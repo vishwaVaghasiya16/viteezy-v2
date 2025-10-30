@@ -60,8 +60,8 @@ export const I18nText = new Schema<I18nTextType>(
 
 export const MediaSchema = new Schema<MediaType>(
   {
-    type: { type: String, enum: MEDIA_TYPE_VALUES, required: true },
-    url: { type: String, required: true, trim: true },
+    type: { type: String, enum: MEDIA_TYPE_VALUES },
+    url: { type: String, trim: true },
     alt: { type: I18nString, default: () => ({}) },
     sortOrder: { type: Number, default: 0 },
   },

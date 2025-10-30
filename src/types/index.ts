@@ -1,5 +1,5 @@
-import { Request } from 'express';
-import { Document } from 'mongoose';
+import { Request } from "express";
+import { Document } from "mongoose";
 
 // User Types
 export interface IUser extends Document {
@@ -7,7 +7,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  role: 'user' | 'admin' | 'moderator';
+  role: "user" | "admin" | "moderator";
   isActive: boolean;
   isEmailVerified: boolean;
   avatar?: string;
@@ -35,6 +35,7 @@ export interface AuthenticatedRequest extends Request {
 export interface ApiResponse<T = any> {
   success: boolean;
   message: string;
+  errorType?: string;
   data?: T;
   error?: string | any[];
   pagination?: {
@@ -50,7 +51,7 @@ export interface PaginationQuery {
   page?: number;
   limit?: number;
   sort?: string;
-  order?: 'asc' | 'desc';
+  order?: "asc" | "desc";
 }
 
 // Search Query

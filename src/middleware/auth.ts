@@ -1,8 +1,8 @@
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import { Request, Response, NextFunction } from 'express';
-import { User, AuthSessions } from '../models/index.model';
-import { AppError } from '../utils/AppError';
-import { logger } from '../utils/logger';
+import jwt, { JwtPayload } from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
+import { User, AuthSessions } from "../models/index.model";
+import { AppError } from "../utils/AppError";
+import { logger } from "../utils/logger";
 
 interface JWTPayload extends JwtPayload {
   userId: string;
@@ -23,42 +23,45 @@ export const authMiddleware = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError('Access token is required', 401);
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw new AppError("Access token is required", 401);
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as JWTPayload;
-    
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your-secret-key"
+    ) as JWTPayload;
+
     // Check if session exists and is valid
     const session = await AuthSessions.findOne({
-      jwtId: decoded.sessionId,
+      sessionId: decoded.sessionId,
       userId: decoded.userId,
       revoked: false,
-      expiresAt: { $gt: new Date() }
+      expiresAt: { $gt: new Date() },
     });
 
     if (!session) {
-      throw new AppError('Invalid or expired session', 401);
+      throw new AppError("Invalid or expired session", 401);
     }
 
     // Get user from database
     const user = await User.findById(decoded.userId);
     if (!user) {
-      throw new AppError('User not found', 401);
+      throw new AppError("User not found", 401);
     }
 
     // Check if user is active
     if (!user.isActive) {
-      throw new AppError('Account is deactivated', 401);
+      throw new AppError("Account is deactivated", 401);
     }
 
     // Update last used time
     await AuthSessions.findByIdAndUpdate(session._id, {
-      lastUsedAt: new Date()
+      lastUsedAt: new Date(),
     });
 
     // Add user info to request
@@ -71,7 +74,7 @@ export const authMiddleware = async (
       isActive: user.isActive,
       isEmailVerified: user.isEmailVerified,
       lastLogin: user.lastLogin,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
     };
     req.userId = user._id.toString();
     req.sessionId = decoded.sessionId;
@@ -79,9 +82,9 @@ export const authMiddleware = async (
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
-      next(new AppError('Invalid token', 401));
+      next(new AppError("Invalid token", 401));
     } else if (error instanceof jwt.TokenExpiredError) {
-      next(new AppError('Token expired', 401));
+      next(new AppError("Token expired", 401));
     } else {
       next(error);
     }
@@ -90,14 +93,18 @@ export const authMiddleware = async (
 
 // Authorization middleware
 export const authorize = (...roles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): void => {
     if (!req.user) {
-      next(new AppError('Authentication required', 401));
+      next(new AppError("Authentication required", 401));
       return;
     }
 
     if (!roles.includes(req.user.role)) {
-      next(new AppError('Insufficient permissions', 403));
+      next(new AppError("Insufficient permissions", 403));
       return;
     }
 
@@ -113,8 +120,8 @@ export const optionalAuth = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       next();
       return;
     }
@@ -122,19 +129,22 @@ export const optionalAuth = async (
     const token = authHeader.substring(7);
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as JWTPayload;
-      
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET || "your-secret-key"
+      ) as JWTPayload;
+
       // Check if session exists and is valid
       const session = await AuthSessions.findOne({
-        jwtId: decoded.sessionId,
+        sessionId: decoded.sessionId,
         userId: decoded.userId,
         revoked: false,
-        expiresAt: { $gt: new Date() }
+        expiresAt: { $gt: new Date() },
       });
 
       if (session) {
         const user = await User.findById(decoded.userId);
-        
+
         if (user && user.isActive) {
           req.user = {
             id: user._id.toString(),
@@ -145,7 +155,7 @@ export const optionalAuth = async (
             isActive: user.isActive,
             isEmailVerified: user.isEmailVerified,
             lastLogin: user.lastLogin,
-            createdAt: user.createdAt
+            createdAt: user.createdAt,
           };
           req.userId = user._id.toString();
           req.sessionId = decoded.sessionId;
@@ -153,7 +163,7 @@ export const optionalAuth = async (
       }
     } catch (error) {
       // Ignore token errors for optional auth
-      logger.warn('Optional auth token verification failed:', error);
+      logger.warn("Optional auth token verification failed:", error);
     }
 
     next();

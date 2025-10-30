@@ -1,5 +1,10 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { PriceSchema, AuditSchema, SoftDelete, PriceType } from '../common.model';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  PriceSchema,
+  AuditSchema,
+  SoftDelete,
+  PriceType,
+} from "../common.model";
 
 export interface ICart extends Document {
   userId: mongoose.Types.ObjectId;
@@ -22,83 +27,80 @@ export interface ICart extends Document {
   updatedAt: Date;
 }
 
-const CartSchema = new Schema<ICart>({
-  userId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'users'
-  },
-  sessionId: { 
-    type: String, 
-    trim: true
-  },
-  items: [{
-    productId: { 
-      type: Schema.Types.ObjectId, 
-      ref: 'products', 
-      required: true 
+const CartSchema = new Schema<ICart>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
     },
-    variantId: { 
-      type: Schema.Types.ObjectId, 
-      ref: 'product_variants' 
+    sessionId: {
+      type: String,
+      trim: true,
     },
-    quantity: { 
-      type: Number, 
-      required: true, 
-      min: 1 
+    items: [
+      {
+        productId: {
+          type: Schema.Types.ObjectId,
+          ref: "products",
+        },
+        variantId: {
+          type: Schema.Types.ObjectId,
+          ref: "product_variants",
+        },
+        quantity: {
+          type: Number,
+          min: 1,
+        },
+        price: {
+          type: PriceSchema,
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    subtotal: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
     },
-    price: { 
-      type: PriceSchema, 
-      required: true 
+    tax: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
     },
-    addedAt: { 
-      type: Date, 
-      default: Date.now 
-    }
-  }],
-  subtotal: { 
-    type: PriceSchema, 
-    required: true, 
-    default: () => ({ currency: 'EUR', amount: 0, taxRate: 0 }) 
+    shipping: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
+    discount: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
+    total: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
+    couponCode: {
+      type: String,
+      trim: true,
+    },
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  tax: { 
-    type: PriceSchema, 
-    required: true, 
-    default: () => ({ currency: 'EUR', amount: 0, taxRate: 0 }) 
-  },
-  shipping: { 
-    type: PriceSchema, 
-    required: true, 
-    default: () => ({ currency: 'EUR', amount: 0, taxRate: 0 }) 
-  },
-  discount: { 
-    type: PriceSchema, 
-    required: true, 
-    default: () => ({ currency: 'EUR', amount: 0, taxRate: 0 }) 
-  },
-  total: { 
-    type: PriceSchema, 
-    required: true, 
-    default: () => ({ currency: 'EUR', amount: 0, taxRate: 0 }) 
-  },
-  couponCode: { 
-    type: String, 
-    trim: true 
-  },
-  expiresAt: { 
-    type: Date, 
-    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Indexes
 CartSchema.index({ userId: 1 });
 CartSchema.index({ sessionId: 1 });
 CartSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-export const Carts = mongoose.model<ICart>('carts', CartSchema);
+export const Carts = mongoose.model<ICart>("carts", CartSchema);

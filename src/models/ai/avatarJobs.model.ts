@@ -39,16 +39,13 @@ const AvatarJobSchema = new Schema<IAvatarJob>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "users",
-      required: true,
     },
     jobType: {
       type: String,
       enum: AI_JOB_TYPE_VALUES,
-      required: true,
     },
     prompt: {
       type: String,
-      required: true,
       trim: true,
     },
     style: {

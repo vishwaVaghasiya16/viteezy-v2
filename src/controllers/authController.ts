@@ -37,32 +37,6 @@ export class AuthController {
   }
 
   /**
-   * Send OTP for verification
-   */
-  static async sendOTP(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const { email, type } = req.body;
-
-      const result = await authService.sendOTPForVerification(
-        req.user?.id || "",
-        email,
-        type
-      );
-
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
    * Verify OTP
    */
   static async verifyOTP(req: Request, res: Response, next: NextFunction) {
@@ -214,6 +188,8 @@ export class AuthController {
   ) {
     try {
       const sessionId = req.user?.sessionId;
+      console.log(req.user);
+      console.log({ sessionId });
 
       if (!sessionId) {
         throw new AppError("Session not found", 401);

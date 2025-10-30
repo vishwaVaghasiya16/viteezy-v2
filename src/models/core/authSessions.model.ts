@@ -6,7 +6,7 @@ export interface IAuthSession extends Document {
   deviceInfo?: string;
   ip?: string;
   userAgent?: string;
-  jwtId: string;
+  sessionId: string;
   expiresAt: Date;
   revoked: boolean;
   revokedAt?: Date;
@@ -20,7 +20,6 @@ const AuthSessionSchema = new Schema<IAuthSession>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "users",
-      required: true,
     },
     deviceInfo: {
       type: String,
@@ -34,14 +33,11 @@ const AuthSessionSchema = new Schema<IAuthSession>(
       type: String,
       trim: true,
     },
-    jwtId: {
+    sessionId: {
       type: String,
-      required: true,
-      unique: true,
     },
     expiresAt: {
       type: Date,
-      required: true,
     },
     revoked: {
       type: Boolean,
@@ -65,7 +61,7 @@ const AuthSessionSchema = new Schema<IAuthSession>(
 
 // Indexes
 AuthSessionSchema.index({ userId: 1, revoked: 1 });
-AuthSessionSchema.index({ jwtId: 1 });
+AuthSessionSchema.index({ sessionId: 1 });
 AuthSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 AuthSessionSchema.index({ userId: 1, lastUsedAt: -1 });
 

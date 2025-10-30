@@ -1,12 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
-import {
-  I18nString,
-  I18nText,
-  AuditSchema,
-  SoftDelete,
-  I18nStringType,
-  I18nTextType,
-} from "../common.model";
+import { AuditSchema, SoftDelete } from "../common.model";
 import {
   AIConversationStatus,
   MessageRole,
@@ -39,23 +32,18 @@ const AIConversationSchema = new Schema<IAIConversation>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "users",
-      required: true,
     },
     sessionId: {
       type: String,
-      required: true,
-      unique: true,
     },
     messages: [
       {
         role: {
           type: String,
           enum: MESSAGE_ROLE_VALUES,
-          required: true,
         },
         content: {
           type: String,
-          required: true,
           trim: true,
         },
         timestamp: {

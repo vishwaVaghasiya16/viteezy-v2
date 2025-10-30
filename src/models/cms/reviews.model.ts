@@ -1,6 +1,13 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { I18nString, I18nText, AuditSchema, SoftDelete, I18nStringType, I18nTextType } from '../common.model';
-import { ReviewStatus, REVIEW_STATUS_VALUES } from '../enums';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  I18nString,
+  I18nText,
+  AuditSchema,
+  SoftDelete,
+  I18nStringType,
+  I18nTextType,
+} from "../common.model";
+import { ReviewStatus, REVIEW_STATUS_VALUES } from "../enums";
 
 export interface IReview extends Document {
   userId: mongoose.Types.ObjectId;
@@ -20,80 +27,82 @@ export interface IReview extends Document {
   updatedAt: Date;
 }
 
-const ReviewSchema = new Schema<IReview>({
-  userId: {
-    type: Schema.Types.ObjectId,
-    ref: 'users',
-    required: true
+const ReviewSchema = new Schema<IReview>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
+    productId: {
+      type: Schema.Types.ObjectId,
+      ref: "products",
+    },
+    serviceId: {
+      type: Schema.Types.ObjectId,
+      ref: "services",
+    },
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    content: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    images: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isPublic: {
+      type: Boolean,
+      default: true,
+    },
+    helpfulCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    notHelpfulCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    status: {
+      type: String,
+      enum: REVIEW_STATUS_VALUES,
+      default: ReviewStatus.PENDING,
+    },
+    moderatorNotes: {
+      type: String,
+      trim: true,
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  productId: {
-    type: Schema.Types.ObjectId,
-    ref: 'products'
-  },
-  serviceId: {
-    type: Schema.Types.ObjectId,
-    ref: 'services'
-  },
-  rating: {
-    type: Number,
-    required: true,
-    min: 1,
-    max: 5
-  },
-  title: {
-    type: I18nString,
-    default: () => ({})
-  },
-  content: {
-    type: I18nText,
-    required: true,
-    default: () => ({})
-  },
-  images: [{
-    type: String,
-    trim: true
-  }],
-  isVerified: {
-    type: Boolean,
-    default: false
-  },
-  isPublic: {
-    type: Boolean,
-    default: true
-  },
-  helpfulCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  notHelpfulCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  status: {
-    type: String,
-    enum: REVIEW_STATUS_VALUES,
-    default: ReviewStatus.PENDING
-  },
-  moderatorNotes: {
-    type: String,
-    trim: true
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Text search index
 ReviewSchema.index({
-  'title.en': 'text',
-  'title.nl': 'text',
-  'content.en': 'text',
-  'content.nl': 'text'
+  "title.en": "text",
+  "title.nl": "text",
+  "content.en": "text",
+  "content.nl": "text",
 });
 
 // Other indexes
@@ -110,4 +119,4 @@ ReviewSchema.index({ userId: 1, status: 1 });
 ReviewSchema.index({ rating: 1, status: 1, isPublic: 1 });
 ReviewSchema.index({ createdAt: -1 });
 
-export const Reviews = mongoose.model<IReview>('reviews', ReviewSchema);
+export const Reviews = mongoose.model<IReview>("reviews", ReviewSchema);

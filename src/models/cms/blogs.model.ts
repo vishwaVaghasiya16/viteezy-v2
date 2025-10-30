@@ -1,6 +1,17 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { I18nString, I18nText, MediaSchema, SeoSchema, AuditSchema, SoftDelete, I18nStringType, I18nTextType, MediaType, SeoType } from '../common.model';
-import { BlogStatus, BLOG_STATUS_VALUES } from '../enums';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  I18nString,
+  I18nText,
+  MediaSchema,
+  SeoSchema,
+  AuditSchema,
+  SoftDelete,
+  I18nStringType,
+  I18nTextType,
+  MediaType,
+  SeoType,
+} from "../common.model";
+import { BlogStatus, BLOG_STATUS_VALUES } from "../enums";
 
 export interface IBlog extends Document {
   slug: string;
@@ -22,88 +33,89 @@ export interface IBlog extends Document {
   updatedAt: Date;
 }
 
-const BlogSchema = new Schema<IBlog>({
-  slug: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true
+const BlogSchema = new Schema<IBlog>(
+  {
+    slug: {
+      type: String,
+      lowercase: true,
+    },
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    excerpt: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    content: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    authorId: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "blog_categories",
+    },
+    tags: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    featuredImage: {
+      type: MediaSchema,
+    },
+    gallery: [
+      {
+        type: MediaSchema,
+      },
+    ],
+    status: {
+      type: String,
+      enum: BLOG_STATUS_VALUES,
+      default: BlogStatus.DRAFT,
+    },
+    publishedAt: {
+      type: Date,
+    },
+    seo: {
+      type: SeoSchema,
+      default: () => ({}),
+    },
+    viewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    likeCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    commentCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  title: {
-    type: I18nString,
-    required: true,
-    default: () => ({})
-  },
-  excerpt: {
-    type: I18nText,
-    default: () => ({})
-  },
-  content: {
-    type: I18nText,
-    required: true,
-    default: () => ({})
-  },
-  authorId: {
-    type: Schema.Types.ObjectId,
-    ref: 'users',
-    required: true
-  },
-  categoryId: {
-    type: Schema.Types.ObjectId,
-    ref: 'blog_categories',
-    required: true
-  },
-  tags: [{
-    type: String,
-    trim: true
-  }],
-  featuredImage: {
-    type: MediaSchema
-  },
-  gallery: [{
-    type: MediaSchema
-  }],
-  status: {
-    type: String,
-    enum: BLOG_STATUS_VALUES,
-    default: BlogStatus.DRAFT
-  },
-  publishedAt: {
-    type: Date
-  },
-  seo: {
-    type: SeoSchema,
-    default: () => ({})
-  },
-  viewCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  likeCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  commentCount: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Text search index
 BlogSchema.index({
-  'title.en': 'text',
-  'title.nl': 'text',
-  'content.en': 'text',
-  'content.nl': 'text'
+  "title.en": "text",
+  "title.nl": "text",
+  "content.en": "text",
+  "content.nl": "text",
 });
 
 // Other indexes
@@ -112,4 +124,4 @@ BlogSchema.index({ categoryId: 1, status: 1 });
 BlogSchema.index({ publishedAt: -1 });
 BlogSchema.index({ viewCount: -1 });
 
-export const Blogs = mongoose.model<IBlog>('blogs', BlogSchema);
+export const Blogs = mongoose.model<IBlog>("blogs", BlogSchema);

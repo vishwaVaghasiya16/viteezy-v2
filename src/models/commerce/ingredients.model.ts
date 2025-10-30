@@ -1,6 +1,20 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { I18nString, I18nText, MediaSchema, AuditSchema, SoftDelete, I18nStringType, I18nTextType, MediaType } from '../common.model';
-import { IngredientType, FrequencyType, INGREDIENT_TYPE_VALUES, FREQUENCY_TYPE_VALUES } from '../enums';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  I18nString,
+  I18nText,
+  MediaSchema,
+  AuditSchema,
+  SoftDelete,
+  I18nStringType,
+  I18nTextType,
+  MediaType,
+} from "../common.model";
+import {
+  IngredientType,
+  FrequencyType,
+  INGREDIENT_TYPE_VALUES,
+  FREQUENCY_TYPE_VALUES,
+} from "../enums";
 
 export interface IIngredient extends Document {
   name: I18nStringType;
@@ -24,91 +38,89 @@ export interface IIngredient extends Document {
   updatedAt: Date;
 }
 
-const IngredientSchema = new Schema<IIngredient>({
-  name: { 
-    type: I18nString, 
-    required: true, 
-    default: () => ({}) 
-  },
-  scientificName: { 
-    type: String, 
-    trim: true 
-  },
-  description: { 
-    type: I18nText, 
-    required: true, 
-    default: () => ({}) 
-  },
-  category: { 
-    type: String, 
-    required: true, 
-    trim: true
-  },
-  type: { 
-    type: String, 
-    enum: INGREDIENT_TYPE_VALUES, 
-    required: true
-  },
-  benefits: { 
-    type: I18nText, 
-    default: () => ({}) 
-  },
-  dosage: {
-    min: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+const IngredientSchema = new Schema<IIngredient>(
+  {
+    name: {
+      type: I18nString,
+      default: () => ({}),
     },
-    max: { 
-      type: Number, 
-      required: true, 
-      min: 0 
+    scientificName: {
+      type: String,
+      trim: true,
     },
-    unit: { 
-      type: String, 
-      required: true, 
-      trim: true 
+    description: {
+      type: I18nText,
+      default: () => ({}),
     },
-    frequency: { 
-      type: String, 
-      enum: FREQUENCY_TYPE_VALUES, 
-      default: FrequencyType.DAILY 
-    }
+    category: {
+      type: String,
+      trim: true,
+    },
+    type: {
+      type: String,
+      enum: INGREDIENT_TYPE_VALUES,
+    },
+    benefits: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    dosage: {
+      min: {
+        type: Number,
+        min: 0,
+      },
+      max: {
+        type: Number,
+        min: 0,
+      },
+      unit: {
+        type: String,
+        trim: true,
+      },
+      frequency: {
+        type: String,
+        enum: FREQUENCY_TYPE_VALUES,
+        default: FrequencyType.DAILY,
+      },
+    },
+    contraindications: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    sideEffects: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    interactions: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    image: {
+      type: MediaSchema,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  contraindications: { 
-    type: I18nText, 
-    default: () => ({}) 
-  },
-  sideEffects: { 
-    type: I18nText, 
-    default: () => ({}) 
-  },
-  interactions: [{ 
-    type: String, 
-    trim: true 
-  }],
-  image: { 
-    type: MediaSchema 
-  },
-  isActive: { 
-    type: Boolean, 
-    default: true
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Text search index
-IngredientSchema.index({ 
-  'name.en': 'text', 
-  'name.nl': 'text', 
-  'description.en': 'text', 
-  'description.nl': 'text', 
-  scientificName: 'text' 
+IngredientSchema.index({
+  "name.en": "text",
+  "name.nl": "text",
+  "description.en": "text",
+  "description.nl": "text",
+  scientificName: "text",
 });
 
 // Other indexes
@@ -116,4 +128,7 @@ IngredientSchema.index({ type: 1, isActive: 1 });
 IngredientSchema.index({ category: 1, isActive: 1 });
 IngredientSchema.index({ isActive: 1 });
 
-export const Ingredients = mongoose.model<IIngredient>('ingredients', IngredientSchema);
+export const Ingredients = mongoose.model<IIngredient>(
+  "ingredients",
+  IngredientSchema
+);

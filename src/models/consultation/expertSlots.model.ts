@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { AuditSchema, SoftDelete } from '../common.model';
+import mongoose, { Schema, Document } from "mongoose";
+import { AuditSchema, SoftDelete } from "../common.model";
 
 export interface IExpertSlot extends Document {
   expertId: mongoose.Types.ObjectId;
@@ -12,46 +12,48 @@ export interface IExpertSlot extends Document {
   updatedAt: Date;
 }
 
-const ExpertSlotSchema = new Schema<IExpertSlot>({
-  expertId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'experts', 
-    required: true
+const ExpertSlotSchema = new Schema<IExpertSlot>(
+  {
+    expertId: {
+      type: Schema.Types.ObjectId,
+      ref: "experts",
+    },
+    date: {
+      type: String,
+    },
+    startTime: {
+      type: String,
+    },
+    endTime: {
+      type: String,
+    },
+    isBooked: {
+      type: Boolean,
+      default: false,
+    },
+    bookingId: {
+      type: Schema.Types.ObjectId,
+      ref: "consultations",
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  date: { 
-    type: String, 
-    required: true
-  },
-  startTime: { 
-    type: String, 
-    required: true 
-  },
-  endTime: { 
-    type: String, 
-    required: true 
-  },
-  isBooked: { 
-    type: Boolean, 
-    default: false
-  },
-  bookingId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'consultations' 
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Unique constraint to prevent double booking
-ExpertSlotSchema.index({ expertId: 1, date: 1, startTime: 1 }, { unique: true });
+ExpertSlotSchema.index({ expertId: 1, date: 1, startTime: 1 });
 
 // Other indexes
 ExpertSlotSchema.index({ expertId: 1, isBooked: 1 });
 ExpertSlotSchema.index({ date: 1, isBooked: 1 });
 ExpertSlotSchema.index({ expertId: 1, date: 1, isBooked: 1 });
 
-export const ExpertSlots = mongoose.model<IExpertSlot>('expert_slots', ExpertSlotSchema);
+export const ExpertSlots = mongoose.model<IExpertSlot>(
+  "expert_slots",
+  ExpertSlotSchema
+);

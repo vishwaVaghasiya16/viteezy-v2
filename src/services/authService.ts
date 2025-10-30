@@ -168,17 +168,16 @@ class AuthService {
         logger.info(`OTP email sent successfully to ${email} (Type: ${type})`);
       } else {
         logger.error(`Failed to send OTP email to ${email} (Type: ${type})`);
-        // Don't throw error to prevent registration failure
-        // Just log the OTP for development
-        logger.info(
-          `OTP for ${email}: ${otp} (Type: ${type}) - Email service failed`
+        throw new AppError(
+          "Failed to send verification email. Please try again later.",
+          502
         );
       }
     } catch (error) {
       logger.error("Error sending OTP email:", error);
-      // Log OTP for development purposes
-      logger.info(
-        `OTP for ${email}: ${otp} (Type: ${type}) - Email service error`
+      throw new AppError(
+        "Failed to send verification email. Please try again later.",
+        502
       );
     }
   }
@@ -286,7 +285,7 @@ class AuthService {
       status: OTPStatus.PENDING,
     });
 
-    // Send OTP via email only
+    // Send OTP via email only (will throw on failure)
     await this.sendOTP(email, otpCode, type);
 
     return {
@@ -364,7 +363,7 @@ class AuthService {
     const sessionId = crypto.randomUUID();
     await AuthSessions.create({
       userId: user._id,
-      jwtId: sessionId,
+      sessionId: sessionId,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       deviceInfo: "Web",
       lastUsedAt: new Date(),
@@ -433,7 +432,7 @@ class AuthService {
     const sessionId = crypto.randomUUID();
     await AuthSessions.create({
       userId: user._id,
-      jwtId: sessionId,
+      sessionId: sessionId,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       deviceInfo: "Web",
       lastUsedAt: new Date(),
@@ -566,7 +565,7 @@ class AuthService {
    */
   async logout(sessionId: string): Promise<{ message: string }> {
     await AuthSessions.findOneAndUpdate(
-      { jwtId: sessionId },
+      { sessionId: sessionId },
       { revoked: true, revokedAt: new Date() }
     );
 
@@ -657,7 +656,7 @@ class AuthService {
 
       // Check if session exists and is valid
       const session = await AuthSessions.findOne({
-        jwtId: decoded.sessionId,
+        sessionId: decoded.sessionId,
         userId: decoded.userId,
         revoked: false,
         expiresAt: { $gt: new Date() },

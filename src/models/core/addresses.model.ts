@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { SoftDelete, AuditSchema } from '../common.model';
-import { AddressType, ADDRESS_TYPE_VALUES } from '../enums';
+import mongoose, { Schema, Document } from "mongoose";
+import { SoftDelete, AuditSchema } from "../common.model";
+import { AddressType, ADDRESS_TYPE_VALUES } from "../enums";
 
 export interface IAddress extends Document {
   userId: mongoose.Types.ObjectId;
@@ -19,67 +19,66 @@ export interface IAddress extends Document {
   updatedAt: Date;
 }
 
-const AddressSchema = new Schema<IAddress>({
-  userId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'users', 
-    required: true
+const AddressSchema = new Schema<IAddress>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
+    label: {
+      type: String,
+      trim: true,
+    },
+    line1: {
+      type: String,
+      trim: true,
+    },
+    line2: {
+      type: String,
+      trim: true,
+    },
+    city: {
+      type: String,
+      trim: true,
+    },
+    state: {
+      type: String,
+      trim: true,
+    },
+    zip: {
+      type: String,
+      trim: true,
+    },
+    country: {
+      type: String,
+      trim: true,
+    },
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
+    type: {
+      type: String,
+      enum: ADDRESS_TYPE_VALUES,
+      default: AddressType.HOME,
+    },
+    phone: {
+      type: String,
+      trim: true,
+    },
+    instructions: {
+      type: String,
+      trim: true,
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  label: { 
-    type: String, 
-    trim: true 
-  },
-  line1: { 
-    type: String, 
-    required: true, 
-    trim: true 
-  },
-  line2: { 
-    type: String, 
-    trim: true 
-  },
-  city: { 
-    type: String, 
-    required: true, 
-    trim: true 
-  },
-  state: { 
-    type: String, 
-    trim: true 
-  },
-  zip: { 
-    type: String, 
-    trim: true 
-  },
-  country: { 
-    type: String, 
-    required: true, 
-    trim: true
-  },
-  isDefault: { 
-    type: Boolean, 
-    default: false
-  },
-  type: { 
-    type: String, 
-    enum: ADDRESS_TYPE_VALUES, 
-    default: AddressType.HOME
-  },
-  phone: { 
-    type: String, 
-    trim: true 
-  },
-  instructions: { 
-    type: String, 
-    trim: true 
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Indexes
 AddressSchema.index({ userId: 1 });
@@ -90,4 +89,4 @@ AddressSchema.index({ userId: 1, isDefault: 1 });
 AddressSchema.index({ userId: 1, type: 1 });
 AddressSchema.index({ country: 1, city: 1 });
 
-export const Addresses = mongoose.model<IAddress>('addresses', AddressSchema);
+export const Addresses = mongoose.model<IAddress>("addresses", AddressSchema);

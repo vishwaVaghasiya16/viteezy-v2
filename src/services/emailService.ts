@@ -1,5 +1,5 @@
-import nodemailer from 'nodemailer';
-import { logger } from '../utils/logger';
+import nodemailer from "nodemailer";
+import { logger } from "../utils/logger";
 
 interface EmailOptions {
   to: string;
@@ -14,16 +14,22 @@ class EmailService {
   constructor() {
     // Check if email credentials are available
     const hasCredentials = process.env.SMTP_USER && process.env.SMTP_PASS;
-    
+
     if (hasCredentials) {
       // Create transporter using environment variables
       this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+        pool: true,
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: process.env.SMTP_USER as string,
+          pass: process.env.SMTP_PASS as string,
+        },
+        tls: {
+          // Allow configuration via env; default to standard verification
+          rejectUnauthorized:
+            process.env.SMTP_REJECT_UNAUTHORIZED === "false" ? false : true,
         },
       });
 
@@ -31,7 +37,9 @@ class EmailService {
       this.verifyConnection();
     } else {
       // Development mode - create a mock transporter
-      logger.warn('Email credentials not found. Using mock email service for development.');
+      logger.warn(
+        "Email credentials not found. Using mock email service for development."
+      );
       this.transporter = null as any; // Mock transporter
     }
   }
@@ -40,10 +48,15 @@ class EmailService {
     try {
       if (this.transporter) {
         await this.transporter.verify();
-        logger.info('Email service connected successfully');
+        logger.info("Email service connected successfully");
       }
     } catch (error) {
-      logger.error('Email service connection failed:', error);
+      logger.error("Email service connection failed:", {
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        response: (error as any)?.response,
+        command: (error as any)?.command,
+      });
       // Don't throw error to prevent app crash, just log it
     }
   }
@@ -51,13 +64,19 @@ class EmailService {
   /**
    * Send OTP email
    */
-  async sendOTPEmail(email: string, otp: string, type: string): Promise<boolean> {
+  async sendOTPEmail(
+    email: string,
+    otp: string,
+    type: string
+  ): Promise<boolean> {
     try {
       // If no transporter (development mode), just log the OTP
       if (!this.transporter) {
         logger.info(`[DEV MODE] OTP for ${email}: ${otp} (Type: ${type})`);
         return true;
       }
+
+      console.log({ email, otp });
 
       const subject = this.getOTPSubject(type);
       const html = this.getOTPEmailTemplate(otp, type);
@@ -67,13 +86,13 @@ class EmailService {
         to: email,
         subject,
         html,
-        text
+        text,
       });
 
       logger.info(`OTP email sent successfully to ${email}`);
       return true;
     } catch (error) {
-      logger.error('Failed to send OTP email:', error);
+      logger.error("Failed to send OTP email:", error);
       // In case of error, log OTP for development
       logger.info(`[FALLBACK] OTP for ${email}: ${otp} (Type: ${type})`);
       return false;
@@ -91,7 +110,7 @@ class EmailService {
         return true;
       }
 
-      const subject = 'Welcome to Viteezy!';
+      const subject = "Welcome to Viteezy!";
       const html = this.getWelcomeEmailTemplate(name);
       const text = `Welcome ${name}! Thank you for joining Viteezy.`;
 
@@ -99,13 +118,13 @@ class EmailService {
         to: email,
         subject,
         html,
-        text
+        text,
       });
 
       logger.info(`Welcome email sent successfully to ${email}`);
       return true;
     } catch (error) {
-      logger.error('Failed to send welcome email:', error);
+      logger.error("Failed to send welcome email:", error);
       return false;
     }
   }
@@ -121,7 +140,7 @@ class EmailService {
         return true;
       }
 
-      const subject = 'Password Reset - Viteezy';
+      const subject = "Password Reset - Viteezy";
       const html = this.getPasswordResetEmailTemplate(otp);
       const text = `Your password reset OTP is: ${otp}. This OTP is valid for 10 minutes.`;
 
@@ -129,13 +148,13 @@ class EmailService {
         to: email,
         subject,
         html,
-        text
+        text,
       });
 
       logger.info(`Password reset email sent successfully to ${email}`);
       return true;
     } catch (error) {
-      logger.error('Failed to send password reset email:', error);
+      logger.error("Failed to send password reset email:", error);
       return false;
     }
   }
@@ -150,10 +169,15 @@ class EmailService {
         to: options.to,
         subject: options.subject,
         html: options.html,
-        text: options.text
+        text: options.text,
       });
     } catch (error) {
-      logger.error('Email sending failed:', error);
+      logger.error("Email sending failed:", {
+        message: (error as any)?.message,
+        code: (error as any)?.code,
+        response: (error as any)?.response,
+        command: (error as any)?.command,
+      });
       throw error;
     }
   }
@@ -163,14 +187,14 @@ class EmailService {
    */
   private getOTPSubject(type: string): string {
     switch (type) {
-      case 'email_verification':
-        return 'Verify Your Email - Viteezy';
-      case 'password_reset':
-        return 'Password Reset - Viteezy';
-      case 'login_verification':
-        return 'Login Verification - Viteezy';
+      case "email_verification":
+        return "Verify Your Email - Viteezy";
+      case "password_reset":
+        return "Password Reset - Viteezy";
+      case "login_verification":
+        return "Login Verification - Viteezy";
       default:
-        return 'Verification Code - Viteezy';
+        return "Verification Code - Viteezy";
     }
   }
 
@@ -178,10 +202,12 @@ class EmailService {
    * Get OTP email HTML template
    */
   private getOTPEmailTemplate(otp: string, type: string): string {
-    const title = type === 'email_verification' ? 'Verify Your Email' : 'Verification Code';
-    const message = type === 'email_verification' 
-      ? 'Please verify your email address to complete your registration.'
-      : 'Please use this verification code to complete your request.';
+    const title =
+      type === "email_verification" ? "Verify Your Email" : "Verification Code";
+    const message =
+      type === "email_verification"
+        ? "Please verify your email address to complete your registration."
+        : "Please use this verification code to complete your request.";
 
     return `
       <!DOCTYPE html>
@@ -236,10 +262,11 @@ class EmailService {
    * Get OTP text template
    */
   private getOTPTextTemplate(otp: string, type: string): string {
-    const message = type === 'email_verification' 
-      ? 'Please verify your email address to complete your registration.'
-      : 'Please use this verification code to complete your request.';
-    
+    const message =
+      type === "email_verification"
+        ? "Please verify your email address to complete your registration."
+        : "Please use this verification code to complete your request.";
+
     return `
 Viteezy - Verification Code
 

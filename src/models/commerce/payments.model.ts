@@ -1,6 +1,16 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { PriceSchema, AuditSchema, SoftDelete, PriceType } from '../common.model';
-import { PaymentMethod, PaymentStatus, PAYMENT_METHOD_VALUES, PAYMENT_STATUS_VALUES } from '../enums';
+import mongoose, { Schema, Document } from "mongoose";
+import {
+  PriceSchema,
+  AuditSchema,
+  SoftDelete,
+  PriceType,
+} from "../common.model";
+import {
+  PaymentMethod,
+  PaymentStatus,
+  PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUS_VALUES,
+} from "../enums";
 
 export interface IPayment extends Document {
   orderId: mongoose.Types.ObjectId;
@@ -21,74 +31,71 @@ export interface IPayment extends Document {
   updatedAt: Date;
 }
 
-const PaymentSchema = new Schema<IPayment>({
-  orderId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'orders', 
-    required: true
+const PaymentSchema = new Schema<IPayment>(
+  {
+    orderId: {
+      type: Schema.Types.ObjectId,
+      ref: "orders",
+    },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
+    paymentMethod: {
+      type: String,
+      enum: PAYMENT_METHOD_VALUES,
+    },
+    status: {
+      type: String,
+      enum: PAYMENT_STATUS_VALUES,
+      default: PaymentStatus.PENDING,
+    },
+    amount: {
+      type: PriceSchema,
+    },
+    currency: {
+      type: String,
+      uppercase: true,
+    },
+    transactionId: {
+      type: String,
+      trim: true,
+      sparse: true,
+    },
+    gatewayTransactionId: {
+      type: String,
+      trim: true,
+    },
+    gatewayResponse: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    failureReason: {
+      type: String,
+      trim: true,
+    },
+    refundAmount: {
+      type: PriceSchema,
+    },
+    refundReason: {
+      type: String,
+      trim: true,
+    },
+    refundedAt: {
+      type: Date,
+    },
+    processedAt: {
+      type: Date,
+    },
+    ...SoftDelete,
+    ...AuditSchema.obj,
   },
-  userId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'users', 
-    required: true
-  },
-  paymentMethod: { 
-    type: String, 
-    enum: PAYMENT_METHOD_VALUES, 
-    required: true
-  },
-  status: { 
-    type: String, 
-    enum: PAYMENT_STATUS_VALUES, 
-    default: PaymentStatus.PENDING
-  },
-  amount: { 
-    type: PriceSchema, 
-    required: true 
-  },
-  currency: { 
-    type: String, 
-    required: true, 
-    uppercase: true
-  },
-  transactionId: { 
-    type: String, 
-    trim: true, 
-    unique: true, 
-    sparse: true 
-  },
-  gatewayTransactionId: { 
-    type: String, 
-    trim: true
-  },
-  gatewayResponse: { 
-    type: Schema.Types.Mixed, 
-    default: {} 
-  },
-  failureReason: { 
-    type: String, 
-    trim: true 
-  },
-  refundAmount: { 
-    type: PriceSchema 
-  },
-  refundReason: { 
-    type: String, 
-    trim: true 
-  },
-  refundedAt: { 
-    type: Date 
-  },
-  processedAt: { 
-    type: Date 
-  },
-  ...SoftDelete,
-  ...AuditSchema.obj
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
 
 // Indexes
 PaymentSchema.index({ orderId: 1, status: 1 });
@@ -97,4 +104,4 @@ PaymentSchema.index({ paymentMethod: 1, status: 1 });
 PaymentSchema.index({ gatewayTransactionId: 1 });
 PaymentSchema.index({ createdAt: -1 });
 
-export const Payments = mongoose.model<IPayment>('payments', PaymentSchema);
+export const Payments = mongoose.model<IPayment>("payments", PaymentSchema);

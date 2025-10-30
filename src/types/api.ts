@@ -1,4 +1,4 @@
-import { Request } from 'express';
+import { Request } from "express";
 
 // Extended Request interface with custom properties
 export interface ApiRequest extends Request {
@@ -18,6 +18,7 @@ export interface ApiRequest extends Request {
 export interface ApiResponse<T = any> {
   success: boolean;
   message: string;
+  errorType?: string;
   data?: T;
   error?: string | any[];
   pagination?: PaginationMeta;
@@ -71,7 +72,7 @@ export interface PaginatedResponse<T = any> {
 
 // API endpoint configuration
 export interface ApiEndpoint {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   path: string;
   handler: Function;
   middleware?: Function[];
