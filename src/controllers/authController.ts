@@ -41,12 +41,14 @@ export class AuthController {
    */
   static async verifyOTP(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, otp, type } = req.body;
+      const { email, otp, type, deviceInfo } = req.body;
 
+      // If not login (for OTP-based login/verification), deviceInfo can be optional, unless required by business rule
       const result = await authService.verifyOTP({
         email,
         otp,
         type,
+        deviceInfo,
       });
 
       res.status(200).json({
@@ -68,11 +70,18 @@ export class AuthController {
    */
   static async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, password } = req.body;
+      const { email, password, deviceInfo } = req.body;
+
+      console.log(req.body);
+
+      if (!deviceInfo) {
+        throw new AppError("deviceInfo is required for login", 400);
+      }
 
       const result = await authService.login({
         email,
         password,
+        deviceInfo,
       });
 
       res.status(200).json({
@@ -187,9 +196,7 @@ export class AuthController {
     next: NextFunction
   ) {
     try {
-      const sessionId = req.user?.sessionId;
-      console.log(req.user);
-      console.log({ sessionId });
+      const sessionId = req.sessionId;
 
       if (!sessionId) {
         throw new AppError("Session not found", 401);

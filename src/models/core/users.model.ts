@@ -2,6 +2,13 @@ import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import { UserRole, USER_ROLE_VALUES } from "../enums";
 
+export interface IUserSessionInfo {
+  sessionId: string;
+  status: "active" | "revoked";
+  revoked: boolean;
+  deviceInfo?: string;
+}
+
 export interface IUser extends Document {
   _id: string;
   name: string;
@@ -13,6 +20,7 @@ export interface IUser extends Document {
   isEmailVerified: boolean;
   avatar?: string;
   lastLogin?: Date;
+  sessionIds?: IUserSessionInfo[];
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -69,6 +77,18 @@ const userSchema = new Schema<IUser>(
       type: Date,
       default: null,
     },
+    sessionIds: [
+      {
+        sessionId: { type: String, required: true },
+        status: {
+          type: String,
+          enum: ["active", "revoked"],
+          default: "active",
+        },
+        revoked: { type: Boolean, default: false },
+        deviceInfo: { type: String, trim: true },
+      },
+    ],
   },
   {
     timestamps: true,

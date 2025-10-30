@@ -17,12 +17,14 @@ interface RegisterData {
 interface LoginData {
   email: string;
   password: string;
+  deviceInfo: string;
 }
 
 interface OTPVerificationData {
   email: string;
   otp: string;
   type: OTPType;
+  deviceInfo?: string;
 }
 
 interface LoginResult {
@@ -297,7 +299,7 @@ class AuthService {
    * Verify OTP
    */
   async verifyOTP(data: OTPVerificationData): Promise<LoginResult> {
-    const { email, otp, type } = data;
+    const { email, otp, type, deviceInfo } = data;
 
     // Find user
     const user = await User.findOne({ email });
@@ -365,11 +367,23 @@ class AuthService {
       userId: user._id,
       sessionId: sessionId,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      deviceInfo: "Web",
+      deviceInfo: deviceInfo || "Web",
       lastUsedAt: new Date(),
     });
 
     const tokens = this.generateTokens(user._id.toString(), sessionId);
+
+    // Track session on user document
+    await User.findByIdAndUpdate(user._id, {
+      $push: {
+        sessionIds: {
+          sessionId: sessionId,
+          status: "active",
+          revoked: false,
+          deviceInfo: deviceInfo || "Web",
+        },
+      },
+    });
 
     return {
       user: {
@@ -390,7 +404,7 @@ class AuthService {
    * Login user
    */
   async login(data: LoginData): Promise<LoginResult> {
-    const { email, password } = data;
+    const { email, password, deviceInfo } = data;
 
     // Find user with password
     const user = await User.findOne({ email }).select("+password");
@@ -434,14 +448,24 @@ class AuthService {
       userId: user._id,
       sessionId: sessionId,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      deviceInfo: "Web",
+      deviceInfo: deviceInfo,
       lastUsedAt: new Date(),
     });
 
     const tokens = this.generateTokens(user._id.toString(), sessionId);
 
     // Update last login
-    await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+    await User.findByIdAndUpdate(user._id, {
+      lastLogin: new Date(),
+      $push: {
+        sessionIds: {
+          sessionId: sessionId,
+          status: "active",
+          revoked: false,
+          deviceInfo: deviceInfo,
+        },
+      },
+    });
 
     return {
       user: {
@@ -522,6 +546,14 @@ class AuthService {
       { revoked: true, revokedAt: new Date() }
     );
 
+    // Mark all user's stored sessionIds as revoked
+    await User.findByIdAndUpdate(user._id, {
+      $set: {
+        "sessionIds.$[].status": "revoked",
+        "sessionIds.$[].revoked": true,
+      },
+    });
+
     return {
       message:
         "Password reset successfully. Please login with your new password.",
@@ -569,6 +601,18 @@ class AuthService {
       { revoked: true, revokedAt: new Date() }
     );
 
+    // Mark session as revoked in user's sessionIds
+    await User.updateOne(
+      { "sessionIds.sessionId": sessionId },
+      {
+        $set: {
+          "sessionIds.$[elem].status": "revoked",
+          "sessionIds.$[elem].revoked": true,
+        },
+      },
+      { arrayFilters: [{ "elem.sessionId": sessionId }] } as any
+    );
+
     return {
       message: "Logged out successfully",
     };
@@ -582,6 +626,14 @@ class AuthService {
       { userId },
       { revoked: true, revokedAt: new Date() }
     );
+
+    // Mark all sessionIds as revoked on user
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        "sessionIds.$[].status": "revoked",
+        "sessionIds.$[].revoked": true,
+      },
+    });
 
     return {
       message: "Logged out from all devices successfully",

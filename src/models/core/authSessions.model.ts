@@ -8,7 +8,7 @@ export interface IAuthSession extends Document {
   userAgent?: string;
   sessionId: string;
   expiresAt: Date;
-  revoked: boolean;
+  isRevoked: boolean;
   revokedAt?: Date;
   lastUsedAt?: Date;
   createdAt: Date;
@@ -39,7 +39,7 @@ const AuthSessionSchema = new Schema<IAuthSession>(
     expiresAt: {
       type: Date,
     },
-    revoked: {
+    isRevoked: {
       type: Boolean,
       default: false,
     },
@@ -60,7 +60,7 @@ const AuthSessionSchema = new Schema<IAuthSession>(
 );
 
 // Indexes
-AuthSessionSchema.index({ userId: 1, revoked: 1 });
+AuthSessionSchema.index({ userId: 1, isRevoked: 1 });
 AuthSessionSchema.index({ sessionId: 1 });
 AuthSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 AuthSessionSchema.index({ userId: 1, lastUsedAt: -1 });

@@ -32,6 +32,10 @@ const nameSchema = Joi.string().min(2).max(50).required().messages({
   "any.required": "Name is required",
 });
 
+const deviceInfoSchema = Joi.string().required().messages({
+  "any.required": "Device Info is required",
+});
+
 const phoneSchema = Joi.string()
   .pattern(/^[+]?[1-9]\d{1,14}$/)
   .optional()
@@ -66,6 +70,7 @@ export const registerSchema = Joi.object({
 export const loginSchema = Joi.object({
   email: emailSchema,
   password: passwordSchema,
+  deviceInfo: deviceInfoSchema,
 });
 
 export const sendOTPSchema = Joi.object({

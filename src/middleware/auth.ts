@@ -40,7 +40,7 @@ export const authMiddleware = async (
     const session = await AuthSessions.findOne({
       sessionId: decoded.sessionId,
       userId: decoded.userId,
-      revoked: false,
+      isRevoked: false,
       expiresAt: { $gt: new Date() },
     });
 
@@ -138,7 +138,7 @@ export const optionalAuth = async (
       const session = await AuthSessions.findOne({
         sessionId: decoded.sessionId,
         userId: decoded.userId,
-        revoked: false,
+        isRevoked: false,
         expiresAt: { $gt: new Date() },
       });
 
