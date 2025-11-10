@@ -185,6 +185,17 @@ class AuthService {
   }
 
   /**
+   * Send welcome email asynchronously so that registration response is not delayed
+   */
+  private sendWelcomeEmailAsync(email: string, name: string): void {
+    Promise.resolve()
+      .then(() => emailService.sendWelcomeEmail(email, name))
+      .catch((error) => {
+        logger.error("Failed to send welcome email:", error);
+      });
+  }
+
+  /**
    * Register new user
    */
   async register(data: RegisterData): Promise<{ user: any; message: string }> {
@@ -193,7 +204,60 @@ class AuthService {
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new AppError("User already exists with this email", 400);
+      if (existingUser.isEmailVerified) {
+        throw new AppError("User already exists with this email", 400);
+      }
+
+      let userUpdated = false;
+
+      if (existingUser.name !== name) {
+        existingUser.name = name;
+        userUpdated = true;
+      }
+
+      if (typeof phone !== "undefined" && existingUser.phone !== phone) {
+        existingUser.phone = phone;
+        userUpdated = true;
+      }
+
+      if (password) {
+        existingUser.password = password;
+        userUpdated = true;
+      }
+
+      if (userUpdated) {
+        await existingUser.save();
+      }
+
+      // Expire any pending verification OTPs before issuing a new one
+      await OTP.updateMany(
+        {
+          userId: existingUser._id,
+          type: OTPType.EMAIL_VERIFICATION,
+          status: OTPStatus.PENDING,
+        },
+        { status: OTPStatus.EXPIRED }
+      );
+
+      await this.sendOTPForVerification(
+        existingUser._id.toString(),
+        email,
+        OTPType.EMAIL_VERIFICATION
+      );
+
+      this.sendWelcomeEmailAsync(email, existingUser.name);
+
+      return {
+        user: {
+          id: existingUser._id,
+          name: existingUser.name,
+          email: existingUser.email,
+          phone: existingUser.phone,
+          isEmailVerified: existingUser.isEmailVerified,
+        },
+        message:
+          "Registration successful. Please verify your email with the OTP sent.",
+      };
     }
 
     // Create user (password will be hashed by pre-save hook)
@@ -216,13 +280,8 @@ class AuthService {
       OTPType.EMAIL_VERIFICATION
     );
 
-    // Send welcome email
-    try {
-      await emailService.sendWelcomeEmail(email, name);
-    } catch (error) {
-      logger.error("Failed to send welcome email:", error);
-      // Don't fail registration if welcome email fails
-    }
+    // Send welcome email asynchronously to avoid delaying the API response
+    this.sendWelcomeEmailAsync(email, name);
 
     return {
       user: {
@@ -701,6 +760,7 @@ class AuthService {
     try {
       // Verify refresh token
       const decoded = jwt.verify(refreshToken, this.JWT_REFRESH_SECRET) as any;
+      console.log({ decoded });
 
       if (decoded.type !== "refresh") {
         throw new AppError("Invalid token type", 401);
@@ -708,11 +768,13 @@ class AuthService {
 
       // Check if session exists and is valid
       const session = await AuthSessions.findOne({
-        sessionId: decoded.sessionId,
         userId: decoded.userId,
+        sessionId: decoded.sessionId,
         revoked: false,
         expiresAt: { $gt: new Date() },
       });
+
+      console.log({ session });
 
       if (!session) {
         throw new AppError("Invalid or expired refresh token", 401);
