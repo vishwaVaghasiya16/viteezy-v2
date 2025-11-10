@@ -40,8 +40,8 @@ export const authMiddleware = async (
     const session = await AuthSessions.findOne({
       sessionId: decoded.sessionId,
       userId: decoded.userId,
-      isRevoked: false,
       expiresAt: { $gt: new Date() },
+      isRevoked: { $ne: true },
     });
 
     if (!session) {
@@ -59,10 +59,18 @@ export const authMiddleware = async (
       throw new AppError("Account is deactivated", 401);
     }
 
-    // Update last used time
-    await AuthSessions.findByIdAndUpdate(session._id, {
+    // Update last used time and ensure isRevoked flag is present
+    const isSessionRevoked = session.isRevoked ?? false;
+
+    const updatePayload: Record<string, unknown> = {
       lastUsedAt: new Date(),
-    });
+    };
+
+    if (session.isRevoked === undefined) {
+      updatePayload.isRevoked = isSessionRevoked;
+    }
+
+    await AuthSessions.findByIdAndUpdate(session._id, updatePayload);
 
     // Add user info to request
     req.user = {
@@ -138,8 +146,8 @@ export const optionalAuth = async (
       const session = await AuthSessions.findOne({
         sessionId: decoded.sessionId,
         userId: decoded.userId,
-        isRevoked: false,
         expiresAt: { $gt: new Date() },
+        isRevoked: { $ne: true },
       });
 
       if (session) {

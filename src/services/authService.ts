@@ -428,6 +428,7 @@ class AuthService {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       deviceInfo: deviceInfo || "Web",
       lastUsedAt: new Date(),
+      isRevoked: false,
     });
 
     const tokens = this.generateTokens(user._id.toString(), sessionId);
@@ -509,6 +510,7 @@ class AuthService {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       deviceInfo: deviceInfo,
       lastUsedAt: new Date(),
+      isRevoked: false,
     });
 
     const tokens = this.generateTokens(user._id.toString(), sessionId);
@@ -602,7 +604,7 @@ class AuthService {
     // Invalidate all existing sessions
     await AuthSessions.updateMany(
       { userId: user._id },
-      { revoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() }
     );
 
     // Mark all user's stored sessionIds as revoked
@@ -657,7 +659,7 @@ class AuthService {
   async logout(sessionId: string): Promise<{ message: string }> {
     await AuthSessions.findOneAndUpdate(
       { sessionId: sessionId },
-      { revoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() }
     );
 
     // Mark session as revoked in user's sessionIds
@@ -683,7 +685,7 @@ class AuthService {
   async logoutAllDevices(userId: string): Promise<{ message: string }> {
     await AuthSessions.updateMany(
       { userId },
-      { revoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() }
     );
 
     // Mark all sessionIds as revoked on user
@@ -760,7 +762,6 @@ class AuthService {
     try {
       // Verify refresh token
       const decoded = jwt.verify(refreshToken, this.JWT_REFRESH_SECRET) as any;
-      console.log({ decoded });
 
       if (decoded.type !== "refresh") {
         throw new AppError("Invalid token type", 401);
@@ -770,11 +771,9 @@ class AuthService {
       const session = await AuthSessions.findOne({
         userId: decoded.userId,
         sessionId: decoded.sessionId,
-        revoked: false,
         expiresAt: { $gt: new Date() },
+        isRevoked: { $ne: true },
       });
-
-      console.log({ session });
 
       if (!session) {
         throw new AppError("Invalid or expired refresh token", 401);
@@ -786,13 +785,61 @@ class AuthService {
         throw new AppError("User not found or inactive", 401);
       }
 
-      // Generate new tokens
-      const tokens = this.generateTokens(decoded.userId, decoded.sessionId);
+      // Revoke the current session atomically to prevent token reuse
+      const revokedSession = await AuthSessions.findOneAndUpdate(
+        {
+          _id: session._id,
+          isRevoked: { $ne: true },
+        },
+        {
+          isRevoked: true,
+          revokedAt: new Date(),
+          lastUsedAt: new Date(),
+        },
+        { new: true }
+      );
 
-      // Update last used time
-      await AuthSessions.findByIdAndUpdate(session._id, {
+      if (!revokedSession) {
+        throw new AppError("Invalid or expired refresh token", 401);
+      }
+
+      // Mark the corresponding embedded session info as revoked
+      await User.updateOne(
+        { _id: user._id, "sessionIds.sessionId": session.sessionId },
+        {
+          $set: {
+            "sessionIds.$.status": "revoked",
+            "sessionIds.$.revoked": true,
+          },
+        }
+      );
+
+      // Create a brand new session (token rotation)
+      const newSessionId = crypto.randomUUID();
+      const deviceInfo = session.deviceInfo || "Web";
+
+      await AuthSessions.create({
+        userId: user._id,
+        sessionId: newSessionId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        deviceInfo,
         lastUsedAt: new Date(),
+        isRevoked: false,
       });
+
+      await User.findByIdAndUpdate(user._id, {
+        $push: {
+          sessionIds: {
+            sessionId: newSessionId,
+            status: "active",
+            revoked: false,
+            deviceInfo,
+          },
+        },
+      });
+
+      // Generate tokens tied to the new session
+      const tokens = this.generateTokens(user._id.toString(), newSessionId);
 
       return {
         accessToken: tokens.accessToken,
