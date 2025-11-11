@@ -1,20 +1,179 @@
+/**
+ * @fileoverview Global Error Handler Middleware
+ * @description Handles all errors in the application and sends standardized error responses
+ * @module middleware/errorHandler
+ */
+
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { ApiResponse } from "@/types";
+import { HTTP_STATUS } from "@/constants";
 
+/**
+ * Sensitive fields to redact from error logs
+ * @constant {string[]} SENSITIVE_FIELDS
+ */
+const SENSITIVE_FIELDS = [
+  "password",
+  "otp",
+  "token",
+  "accessToken",
+  "refreshToken",
+  "secret",
+  "apiKey",
+  "apiSecret",
+];
+
+/**
+ * Mask sensitive data in objects
+ * @function maskSensitiveData
+ * @description Recursively redacts sensitive fields from objects before logging
+ * @param {any} obj - Object to mask
+ * @returns {any} Object with sensitive fields redacted
+ */
+const maskSensitiveData = (obj: any): any => {
+  try {
+    // Deep clone the object to avoid mutating the original
+    const clone = JSON.parse(JSON.stringify(obj || {}));
+
+    /**
+     * Recursive function to redact sensitive fields
+     * @param {any} o - Object to process
+     * @returns {any} Object with sensitive fields redacted
+     */
+    const redact = (o: any): any => {
+      if (!o || typeof o !== "object") {
+        return o;
+      }
+
+      // Process all keys in the object
+      for (const key of Object.keys(o)) {
+        // Redact sensitive fields
+        if (SENSITIVE_FIELDS.includes(key.toLowerCase())) {
+          o[key] = "[REDACTED]";
+        }
+        // Recursively process nested objects
+        else if (o[key] && typeof o[key] === "object") {
+          redact(o[key]);
+        }
+      }
+
+      return o;
+    };
+
+    return redact(clone);
+  } catch {
+    // Return empty object if masking fails
+    return {};
+  }
+};
+
+/**
+ * Handle Mongoose validation errors
+ * @function handleValidationError
+ * @param {any} error - Mongoose validation error
+ * @returns {{ statusCode: number; message: string; errorType: string; errorText: string }}
+ */
+const handleValidationError = (
+  error: any
+): {
+  statusCode: number;
+  message: string;
+  errorType: string;
+  errorText: string;
+} => {
+  const errorMessages = Object.values(error.errors).map(
+    (err: any) => err.message
+  );
+
+  return {
+    statusCode: HTTP_STATUS.BAD_REQUEST,
+    message: "Validation error",
+    errorType: "ValidationError",
+    errorText: errorMessages.join(", "),
+  };
+};
+
+/**
+ * Handle Mongoose duplicate key errors
+ * @function handleDuplicateKeyError
+ * @param {any} error - Mongoose duplicate key error
+ * @returns {{ statusCode: number; message: string; errorType: string; errorText: string }}
+ */
+const handleDuplicateKeyError = (
+  error: any
+): {
+  statusCode: number;
+  message: string;
+  errorType: string;
+  errorText: string;
+} => {
+  const field = Object.keys(error.keyValue || {})[0] || "field";
+
+  return {
+    statusCode: HTTP_STATUS.CONFLICT,
+    message: "Duplicate entry",
+    errorType: "DuplicateKeyError",
+    errorText: `${field} already exists`,
+  };
+};
+
+/**
+ * Handle JWT authentication errors
+ * @function handleJWTError
+ * @param {Error} error - JWT error
+ * @returns {{ statusCode: number; message: string; errorType: string; errorText: string }}
+ */
+const handleJWTError = (
+  error: Error
+): {
+  statusCode: number;
+  message: string;
+  errorType: string;
+  errorText: string;
+} => {
+  if (error.name === "TokenExpiredError") {
+    return {
+      statusCode: HTTP_STATUS.UNAUTHORIZED,
+      message: "Authentication failed",
+      errorType: "AuthenticationError",
+      errorText: "Token expired",
+    };
+  }
+
+  return {
+    statusCode: HTTP_STATUS.UNAUTHORIZED,
+    message: "Authentication failed",
+    errorType: "AuthenticationError",
+    errorText: "Invalid token",
+  };
+};
+
+/**
+ * Global Error Handler Middleware
+ * @function errorHandler
+ * @description Centralized error handling middleware that processes all errors
+ * and sends standardized error responses to the client
+ * @param {Error} error - The error object
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ * @param {NextFunction} next - Express next function
+ * @returns {void}
+ */
 export const errorHandler = (
   error: Error,
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
-  let statusCode = 500;
+  // Default error values
+  let statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
   let message = "Internal Server Error";
-  let errorType = "Server Error";
+  let errorType = "ServerError";
   let errorText: string | undefined;
 
-  // Handle AppError instances
+  // Handle AppError instances (custom application errors)
   if (error instanceof AppError) {
     statusCode = error.statusCode;
     message = error.message;
@@ -23,66 +182,49 @@ export const errorHandler = (
   }
   // Handle Mongoose validation errors
   else if (error.name === "ValidationError") {
-    statusCode = 400;
-    const msgs = Object.values((error as any).errors).map(
-      (err: any) => err.message
-    );
-    message = "Validation error";
-    errorType = "Validation error";
-    errorText = msgs.join(", ");
+    const errorInfo = handleValidationError(error as any);
+    statusCode = errorInfo.statusCode;
+    message = errorInfo.message;
+    errorType = errorInfo.errorType;
+    errorText = errorInfo.errorText;
   }
-  // Handle Mongoose duplicate key errors
+  // Handle Mongoose duplicate key errors (MongoDB error code 11000)
   else if ((error as any).code === 11000) {
-    statusCode = 400;
-    const field = Object.keys((error as any).keyValue)[0];
-    message = "Duplicate key";
-    errorType = "Database error";
-    errorText = `${field} already exists`;
+    const errorInfo = handleDuplicateKeyError(error as any);
+    statusCode = errorInfo.statusCode;
+    message = errorInfo.message;
+    errorType = errorInfo.errorType;
+    errorText = errorInfo.errorText;
   }
   // Handle JWT errors
-  else if (error.name === "JsonWebTokenError") {
-    statusCode = 401;
-    message = "Authentication failed";
-    errorType = "Authentication error";
-    errorText = "Invalid token";
-  } else if (error.name === "TokenExpiredError") {
-    statusCode = 401;
-    message = "Authentication failed";
-    errorType = "Authentication error";
-    errorText = "Token expired";
+  else if (
+    error.name === "JsonWebTokenError" ||
+    error.name === "TokenExpiredError"
+  ) {
+    const errorInfo = handleJWTError(error);
+    statusCode = errorInfo.statusCode;
+    message = errorInfo.message;
+    errorType = errorInfo.errorType;
+    errorText = errorInfo.errorText;
   }
-  // Handle CastError (invalid ObjectId)
+  // Handle CastError (invalid ObjectId format)
   else if (error.name === "CastError") {
-    statusCode = 400;
+    statusCode = HTTP_STATUS.BAD_REQUEST;
     message = "Validation error";
-    errorType = "Validation error";
+    errorType = "ValidationError";
     errorText = "Invalid ID format";
   }
+  // Handle other unexpected errors
+  else {
+    // Log unexpected errors for debugging
+    logger.error("Unexpected error:", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    });
+  }
 
-  // Log error
-  const mask = (obj: any) => {
-    try {
-      const clone = JSON.parse(JSON.stringify(obj || {}));
-      const redact = (o: any) => {
-        const keys = [
-          "password",
-          "otp",
-          "token",
-          "accessToken",
-          "refreshToken",
-        ];
-        for (const k of Object.keys(o)) {
-          if (keys.includes(k)) o[k] = "[REDACTED]";
-          else if (o[k] && typeof o[k] === "object") redact(o[k]);
-        }
-        return o;
-      };
-      return redact(clone);
-    } catch {
-      return {};
-    }
-  };
-
+  // Log error with masked sensitive data
   logger.error("Error occurred:", {
     message: error.message,
     stack: error.stack,
@@ -93,12 +235,12 @@ export const errorHandler = (
     method: req.method,
     ip: req.ip,
     userAgent: req.get("User-Agent"),
-    body: mask(req.body),
-    params: mask(req.params),
-    query: mask(req.query),
+    body: maskSensitiveData(req.body),
+    params: maskSensitiveData(req.params),
+    query: maskSensitiveData(req.query),
   });
 
-  // Send error response
+  // Send standardized error response
   const response: ApiResponse = {
     success: false,
     message,

@@ -1,55 +1,125 @@
-import winston from 'winston';
-import path from 'path';
-import { config } from '@/config';
+/**
+ * @fileoverview Logger configuration and setup
+ * @description Winston logger configuration with file and console transports
+ * @module utils/logger
+ */
 
-// Define log format
+import winston from "winston";
+import path from "path";
+import fs from "fs";
+import { config } from "@/config";
+
+/**
+ * Log file size limit (5MB)
+ * @constant {number} MAX_LOG_FILE_SIZE
+ */
+const MAX_LOG_FILE_SIZE = 5 * 1024 * 1024;
+
+/**
+ * Maximum number of log files to keep
+ * @constant {number} MAX_LOG_FILES
+ */
+const MAX_LOG_FILES = 5;
+
+/**
+ * Logs directory path
+ * @constant {string} LOGS_DIR
+ */
+const LOGS_DIR = path.join(process.cwd(), "logs");
+
+/**
+ * Create logs directory if it doesn't exist
+ * @function ensureLogsDirectory
+ * @description Creates the logs directory if it doesn't exist
+ * @returns {void}
+ */
+const ensureLogsDirectory = (): void => {
+  if (!fs.existsSync(LOGS_DIR)) {
+    fs.mkdirSync(LOGS_DIR, { recursive: true });
+  }
+};
+
+/**
+ * Log format for file transports
+ * @constant {winston.Logform.Format} logFormat
+ * @description JSON format with timestamp and error stack traces
+ */
 const logFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   winston.format.errors({ stack: true }),
   winston.format.json()
 );
 
-// Define console format for development
+/**
+ * Console format for development
+ * @constant {winston.Logform.Format} consoleFormat
+ * @description Colorized console output with timestamp and metadata
+ */
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
-  winston.format.timestamp({ format: 'HH:mm:ss' }),
+  winston.format.timestamp({ format: "HH:mm:ss" }),
   winston.format.printf(({ timestamp, level, message, ...meta }) => {
-    return `${timestamp} [${level}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''}`;
+    const metaString = Object.keys(meta).length
+      ? JSON.stringify(meta, null, 2)
+      : "";
+    return `${timestamp} [${level}]: ${message} ${metaString}`;
   })
 );
 
-// Create logger instance
+/**
+ * Winston logger instance
+ * @constant {winston.Logger} logger
+ * @description Configured logger with file and console transports
+ */
 export const logger = winston.createLogger({
   level: config.logging.level,
   format: logFormat,
-  defaultMeta: { service: 'viteezy-phase-2' },
+  defaultMeta: {
+    service: "viteezy-phase-2",
+    environment: config.server.nodeEnv,
+  },
   transports: [
-    // Write all logs with level 'error' and below to error.log
+    // Error log file - only logs errors
     new winston.transports.File({
-      filename: path.join('logs', 'error.log'),
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
+      filename: path.join(LOGS_DIR, "error.log"),
+      level: "error",
+      maxsize: MAX_LOG_FILE_SIZE,
+      maxFiles: MAX_LOG_FILES,
+      handleExceptions: true,
+      handleRejections: true,
     }),
-    // Write all logs with level 'info' and below to combined.log
+    // Combined log file - logs all levels
     new winston.transports.File({
-      filename: path.join('logs', 'combined.log'),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
-  ]
+      filename: path.join(LOGS_DIR, "combined.log"),
+      maxsize: MAX_LOG_FILE_SIZE,
+      maxFiles: MAX_LOG_FILES,
+    }),
+  ],
+  // Exit on error
+  exitOnError: false,
 });
 
-// If we're not in production, log to the console as well
-if (config.server.nodeEnv !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: consoleFormat
-  }));
+// Ensure logs directory exists
+ensureLogsDirectory();
+
+// Add console transport in non-production environments
+if (config.server.nodeEnv !== "production") {
+  logger.add(
+    new winston.transports.Console({
+      format: consoleFormat,
+      handleExceptions: true,
+      handleRejections: true,
+    })
+  );
 }
 
-// Create logs directory if it doesn't exist
-import fs from 'fs';
-const logsDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
+/**
+ * Stream interface for Morgan HTTP logger
+ * @constant {object} stream
+ * @description Allows Winston to be used as Morgan's stream
+ */
+export const stream = {
+  write: (message: string): void => {
+    logger.info(message.trim());
+  },
+};

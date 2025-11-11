@@ -1,48 +1,103 @@
-import Joi from "joi";
-import { OTPType } from "../models/enums";
-import { AppError } from "@/utils/AppError";
+/**
+ * @fileoverview Authentication Validation Schemas
+ * @description Joi validation schemas for authentication-related endpoints
+ * @module validation/authValidation
+ */
 
-// Common validation patterns
+import Joi from "joi";
+import { OTPType } from "@/models/enums";
+import { VALIDATION } from "@/constants";
+
+/**
+ * Email validation schema
+ * @constant {Joi.StringSchema} emailSchema
+ */
 const emailSchema = Joi.string().email().required().messages({
   "string.email": "Please provide a valid email address",
   "any.required": "Email is required",
 });
 
-const passwordSchema = Joi.string().min(6).max(128).required().messages({
-  "string.min": "Password must be at least 6 characters long",
-  "string.max": "Password cannot exceed 128 characters",
-  "any.required": "Password is required",
-});
+/**
+ * Password validation schema
+ * @constant {Joi.StringSchema} passwordSchema
+ */
+const passwordSchema = Joi.string()
+  .min(VALIDATION.PASSWORD.MIN_LENGTH)
+  .max(VALIDATION.PASSWORD.MAX_LENGTH)
+  .required()
+  .messages({
+    "string.min": `Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
+    "string.max": `Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
+    "any.required": "Password is required",
+  });
 
-const currentPasswordSchema = Joi.string().min(6).max(128).required().messages({
-  "string.min": "Current Password must be at least 6 characters long",
-  "string.max": "Current Password cannot exceed 128 characters",
-  "any.required": "Current Password is required",
-});
+/**
+ * Current password validation schema
+ * @constant {Joi.StringSchema} currentPasswordSchema
+ */
+const currentPasswordSchema = Joi.string()
+  .min(VALIDATION.PASSWORD.MIN_LENGTH)
+  .max(VALIDATION.PASSWORD.MAX_LENGTH)
+  .required()
+  .messages({
+    "string.min": `Current Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
+    "string.max": `Current Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
+    "any.required": "Current Password is required",
+  });
 
-const newPasswordSchema = Joi.string().min(6).max(128).required().messages({
-  "string.min": "New Password must be at least 6 characters long",
-  "string.max": "New Password cannot exceed 128 characters",
-  "any.required": "New Password is required",
-});
+/**
+ * New password validation schema
+ * @constant {Joi.StringSchema} newPasswordSchema
+ */
+const newPasswordSchema = Joi.string()
+  .min(VALIDATION.PASSWORD.MIN_LENGTH)
+  .max(VALIDATION.PASSWORD.MAX_LENGTH)
+  .required()
+  .messages({
+    "string.min": `New Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
+    "string.max": `New Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
+    "any.required": "New Password is required",
+  });
 
-const nameSchema = Joi.string().min(2).max(50).required().messages({
-  "string.min": "Name must be at least 2 characters long",
-  "string.max": "Name cannot exceed 50 characters",
-  "any.required": "Name is required",
-});
+/**
+ * Name validation schema
+ * @constant {Joi.StringSchema} nameSchema
+ */
+const nameSchema = Joi.string()
+  .min(VALIDATION.NAME.MIN_LENGTH)
+  .max(VALIDATION.NAME.MAX_LENGTH)
+  .required()
+  .messages({
+    "string.min": `Name must be at least ${VALIDATION.NAME.MIN_LENGTH} characters long`,
+    "string.max": `Name cannot exceed ${VALIDATION.NAME.MAX_LENGTH} characters`,
+    "any.required": "Name is required",
+  });
 
+/**
+ * Device info validation schema
+ * @constant {Joi.StringSchema} deviceInfoSchema
+ */
 const deviceInfoSchema = Joi.string().required().messages({
   "any.required": "Device Info is required",
 });
 
+/**
+ * Phone number validation schema
+ * @constant {Joi.StringSchema} phoneSchema
+ * @description Validates international phone number format (E.164)
+ */
 const phoneSchema = Joi.string()
   .pattern(/^[+]?[1-9]\d{1,14}$/)
   .optional()
   .messages({
-    "string.pattern.base": "Please provide a valid phone number",
+    "string.pattern.base": "Please provide a valid phone number (E.164 format)",
   });
 
+/**
+ * OTP validation schema
+ * @constant {Joi.StringSchema} otpSchema
+ * @description Validates 6-digit OTP code
+ */
 const otpSchema = Joi.string()
   .pattern(/^\d{6}$/)
   .required()
@@ -51,6 +106,11 @@ const otpSchema = Joi.string()
     "any.required": "OTP is required",
   });
 
+/**
+ * OTP type validation schema
+ * @constant {Joi.StringSchema} otpTypeSchema
+ * @description Validates OTP type against enum values
+ */
 const otpTypeSchema = Joi.string()
   .valid(...Object.values(OTPType))
   .required()
@@ -59,7 +119,11 @@ const otpTypeSchema = Joi.string()
     "any.required": "OTP type is required",
   });
 
-// Validation schemas
+/**
+ * User Registration Validation Schema
+ * @constant {Joi.ObjectSchema} registerSchema
+ * @description Validates user registration request data
+ */
 export const registerSchema = Joi.object({
   name: nameSchema,
   email: emailSchema,
@@ -67,73 +131,95 @@ export const registerSchema = Joi.object({
   phone: phoneSchema,
 });
 
+/**
+ * User Login Validation Schema
+ * @constant {Joi.ObjectSchema} loginSchema
+ * @description Validates user login request data
+ */
 export const loginSchema = Joi.object({
   email: emailSchema,
   password: passwordSchema,
   deviceInfo: deviceInfoSchema,
 });
 
+/**
+ * Send OTP Validation Schema
+ * @constant {Joi.ObjectSchema} sendOTPSchema
+ * @description Validates send OTP request data
+ */
 export const sendOTPSchema = Joi.object({
   email: emailSchema,
   type: otpTypeSchema,
 });
 
+/**
+ * Verify OTP Validation Schema
+ * @constant {Joi.ObjectSchema} verifyOTPSchema
+ * @description Validates verify OTP request data
+ */
 export const verifyOTPSchema = Joi.object({
   email: emailSchema,
   otp: otpSchema,
   type: otpTypeSchema,
 });
 
+/**
+ * Resend OTP Validation Schema
+ * @constant {Joi.ObjectSchema} resendOTPSchema
+ * @description Validates resend OTP request data
+ */
 export const resendOTPSchema = Joi.object({
   email: emailSchema,
   type: otpTypeSchema,
 });
 
+/**
+ * Forgot Password Validation Schema
+ * @constant {Joi.ObjectSchema} forgotPasswordSchema
+ * @description Validates forgot password request data
+ */
 export const forgotPasswordSchema = Joi.object({
   email: emailSchema,
 });
 
+/**
+ * Reset Password Validation Schema
+ * @constant {Joi.ObjectSchema} resetPasswordSchema
+ * @description Validates reset password request data
+ */
 export const resetPasswordSchema = Joi.object({
   email: emailSchema,
   otp: otpSchema,
   newPassword: passwordSchema,
 });
 
+/**
+ * Change Password Validation Schema
+ * @constant {Joi.ObjectSchema} changePasswordSchema
+ * @description Validates change password request data
+ */
 export const changePasswordSchema = Joi.object({
   currentPassword: currentPasswordSchema,
   newPassword: newPasswordSchema,
 });
 
+/**
+ * Update Profile Validation Schema
+ * @constant {Joi.ObjectSchema} updateProfileSchema
+ * @description Validates update profile request data
+ */
 export const updateProfileSchema = Joi.object({
   name: nameSchema.optional(),
   phone: phoneSchema,
 });
 
+/**
+ * Refresh Token Validation Schema
+ * @constant {Joi.ObjectSchema} refreshTokenSchema
+ * @description Validates refresh token request data
+ */
 export const refreshTokenSchema = Joi.object({
   refreshToken: Joi.string().required().messages({
     "any.required": "Refresh token is required",
   }),
 });
-
-// Validation middleware
-export const validateAuth = (schema: Joi.ObjectSchema) => {
-  return (req: any, res: any, next: any) => {
-    const { error, value } = schema.validate(req.body, {
-      abortEarly: false,
-      stripUnknown: true,
-      allowUnknown: false,
-    });
-
-    if (error) {
-      const first = error.details[0];
-      const firstMessage = first?.message || "Validation error";
-      const appErr: any = new AppError("Validation error", 400);
-      appErr.errorType = "Validation error";
-      appErr.error = firstMessage;
-      throw appErr;
-    }
-
-    req.body = value;
-    next();
-  };
-};
