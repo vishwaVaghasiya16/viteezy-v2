@@ -1,0 +1,47 @@
+[
+    {
+        "slug": "health-wellness",
+        "title": {
+            "en": "Health & Wellness",
+            "nl": "Gezondheid & Welzijn"
+        },
+        "sortOrder": 1,
+        "isDeleted": false
+    },
+    {
+        "slug": "nutrition",
+        "title": {
+            "en": "Nutrition",
+            "nl": "Voeding"
+        },
+        "sortOrder": 2,
+        "isDeleted": false
+    },
+    {
+        "slug": "fitness",
+        "title": {
+            "en": "Fitness",
+            "nl": "Fitness"
+        },
+        "sortOrder": 3,
+        "isDeleted": false
+    },
+    {
+        "slug": "supplements",
+        "title": {
+            "en": "Supplements",
+            "nl": "Supplementen"
+        },
+        "sortOrder": 4,
+        "isDeleted": false
+    },
+    {
+        "slug": "lifestyle",
+        "title": {
+            "en": "Lifestyle",
+            "nl": "Levensstijl"
+        },
+        "sortOrder": 5,
+        "isDeleted": false
+    }
+]

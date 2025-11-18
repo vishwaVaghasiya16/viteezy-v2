@@ -19,7 +19,7 @@ const AuthSessionSchema = new Schema<IAuthSession>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     deviceInfo: {
       type: String,

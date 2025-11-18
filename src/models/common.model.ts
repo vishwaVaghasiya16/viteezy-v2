@@ -22,6 +22,7 @@ export interface MediaType {
 export interface SeoType {
   title?: string;
   description?: string;
+  keywords?: string;
   ogImage?: string;
   hreflang?: Array<{ lang: string; url: string }>;
 }
@@ -72,6 +73,7 @@ export const SeoSchema = new Schema<SeoType>(
   {
     title: { type: String, trim: true },
     description: { type: String, trim: true },
+    keywords: { type: String, trim: true },
     ogImage: { type: String, trim: true },
     hreflang: [
       {
@@ -114,8 +116,8 @@ export const PriceSchema = new Schema<PriceType>(
 
 export const AuditSchema = new Schema<AuditType>(
   {
-    createdBy: { type: Schema.Types.ObjectId, ref: "users" },
-    updatedBy: { type: Schema.Types.ObjectId, ref: "users" },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { _id: false }
 );

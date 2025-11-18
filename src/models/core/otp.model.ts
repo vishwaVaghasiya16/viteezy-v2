@@ -32,7 +32,7 @@ const OTPSchema = new Schema<IOTP>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     email: {
       type: String,

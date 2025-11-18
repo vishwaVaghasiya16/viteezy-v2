@@ -38,7 +38,7 @@ const AvatarJobSchema = new Schema<IAvatarJob>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     jobType: {
       type: String,

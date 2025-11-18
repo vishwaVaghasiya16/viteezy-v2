@@ -23,7 +23,7 @@ const AddressSchema = new Schema<IAddress>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     label: {
       type: String,

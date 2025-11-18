@@ -1,0 +1,92 @@
+[
+    {
+        "_id": {
+            "$oid": "507f1f77bcf86cd799439011"
+        },
+        "slug": "health-wellness",
+        "title": {
+            "en": "Health & Wellness",
+            "nl": "Gezondheid & Welzijn"
+        },
+        "sortOrder": 1,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f1f77bcf86cd799439012"
+        },
+        "slug": "nutrition",
+        "title": {
+            "en": "Nutrition",
+            "nl": "Voeding"
+        },
+        "sortOrder": 2,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f1f77bcf86cd799439013"
+        },
+        "slug": "fitness",
+        "title": {
+            "en": "Fitness",
+            "nl": "Fitness"
+        },
+        "sortOrder": 3,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f1f77bcf86cd799439014"
+        },
+        "slug": "supplements",
+        "title": {
+            "en": "Supplements",
+            "nl": "Supplementen"
+        },
+        "sortOrder": 4,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f1f77bcf86cd799439015"
+        },
+        "slug": "lifestyle",
+        "title": {
+            "en": "Lifestyle",
+            "nl": "Levensstijl"
+        },
+        "sortOrder": 5,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T10:00:00.000Z"
+        }
+    }
+]

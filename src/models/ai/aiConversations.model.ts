@@ -31,7 +31,7 @@ const AIConversationSchema = new Schema<IAIConversation>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     sessionId: {
       type: String,

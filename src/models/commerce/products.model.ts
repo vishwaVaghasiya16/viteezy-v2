@@ -63,8 +63,8 @@ const ProductSchema = new Schema<IProduct>(
     seo: { type: SeoSchema, default: () => ({}) },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date },
-    createdBy: { type: Schema.Types.ObjectId, ref: "users" },
-    updatedBy: { type: Schema.Types.ObjectId, ref: "users" },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

@@ -31,7 +31,7 @@ const CartSchema = new Schema<ICart>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     sessionId: {
       type: String,

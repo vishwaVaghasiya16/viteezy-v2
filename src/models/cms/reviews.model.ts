@@ -31,7 +31,7 @@ const ReviewSchema = new Schema<IReview>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     productId: {
       type: Schema.Types.ObjectId,

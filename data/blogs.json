@@ -1,0 +1,361 @@
+[
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860ea"
+        },
+        "slug": "10-essential-vitamins-for-daily-health",
+        "title": {
+            "en": "10 Essential Vitamins for Daily Health",
+            "nl": "10 Essentiële Vitamines voor Dagelijkse Gezondheid"
+        },
+        "excerpt": {
+            "en": "Discover the 10 most important vitamins your body needs every day to maintain optimal health and wellness.",
+            "nl": "Ontdek de 10 belangrijkste vitamines die uw lichaam dagelijks nodig heeft om een optimale gezondheid en welzijn te behouden."
+        },
+        "content": {
+            "en": "Vitamins are essential nutrients that your body needs to function properly. In this comprehensive guide, we'll explore the 10 most important vitamins for daily health. From Vitamin A to Zinc, each vitamin plays a crucial role in maintaining your body's systems. Vitamin D, for example, is essential for bone health and immune function, while Vitamin C is a powerful antioxidant that supports your immune system. Learn how to incorporate these vitamins into your daily routine through diet and supplements.",
+            "nl": "Vitamines zijn essentiële voedingsstoffen die uw lichaam nodig heeft om goed te functioneren. In deze uitgebreide gids onderzoeken we de 10 belangrijkste vitamines voor dagelijkse gezondheid. Van vitamine A tot zink speelt elke vitamine een cruciale rol bij het behouden van de systemen van uw lichaam. Vitamine D is bijvoorbeeld essentieel voor de gezondheid van de botten en de immuunfunctie, terwijl vitamine C een krachtige antioxidant is die uw immuunsysteem ondersteunt. Leer hoe u deze vitamines in uw dagelijkse routine kunt opnemen via voeding en supplementen."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439020"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439012"
+        },
+        "tags": [
+            "vitamins",
+            "health",
+            "nutrition",
+            "wellness"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=800",
+            "alt": {
+                "en": "Vitamins and supplements",
+                "nl": "Vitamines en supplementen"
+            },
+            "sortOrder": 0
+        },
+        "gallery": [
+            {
+                "type": "image",
+                "url": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800",
+                "alt": {
+                    "en": "Healthy food",
+                    "nl": "Gezond eten"
+                },
+                "sortOrder": 1
+            }
+        ],
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-20T10:00:00.000Z"
+        },
+        "seo": {
+            "title": "10 Essential Vitamins for Daily Health | Viteezy",
+            "description": "Discover the 10 most important vitamins your body needs every day. Learn about their benefits and how to get them through diet and supplements.",
+            "ogImage": "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200"
+        },
+        "viewCount": 1250,
+        "likeCount": 89,
+        "commentCount": 23,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-20T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-20T09:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860eb"
+        },
+        "slug": "best-workout-routine-for-beginners",
+        "title": {
+            "en": "Best Workout Routine for Beginners",
+            "nl": "Beste Trainingsroutine voor Beginners"
+        },
+        "excerpt": {
+            "en": "Starting your fitness journey? Here's a complete guide to the best workout routine for beginners that will help you build strength and confidence.",
+            "nl": "Begint u aan uw fitnessreis? Hier is een complete gids voor de beste trainingsroutine voor beginners die u zal helpen kracht en vertrouwen op te bouwen."
+        },
+        "content": {
+            "en": "Starting a fitness journey can be overwhelming, but with the right workout routine, you can build a strong foundation. This beginner-friendly guide covers everything from warm-up exercises to strength training and cardio. We'll discuss the importance of proper form, rest days, and progressive overload. Whether you're looking to lose weight, build muscle, or improve your overall health, this routine will set you on the right path. Remember, consistency is key, and it's better to start slow and build up gradually.",
+            "nl": "Aan een fitnessreis beginnen kan overweldigend zijn, maar met de juiste trainingsroutine kunt u een sterke basis opbouwen. Deze beginnersvriendelijke gids behandelt alles van warming-up oefeningen tot krachttraining en cardio. We bespreken het belang van goede vorm, rustdagen en progressieve overbelasting. Of u nu wilt afvallen, spieren wilt opbouwen of uw algehele gezondheid wilt verbeteren, deze routine zet u op het juiste pad. Onthoud dat consistentie de sleutel is, en het is beter om langzaam te beginnen en geleidelijk op te bouwen."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439020"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439013"
+        },
+        "tags": [
+            "fitness",
+            "workout",
+            "beginners",
+            "exercise"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800",
+            "alt": {
+                "en": "Fitness workout",
+                "nl": "Fitness training"
+            },
+            "sortOrder": 0
+        },
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-18T14:30:00.000Z"
+        },
+        "seo": {
+            "title": "Best Workout Routine for Beginners | Viteezy",
+            "description": "Complete guide to the best workout routine for beginners. Learn proper form, rest days, and progressive overload to build strength and confidence.",
+            "ogImage": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200"
+        },
+        "viewCount": 2100,
+        "likeCount": 156,
+        "commentCount": 42,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-18T13:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-18T13:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860ec"
+        },
+        "slug": "understanding-protein-supplements",
+        "title": {
+            "en": "Understanding Protein Supplements",
+            "nl": "Eiwitsupplementen Begrijpen"
+        },
+        "excerpt": {
+            "en": "Everything you need to know about protein supplements: types, benefits, and when to use them for optimal results.",
+            "nl": "Alles wat u moet weten over eiwitsupplementen: soorten, voordelen en wanneer u ze moet gebruiken voor optimale resultaten."
+        },
+        "content": {
+            "en": "Protein supplements have become a staple in many fitness enthusiasts' routines. But with so many options available, it can be confusing to know which one is right for you. This comprehensive guide covers whey protein, casein, plant-based proteins, and more. We'll discuss the benefits of each type, when to take them, and how much protein you actually need. Whether you're looking to build muscle, recover faster, or maintain a healthy diet, understanding protein supplements is essential.",
+            "nl": "Eiwitsupplementen zijn een hoofdbestanddeel geworden in de routines van veel fitnessliefhebbers. Maar met zoveel opties beschikbaar, kan het verwarrend zijn om te weten welke geschikt is voor u. Deze uitgebreide gids behandelt wei-eiwit, caseïne, plantaardige eiwitten en meer. We bespreken de voordelen van elk type, wanneer u ze moet innemen en hoeveel eiwit u eigenlijk nodig heeft. Of u nu spieren wilt opbouwen, sneller wilt herstellen of een gezond dieet wilt behouden, het begrijpen van eiwitsupplementen is essentieel."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439021"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439014"
+        },
+        "tags": [
+            "protein",
+            "supplements",
+            "fitness",
+            "nutrition"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=800",
+            "alt": {
+                "en": "Protein supplements",
+                "nl": "Eiwitsupplementen"
+            },
+            "sortOrder": 0
+        },
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-22T11:00:00.000Z"
+        },
+        "seo": {
+            "title": "Understanding Protein Supplements | Viteezy",
+            "description": "Complete guide to protein supplements: types, benefits, and when to use them. Learn about whey, casein, and plant-based proteins.",
+            "ogImage": "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=1200"
+        },
+        "viewCount": 980,
+        "likeCount": 67,
+        "commentCount": 18,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-22T10:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-22T10:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860ed"
+        },
+        "slug": "healthy-morning-routine-tips",
+        "title": {
+            "en": "Healthy Morning Routine Tips",
+            "nl": "Tips voor een Gezonde Ochtendroutine"
+        },
+        "excerpt": {
+            "en": "Start your day right with these proven healthy morning routine tips that will boost your energy and productivity.",
+            "nl": "Begin uw dag goed met deze bewezen tips voor een gezonde ochtendroutine die uw energie en productiviteit zullen verhogen."
+        },
+        "content": {
+            "en": "A healthy morning routine sets the tone for your entire day. In this article, we'll explore evidence-based tips to help you start your mornings with energy and purpose. From hydration and nutrition to exercise and mindfulness, we'll cover all aspects of a productive morning routine. Learn how waking up at the same time, drinking water first thing, and incorporating movement can transform your day. We'll also discuss the importance of avoiding screens first thing in the morning and creating a routine that works for your lifestyle.",
+            "nl": "Een gezonde ochtendroutine zet de toon voor uw hele dag. In dit artikel onderzoeken we op bewijs gebaseerde tips om u te helpen uw ochtenden met energie en doel te beginnen. Van hydratatie en voeding tot beweging en mindfulness, we behandelen alle aspecten van een productieve ochtendroutine. Leer hoe opstaan op hetzelfde tijdstip, als eerste water drinken en beweging opnemen uw dag kunnen transformeren. We bespreken ook het belang van het vermijden van schermen als eerste in de ochtend en het creëren van een routine die werkt voor uw levensstijl."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439020"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439015"
+        },
+        "tags": [
+            "lifestyle",
+            "morning routine",
+            "productivity",
+            "wellness"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?w=800",
+            "alt": {
+                "en": "Morning routine",
+                "nl": "Ochtendroutine"
+            },
+            "sortOrder": 0
+        },
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-25T08:00:00.000Z"
+        },
+        "seo": {
+            "title": "Healthy Morning Routine Tips | Viteezy",
+            "description": "Start your day right with these proven healthy morning routine tips. Learn how to boost energy and productivity with simple daily habits.",
+            "ogImage": "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?w=1200"
+        },
+        "viewCount": 1750,
+        "likeCount": 134,
+        "commentCount": 35,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-25T07:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-25T07:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860ee"
+        },
+        "slug": "benefits-of-meditation-for-mental-health",
+        "title": {
+            "en": "Benefits of Meditation for Mental Health",
+            "nl": "Voordelen van Meditatie voor Geestelijke Gezondheid"
+        },
+        "excerpt": {
+            "en": "Discover how meditation can improve your mental health, reduce stress, and enhance overall well-being.",
+            "nl": "Ontdek hoe meditatie uw geestelijke gezondheid kan verbeteren, stress kan verminderen en het algehele welzijn kan verbeteren."
+        },
+        "content": {
+            "en": "Meditation has been practiced for thousands of years and is now backed by scientific research showing its numerous benefits for mental health. This article explores how regular meditation practice can reduce anxiety, improve focus, enhance emotional regulation, and promote better sleep. We'll discuss different meditation techniques, from mindfulness to guided meditation, and provide practical tips for beginners. Learn how just 10 minutes a day can make a significant difference in your mental well-being and overall quality of life.",
+            "nl": "Meditatie wordt al duizenden jaren beoefend en wordt nu ondersteund door wetenschappelijk onderzoek dat de talrijke voordelen voor de geestelijke gezondheid aantoont. Dit artikel onderzoekt hoe regelmatige meditatiebeoefening angst kan verminderen, focus kan verbeteren, emotieregulatie kan verbeteren en betere slaap kan bevorderen. We bespreken verschillende meditatietechnieken, van mindfulness tot geleide meditatie, en bieden praktische tips voor beginners. Leer hoe slechts 10 minuten per dag een aanzienlijk verschil kan maken in uw geestelijk welzijn en algehele kwaliteit van leven."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439021"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439011"
+        },
+        "tags": [
+            "meditation",
+            "mental health",
+            "wellness",
+            "stress relief"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800",
+            "alt": {
+                "en": "Meditation",
+                "nl": "Meditatie"
+            },
+            "sortOrder": 0
+        },
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-28T09:00:00.000Z"
+        },
+        "seo": {
+            "title": "Benefits of Meditation for Mental Health | Viteezy",
+            "description": "Discover how meditation can improve mental health, reduce stress, and enhance well-being. Learn different techniques and practical tips for beginners.",
+            "ogImage": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1200"
+        },
+        "viewCount": 890,
+        "likeCount": 78,
+        "commentCount": 19,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-28T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-28T08:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "507f191e810c19729de860ef"
+        },
+        "slug": "omega-3-fatty-acids-complete-guide",
+        "title": {
+            "en": "Omega-3 Fatty Acids: Complete Guide",
+            "nl": "Omega-3 Vetzuren: Complete Gids"
+        },
+        "excerpt": {
+            "en": "Everything you need to know about Omega-3 fatty acids, their health benefits, and the best sources to include in your diet.",
+            "nl": "Alles wat u moet weten over omega-3 vetzuren, hun gezondheidsvoordelen en de beste bronnen om in uw dieet op te nemen."
+        },
+        "content": {
+            "en": "Omega-3 fatty acids are essential fats that play a crucial role in brain function, heart health, and inflammation reduction. This comprehensive guide covers the three main types of Omega-3s: ALA, EPA, and DHA. We'll explore their individual benefits, recommended daily intake, and the best food sources. From fatty fish to flaxseeds and walnuts, learn how to incorporate these healthy fats into your diet. We'll also discuss when supplements might be necessary and how to choose the right Omega-3 supplement for your needs.",
+            "nl": "Omega-3 vetzuren zijn essentiële vetten die een cruciale rol spelen bij de hersenfunctie, hartgezondheid en ontstekingsreductie. Deze uitgebreide gids behandelt de drie hoofdtypen Omega-3's: ALA, EPA en DHA. We onderzoeken hun individuele voordelen, aanbevolen dagelijkse inname en de beste voedselbronnen. Van vette vis tot lijnzaad en walnoten, leer hoe u deze gezonde vetten in uw dieet kunt opnemen. We bespreken ook wanneer supplementen nodig kunnen zijn en hoe u het juiste Omega-3 supplement voor uw behoeften kiest."
+        },
+        "authorId": {
+            "$oid": "507f1f77bcf86cd799439020"
+        },
+        "categoryId": {
+            "$oid": "507f1f77bcf86cd799439012"
+        },
+        "tags": [
+            "omega-3",
+            "nutrition",
+            "health",
+            "supplements"
+        ],
+        "featuredImage": {
+            "type": "image",
+            "url": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800",
+            "alt": {
+                "en": "Omega-3 sources",
+                "nl": "Omega-3 bronnen"
+            },
+            "sortOrder": 0
+        },
+        "status": "published",
+        "publishedAt": {
+            "$date": "2024-01-30T12:00:00.000Z"
+        },
+        "seo": {
+            "title": "Omega-3 Fatty Acids: Complete Guide | Viteezy",
+            "description": "Complete guide to Omega-3 fatty acids: benefits, sources, and supplements. Learn about ALA, EPA, and DHA and how to include them in your diet.",
+            "ogImage": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200"
+        },
+        "viewCount": 1450,
+        "likeCount": 112,
+        "commentCount": 28,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-30T11:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-30T11:00:00.000Z"
+        }
+    }
+]

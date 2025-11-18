@@ -53,7 +53,7 @@ const BlogSchema = new Schema<IBlog>(
     },
     authorId: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
     },
     categoryId: {
       type: Schema.Types.ObjectId,

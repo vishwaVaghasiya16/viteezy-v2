@@ -10,6 +10,9 @@ export * from "./authValidation";
 // Export payment validation schemas
 export * from "./paymentValidation";
 
+// Export blog validation schemas
+export * from "./blogValidation";
+
 // Add more validation schemas here as you create them
 // export * from './userValidation';
 // export * from './productValidation';

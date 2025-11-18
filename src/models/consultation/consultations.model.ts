@@ -41,7 +41,7 @@ export interface IConsultation extends Document {
 const ConsultationSchema = new Schema<IConsultation>(
   {
     bookingNo: { type: String },
-    userId: { type: Schema.Types.ObjectId, ref: "users" },
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
     expertId: { type: Schema.Types.ObjectId, ref: "experts" },
     scheduledAt: { type: Date },
     durationMins: { type: Number, default: 30 },
