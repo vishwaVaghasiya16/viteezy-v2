@@ -4,6 +4,7 @@ import userRoutes from "./userRoutes";
 import exampleRoutes from "./exampleRoutes";
 import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
+import addressRoutes from "./addressRoutes";
 
 const router = Router();
 
@@ -13,5 +14,6 @@ router.use("/users", userRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
+router.use("/addresses", addressRoutes);
 
 export default router;

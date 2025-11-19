@@ -13,7 +13,5 @@ export * from "./paymentValidation";
 // Export blog validation schemas
 export * from "./blogValidation";
 
-// Add more validation schemas here as you create them
-// export * from './userValidation';
-// export * from './productValidation';
-// export * from './orderValidation';
+// Export address validation schemas
+export * from "./addressValidation";

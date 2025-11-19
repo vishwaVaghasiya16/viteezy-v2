@@ -2,195 +2,195 @@
 
 // Product Status
 export enum ProductStatus {
-  ACTIVE = "ACTIVE",
-  HIDDEN = "HIDDEN",
-  DRAFT = "DRAFT",
+  ACTIVE = "Active",
+  HIDDEN = "Hidden",
+  DRAFT = "Draft",
 }
 
 // User Roles
 export enum UserRole {
-  USER = "user",
-  ADMIN = "admin",
-  MODERATOR = "moderator",
+  USER = "User",
+  ADMIN = "Admin",
+  MODERATOR = "Moderator",
 }
 
 // User Status
 export enum UserStatus {
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-  SUSPENDED = "suspended",
+  ACTIVE = "Active",
+  INACTIVE = "Inactive",
+  SUSPENDED = "Suspended",
 }
 
 // Blog Status
 export enum BlogStatus {
-  DRAFT = "draft",
-  PUBLISHED = "published",
-  ARCHIVED = "archived",
+  DRAFT = "Draft",
+  PUBLISHED = "Published",
+  ARCHIVED = "Archived",
 }
 
 // Page Status
 export enum PageStatus {
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-  DRAFT = "draft",
+  ACTIVE = "Active",
+  INACTIVE = "Inactive",
+  DRAFT = "Draft",
 }
 
 // Page Types
 export enum PageType {
-  STATIC = "static",
-  DYNAMIC = "dynamic",
-  LANDING = "landing",
+  STATIC = "Static",
+  DYNAMIC = "Dynamic",
+  LANDING = "Landing",
 }
 
 // Order Status
 export enum OrderStatus {
-  PENDING = "pending",
-  CONFIRMED = "confirmed",
-  PROCESSING = "processing",
-  SHIPPED = "shipped",
-  DELIVERED = "delivered",
-  CANCELLED = "cancelled",
-  REFUNDED = "refunded",
+  PENDING = "Pending",
+  CONFIRMED = "Confirmed",
+  PROCESSING = "Processing",
+  SHIPPED = "Shipped",
+  DELIVERED = "Delivered",
+  CANCELLED = "Cancelled",
+  REFUNDED = "Refunded",
 }
 
 // Payment Status
 export enum PaymentStatus {
-  PENDING = "pending",
-  PROCESSING = "processing",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  CANCELLED = "cancelled",
-  REFUNDED = "refunded",
+  PENDING = "Pending",
+  PROCESSING = "Processing",
+  COMPLETED = "Completed",
+  FAILED = "Failed",
+  CANCELLED = "Cancelled",
+  REFUNDED = "Refunded",
 }
 
 // Payment Methods
 export enum PaymentMethod {
-  STRIPE = "stripe",
-  MOLLIE = "mollie",
-  PAYPAL = "paypal",
-  BANK_TRANSFER = "bank_transfer",
+  STRIPE = "Stripe",
+  MOLLIE = "Mollie",
+  PAYPAL = "Paypal",
+  BANK_TRANSFER = "Bank Transfer",
 }
 
 // Shipment Status
 export enum ShipmentStatus {
-  PENDING = "pending",
-  PICKED_UP = "picked_up",
-  IN_TRANSIT = "in_transit",
-  OUT_FOR_DELIVERY = "out_for_delivery",
-  DELIVERED = "delivered",
-  EXCEPTION = "exception",
-  RETURNED = "returned",
+  PENDING = "Pending",
+  PICKED_UP = "Picked Up",
+  IN_TRANSIT = "In Transit",
+  OUT_FOR_DELIVERY = "Out for Delivery",
+  DELIVERED = "Delivered",
+  EXCEPTION = "Exception",
+  RETURNED = "Returned",
 }
 
 // Campaign Types
 export enum CampaignType {
-  DISCOUNT = "discount",
-  BOGO = "bogo",
-  FREE_SHIPPING = "free_shipping",
-  GIFT = "gift",
+  DISCOUNT = "Discount",
+  BOGO = "Buy One Get One",
+  FREE_SHIPPING = "Free Shipping",
+  GIFT = "Gift",
 }
 
 // Campaign Status
 export enum CampaignStatus {
-  DRAFT = "draft",
-  ACTIVE = "active",
-  PAUSED = "paused",
-  EXPIRED = "expired",
+  DRAFT = "Draft",
+  ACTIVE = "Active",
+  PAUSED = "Paused",
+  EXPIRED = "Expired",
 }
 
 // Discount Types
 export enum DiscountType {
-  PERCENTAGE = "percentage",
-  FIXED = "fixed",
-  FREE = "free",
+  PERCENTAGE = "Percentage",
+  FIXED = "Fixed",
+  FREE = "Free",
 }
 
 // Coupon Types
 export enum CouponType {
-  PERCENTAGE = "percentage",
-  FIXED = "fixed",
-  FREE_SHIPPING = "free_shipping",
+  PERCENTAGE = "Percentage",
+  FIXED = "Fixed",
+  FREE_SHIPPING = "Free Shipping",
 }
 
 // Ingredient Types
 export enum IngredientType {
-  VITAMIN = "vitamin",
-  MINERAL = "mineral",
-  HERB = "herb",
-  AMINO_ACID = "amino_acid",
-  FATTY_ACID = "fatty_acid",
-  OTHER = "other",
+  VITAMIN = "Vitamin",
+  MINERAL = "Mineral",
+  HERB = "Herb",
+  AMINO_ACID = "Amino Acid",
+  FATTY_ACID = "Fatty Acid",
+  OTHER = "Other",
 }
 
 // Consultation Status
 export enum ConsultationStatus {
-  BOOKED = "BOOKED",
-  RESCHEDULED = "RESCHEDULED",
-  CANCELLED = "CANCELLED",
-  COMPLETED = "COMPLETED",
+  BOOKED = "Booked",
+  RESCHEDULED = "Rescheduled",
+  CANCELLED = "Cancelled",
+  COMPLETED = "Completed",
 }
 
 // Expert Slot Status
 export enum ExpertSlotStatus {
-  AVAILABLE = "available",
-  BOOKED = "booked",
-  BLOCKED = "blocked",
+  AVAILABLE = "Available",
+  BOOKED = "Booked",
+  BLOCKED = "Blocked",
 }
 
 // AI Conversation Status
 export enum AIConversationStatus {
-  ACTIVE = "active",
-  COMPLETED = "completed",
-  ARCHIVED = "archived",
+  ACTIVE = "Active",
+  COMPLETED = "Completed",
+  ARCHIVED = "Archived",
 }
 
 // AI Job Types
 export enum AIJobType {
-  GENERATE = "generate",
-  EDIT = "edit",
-  ENHANCE = "enhance",
+  GENERATE = "Generate",
+  EDIT = "Edit",
+  ENHANCE = "Enhance",
 }
 
 // AI Job Status
 export enum AIJobStatus {
-  PENDING = "pending",
-  PROCESSING = "processing",
-  COMPLETED = "completed",
-  FAILED = "failed",
+  PENDING = "Pending",
+  PROCESSING = "Processing",
+  COMPLETED = "Completed",
+  FAILED = "Failed",
 }
 
 // Address Types
 export enum AddressType {
-  HOME = "home",
-  WORK = "work",
-  OTHER = "other",
+  HOME = "Home",
+  WORK = "Work",
+  OTHER = "Other",
 }
 
 // Review Status
 export enum ReviewStatus {
-  PENDING = "pending",
-  APPROVED = "approved",
-  REJECTED = "rejected",
+  PENDING = "Pending",
+  APPROVED = "Approved",
+  REJECTED = "Rejected",
 }
 
 // Media Types
 export enum MediaType {
-  IMAGE = "image",
-  VIDEO = "video",
+  IMAGE = "Image",
+  VIDEO = "Video",
 }
 
 // Frequency Types
 export enum FrequencyType {
-  DAILY = "daily",
-  WEEKLY = "weekly",
-  MONTHLY = "monthly",
+  DAILY = "Daily",
+  WEEKLY = "Weekly",
+  MONTHLY = "Monthly",
 }
 
 // Message Roles
 export enum MessageRole {
-  USER = "user",
-  ASSISTANT = "assistant",
-  SYSTEM = "system",
+  USER = "User",
+  ASSISTANT = "Assistant",
+  SYSTEM = "System",
 }
 
 // Working Days (0-6, Sunday-Saturday)
@@ -214,18 +214,18 @@ export enum Currency {
 
 // OTP Types
 export enum OTPType {
-  EMAIL_VERIFICATION = "email_verification",
-  PHONE_VERIFICATION = "phone_verification",
-  PASSWORD_RESET = "password_reset",
-  LOGIN_VERIFICATION = "login_verification",
+  EMAIL_VERIFICATION = "Email Verification",
+  PHONE_VERIFICATION = "Phone Verification",
+  PASSWORD_RESET = "Password Reset",
+  LOGIN_VERIFICATION = "Login Verification",
 }
 
 // OTP Status
 export enum OTPStatus {
-  PENDING = "pending",
-  VERIFIED = "verified",
-  EXPIRED = "expired",
-  USED = "used",
+  PENDING = "Pending",
+  VERIFIED = "Verified",
+  EXPIRED = "Expired",
+  USED = "Used",
 }
 
 // Timezones

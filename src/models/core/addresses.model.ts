@@ -4,16 +4,18 @@ import { AddressType, ADDRESS_TYPE_VALUES } from "../enums";
 
 export interface IAddress extends Document {
   userId: mongoose.Types.ObjectId;
-  label?: string;
-  line1: string;
-  line2?: string;
-  city: string;
-  state?: string;
-  zip?: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
   country: string;
+  state: string;
+  city: string;
+  zip: string;
+  addressLine1: string;
+  addressLine2?: string;
   isDefault: boolean;
-  type: AddressType;
-  phone?: string;
+  type?: AddressType;
+  label?: string;
   instructions?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -24,32 +26,50 @@ const AddressSchema = new Schema<IAddress>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+      index: true,
     },
-    label: {
+    firstName: {
       type: String,
+      required: true,
       trim: true,
     },
-    line1: {
+    lastName: {
       type: String,
+      required: true,
       trim: true,
     },
-    line2: {
+    phone: {
       type: String,
+      required: true,
       trim: true,
     },
-    city: {
+    country: {
       type: String,
+      required: true,
       trim: true,
     },
     state: {
       type: String,
+      required: true,
+      trim: true,
+    },
+    city: {
+      type: String,
+      required: true,
       trim: true,
     },
     zip: {
       type: String,
+      required: true,
       trim: true,
     },
-    country: {
+    addressLine1: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    addressLine2: {
       type: String,
       trim: true,
     },
@@ -62,7 +82,7 @@ const AddressSchema = new Schema<IAddress>(
       enum: ADDRESS_TYPE_VALUES,
       default: AddressType.HOME,
     },
-    phone: {
+    label: {
       type: String,
       trim: true,
     },

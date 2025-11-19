@@ -1,0 +1,334 @@
+/**
+ * @fileoverview Address Controller
+ * @description Controller for address-related operations
+ * @module controllers/addressController
+ */
+
+import { Request, Response } from "express";
+import { asyncHandler } from "@/utils";
+import { Addresses, IAddress } from "@/models/core/addresses.model";
+import mongoose from "mongoose";
+
+interface AuthenticatedRequest extends Request {
+  user?: any;
+  userId?: string;
+}
+
+class AddressController {
+  /**
+   * Add new address for authenticated user
+   * @route POST /api/addresses
+   * @access Private
+   */
+  addAddress = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      const {
+        firstName,
+        lastName,
+        phone,
+        country,
+        state,
+        city,
+        zip,
+        addressLine1,
+        addressLine2,
+        isDefault,
+        type,
+        label,
+        instructions,
+      } = req.body;
+
+      // If setting as default, unset other default addresses for this user
+      if (isDefault === true) {
+        await Addresses.updateMany(
+          {
+            userId: new mongoose.Types.ObjectId(userId),
+            isDeleted: false,
+          },
+          { $set: { isDefault: false } }
+        );
+      }
+
+      // Create new address
+      const address = await Addresses.create({
+        userId: new mongoose.Types.ObjectId(userId),
+        firstName,
+        lastName,
+        phone,
+        country,
+        state,
+        city,
+        zip,
+        addressLine1,
+        addressLine2,
+        isDefault: isDefault || false,
+        type: type || "home",
+        label,
+        instructions,
+        createdBy: new mongoose.Types.ObjectId(userId),
+        updatedBy: new mongoose.Types.ObjectId(userId),
+      });
+
+      res.apiCreated({ address }, "Address added successfully");
+    }
+  );
+
+  /**
+   * Get all addresses for authenticated user
+   * @route GET /api/addresses
+   * @access Private
+   */
+  getAllAddresses = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      const addresses = await Addresses.find({
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      })
+        .sort({ isDefault: -1, createdAt: -1 })
+        .lean();
+
+      res.apiSuccess({ addresses }, "Addresses retrieved successfully");
+    }
+  );
+
+  /**
+   * Get address by ID
+   * @route GET /api/addresses/:id
+   * @access Private
+   */
+  getAddressById = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      const { id } = req.params;
+
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        res.apiError("Invalid address ID", 400);
+        return;
+      }
+
+      const address = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(id),
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      }).lean();
+
+      if (!address) {
+        res.apiNotFound("Address not found");
+        return;
+      }
+
+      res.apiSuccess({ address }, "Address retrieved successfully");
+    }
+  );
+
+  /**
+   * Update address by ID
+   * @route PUT /api/addresses/:id
+   * @access Private
+   */
+  updateAddress = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      const { id } = req.params;
+
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        res.apiError("Invalid address ID", 400);
+        return;
+      }
+
+      // Check if address exists and belongs to user
+      const existingAddress = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(id),
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      });
+
+      if (!existingAddress) {
+        res.apiNotFound("Address not found");
+        return;
+      }
+
+      const {
+        firstName,
+        lastName,
+        phone,
+        country,
+        state,
+        city,
+        zip,
+        addressLine1,
+        addressLine2,
+        isDefault,
+        type,
+        label,
+        instructions,
+      } = req.body;
+
+      // If setting as default, unset other default addresses for this user
+      if (isDefault === true && existingAddress.isDefault !== true) {
+        await Addresses.updateMany(
+          {
+            userId: new mongoose.Types.ObjectId(userId),
+            _id: { $ne: new mongoose.Types.ObjectId(id) },
+            isDeleted: false,
+          },
+          { $set: { isDefault: false } }
+        );
+      }
+
+      // Update address
+      const updatedAddress = await Addresses.findByIdAndUpdate(
+        id,
+        {
+          ...(firstName && { firstName }),
+          ...(lastName && { lastName }),
+          ...(phone && { phone }),
+          ...(country && { country }),
+          ...(state && { state }),
+          ...(city && { city }),
+          ...(zip && { zip }),
+          ...(addressLine1 && { addressLine1 }),
+          ...(addressLine2 !== undefined && { addressLine2 }),
+          ...(isDefault !== undefined && { isDefault }),
+          ...(type && { type }),
+          ...(label !== undefined && { label }),
+          ...(instructions !== undefined && { instructions }),
+          updatedBy: new mongoose.Types.ObjectId(userId),
+        },
+        { new: true, runValidators: true }
+      ).lean();
+
+      res.apiSuccess(
+        { address: updatedAddress },
+        "Address updated successfully"
+      );
+    }
+  );
+
+  /**
+   * Delete address by ID (soft delete)
+   * @route DELETE /api/addresses/:id
+   * @access Private
+   */
+  deleteAddress = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      const { id } = req.params;
+
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        res.apiError("Invalid address ID", 400);
+        return;
+      }
+
+      // Check if address exists and belongs to user
+      const address = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(id),
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      });
+
+      if (!address) {
+        res.apiNotFound("Address not found");
+        return;
+      }
+
+      // Soft delete the address
+      await Addresses.findByIdAndUpdate(id, {
+        isDeleted: true,
+        deletedAt: new Date(),
+        updatedBy: new mongoose.Types.ObjectId(userId),
+      });
+
+      res.apiSuccess(null, "Address deleted successfully");
+    }
+  );
+
+  /**
+   * Set address as default
+   * @route PATCH /api/addresses/:id/set-default
+   * @access Private
+   */
+  setDefaultAddress = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?.id;
+      const { id } = req.params;
+
+      if (!userId) {
+        res.apiError("User not authenticated", 401);
+        return;
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        res.apiError("Invalid address ID", 400);
+        return;
+      }
+
+      // Check if address exists and belongs to user
+      const address = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(id),
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      });
+
+      if (!address) {
+        res.apiNotFound("Address not found");
+        return;
+      }
+
+      // Unset all other default addresses for this user
+      await Addresses.updateMany(
+        {
+          userId: new mongoose.Types.ObjectId(userId),
+          _id: { $ne: new mongoose.Types.ObjectId(id) },
+          isDeleted: false,
+        },
+        { $set: { isDefault: false } }
+      );
+
+      // Set this address as default
+      const updatedAddress = await Addresses.findByIdAndUpdate(
+        id,
+        {
+          isDefault: true,
+          updatedBy: new mongoose.Types.ObjectId(userId),
+        },
+        { new: true }
+      ).lean();
+
+      res.apiSuccess(
+        { address: updatedAddress },
+        "Default address set successfully"
+      );
+    }
+  );
+}
+
+const addressController = new AddressController();
+export { addressController as AddressController };
