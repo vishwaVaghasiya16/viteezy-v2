@@ -13,6 +13,8 @@ export interface IAddress extends Document {
   zip: string;
   addressLine1: string;
   addressLine2?: string;
+  houseNumber?: string;
+  houseNumberAddition?: string;
   isDefault: boolean;
   type?: AddressType;
   label?: string;
@@ -70,6 +72,14 @@ const AddressSchema = new Schema<IAddress>(
       trim: true,
     },
     addressLine2: {
+      type: String,
+      trim: true,
+    },
+    houseNumber: {
+      type: String,
+      trim: true,
+    },
+    houseNumberAddition: {
       type: String,
       trim: true,
     },

@@ -84,6 +84,28 @@ export const addAddressSchema = Joi.object({
   addressLine2: Joi.string().trim().optional().allow("").max(200).messages({
     "string.max": "Address line 2 must not exceed 200 characters",
   }),
+  houseNumber: Joi.alternatives()
+    .try(
+      Joi.string()
+        .trim()
+        .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
+      Joi.number().min(1).max(99999)
+    )
+    .optional()
+    .messages({
+      "alternatives.match":
+        "House number must be numeric with optional letters",
+      "string.pattern.base":
+        "House number must be numeric with optional letters",
+    }),
+  houseNumberAddition: Joi.string()
+    .trim()
+    .optional()
+    .allow("")
+    .max(10)
+    .messages({
+      "string.max": "House number addition must not exceed 10 characters",
+    }),
   isDefault: Joi.boolean().optional().default(false),
   type: Joi.string()
     .valid(...ADDRESS_TYPE_VALUES)
@@ -146,6 +168,28 @@ export const updateAddressSchema = Joi.object({
   addressLine2: Joi.string().trim().optional().allow("").max(200).messages({
     "string.max": "Address line 2 must not exceed 200 characters",
   }),
+  houseNumber: Joi.alternatives()
+    .try(
+      Joi.string()
+        .trim()
+        .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
+      Joi.number().min(1).max(99999)
+    )
+    .optional()
+    .messages({
+      "alternatives.match":
+        "House number must be numeric with optional letters",
+      "string.pattern.base":
+        "House number must be numeric with optional letters",
+    }),
+  houseNumberAddition: Joi.string()
+    .trim()
+    .optional()
+    .allow("")
+    .max(10)
+    .messages({
+      "string.max": "House number addition must not exceed 10 characters",
+    }),
   isDefault: Joi.boolean().optional(),
   type: Joi.string()
     .valid(...ADDRESS_TYPE_VALUES)

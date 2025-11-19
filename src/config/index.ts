@@ -33,6 +33,8 @@ const DEFAULT_VALUES = {
   CORS_ORIGIN: "http://localhost:3000",
   LOG_LEVEL: "info",
   LOG_FILE: "logs/app.log",
+  POSTNL_URL: "https://api.postnl.nl/address/national/v1/validate",
+  POSTNL_TIMEOUT_MS: 5000,
 } as const;
 
 /**
@@ -145,6 +147,23 @@ export const config = {
   logging: {
     level: process.env.LOG_LEVEL || DEFAULT_VALUES.LOG_LEVEL,
     file: process.env.LOG_FILE || DEFAULT_VALUES.LOG_FILE,
+  },
+
+  /**
+   * PostNL Integration Configuration
+   * @property {string} addressValidationUrl - Endpoint for address validation
+   * @property {string} apiKey - API key for address validation
+   * @property {string} shipmentApiKey - API key for shipment status checks
+   * @property {number} timeoutMs - Timeout for PostNL requests
+   */
+  postnl: {
+    addressValidationUrl: process.env.POSTNL_URL || DEFAULT_VALUES.POSTNL_URL,
+    apiKey: process.env.POSTNL_API_KEY || "",
+    shipmentApiKey: process.env.POSTNL_SHIPMENT_API_KEY || "",
+    timeoutMs: parseInt(
+      process.env.POSTNL_TIMEOUT_MS || String(DEFAULT_VALUES.POSTNL_TIMEOUT_MS),
+      10
+    ),
   },
 } as const;
 
