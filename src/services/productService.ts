@@ -1,16 +1,26 @@
 import { Products } from "../models/commerce/products.model";
-import { ProductStatus, ProductVariant } from "../models/enums";
+import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
-import mongoose from "mongoose";
+import { generateSlug, generateUniqueSlug } from "../utils/slug";
+import { fileStorageService } from "./fileStorageService";
+import mongoose, { PipelineStage } from "mongoose";
+
+export type ProductSortOption =
+  | "relevance"
+  | "priceLowToHigh"
+  | "priceHighToLow"
+  | "rating";
 
 interface CreateProductData {
   title: string;
-  slug: string;
+  slug?: string;
   description: string;
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  categories?: string[];
+  healthGoals?: string[];
   nutritionInfo: string;
   howToUse: string;
   status: ProductStatus;
@@ -58,6 +68,8 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
+  categories?: string[];
+  healthGoals?: string[];
   nutritionInfo?: string;
   howToUse?: string;
   status?: ProductStatus;
@@ -103,12 +115,25 @@ class ProductService {
    * Create new product
    */
   async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
-    const { slug, hasStandupPouch, standupPouchPrices } = data;
+    const { title, slug, hasStandupPouch, standupPouchPrices } = data;
 
-    // Check if product with same slug already exists
-    const existingProduct = await Products.findOne({ slug, isDeleted: false });
-    if (existingProduct) {
-      throw new AppError("Product with this slug already exists", 409);
+    // Generate slug from title if not provided
+    let finalSlug = slug;
+    if (!finalSlug) {
+      const baseSlug = generateSlug(title);
+      finalSlug = await generateUniqueSlug(
+        baseSlug,
+        async (slugToCheck: string) => {
+          const existing = await Products.findOne({ slug: slugToCheck, isDeleted: false });
+          return !!existing;
+        }
+      );
+    } else {
+      // Check if provided slug already exists
+      const existingProduct = await Products.findOne({ slug: finalSlug, isDeleted: false });
+      if (existingProduct) {
+        throw new AppError("Product with this slug already exists", 409);
+      }
     }
 
     // Validate standupPouchPrices if hasStandupPouch is true
@@ -116,8 +141,11 @@ class ProductService {
       throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
     }
 
-    // Create product
-    const product = await Products.create(data);
+    // Create product with generated slug
+    const product = await Products.create({
+      ...data,
+      slug: finalSlug,
+    });
 
     logger.info(`Product created successfully: ${product.slug}`);
 
@@ -140,42 +168,134 @@ class ProductService {
       status?: ProductStatus;
       variant?: ProductVariant;
       hasStandupPouch?: boolean;
+      categories?: string[];
+      healthGoals?: string[];
+      ingredients?: string[];
+      sortBy?: ProductSortOption;
     }
   ): Promise<{ products: any[]; total: number }> {
-    const { search, status, variant, hasStandupPouch } = filters;
+    const {
+      search,
+      status,
+      variant,
+      hasStandupPouch,
+      categories,
+      healthGoals,
+      ingredients,
+      sortBy,
+    } = filters;
 
-    // Build filter object
-    const filter: any = { isDeleted: false };
-
-    if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { slug: { $regex: search, $options: "i" } },
-      ];
-    }
+    const matchStage: Record<string, any> = { isDeleted: false };
 
     if (status) {
-      filter.status = status;
+      matchStage.status = status;
     }
 
     if (variant) {
-      filter.variant = variant;
+      matchStage.variant = variant;
     }
 
     if (hasStandupPouch !== undefined) {
-      filter.hasStandupPouch = hasStandupPouch;
+      matchStage.hasStandupPouch = hasStandupPouch;
     }
 
-    // Get total count
-    const total = await Products.countDocuments(filter);
+    if (categories?.length) {
+      matchStage.categories = { $in: categories };
+    }
 
-    // Get products with pagination
-    const products = await Products.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    if (healthGoals?.length) {
+      matchStage.healthGoals = { $in: healthGoals };
+    }
+
+    if (ingredients?.length) {
+      matchStage.ingredients = { $all: ingredients };
+    }
+
+    const pipeline: PipelineStage[] = [{ $match: matchStage }];
+
+    let hasSearch = false;
+    if (search) {
+      hasSearch = true;
+      pipeline.push({
+        $match: {
+          $text: { $search: search },
+        },
+      });
+      pipeline.push({
+        $addFields: {
+          relevanceScore: { $meta: "textScore" },
+        },
+      });
+    }
+
+    pipeline.push(
+      {
+        $lookup: {
+          from: "reviews",
+          let: { productId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$productId", "$$productId"] },
+                isDeleted: { $ne: true },
+                isPublic: true,
+                status: ReviewStatus.APPROVED,
+              },
+            },
+            {
+              $group: {
+                _id: "$productId",
+                averageRating: { $avg: "$rating" },
+                ratingCount: { $sum: 1 },
+              },
+            },
+          ],
+          as: "ratingSummary",
+        },
+      },
+      {
+        $addFields: {
+          ratingSummary: {
+            $ifNull: [{ $arrayElemAt: ["$ratingSummary", 0] }, null],
+          },
+        },
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $round: [
+              {
+                $ifNull: ["$ratingSummary.averageRating", 0],
+              },
+              2,
+            ],
+          },
+          ratingCount: { $ifNull: ["$ratingSummary.ratingCount", 0] },
+        },
+      },
+      {
+        $project: {
+          ratingSummary: 0,
+        },
+      }
+    );
+
+    const sortStage = this.buildSortStage(sortBy, sort, hasSearch);
+    pipeline.push({ $sort: sortStage });
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $skip: skip },
+          { $limit: limit },
+        ],
+        total: [{ $count: "value" }],
+      },
+    });
+
+    const [aggregationResult] = await Products.aggregate(pipeline);
+    const products = aggregationResult?.data ?? [];
+    const total = aggregationResult?.total?.[0]?.value ?? 0;
 
     return { products, total };
   }
@@ -249,6 +369,11 @@ class ProductService {
       throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
     }
 
+    const shouldDeleteOldImage =
+      !!data.productImage &&
+      !!existingProduct.productImage &&
+      data.productImage !== existingProduct.productImage;
+
     // Update product
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
@@ -258,6 +383,10 @@ class ProductService {
 
     if (!updatedProduct) {
       throw new AppError("Product not found", 404);
+    }
+
+    if (shouldDeleteOldImage) {
+      await fileStorageService.deleteFileByUrl(existingProduct.productImage);
     }
 
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
@@ -281,6 +410,9 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
+    // Delete associated assets
+    await fileStorageService.deleteFileByUrl(product.productImage);
+
     // Soft delete
     await Products.findByIdAndUpdate(productId, {
       isDeleted: true,
@@ -291,6 +423,64 @@ class ProductService {
 
     return {
       message: "Product deleted successfully",
+    };
+  }
+
+  /**
+   * Get available filter values
+   */
+  async getFilterOptions(): Promise<{
+    categories: string[];
+    healthGoals: string[];
+    ingredients: string[];
+  }> {
+    const [result] = await Products.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+        },
+      },
+      {
+        $project: {
+          categories: { $ifNull: ["$categories", []] },
+          healthGoals: { $ifNull: ["$healthGoals", []] },
+          ingredients: { $ifNull: ["$ingredients", []] },
+        },
+      },
+      {
+        $facet: {
+          categories: [
+            { $unwind: "$categories" },
+            { $match: { categories: { $nin: [null, ""] } } },
+            { $group: { _id: "$categories" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
+          healthGoals: [
+            { $unwind: "$healthGoals" },
+            { $match: { healthGoals: { $nin: [null, ""] } } },
+            { $group: { _id: "$healthGoals" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
+          ingredients: [
+            { $unwind: "$ingredients" },
+            { $match: { ingredients: { $nin: [null, ""] } } },
+            { $group: { _id: "$ingredients" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
+        },
+      },
+    ]);
+
+    const mapValues = (items?: Array<{ value: string }>) =>
+      (items ?? []).map((item) => item.value);
+
+    return {
+      categories: mapValues(result?.categories),
+      healthGoals: mapValues(result?.healthGoals),
+      ingredients: mapValues(result?.ingredients),
     };
   }
 
@@ -322,6 +512,34 @@ class ProductService {
       sachets,
       standupPouch,
     };
+  }
+
+  private buildSortStage(
+    sortBy: ProductSortOption | undefined,
+    fallbackSort: Record<string, 1 | -1>,
+    hasSearch: boolean
+  ): Record<string, 1 | -1> {
+    switch (sortBy) {
+      case "relevance":
+        if (hasSearch) {
+          return { relevanceScore: -1 as 1 | -1, createdAt: -1 };
+        }
+        break;
+      case "priceLowToHigh":
+        return { "price.amount": 1, createdAt: -1 };
+      case "priceHighToLow":
+        return { "price.amount": -1, createdAt: -1 };
+      case "rating":
+        return { averageRating: -1, ratingCount: -1, createdAt: -1 };
+      default:
+        break;
+    }
+
+    if (fallbackSort && Object.keys(fallbackSort).length > 0) {
+      return fallbackSort;
+    }
+
+    return { createdAt: -1 };
   }
 }
 

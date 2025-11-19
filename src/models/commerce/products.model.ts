@@ -32,6 +32,8 @@ export interface IProduct extends Document {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  categories?: string[];
+  healthGoals?: string[];
   nutritionInfo: string;
   howToUse: string;
   status: ProductStatus;
@@ -73,6 +75,18 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     ingredients: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    categories: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    healthGoals: [
       {
         type: String,
         trim: true,
@@ -134,6 +148,8 @@ ProductSchema.index({ status: 1 });
 ProductSchema.index({ variant: 1 });
 ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
+ProductSchema.index({ categories: 1 });
+ProductSchema.index({ healthGoals: 1 });
 
 // Text search index
 ProductSchema.index({ title: "text", description: "text" });

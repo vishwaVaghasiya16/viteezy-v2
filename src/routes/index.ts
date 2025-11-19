@@ -5,6 +5,7 @@ import exampleRoutes from "./exampleRoutes";
 import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
 import addressRoutes from "./addressRoutes";
+import productRoutes from "./productRoutes";
 
 const router = Router();
 
@@ -15,5 +16,6 @@ router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
 router.use("/addresses", addressRoutes);
+router.use("/products", productRoutes);
 
 export default router;

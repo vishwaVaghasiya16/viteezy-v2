@@ -26,6 +26,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.934.0",
     "@mollie/api-client": "^4.3.3",
     "@sendgrid/mail": "^8.1.6",
     "bcryptjs": "^2.4.3",

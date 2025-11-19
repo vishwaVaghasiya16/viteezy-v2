@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { productService } from "../services/productService";
+import {
+  productService,
+  ProductSortOption,
+} from "../services/productService";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { getPaginationOptions, getPaginationMeta } from "../utils/pagination";
@@ -9,6 +12,27 @@ interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
+
+const parseArrayQuery = (
+  value?: string | string[]
+): string[] | undefined => {
+  if (!value) return undefined;
+  const values = Array.isArray(value) ? value : value.split(",");
+  const sanitized = values.map((item) => item.trim()).filter(Boolean);
+  return sanitized.length ? sanitized : undefined;
+};
+
+const SORT_OPTIONS: ProductSortOption[] = [
+  "relevance",
+  "priceLowToHigh",
+  "priceHighToLow",
+  "rating",
+];
+
+const isValidSortOption = (value: unknown): value is ProductSortOption => {
+  if (typeof value !== "string") return false;
+  return SORT_OPTIONS.includes(value as ProductSortOption);
+};
 
 export class ProductController {
   /**
@@ -44,14 +68,45 @@ export class ProductController {
   static async getAllProducts(req: Request, res: Response, next: NextFunction) {
     try {
       const { page, limit, skip, sort } = getPaginationOptions(req);
-      const { search, status, variant, hasStandupPouch } = req.query;
+      const {
+        search,
+        status,
+        variant,
+        hasStandupPouch,
+        categories,
+        healthGoals,
+        ingredients,
+        sortBy,
+      } = req.query;
+
+      const searchTerm =
+        typeof search === "string" && search.trim().length
+          ? search.trim()
+          : undefined;
+      const parsedCategories = parseArrayQuery(
+        categories as string | string[] | undefined
+      );
+      const parsedHealthGoals = parseArrayQuery(
+        healthGoals as string | string[] | undefined
+      );
+      const parsedIngredients = parseArrayQuery(
+        ingredients as string | string[] | undefined
+      );
+
+      const sortByValue = isValidSortOption(sortBy)
+        ? sortBy
+        : undefined;
 
       const result = await productService.getAllProducts(page, limit, skip, sort, {
-        search: search as string,
+        search: searchTerm,
         status: status as any,
         variant: variant as any,
         hasStandupPouch:
           hasStandupPouch !== undefined ? hasStandupPouch === "true" : undefined,
+        categories: parsedCategories,
+        healthGoals: parsedHealthGoals,
+        ingredients: parsedIngredients,
+        sortBy: sortByValue,
       });
 
       const pagination = getPaginationMeta(page, limit, result.total);
@@ -61,6 +116,22 @@ export class ProductController {
         message: "Products retrieved successfully",
         data: result.products,
         pagination,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get available filter values
+   */
+  static async getFilterOptions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const filters = await productService.getFilterOptions();
+      res.status(200).json({
+        success: true,
+        message: "Product filter values retrieved successfully",
+        data: filters,
       });
     } catch (error) {
       next(error);

@@ -13,10 +13,9 @@ const slugSchema = Joi.string()
   .trim()
   .lowercase()
   .pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  .required()
+  .optional()
   .messages({
     "string.pattern.base": "Slug must be a valid URL-friendly string (lowercase letters, numbers, and hyphens only)",
-    "any.required": "Slug is required",
   });
 
 const descriptionSchema = Joi.string().trim().required().messages({
@@ -35,6 +34,20 @@ const benefitsSchema = Joi.array().items(Joi.string().trim()).optional().message
 const ingredientsSchema = Joi.array().items(Joi.string().trim()).optional().messages({
   "array.base": "Ingredients must be an array of strings",
 });
+
+const categoriesSchema = Joi.array()
+  .items(Joi.string().trim())
+  .optional()
+  .messages({
+    "array.base": "Categories must be an array of strings",
+  });
+
+const healthGoalsSchema = Joi.array()
+  .items(Joi.string().trim())
+  .optional()
+  .messages({
+    "array.base": "Health goals must be an array of strings",
+  });
 
 const nutritionInfoSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "Nutrition info must be a string",
@@ -100,11 +113,13 @@ const standupPouchPricesSchema = subscriptionPriceSchema.when("hasStandupPouch",
 // Create product schema
 export const createProductSchema = Joi.object({
   title: titleSchema,
-  slug: slugSchema,
+  slug: slugSchema.optional(),
   description: descriptionSchema,
   productImage: productImageSchema,
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
+  categories: categoriesSchema,
+  healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
   howToUse: howToUseSchema,
   status: statusSchema.default(ProductStatus.DRAFT),
@@ -130,6 +145,8 @@ export const updateProductSchema = Joi.object({
   productImage: productImageSchema.optional(),
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
+  categories: categoriesSchema,
+  healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
   howToUse: howToUseSchema,
   status: statusSchema,

@@ -33,6 +33,12 @@ const DEFAULT_VALUES = {
   CORS_ORIGIN: "http://localhost:3000",
   LOG_LEVEL: "info",
   LOG_FILE: "logs/app.log",
+  DO_SPACES_ENDPOINT: "",
+  DO_SPACES_REGION: "ams3",
+  DO_SPACES_BUCKET: "",
+  DO_SPACES_ACCESS_KEY: "",
+  DO_SPACES_SECRET_KEY: "",
+  DO_SPACES_CDN_BASE_URL: "",
 } as const;
 
 /**
@@ -145,6 +151,34 @@ export const config = {
   logging: {
     level: process.env.LOG_LEVEL || DEFAULT_VALUES.LOG_LEVEL,
     file: process.env.LOG_FILE || DEFAULT_VALUES.LOG_FILE,
+  },
+
+  /**
+   * DigitalOcean Spaces / S3 compatible storage configuration
+   */
+  spaces: {
+    endpoint:
+      process.env.DO_SPACES_ENDPOINT ||
+      process.env.DIGITALOCEAN_CALLBACK_URL ||
+      DEFAULT_VALUES.DO_SPACES_ENDPOINT,
+    region:
+      process.env.DO_SPACES_REGION ||
+      process.env.DIGITALOCEAN_RESION ||
+      DEFAULT_VALUES.DO_SPACES_REGION,
+    bucket:
+      process.env.DO_SPACES_BUCKET ||
+      process.env.DIGITALOCEAN_BUCKET_NAME ||
+      DEFAULT_VALUES.DO_SPACES_BUCKET,
+    accessKeyId:
+      process.env.DO_SPACES_ACCESS_KEY ||
+      process.env.DIGITALOCEAN_ACCESS_KEY ||
+      DEFAULT_VALUES.DO_SPACES_ACCESS_KEY,
+    secretAccessKey:
+      process.env.DO_SPACES_SECRET_KEY ||
+      process.env.DIGITALOCEAN_CLIENT_SECRET ||
+      DEFAULT_VALUES.DO_SPACES_SECRET_KEY,
+    cdnBaseUrl:
+      process.env.DO_SPACES_CDN_BASE_URL || DEFAULT_VALUES.DO_SPACES_CDN_BASE_URL,
   },
 } as const;
 

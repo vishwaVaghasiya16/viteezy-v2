@@ -11,6 +11,7 @@ export {
   cacheWrapper 
 } from './apiDecorators';
 export { getPaginationOptions, getPaginationMeta } from './pagination';
+export { generateSlug, generateUniqueSlug } from './slug';
 
 // Add more utilities here as you create them
 // export { emailService } from './emailService';
