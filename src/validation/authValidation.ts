@@ -5,7 +5,7 @@
  */
 
 import Joi from "joi";
-import { OTPType } from "@/models/enums";
+import { OTPType, OTP_TYPE_VALUES } from "@/models/enums";
 import { VALIDATION } from "@/constants";
 
 /**
@@ -112,10 +112,10 @@ const otpSchema = Joi.string()
  * @description Validates OTP type against enum values
  */
 const otpTypeSchema = Joi.string()
-  .valid(...Object.values(OTPType))
+  .valid(...OTP_TYPE_VALUES)
   .required()
   .messages({
-    "any.only": `OTP type must be one of: ${Object.values(OTPType).join(", ")}`,
+    "any.only": `OTP type must be one of: ${OTP_TYPE_VALUES.join(", ")}`,
     "any.required": "OTP type is required",
   });
 

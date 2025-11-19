@@ -110,7 +110,7 @@ OTPSchema.methods.isExpired = function (): boolean {
 };
 
 OTPSchema.methods.canAttempt = function (): boolean {
-  return this.attempts < this.maxAttempts && this.status === "pending";
+  return this.attempts < this.maxAttempts && this.status === OTPStatus.PENDING;
 };
 
 // Static method to create OTP with hashing
