@@ -43,6 +43,14 @@ export const getBlogDetailsQuerySchema = Joi.object({
 }).unknown(false);
 
 /**
+ * Get Blog Categories Query Validation Schema
+ */
+export const getBlogCategoriesQuerySchema = Joi.object({
+  status: Joi.string().valid("active", "all").default("active"),
+  lang: Joi.string().valid("en", "nl").default("en"),
+}).unknown(false);
+
+/**
  * Get Popular Blogs Query Validation Schema
  * @constant {Joi.ObjectSchema} getPopularBlogsSchema
  * @description Validates query parameters for getting popular/latest blogs

@@ -226,13 +226,22 @@ class BlogController {
    */
   getBlogCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { lang = "en" } = req.query;
+      const { lang = "en", status = "active" } = req.query as {
+        lang?: "en" | "nl";
+        status?: "active" | "all";
+      };
 
-      const categories = await BlogCategories.find({
+      const filter: any = {
         isDeleted: false,
-      })
+      };
+
+      if (status !== "all") {
+        filter.isActive = true;
+      }
+
+      const categories = await BlogCategories.find(filter)
         .sort({ sortOrder: 1, createdAt: 1 })
-        .select("slug title sortOrder")
+        .select("slug title sortOrder isActive")
         .lean();
 
       const transformedCategories = categories.map((category) => ({
@@ -240,6 +249,7 @@ class BlogController {
         slug: category.slug,
         title: category.title[lang as "en" | "nl"] || category.title.en || "",
         sortOrder: category.sortOrder || 0,
+        isActive: category.isActive !== false,
       }));
 
       res.apiSuccess(

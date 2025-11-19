@@ -28,6 +28,12 @@ export enum BlogStatus {
   ARCHIVED = "Archived",
 }
 
+// FAQ Status
+export enum FAQStatus {
+  ACTIVE = "Active",
+  INACTIVE = "Inactive",
+}
+
 // Page Status
 export enum PageStatus {
   ACTIVE = "Active",
@@ -242,6 +248,7 @@ export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const USER_ROLE_VALUES = Object.values(UserRole);
 export const USER_STATUS_VALUES = Object.values(UserStatus);
 export const BLOG_STATUS_VALUES = Object.values(BlogStatus);
+export const FAQ_STATUS_VALUES = Object.values(FAQStatus);
 export const PAGE_STATUS_VALUES = Object.values(PageStatus);
 export const PAGE_TYPE_VALUES = Object.values(PageType);
 export const ORDER_STATUS_VALUES = Object.values(OrderStatus);

@@ -12,6 +12,7 @@ import {
   getBlogDetailsSchema,
   getPopularBlogsSchema,
   incrementBlogViewsSchema,
+  getBlogCategoriesQuerySchema,
 } from "@/validation/blogValidation";
 
 const router = Router();
@@ -21,6 +22,20 @@ const router = Router();
  * These routes are accessible without authentication token
  */
 
+// Get list of blog categories
+router.get(
+  "/categories/list",
+  validateQuery(getBlogCategoriesQuerySchema),
+  BlogController.getBlogCategories
+);
+
+// Get popular or latest blogs (top 3-5)
+router.get(
+  "/popular/list",
+  validateQuery(getPopularBlogsSchema),
+  BlogController.getPopularBlogs
+);
+
 // Get paginated list of blogs with filters
 router.get("/", validateQuery(getBlogsSchema), BlogController.getBlogs);
 
@@ -29,16 +44,6 @@ router.get(
   "/:slugOrId",
   validateParams(getBlogDetailsSchema),
   BlogController.getBlogDetails
-);
-
-// Get list of blog categories
-router.get("/categories/list", BlogController.getBlogCategories);
-
-// Get popular or latest blogs (top 3-5)
-router.get(
-  "/popular/list",
-  validateQuery(getPopularBlogsSchema),
-  BlogController.getPopularBlogs
 );
 
 // Increment blog view count
