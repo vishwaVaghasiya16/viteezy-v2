@@ -1,33 +1,44 @@
 import mongoose, { Schema, Document } from "mongoose";
 import {
-  I18nString,
-  I18nText,
-  MediaSchema,
-  SeoSchema,
-  I18nStringType,
-  I18nTextType,
-  MediaType,
-  SeoType,
+  PriceSchema,
+  PriceType,
 } from "../common.model";
-import { ProductStatus, PRODUCT_STATUS_VALUES } from "../enums";
+import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
+
+// Price structure for subscription periods
+export interface SubscriptionPriceType {
+  oneTime: PriceType;
+  thirtyDays: PriceType;
+  sixtyDays: PriceType;
+  ninetyDays: PriceType;
+  oneEightyDays: PriceType;
+}
+
+const SubscriptionPriceSchema = new Schema<SubscriptionPriceType>(
+  {
+    oneTime: { type: PriceSchema },
+    thirtyDays: { type: PriceSchema },
+    sixtyDays: { type: PriceSchema },
+    ninetyDays: { type: PriceSchema },
+    oneEightyDays: { type: PriceSchema },
+  },
+  { _id: false }
+);
 
 export interface IProduct extends Document {
+  title: string;
   slug: string;
-  skuRoot?: string;
+  description: string;
+  productImage: string;
+  benefits: string[];
+  ingredients: string[];
+  nutritionInfo: string;
+  howToUse: string;
   status: ProductStatus;
-  title: I18nStringType;
-  subtitle: I18nStringType;
-  description: I18nTextType;
-  categories: mongoose.Types.ObjectId[];
-  tags: string[];
-  labels: string[];
-  media: MediaType[];
-  ingredientLinks: Array<{
-    ingredientId: mongoose.Types.ObjectId;
-    amount: number;
-    unit: string;
-  }>;
-  seo: SeoType;
+  price: PriceType;
+  variant: ProductVariant;
+  hasStandupPouch: boolean;
+  standupPouchPrices?: SubscriptionPriceType;
   isDeleted: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
@@ -38,50 +49,93 @@ export interface IProduct extends Document {
 
 const ProductSchema = new Schema<IProduct>(
   {
-    slug: { type: String, lowercase: true },
-    skuRoot: { type: String, trim: true },
+    title: {
+      type: String,
+      trim: true,
+    },
+    slug: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+    },
+    productImage: {
+      type: String,
+      trim: true,
+    },
+    benefits: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    ingredients: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    nutritionInfo: {
+      type: String,
+      trim: true,
+    },
+    howToUse: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: PRODUCT_STATUS_VALUES,
       default: ProductStatus.DRAFT,
     },
-    title: { type: I18nString, default: () => ({}) },
-    subtitle: { type: I18nString, default: () => ({}) },
-    description: { type: I18nText, default: () => ({}) },
-    categories: [{ type: Schema.Types.ObjectId, ref: "categories" }],
-    tags: [{ type: String, trim: true }],
-    labels: [{ type: String, trim: true }],
-    media: { type: [MediaSchema], default: [] },
-    ingredientLinks: [
-      {
-        ingredientId: { type: Schema.Types.ObjectId, ref: "ingredients" },
-        amount: Number,
-        unit: String,
-        _id: false,
-      },
-    ],
-    seo: { type: SeoSchema, default: () => ({}) },
-    isDeleted: { type: Boolean, default: false },
-    deletedAt: { type: Date },
-    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
-    updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    price: {
+      type: PriceSchema,
+    },
+    variant: {
+      type: String,
+      enum: PRODUCT_VARIANT_VALUES,
+    },
+    hasStandupPouch: {
+      type: Boolean,
+      default: false,
+    },
+    standupPouchPrices: {
+      type: SubscriptionPriceSchema,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
+    updatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "users",
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-// Text search index
-ProductSchema.index({
-  "title.en": "text",
-  "title.nl": "text",
-  "description.en": "text",
-  "description.nl": "text",
-});
-
-// Other indexes
+// Indexes
 ProductSchema.index({ slug: 1 });
 ProductSchema.index({ status: 1 });
-ProductSchema.index({ categories: 1 });
-ProductSchema.index({ tags: 1 });
+ProductSchema.index({ variant: 1 });
+ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
+
+// Text search index
+ProductSchema.index({ title: "text", description: "text" });
 
 export const Products = mongoose.model<IProduct>("products", ProductSchema);

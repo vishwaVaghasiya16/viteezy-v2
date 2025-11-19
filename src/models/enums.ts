@@ -7,6 +7,11 @@ export enum ProductStatus {
   DRAFT = "Draft",
 }
 
+export enum ProductVariant {
+  SACHETS = 'SACHETS',
+  STAND_UP_POUCH = 'STAND_UP_POUCH'
+}
+
 // User Roles
 export enum UserRole {
   USER = "User",
@@ -239,6 +244,7 @@ export enum Timezone {
 
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
+export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
 export const USER_ROLE_VALUES = Object.values(UserRole);
 export const USER_STATUS_VALUES = Object.values(UserStatus);
 export const BLOG_STATUS_VALUES = Object.values(BlogStatus);
