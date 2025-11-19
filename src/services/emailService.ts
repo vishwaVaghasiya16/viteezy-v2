@@ -434,7 +434,7 @@ class EmailService {
             <p>Hello,</p>
             <p>${message}</p>
             <div class="otp-code">${otp}</div>
-            <p><strong>This code will expire in 10 minutes.</strong></p>
+            <p><strong>This code will expire in 5 minutes.</strong></p>
             <p>If you didn't request this code, please ignore this email or contact our support team.</p>
             <p>Best regards,<br><strong>The Viteezy Team</strong></p>
           </div>
@@ -464,7 +464,7 @@ ${message}
 
 Your verification code is: ${otp}
 
-This code will expire in 10 minutes.
+This code will expire in 5 minutes.
 
 If you didn't request this code, please ignore this email.
 
@@ -594,7 +594,7 @@ The Viteezy Team
             <p>Hello,</p>
             <p>You requested to reset your password. Please use the verification code below:</p>
             <div class="otp-code">${otp}</div>
-            <p>This code will expire in 10 minutes.</p>
+            <p>This code will expire in 5 minutes.</p>
             <p>If you didn't request this password reset, please ignore this email.</p>
             <p>Best regards,<br>The Viteezy Team</p>
           </div>

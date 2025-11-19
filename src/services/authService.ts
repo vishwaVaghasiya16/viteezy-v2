@@ -60,7 +60,7 @@ class AuthService {
       process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key";
     this.JWT_EXPIRES_IN = process.env.JWT_EXPIRE || "15m"; // 15 minutes for access token
     this.JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRE || "7d"; // 7 days for refresh token
-    this.OTP_EXPIRES_IN = parseInt(process.env.OTP_EXPIRES_IN || "10"); // 10 minutes
+    this.OTP_EXPIRES_IN = parseInt(process.env.OTP_EXPIRES_IN || "5"); // 5 minutes
 
     // Validate JWT_EXPIRES_IN format
     if (!this.isValidExpiresIn(this.JWT_EXPIRES_IN)) {
@@ -376,11 +376,20 @@ class AuthService {
     });
 
     if (!otpRecord) {
-      // Increment attempts for failed verification
-      await OTP.updateOne(
-        { userId: user._id, email, type, status: OTPStatus.PENDING },
-        { $inc: { attempts: 1 } }
-      );
+      // Try to find any pending OTP for this user/email/type to increment attempts
+      const anyPendingOTP = await OTP.findOne({
+        userId: user._id,
+        email,
+        type,
+        status: OTPStatus.PENDING,
+      });
+
+      if (anyPendingOTP) {
+        // Increment attempts for failed verification
+        await OTP.findByIdAndUpdate(anyPendingOTP._id, {
+          $inc: { attempts: 1 },
+        });
+      }
 
       throw new AppError("Invalid or expired OTP", 400);
     }
