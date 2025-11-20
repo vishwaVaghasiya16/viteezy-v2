@@ -6,6 +6,7 @@ import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
 import addressRoutes from "./addressRoutes";
 import productRoutes from "./productRoutes";
+import cartRoutes from "./cartRoutes";
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/products", productRoutes);
+router.use("/carts", cartRoutes);
 
 export default router;
