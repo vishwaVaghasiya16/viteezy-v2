@@ -6,6 +6,7 @@ interface AuthenticatedRequest extends Request {
   sessionId?: string;
 }
 import { authService } from "../services/authService";
+import { User } from "@/models/index.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 
@@ -261,6 +262,10 @@ export class AuthController {
             isEmailVerified: user?.isEmailVerified,
             role: user?.role,
             isActive: user?.isActive,
+            avatar: user?.avatar,
+            profileImage: user?.profileImage,
+            gender: user?.gender,
+            age: user?.age,
             lastLogin: user?.lastLogin,
             createdAt: user?.createdAt,
           },
@@ -281,22 +286,51 @@ export class AuthController {
   ) {
     try {
       const userId = req.user?.id;
-      const { name, phone } = req.body;
+      const { name, phone, profileImage, gender, age } = req.body;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
       }
 
-      // TODO: Implement profile update logic
-      // const updatedUser = await User.findByIdAndUpdate(
-      //   userId,
-      //   { name, phone },
-      //   { new: true, runValidators: true }
-      // );
+      // Build update object with only provided fields
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (phone !== undefined) updateData.phone = phone;
+      if (profileImage !== undefined) updateData.profileImage = profileImage;
+      if (gender !== undefined) updateData.gender = gender;
+      if (age !== undefined) updateData.age = age;
+
+      // Update user profile
+      const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+        new: true,
+        runValidators: true,
+      }).select("-password");
+
+      if (!updatedUser) {
+        throw new AppError("User not found", 404);
+      }
 
       res.status(200).json({
         success: true,
         message: "Profile updated successfully",
+        data: {
+          user: {
+            id: updatedUser._id.toString(),
+            name: updatedUser.name,
+            email: updatedUser.email,
+            phone: updatedUser.phone,
+            isEmailVerified: updatedUser.isEmailVerified,
+            role: updatedUser.role,
+            isActive: updatedUser.isActive,
+            avatar: updatedUser.avatar,
+            profileImage: updatedUser.profileImage,
+            gender: updatedUser.gender,
+            age: updatedUser.age,
+            lastLogin: updatedUser.lastLogin,
+            createdAt: updatedUser.createdAt,
+            updatedAt: updatedUser.updatedAt,
+          },
+        },
       });
     } catch (error) {
       next(error);

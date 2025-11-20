@@ -56,6 +56,10 @@ const extractUserData = (user: any): object => {
     role: user.role,
     isActive: user.isActive,
     isEmailVerified: user.isEmailVerified,
+    avatar: user.avatar,
+    profileImage: user.profileImage,
+    gender: user.gender,
+    age: user.age,
     lastLogin: user.lastLogin,
     createdAt: user.createdAt,
   };

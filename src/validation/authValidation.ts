@@ -5,7 +5,12 @@
  */
 
 import Joi from "joi";
-import { OTPType, OTP_TYPE_VALUES } from "@/models/enums";
+import {
+  OTPType,
+  OTP_TYPE_VALUES,
+  Gender,
+  GENDER_VALUES,
+} from "@/models/enums";
 import { VALIDATION } from "@/constants";
 
 /**
@@ -211,6 +216,21 @@ export const changePasswordSchema = Joi.object({
 export const updateProfileSchema = Joi.object({
   name: nameSchema.optional(),
   phone: phoneSchema,
+  profileImage: Joi.string().uri().optional().allow(null, "").messages({
+    "string.uri": "Profile image must be a valid URL",
+  }),
+  gender: Joi.string()
+    .valid(...GENDER_VALUES)
+    .optional()
+    .allow(null)
+    .messages({
+      "any.only": `Gender must be one of: ${GENDER_VALUES.join(", ")}`,
+    }),
+  age: Joi.number().integer().min(1).max(150).optional().allow(null).messages({
+    "number.min": "Age must be at least 1",
+    "number.max": "Age cannot exceed 150",
+    "number.integer": "Age must be an integer",
+  }),
 });
 
 /**

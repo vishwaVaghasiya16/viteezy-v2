@@ -243,6 +243,13 @@ export enum Timezone {
   IST = "IST",
 }
 
+// Gender
+export enum Gender {
+  MALE = "Male",
+  FEMALE = "Female",
+  GENDER_NEUTRAL = "Gender neutral",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const USER_ROLE_VALUES = Object.values(UserRole);
@@ -276,3 +283,4 @@ export const CURRENCY_VALUES = Object.values(Currency);
 export const TIMEZONE_VALUES = Object.values(Timezone);
 export const OTP_TYPE_VALUES = Object.values(OTPType);
 export const OTP_STATUS_VALUES = Object.values(OTPStatus);
+export const GENDER_VALUES = Object.values(Gender);

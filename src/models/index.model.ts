@@ -34,6 +34,7 @@ export {
   Timezone,
   OTPType,
   OTPStatus,
+  Gender,
   // Export enum values
   PRODUCT_STATUS_VALUES,
   USER_ROLE_VALUES,
@@ -66,6 +67,7 @@ export {
   TIMEZONE_VALUES,
   OTP_TYPE_VALUES,
   OTP_STATUS_VALUES,
+  GENDER_VALUES,
 } from "./enums";
 
 // AI Models
