@@ -53,6 +53,43 @@ const nutritionInfoSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "Nutrition info must be a string",
 });
 
+const nutritionTableSchema = Joi.array()
+  .items(
+    Joi.object({
+      nutrient: Joi.string().trim().required(),
+      amount: Joi.string().trim().required(),
+      unit: Joi.string().trim().optional(),
+      dailyValue: Joi.string().trim().optional(),
+    })
+  )
+  .optional()
+  .messages({
+    "array.base": "Nutrition table must be an array",
+  });
+
+const metaSchema = Joi.object({
+  title: Joi.string().trim().optional(),
+  description: Joi.string().trim().optional(),
+  keywords: Joi.string().trim().optional(),
+  ogImage: Joi.string().trim().uri().optional(),
+  hreflang: Joi.array()
+    .items(
+      Joi.object({
+        lang: Joi.string().trim().required(),
+        url: Joi.string().trim().uri().required(),
+      })
+    )
+    .optional(),
+}).optional();
+
+const sourceInfoSchema = Joi.object({
+  manufacturer: Joi.string().trim().optional(),
+  countryOfOrigin: Joi.string().trim().optional(),
+  certification: Joi.array().items(Joi.string().trim()).optional(),
+  batchNumber: Joi.string().trim().optional(),
+  expiryDate: Joi.date().optional(),
+}).optional();
+
 const howToUseSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "How to use must be a string",
 });
@@ -121,8 +158,11 @@ export const createProductSchema = Joi.object({
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
+  nutritionTable: nutritionTableSchema,
   howToUse: howToUseSchema,
   status: statusSchema.default(ProductStatus.DRAFT),
+  meta: metaSchema,
+  sourceInfo: sourceInfoSchema,
   price: priceSchema,
   variant: variantSchema,
   hasStandupPouch: hasStandupPouchSchema,
@@ -148,8 +188,11 @@ export const updateProductSchema = Joi.object({
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
+  nutritionTable: nutritionTableSchema,
   howToUse: howToUseSchema,
   status: statusSchema,
+  meta: metaSchema,
+  sourceInfo: sourceInfoSchema,
   price: priceSchema.optional(),
   variant: variantSchema.optional(),
   hasStandupPouch: hasStandupPouchSchema,

@@ -2,6 +2,8 @@ import mongoose, { Schema, Document } from "mongoose";
 import {
   PriceSchema,
   PriceType,
+  SeoSchema,
+  SeoType,
 } from "../common.model";
 import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
 
@@ -25,6 +27,21 @@ const SubscriptionPriceSchema = new Schema<SubscriptionPriceType>(
   { _id: false }
 );
 
+export interface NutritionTableItem {
+  nutrient: string;
+  amount: string;
+  unit?: string;
+  dailyValue?: string;
+}
+
+export interface SourceInfo {
+  manufacturer?: string;
+  countryOfOrigin?: string;
+  certification?: string[];
+  batchNumber?: string;
+  expiryDate?: Date;
+}
+
 export interface IProduct extends Document {
   title: string;
   slug: string;
@@ -35,12 +52,15 @@ export interface IProduct extends Document {
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
+  nutritionTable?: NutritionTableItem[];
   howToUse: string;
   status: ProductStatus;
   price: PriceType;
   variant: ProductVariant;
   hasStandupPouch: boolean;
   standupPouchPrices?: SubscriptionPriceType;
+  meta?: SeoType;
+  sourceInfo?: SourceInfo;
   isDeleted: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
@@ -96,6 +116,15 @@ const ProductSchema = new Schema<IProduct>(
       type: String,
       trim: true,
     },
+    nutritionTable: [
+      {
+        nutrient: { type: String, trim: true },
+        amount: { type: String, trim: true },
+        unit: { type: String, trim: true },
+        dailyValue: { type: String, trim: true },
+        _id: false,
+      },
+    ],
     howToUse: {
       type: String,
       trim: true,
@@ -118,6 +147,17 @@ const ProductSchema = new Schema<IProduct>(
     },
     standupPouchPrices: {
       type: SubscriptionPriceSchema,
+    },
+    meta: {
+      type: SeoSchema,
+    },
+    sourceInfo: {
+      manufacturer: { type: String, trim: true },
+      countryOfOrigin: { type: String, trim: true },
+      certification: [{ type: String, trim: true }],
+      batchNumber: { type: String, trim: true },
+      expiryDate: { type: Date },
+      _id: false,
     },
     isDeleted: {
       type: Boolean,

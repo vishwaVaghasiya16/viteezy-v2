@@ -1,4 +1,6 @@
 import { Products } from "../models/commerce/products.model";
+import { ProductVariants } from "../models/commerce/productVariants.model";
+import { Ingredients } from "../models/commerce/ingredients.model";
 import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
@@ -22,6 +24,12 @@ interface CreateProductData {
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
+  nutritionTable?: Array<{
+    nutrient: string;
+    amount: string;
+    unit?: string;
+    dailyValue?: string;
+  }>;
   howToUse: string;
   status: ProductStatus;
   price: {
@@ -58,6 +66,20 @@ interface CreateProductData {
       taxRate: number;
     };
   };
+  meta?: {
+    title?: string;
+    description?: string;
+    keywords?: string;
+    ogImage?: string;
+    hreflang?: Array<{ lang: string; url: string }>;
+  };
+  sourceInfo?: {
+    manufacturer?: string;
+    countryOfOrigin?: string;
+    certification?: string[];
+    batchNumber?: string;
+    expiryDate?: Date;
+  };
   createdBy?: mongoose.Types.ObjectId;
 }
 
@@ -71,6 +93,12 @@ interface UpdateProductData {
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
+  nutritionTable?: Array<{
+    nutrient: string;
+    amount: string;
+    unit?: string;
+    dailyValue?: string;
+  }>;
   howToUse?: string;
   status?: ProductStatus;
   price?: {
@@ -106,6 +134,20 @@ interface UpdateProductData {
       amount: number;
       taxRate: number;
     };
+  };
+  meta?: {
+    title?: string;
+    description?: string;
+    keywords?: string;
+    ogImage?: string;
+    hreflang?: Array<{ lang: string; url: string }>;
+  };
+  sourceInfo?: {
+    manufacturer?: string;
+    countryOfOrigin?: string;
+    certification?: string[];
+    batchNumber?: string;
+    expiryDate?: Date;
   };
   updatedBy?: mongoose.Types.ObjectId;
 }
@@ -211,21 +253,46 @@ class ProductService {
       matchStage.ingredients = { $all: ingredients };
     }
 
-    const pipeline: PipelineStage[] = [{ $match: matchStage }];
-
+    const pipeline: PipelineStage[] = [];
     let hasSearch = false;
-    if (search) {
+
+    // MongoDB requires $text search to be the FIRST stage
+    // If search exists, it must be the first $match stage
+    if (search && search.trim().length > 0) {
       hasSearch = true;
-      pipeline.push({
-        $match: {
-          $text: { $search: search },
-        },
-      });
+      // Build text search match with isDeleted filter
+      const textSearchMatch: Record<string, any> = {
+        $text: { $search: search.trim() },
+        isDeleted: false,
+      };
+      
+      // Add other filters that can be combined with $text in same stage
+      if (status) textSearchMatch.status = status;
+      if (variant) textSearchMatch.variant = variant;
+      if (hasStandupPouch !== undefined) textSearchMatch.hasStandupPouch = hasStandupPouch;
+      
+      // Text search must be first stage
+      pipeline.push({ $match: textSearchMatch });
+      
+      // Add relevance score immediately after text search
       pipeline.push({
         $addFields: {
           relevanceScore: { $meta: "textScore" },
         },
       });
+      
+      // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
+      const arrayFilters: Record<string, any> = {};
+      if (categories?.length) arrayFilters.categories = { $in: categories };
+      if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
+      if (ingredients?.length) arrayFilters.ingredients = { $all: ingredients };
+      
+      if (Object.keys(arrayFilters).length > 0) {
+        pipeline.push({ $match: arrayFilters });
+      }
+    } else {
+      // No search - apply all filters in first stage
+      pipeline.push({ $match: matchStage });
     }
 
     pipeline.push(
@@ -301,7 +368,8 @@ class ProductService {
   }
 
   /**
-   * Get product by ID
+   * Get product by ID with full details
+   * Includes variants, detailed ingredients, meta, and structured data
    */
   async getProductById(productId: string): Promise<{ product: any }> {
     const product = await Products.findOne({
@@ -313,7 +381,59 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    return { product };
+    // Fetch product variants
+    const variants = await ProductVariants.find({
+      productId: new mongoose.Types.ObjectId(productId),
+      isDeleted: { $ne: true },
+      isActive: true,
+    })
+      .sort({ sortOrder: 1 })
+      .lean();
+
+    // Fetch detailed ingredient information
+    // Match ingredients by name (case-insensitive) or scientific name
+    let detailedIngredients: any[] = [];
+    if (product.ingredients && product.ingredients.length > 0) {
+      const ingredientQueries = product.ingredients.map((ingredientName) => ({
+        $or: [
+          { "name.en": { $regex: ingredientName.trim(), $options: "i" } },
+          { "name.nl": { $regex: ingredientName.trim(), $options: "i" } },
+          { scientificName: { $regex: ingredientName.trim(), $options: "i" } },
+        ],
+      }));
+
+      detailedIngredients = await Ingredients.find({
+        $or: ingredientQueries,
+        isDeleted: { $ne: true },
+        isActive: true,
+      }).lean();
+    }
+
+    // Build meta data if not present
+    const meta = product.meta || {
+      title: product.title,
+      description: product.description,
+      keywords: [
+        ...(product.categories || []),
+        ...(product.healthGoals || []),
+        ...product.ingredients,
+      ].join(", "),
+      ogImage: product.productImage,
+    };
+
+    // Build structured response
+    const enrichedProduct = {
+      ...product,
+      variants: variants || [],
+      detailedIngredients: detailedIngredients || [],
+      meta,
+      // Ensure nutritionTable exists (can be empty array)
+      nutritionTable: product.nutritionTable || [],
+      // Ensure sourceInfo exists
+      sourceInfo: product.sourceInfo || {},
+    };
+
+    return { product: enrichedProduct };
   }
 
   /**

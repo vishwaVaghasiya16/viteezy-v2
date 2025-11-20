@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "@/utils/AppError";
 
-const ARRAY_FIELDS = ["benefits", "ingredients"];
-const JSON_FIELDS = ["price", "standupPouchPrices"];
+const ARRAY_FIELDS = ["benefits", "ingredients", "categories", "healthGoals"];
+const JSON_FIELDS = ["price", "standupPouchPrices", "nutritionTable", "meta", "sourceInfo"];
 
 const toBoolean = (value: any): boolean | undefined => {
   if (typeof value === "boolean") return value;
