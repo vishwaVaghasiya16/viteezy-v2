@@ -1,92 +1,202 @@
 [
     {
         "_id": {
-            "$oid": "507f1f77bcf86cd799439011"
+            "$oid": "64f0a1b2c3d4e5f601000001"
         },
-        "slug": "health-wellness",
+        "slug": "immune-support",
         "title": {
-            "en": "Health & Wellness",
-            "nl": "Gezondheid & Welzijn"
+            "en": "Immune Support",
+            "nl": "Immuunondersteuning"
         },
         "sortOrder": 1,
+        "isActive": true,
         "isDeleted": false,
         "createdAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
+            "$date": "2024-08-01T08:00:00.000Z"
         },
         "updatedAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
-        }
+            "$date": "2024-08-01T08:00:00.000Z"
+        },
+        "__v": 0
     },
     {
         "_id": {
-            "$oid": "507f1f77bcf86cd799439012"
+            "$oid": "64f0a1b2c3d4e5f601000002"
         },
-        "slug": "nutrition",
+        "slug": "mental-fitness",
         "title": {
-            "en": "Nutrition",
-            "nl": "Voeding"
+            "en": "Mental Fitness",
+            "nl": "Mentale Fitheid"
         },
         "sortOrder": 2,
+        "isActive": true,
         "isDeleted": false,
         "createdAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
+            "$date": "2024-08-02T08:00:00.000Z"
         },
         "updatedAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
-        }
+            "$date": "2024-08-02T08:00:00.000Z"
+        },
+        "__v": 0
     },
     {
         "_id": {
-            "$oid": "507f1f77bcf86cd799439013"
+            "$oid": "64f0a1b2c3d4e5f601000003"
         },
-        "slug": "fitness",
+        "slug": "digestive-health",
         "title": {
-            "en": "Fitness",
-            "nl": "Fitness"
+            "en": "Digestive Health",
+            "nl": "Spijsvertering"
         },
         "sortOrder": 3,
+        "isActive": true,
         "isDeleted": false,
         "createdAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
+            "$date": "2024-08-03T08:00:00.000Z"
         },
         "updatedAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
-        }
+            "$date": "2024-08-03T08:00:00.000Z"
+        },
+        "__v": 0
     },
     {
         "_id": {
-            "$oid": "507f1f77bcf86cd799439014"
+            "$oid": "64f0a1b2c3d4e5f601000004"
         },
-        "slug": "supplements",
+        "slug": "fitness-performance",
         "title": {
-            "en": "Supplements",
-            "nl": "Supplementen"
+            "en": "Fitness & Performance",
+            "nl": "Fitness & Prestatie"
         },
         "sortOrder": 4,
+        "isActive": true,
         "isDeleted": false,
         "createdAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
+            "$date": "2024-08-04T08:00:00.000Z"
         },
         "updatedAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
-        }
+            "$date": "2024-08-04T08:00:00.000Z"
+        },
+        "__v": 0
     },
     {
         "_id": {
-            "$oid": "507f1f77bcf86cd799439015"
+            "$oid": "64f0a1b2c3d4e5f601000005"
         },
-        "slug": "lifestyle",
+        "slug": "sleep-recovery",
         "title": {
-            "en": "Lifestyle",
-            "nl": "Levensstijl"
+            "en": "Sleep & Recovery",
+            "nl": "Slaap & Herstel"
         },
         "sortOrder": 5,
+        "isActive": true,
         "isDeleted": false,
         "createdAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
+            "$date": "2024-08-05T08:00:00.000Z"
         },
         "updatedAt": {
-            "$date": "2024-01-15T10:00:00.000Z"
-        }
+            "$date": "2024-08-05T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "64f0a1b2c3d4e5f601000006"
+        },
+        "slug": "skin-glow",
+        "title": {
+            "en": "Skin Glow",
+            "nl": "Stralende Huid"
+        },
+        "sortOrder": 6,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-06T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-06T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "64f0a1b2c3d4e5f601000007"
+        },
+        "slug": "heart-health",
+        "title": {
+            "en": "Heart Health",
+            "nl": "Hartgezondheid"
+        },
+        "sortOrder": 7,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-07T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-07T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "64f0a1b2c3d4e5f601000008"
+        },
+        "slug": "hormone-balance",
+        "title": {
+            "en": "Hormone Balance",
+            "nl": "Hormoonbalans"
+        },
+        "sortOrder": 8,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-08T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-08T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "64f0a1b2c3d4e5f601000009"
+        },
+        "slug": "gut-reset",
+        "title": {
+            "en": "Gut Reset Plans",
+            "nl": "Darm Reset"
+        },
+        "sortOrder": 9,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-09T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-09T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "64f0a1b2c3d4e5f60100000a"
+        },
+        "slug": "longevity",
+        "title": {
+            "en": "Longevity Lab",
+            "nl": "Lang Leven Lab"
+        },
+        "sortOrder": 10,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-10T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-10T08:00:00.000Z"
+        },
+        "__v": 0
     }
 ]

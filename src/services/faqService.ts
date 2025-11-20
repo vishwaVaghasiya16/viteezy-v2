@@ -15,7 +15,7 @@ export interface GetFaqsFilters {
 }
 
 interface GroupedFaqItem {
-  id: string;
+  _id: string;
   question: string;
   answer: string;
   categoryId: string | null;
@@ -108,7 +108,7 @@ class FaqService {
     const categories = await this.fetchCategories({ onlyActive });
 
     return categories.map((category) => ({
-      id: category._id.toString(),
+      _id: category._id.toString(),
       title: this.resolveI18nField(category.title, lang),
       isActive: category.isActive,
       sortOrder: category.sortOrder ?? 0,
@@ -158,7 +158,7 @@ class FaqService {
 
     faqs.forEach((faq) => {
       const formattedFaq: GroupedFaqItem = {
-        id: faq._id.toString(),
+        _id: faq._id.toString(),
         question: this.resolveI18nField(faq.question, lang),
         answer: this.resolveI18nField(faq.answer, lang),
         categoryId: faq.categoryId ? faq.categoryId.toString() : null,

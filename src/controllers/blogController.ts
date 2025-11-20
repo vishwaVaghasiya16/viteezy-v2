@@ -245,7 +245,7 @@ class BlogController {
         .lean();
 
       const transformedCategories = categories.map((category) => ({
-        id: category._id,
+        _id: category._id,
         slug: category.slug,
         title: category.title[lang as "en" | "nl"] || category.title.en || "",
         sortOrder: category.sortOrder || 0,
