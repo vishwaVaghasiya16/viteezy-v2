@@ -6,6 +6,7 @@
 
 import { Request, Response } from "express";
 import { asyncHandler } from "@/utils";
+import { AppError } from "@/utils/AppError";
 import { Addresses, IAddress } from "@/models/core/addresses.model";
 import mongoose from "mongoose";
 import {
@@ -76,8 +77,7 @@ class AddressController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?.id;
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       const {
@@ -98,16 +98,12 @@ class AddressController {
         houseNumberAddition,
       } = req.body;
 
-      const validationOutcome = await this.validateDutchAddressOrRespond(res, {
+      const validationOutcome = await this.validateDutchAddressOrRespond({
         country,
         postcode: zip,
         houseNumber,
         houseNumberAddition,
       });
-
-      if (!validationOutcome.success) {
-        return;
-      }
 
       const normalizedAddress = validationOutcome.normalized;
       const normalizedAddressLine1 =
@@ -173,8 +169,7 @@ class AddressController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?.id;
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       const addresses = await Addresses.find({
@@ -199,13 +194,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       const address = await Addresses.findOne({
@@ -215,8 +208,7 @@ class AddressController {
       }).lean();
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       res.apiSuccess({ address }, "Address retrieved successfully");
@@ -234,13 +226,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -251,8 +241,7 @@ class AddressController {
       });
 
       if (!existingAddress) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       const {
@@ -284,16 +273,12 @@ class AddressController {
         existingAddress.houseNumberAddition ??
         extractAdditionFromLine(addressLine1 || existingAddress.addressLine1);
 
-      const validationOutcome = await this.validateDutchAddressOrRespond(res, {
+      const validationOutcome = await this.validateDutchAddressOrRespond({
         country: country || existingAddress.country,
         postcode: zip || existingAddress.zip,
         houseNumber: inferredHouseNumber,
         houseNumberAddition: inferredAddition,
       });
-
-      if (!validationOutcome.success) {
-        return;
-      }
 
       const normalizedAddress = validationOutcome.normalized;
       const normalizedAddressLine1 =
@@ -393,13 +378,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -410,8 +393,7 @@ class AddressController {
       });
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       // Soft delete the address
@@ -436,13 +418,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -453,8 +433,7 @@ class AddressController {
       });
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       // Unset all other default addresses for this user
@@ -484,27 +463,21 @@ class AddressController {
     }
   );
 
-  private async validateDutchAddressOrRespond(
-    res: Response,
-    options: {
-      country?: string;
-      postcode?: string;
-      houseNumber?: string | number;
-      houseNumberAddition?: string;
-    }
-  ): Promise<
-    { success: true; normalized?: PostNLNormalizedAddress } | { success: false }
-  > {
+  private async validateDutchAddressOrRespond(options: {
+    country?: string;
+    postcode?: string;
+    houseNumber?: string | number;
+    houseNumberAddition?: string;
+  }): Promise<{ success: true; normalized?: PostNLNormalizedAddress }> {
     if (!shouldValidateWithPostNL(options.country)) {
       return { success: true };
     }
 
     if (!options.postcode || !options.houseNumber) {
-      res.apiError(
+      throw new AppError(
         "Postcode and house number are required for Netherlands addresses",
         400
       );
-      return { success: false };
     }
 
     try {
@@ -515,8 +488,7 @@ class AddressController {
       });
 
       if (!validation.isValid) {
-        res.apiError("Address incorrect", 400);
-        return { success: false };
+        throw new AppError("Address incorrect", 400);
       }
 
       return { success: true, normalized: validation.normalizedAddress };
@@ -524,11 +496,10 @@ class AddressController {
       logger.error("PostNL validation failed", {
         error: error?.message ?? error,
       });
-      res.apiError(
+      throw new AppError(
         "Unable to validate address with PostNL. Please try again later.",
         502
       );
-      return { success: false };
     }
   }
 }

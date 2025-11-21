@@ -90,7 +90,7 @@ const handleValidationError = (
   return {
     statusCode: HTTP_STATUS.BAD_REQUEST,
     message: "Validation error",
-    errorType: "ValidationError",
+    errorType: "Validation Error",
     errorText: errorMessages.join(", "),
   };
 };
@@ -114,7 +114,7 @@ const handleDuplicateKeyError = (
   return {
     statusCode: HTTP_STATUS.CONFLICT,
     message: "Duplicate entry",
-    errorType: "DuplicateKeyError",
+    errorType: "Duplicate Key Error",
     errorText: `${field} already exists`,
   };
 };
@@ -137,7 +137,7 @@ const handleJWTError = (
     return {
       statusCode: HTTP_STATUS.UNAUTHORIZED,
       message: "Authentication failed",
-      errorType: "AuthenticationError",
+      errorType: "Authentication Error",
       errorText: "Token expired",
     };
   }
@@ -145,7 +145,7 @@ const handleJWTError = (
   return {
     statusCode: HTTP_STATUS.UNAUTHORIZED,
     message: "Authentication failed",
-    errorType: "AuthenticationError",
+    errorType: "Authentication Error",
     errorText: "Invalid token",
   };
 };
@@ -170,7 +170,7 @@ export const errorHandler = (
   // Default error values
   let statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
   let message = "Internal Server Error";
-  let errorType = "ServerError";
+  let errorType = "Server Error";
   let errorText: string | undefined;
 
   // Handle AppError instances (custom application errors)
@@ -211,7 +211,7 @@ export const errorHandler = (
   else if (error.name === "CastError") {
     statusCode = HTTP_STATUS.BAD_REQUEST;
     message = "Validation error";
-    errorType = "ValidationError";
+    errorType = "Validation Error";
     errorText = "Invalid ID format";
   }
   // Handle other unexpected errors
@@ -245,7 +245,8 @@ export const errorHandler = (
     success: false,
     message,
     errorType,
-    error: errorText,
+    error: errorText || message,
+    data: null,
   };
 
   res.status(statusCode).json(response);

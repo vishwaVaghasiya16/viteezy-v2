@@ -249,7 +249,7 @@ class AuthService {
 
       return {
         user: {
-          id: existingUser._id,
+          _id: existingUser._id,
           name: existingUser.name,
           email: existingUser.email,
           phone: existingUser.phone,
@@ -285,7 +285,7 @@ class AuthService {
 
     return {
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
@@ -456,7 +456,7 @@ class AuthService {
 
     return {
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
@@ -539,7 +539,7 @@ class AuthService {
 
     return {
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,

@@ -14,7 +14,7 @@ class UserController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const user = await User.findById(req.user.id).select("-password");
+      const user = await User.findById(req.user._id).select("-password");
 
       if (!user) {
         throw new AppError("User not found", 404);
@@ -40,7 +40,7 @@ class UserController {
       if (age !== undefined) updateData.age = age;
 
       const updatedUser = await User.findByIdAndUpdate(
-        req.user.id,
+        req.user._id,
         updateData,
         { new: true, runValidators: true }
       ).select("-password");

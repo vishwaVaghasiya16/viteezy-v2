@@ -1,21 +1,21 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
+import { asyncHandler } from "@/utils";
+import { AppError } from "@/utils/AppError";
+import { authService } from "@/services/authService";
+import { User } from "@/models/index.model";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
   sessionId?: string;
 }
-import { authService } from "../services/authService";
-import { User } from "@/models/index.model";
-import { AppError } from "../utils/AppError";
-import { logger } from "../utils/logger";
 
-export class AuthController {
+class AuthController {
   /**
    * Register new user
    */
-  static async register(req: Request, res: Response, next: NextFunction) {
-    try {
+  register = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { name, email, password, phone } = req.body;
 
       const result = await authService.register({
@@ -25,26 +25,22 @@ export class AuthController {
         phone,
       });
 
-      res.status(201).json({
-        success: true,
-        message: result.message,
-        data: {
+      res.apiCreated(
+        {
           user: result.user,
         },
-      });
-    } catch (error) {
-      next(error);
+        result.message
+      );
     }
-  }
+  );
 
   /**
    * Verify OTP
    */
-  static async verifyOTP(req: Request, res: Response, next: NextFunction) {
-    try {
+  verifyOTP = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { email, otp, type, deviceInfo } = req.body;
 
-      // If not login (for OTP-based login/verification), deviceInfo can be optional, unless required by business rule
       const result = await authService.verifyOTP({
         email,
         otp,
@@ -52,94 +48,74 @@ export class AuthController {
         deviceInfo,
       });
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: {
+      res.apiSuccess(
+        {
           user: result.user,
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
         },
-      });
-    } catch (error) {
-      next(error);
+        result.message
+      );
     }
-  }
+  );
 
   /**
    * Login user
    */
-  static async login(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { email, password, deviceInfo } = req.body;
+  login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { email, password, deviceInfo } = req.body;
 
-      console.log(req.body);
-
-      if (!deviceInfo) {
-        throw new AppError("deviceInfo is required for login", 400);
-      }
-
-      const result = await authService.login({
-        email,
-        password,
-        deviceInfo,
-      });
-
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: {
-          user: result.user,
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        },
-      });
-    } catch (error) {
-      next(error);
+    if (!deviceInfo) {
+      throw new AppError("deviceInfo is required for login", 400);
     }
-  }
+
+    const result = await authService.login({
+      email,
+      password,
+      deviceInfo,
+    });
+
+    res.apiSuccess(
+      {
+        user: result.user,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      },
+      result.message
+    );
+  });
 
   /**
    * Resend OTP
    */
-  static async resendOTP(req: Request, res: Response, next: NextFunction) {
-    try {
+  resendOTP = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { email, type } = req.body;
 
       const result = await authService.resendOTP(email, type);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Forgot password
    */
-  static async forgotPassword(req: Request, res: Response, next: NextFunction) {
-    try {
+  forgotPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { email } = req.body;
 
       const result = await authService.forgotPassword(email);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Reset password
    */
-  static async resetPassword(req: Request, res: Response, next: NextFunction) {
-    try {
+  resetPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { email, otp, newPassword } = req.body;
 
       const result = await authService.resetPassword({
@@ -148,24 +124,15 @@ export class AuthController {
         newPassword,
       });
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Change password
    */
-  static async changePassword(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  changePassword = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { currentPassword, newPassword } = req.body;
       const userId = req.user?.id;
 
@@ -179,24 +146,15 @@ export class AuthController {
         newPassword,
       });
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Logout user
    */
-  static async logout(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  logout = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const sessionId = req.sessionId;
 
       if (!sessionId) {
@@ -205,24 +163,15 @@ export class AuthController {
 
       const result = await authService.logout(sessionId);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Logout from all devices
    */
-  static async logoutAllDevices(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  logoutAllDevices = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id;
 
       if (!userId) {
@@ -231,31 +180,21 @@ export class AuthController {
 
       const result = await authService.logoutAllDevices(userId);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-      });
-    } catch (error) {
-      next(error);
+      res.apiSuccess(null, result.message);
     }
-  }
+  );
 
   /**
    * Get current user profile
    */
-  static async getProfile(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  getProfile = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const user = req.user;
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           user: {
-            id: user?.id,
+            _id: user?.id,
             name: user?.name,
             email: user?.email,
             phone: user?.phone,
@@ -270,21 +209,16 @@ export class AuthController {
             createdAt: user?.createdAt,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Profile retrieved successfully"
+      );
     }
-  }
+  );
 
   /**
    * Update user profile
    */
-  static async updateProfile(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  updateProfile = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id;
       const { name, phone, profileImage, gender, age } = req.body;
 
@@ -310,12 +244,10 @@ export class AuthController {
         throw new AppError("User not found", 404);
       }
 
-      res.status(200).json({
-        success: true,
-        message: "Profile updated successfully",
-        data: {
+      res.apiSuccess(
+        {
           user: {
-            id: updatedUser._id.toString(),
+            _id: updatedUser._id.toString(),
             name: updatedUser.name,
             email: updatedUser.email,
             phone: updatedUser.phone,
@@ -331,17 +263,16 @@ export class AuthController {
             updatedAt: updatedUser.updatedAt,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Profile updated successfully"
+      );
     }
-  }
+  );
 
   /**
    * Refresh access token
    */
-  static async refreshToken(req: Request, res: Response, next: NextFunction) {
-    try {
+  refreshToken = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { refreshToken } = req.body;
 
       if (!refreshToken) {
@@ -350,61 +281,47 @@ export class AuthController {
 
       const result = await authService.refreshToken(refreshToken);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: {
+      res.apiSuccess(
+        {
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
         },
-      });
-    } catch (error) {
-      next(error);
+        result.message
+      );
     }
-  }
+  );
 
   /**
    * Clean up expired OTPs (Admin only)
    */
-  static async cleanupOTPs(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  cleanupOTPs = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const result = await authService.cleanupExpiredOTPs();
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: {
+      res.apiSuccess(
+        {
           deletedCount: result.deletedCount,
         },
-      });
-    } catch (error) {
-      next(error);
+        result.message
+      );
     }
-  }
+  );
 
   /**
    * Get OTP statistics (Admin only)
    */
-  static async getOTPStats(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  getOTPStats = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const stats = await authService.getOTPStats();
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           stats,
         },
-      });
-    } catch (error) {
-      next(error);
+        "OTP statistics retrieved successfully"
+      );
     }
-  }
+  );
 }
+
+export const authController = new AuthController();

@@ -6,6 +6,7 @@
 
 import { Request, Response } from "express";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
+import { AppError } from "@/utils/AppError";
 import { Blogs, IBlog } from "@/models/cms/blogs.model";
 import { BlogCategories } from "@/models/cms/blogCategories.model";
 import { BlogStatus } from "@/models/enums";
@@ -107,7 +108,7 @@ class BlogController {
           typeof blog.categoryId === "object" &&
           !(blog.categoryId instanceof mongoose.Types.ObjectId)
             ? {
-                id: blog.categoryId._id,
+                _id: blog.categoryId._id,
                 slug: blog.categoryId.slug,
                 title:
                   blog.categoryId.title?.[lang as "en" | "nl"] ||
@@ -170,8 +171,7 @@ class BlogController {
         .lean();
 
       if (!blog) {
-        res.apiNotFound("Blog not found");
-        return;
+        throw new AppError("Blog not found", 404);
       }
 
       // Transform blog to include required fields
@@ -180,7 +180,7 @@ class BlogController {
         typeof blog.categoryId === "object" &&
         !(blog.categoryId instanceof mongoose.Types.ObjectId)
           ? {
-              id: (blog.categoryId as any)._id,
+              _id: (blog.categoryId as any)._id,
               slug: (blog.categoryId as any).slug,
               title:
                 (blog.categoryId as any).title?.[lang as "en" | "nl"] ||
@@ -194,7 +194,7 @@ class BlogController {
         typeof blog.authorId === "object" &&
         !(blog.authorId instanceof mongoose.Types.ObjectId)
           ? {
-              id: (blog.authorId as any)._id,
+              _id: (blog.authorId as any)._id,
               name: (blog.authorId as any).name || "",
               email: (blog.authorId as any).email || "",
             }
@@ -302,7 +302,7 @@ class BlogController {
           typeof blog.categoryId === "object" &&
           !(blog.categoryId instanceof mongoose.Types.ObjectId)
             ? {
-                id: blog.categoryId._id,
+              _id: blog.categoryId._id,
                 slug: blog.categoryId.slug,
                 title:
                   blog.categoryId.title?.[lang as "en" | "nl"] ||
@@ -365,8 +365,7 @@ class BlogController {
       ).select("slug viewCount");
 
       if (!blog) {
-        res.apiNotFound("Blog not found");
-        return;
+        throw new AppError("Blog not found", 404);
       }
 
       res.apiSuccess(

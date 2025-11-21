@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { User } from "@/models/index.model";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
+import { AppError } from "@/utils/AppError";
+import { User } from "@/models/index.model";
 
 class AdminUserController {
   getAllUsers = asyncHandler(
@@ -46,8 +47,7 @@ class AdminUserController {
       const user = await User.findById(id).select("-password");
 
       if (!user) {
-        res.apiNotFound("User not found");
-        return;
+        throw new AppError("User not found", 404);
       }
 
       res.apiSuccess({ user }, "User retrieved successfully");
@@ -66,8 +66,7 @@ class AdminUserController {
       ).select("-password");
 
       if (!user) {
-        res.apiNotFound("User not found");
-        return;
+        throw new AppError("User not found", 404);
       }
 
       res.apiSuccess({ user }, "User status updated successfully");
@@ -81,8 +80,7 @@ class AdminUserController {
       const user = await User.findByIdAndDelete(id);
 
       if (!user) {
-        res.apiNotFound("User not found");
-        return;
+        throw new AppError("User not found", 404);
       }
 
       res.apiSuccess(null, "User deleted successfully");

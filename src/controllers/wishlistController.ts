@@ -6,14 +6,14 @@ import { Wishlists, Products } from "@/models/commerce";
 
 interface AuthenticatedRequest extends Request {
   user?: {
-    id: string;
+    _id: string;
   };
 }
 
 class WishlistController {
   addItem = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?.id) {
+      if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
@@ -33,7 +33,7 @@ class WishlistController {
       }
 
       const existing = await Wishlists.findOne({
-        userId: req.user.id,
+        userId: req.user._id,
         productId,
       });
 
@@ -42,7 +42,7 @@ class WishlistController {
       }
 
       const item = await Wishlists.create({
-        userId: req.user.id,
+        userId: req.user._id,
         productId,
         notes,
       });
@@ -53,14 +53,14 @@ class WishlistController {
 
   getItems = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?.id) {
+      if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
       const { includeProduct } = req.query;
       const { page, limit, skip } = getPaginationOptions(req);
 
-      const filter = { userId: req.user.id };
+      const filter = { userId: req.user._id };
 
       let query = Wishlists.find(filter)
         .sort({ createdAt: -1 })
@@ -87,7 +87,7 @@ class WishlistController {
 
   updateItem = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?.id) {
+      if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
@@ -95,7 +95,7 @@ class WishlistController {
       const { notes } = req.body;
 
       const item = await Wishlists.findOneAndUpdate(
-        { _id: id, userId: req.user.id },
+        { _id: id, userId: req.user._id },
         { notes },
         { new: true }
       );
@@ -110,7 +110,7 @@ class WishlistController {
 
   removeItem = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?.id) {
+      if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
@@ -118,7 +118,7 @@ class WishlistController {
 
       const result = await Wishlists.findOneAndDelete({
         _id: id,
-        userId: req.user.id,
+        userId: req.user._id,
       });
 
       if (!result) {
@@ -131,11 +131,11 @@ class WishlistController {
 
   getCount = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?.id) {
+      if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
-      const count = await Wishlists.countDocuments({ userId: req.user.id });
+      const count = await Wishlists.countDocuments({ userId: req.user._id });
 
       res.apiSuccess({ count }, "Wishlist count retrieved successfully");
     }

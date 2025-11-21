@@ -4,7 +4,7 @@ import { UserRole, USER_ROLE_VALUES, Gender, GENDER_VALUES } from "../enums";
 
 export interface IUserSessionInfo {
   sessionId: string;
-  status: "active" | "revoked";
+  status: "Active" | "Revoked";
   revoked: boolean;
   deviceInfo?: string;
 }
@@ -101,8 +101,8 @@ const userSchema = new Schema<IUser>(
         sessionId: { type: String, required: true },
         status: {
           type: String,
-          enum: ["active", "revoked"],
-          default: "active",
+          enum: ["Active", "Revoked"],
+          default: "Active",
         },
         revoked: { type: Boolean, default: false },
         deviceInfo: { type: String, trim: true },

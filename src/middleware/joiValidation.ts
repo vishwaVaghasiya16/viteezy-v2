@@ -35,7 +35,7 @@ const createValidationError = (error: JoiValidationError): AppError => {
     "Validation error",
     HTTP_STATUS.BAD_REQUEST,
     true,
-    "ValidationError"
+    "Validation Error"
   );
 
   (appErr as any).error = firstMessage;

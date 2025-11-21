@@ -1,46 +1,37 @@
-import { Request, Response, NextFunction } from "express";
-import { paymentService } from "../services/payment";
-import { PaymentMethod } from "../models/enums";
-import { AppError } from "../utils/AppError";
-import { logger } from "../utils/logger";
+import { Request, Response } from "express";
+import { asyncHandler } from "@/utils";
+import { AppError } from "@/utils/AppError";
+import { logger } from "@/utils/logger";
+import { paymentService } from "@/services/payment";
+import { PaymentMethod } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
 
-export class PaymentController {
+class PaymentController {
   /**
    * Get available payment methods
    */
-  static async getAvailableMethods(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  getAvailableMethods = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const methods = paymentService.getAvailablePaymentMethods();
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           methods,
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment methods retrieved successfully"
+      );
     }
-  }
+  );
 
   /**
    * Create payment
    */
-  static async createPayment(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  createPayment = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id || req.userId;
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -65,12 +56,10 @@ export class PaymentController {
         returnUrl,
       });
 
-      res.status(201).json({
-        success: true,
-        message: "Payment created successfully",
-        data: {
+      res.apiCreated(
+        {
           payment: {
-            id: result.payment._id,
+            _id: result.payment._id,
             orderId: result.payment.orderId,
             status: result.payment.status,
             amount: result.payment.amount,
@@ -82,17 +71,16 @@ export class PaymentController {
             gatewayTransactionId: result.result.gatewayTransactionId,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment created successfully"
+      );
     }
-  }
+  );
 
   /**
    * Verify payment
    */
-  static async verifyPayment(req: Request, res: Response, next: NextFunction) {
-    try {
+  verifyPayment = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { paymentId, gatewayTransactionId } = req.body;
 
       const payment = await paymentService.verifyPayment(
@@ -100,33 +88,26 @@ export class PaymentController {
         gatewayTransactionId
       );
 
-      res.status(200).json({
-        success: true,
-        message: "Payment verified successfully",
-        data: {
+      res.apiSuccess(
+        {
           payment: {
-            id: payment._id,
+            _id: payment._id,
             orderId: payment.orderId,
             status: payment.status,
             amount: payment.amount,
             paymentMethod: payment.paymentMethod,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment verified successfully"
+      );
     }
-  }
+  );
 
   /**
    * Create payment intent for product checkout (order-based)
    */
-  static async createPaymentIntent(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  createPaymentIntent = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id || req.userId;
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -142,12 +123,10 @@ export class PaymentController {
         cancelUrl,
       });
 
-      res.status(201).json({
-        success: true,
-        message: "Payment intent created successfully",
-        data: {
+      res.apiCreated(
+        {
           payment: {
-            id: result.payment._id,
+            _id: result.payment._id,
             orderId: result.payment.orderId,
             status: result.payment.status,
             amount: result.payment.amount,
@@ -155,7 +134,7 @@ export class PaymentController {
             gatewayTransactionId: result.payment.gatewayTransactionId,
           },
           order: {
-            id: result.order._id,
+            _id: result.order._id,
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
@@ -167,21 +146,16 @@ export class PaymentController {
             gatewayTransactionId: result.result.gatewayTransactionId,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment intent created successfully"
+      );
     }
-  }
+  );
 
   /**
    * Verify payment and update order status (Frontend Callback)
    */
-  static async verifyPaymentCallback(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  verifyPaymentCallback = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id || req.userId;
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -204,14 +178,10 @@ export class PaymentController {
         throw new AppError("Order does not belong to user", 403);
       }
 
-      res.status(200).json({
-        success: true,
-        message: result.updated
-          ? "Payment verified and order updated successfully"
-          : "Payment verified successfully",
-        data: {
+      res.apiSuccess(
+        {
           payment: {
-            id: result.payment._id,
+            _id: result.payment._id,
             orderId: result.payment.orderId,
             status: result.payment.status,
             amount: result.payment.amount,
@@ -219,7 +189,7 @@ export class PaymentController {
             gatewayTransactionId: result.payment.gatewayTransactionId,
           },
           order: {
-            id: result.order._id,
+            _id: result.order._id,
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
@@ -227,95 +197,88 @@ export class PaymentController {
           },
           updated: result.updated,
         },
-      });
-    } catch (error) {
-      next(error);
+        result.updated
+          ? "Payment verified and order updated successfully"
+          : "Payment verified successfully"
+      );
     }
-  }
+  );
 
   /**
    * Process Stripe webhook
    */
-  static async processStripeWebhook(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const signature = req.headers["stripe-signature"] as string;
-      const payload = req.body;
+  processStripeWebhook = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const signature = req.headers["stripe-signature"] as string;
+        const payload = req.body;
 
-      const payment = await paymentService.processWebhook(
-        PaymentMethod.STRIPE,
-        payload,
-        signature
-      );
+        const payment = await paymentService.processWebhook(
+          PaymentMethod.STRIPE,
+          payload,
+          signature
+        );
 
-      res.status(200).json({
-        success: true,
-        message: "Webhook processed successfully",
-        data: {
-          payment: {
-            id: payment._id,
-            status: payment.status,
+        res.apiSuccess(
+          {
+            payment: {
+              _id: payment._id,
+              status: payment.status,
+            },
           },
-        },
-      });
-    } catch (error) {
-      logger.error("Stripe webhook processing error:", error);
-      // Still return 200 to prevent webhook retries
-      res.status(200).json({
-        success: false,
-        message: "Webhook processing failed",
-      });
+          "Webhook processed successfully"
+        );
+      } catch (error) {
+        logger.error("Stripe webhook processing error:", error);
+        // Still return 200 to prevent webhook retries
+        res.status(200).json({
+          success: false,
+          message: "Webhook processing failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
     }
-  }
+  );
 
   /**
    * Process Mollie webhook
    */
-  static async processMollieWebhook(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const payload = req.body;
+  processMollieWebhook = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        const payload = req.body;
 
-      const payment = await paymentService.processWebhook(
-        PaymentMethod.MOLLIE,
-        payload
-      );
+        const payment = await paymentService.processWebhook(
+          PaymentMethod.MOLLIE,
+          payload
+        );
 
-      res.status(200).json({
-        success: true,
-        message: "Webhook processed successfully",
-        data: {
-          payment: {
-            id: payment._id,
-            status: payment.status,
+        res.apiSuccess(
+          {
+            payment: {
+              _id: payment._id,
+              status: payment.status,
+            },
           },
-        },
-      });
-    } catch (error) {
-      logger.error("Mollie webhook processing error:", error);
-      // Still return 200 to prevent webhook retries
-      res.status(200).json({
-        success: false,
-        message: "Webhook processing failed",
-      });
+          "Webhook processed successfully"
+        );
+      } catch (error) {
+        logger.error("Mollie webhook processing error:", error);
+        // Still return 200 to prevent webhook retries
+        res.status(200).json({
+          success: false,
+          message: "Webhook processing failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
     }
-  }
+  );
 
   /**
    * Refund payment
    */
-  static async refundPayment(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  refundPayment = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { paymentId, amount, reason, metadata } = req.body;
 
       const payment = await paymentService.refundPayment({
@@ -325,104 +288,82 @@ export class PaymentController {
         metadata,
       });
 
-      res.status(200).json({
-        success: true,
-        message: "Refund processed successfully",
-        data: {
+      res.apiSuccess(
+        {
           payment: {
-            id: payment._id,
+            _id: payment._id,
             status: payment.status,
             refundAmount: payment.refundAmount,
             refundReason: payment.refundReason,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Refund processed successfully"
+      );
     }
-  }
+  );
 
   /**
    * Cancel payment
    */
-  static async cancelPayment(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  cancelPayment = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { paymentId } = req.body;
 
       const payment = await paymentService.cancelPayment(paymentId);
 
-      res.status(200).json({
-        success: true,
-        message: "Payment cancelled successfully",
-        data: {
+      res.apiSuccess(
+        {
           payment: {
-            id: payment._id,
+            _id: payment._id,
             status: payment.status,
           },
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment cancelled successfully"
+      );
     }
-  }
+  );
 
   /**
    * Get payment by ID
    */
-  static async getPayment(req: Request, res: Response, next: NextFunction) {
-    try {
+  getPayment = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { paymentId } = req.params;
 
       const payment = await paymentService.getPayment(paymentId);
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           payment,
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payment retrieved successfully"
+      );
     }
-  }
+  );
 
   /**
    * Get payments by order
    */
-  static async getPaymentsByOrder(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  getPaymentsByOrder = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
       const { orderId } = req.params;
 
       const payments = await paymentService.getPaymentsByOrder(orderId);
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           payments,
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payments retrieved successfully"
+      );
     }
-  }
+  );
 
   /**
    * Get payments by user
    */
-  static async getPaymentsByUser(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
+  getPaymentsByUser = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id || req.userId;
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -430,14 +371,14 @@ export class PaymentController {
 
       const payments = await paymentService.getPaymentsByUser(userId);
 
-      res.status(200).json({
-        success: true,
-        data: {
+      res.apiSuccess(
+        {
           payments,
         },
-      });
-    } catch (error) {
-      next(error);
+        "Payments retrieved successfully"
+      );
     }
-  }
+  );
 }
+
+export const paymentController = new PaymentController();
