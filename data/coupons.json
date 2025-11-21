@@ -1,0 +1,396 @@
+[
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000001"
+        },
+        "code": "WELCOME10",
+        "name": {
+            "en": "Welcome Discount",
+            "nl": "Welkomstkorting"
+        },
+        "description": {
+            "en": "Get 10% off on your first order",
+            "nl": "Krijg 10% korting op uw eerste bestelling"
+        },
+        "type": "Percentage",
+        "value": 10,
+        "minOrderAmount": 50,
+        "maxDiscountAmount": 20,
+        "usageLimit": 1000,
+        "usageCount": 0,
+        "userUsageLimit": 1,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000002"
+        },
+        "code": "SAVE20",
+        "name": {
+            "en": "Save 20 Euros",
+            "nl": "Bespaar 20 Euro"
+        },
+        "description": {
+            "en": "Get 20 EUR off on orders above 100 EUR",
+            "nl": "Krijg 20 EUR korting op bestellingen boven 100 EUR"
+        },
+        "type": "Fixed",
+        "value": 20,
+        "minOrderAmount": 100,
+        "usageLimit": 500,
+        "usageCount": 0,
+        "userUsageLimit": 2,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000003"
+        },
+        "code": "FREESHIP",
+        "name": {
+            "en": "Free Shipping",
+            "nl": "Gratis Verzending"
+        },
+        "description": {
+            "en": "Free shipping on all orders",
+            "nl": "Gratis verzending op alle bestellingen"
+        },
+        "type": "Free Shipping",
+        "value": 0,
+        "minOrderAmount": 30,
+        "usageLimit": 2000,
+        "usageCount": 0,
+        "userUsageLimit": 5,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000004"
+        },
+        "code": "SUMMER25",
+        "name": {
+            "en": "Summer Sale 25%",
+            "nl": "Zomeraanbieding 25%"
+        },
+        "description": {
+            "en": "Enjoy 25% off on all summer products",
+            "nl": "Geniet van 25% korting op alle zomerproducten"
+        },
+        "type": "Percentage",
+        "value": 25,
+        "minOrderAmount": 75,
+        "maxDiscountAmount": 50,
+        "usageLimit": 300,
+        "usageCount": 0,
+        "userUsageLimit": 1,
+        "applicableProducts": [],
+        "applicableCategories": [
+            {
+                "$oid": "64f0a1b2c3d4e5f601000001"
+            }
+        ],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-06-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-08-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-05-15T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-05-15T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000005"
+        },
+        "code": "NEWUSER15",
+        "name": {
+            "en": "New User Special",
+            "nl": "Nieuwe Gebruiker Speciaal"
+        },
+        "description": {
+            "en": "15% discount for new users on first purchase",
+            "nl": "15% korting voor nieuwe gebruikers bij eerste aankoop"
+        },
+        "type": "Percentage",
+        "value": 15,
+        "minOrderAmount": 40,
+        "usageLimit": 1000,
+        "usageCount": 0,
+        "userUsageLimit": 1,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000006"
+        },
+        "code": "BULK50",
+        "name": {
+            "en": "Bulk Purchase Discount",
+            "nl": "Groothandelskorting"
+        },
+        "description": {
+            "en": "Save 50 EUR on orders above 200 EUR",
+            "nl": "Bespaar 50 EUR op bestellingen boven 200 EUR"
+        },
+        "type": "Fixed",
+        "value": 50,
+        "minOrderAmount": 200,
+        "usageLimit": 200,
+        "usageCount": 0,
+        "userUsageLimit": 3,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000007"
+        },
+        "code": "VITAMIN30",
+        "name": {
+            "en": "Vitamin Products 30% Off",
+            "nl": "Vitamine Producten 30% Korting"
+        },
+        "description": {
+            "en": "Get 30% off on all vitamin products",
+            "nl": "Krijg 30% korting op alle vitamineproducten"
+        },
+        "type": "Percentage",
+        "value": 30,
+        "minOrderAmount": 60,
+        "maxDiscountAmount": 40,
+        "usageLimit": 500,
+        "usageCount": 0,
+        "userUsageLimit": 2,
+        "applicableProducts": [
+            {
+                "$oid": "64f0b1c2d3e4f5a601000001"
+            },
+            {
+                "$oid": "64f0b1c2d3e4f5a601000002"
+            }
+        ],
+        "applicableCategories": [
+            {
+                "$oid": "64f0a1b2c3d4e5f601000002"
+            }
+        ],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000008"
+        },
+        "code": "FLASH5",
+        "name": {
+            "en": "Flash Sale 5 EUR",
+            "nl": "Flash Sale 5 EUR"
+        },
+        "description": {
+            "en": "Quick 5 EUR discount on any order",
+            "nl": "Snelle 5 EUR korting op elke bestelling"
+        },
+        "type": "Fixed",
+        "value": 5,
+        "minOrderAmount": 25,
+        "usageLimit": 1000,
+        "usageCount": 0,
+        "userUsageLimit": 1,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-03-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-03-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-02-25T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-02-25T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000009"
+        },
+        "code": "LOYALTY20",
+        "name": {
+            "en": "Loyalty Rewards",
+            "nl": "Loyaliteitsbeloningen"
+        },
+        "description": {
+            "en": "20% off for our loyal customers",
+            "nl": "20% korting voor onze trouwe klanten"
+        },
+        "type": "Percentage",
+        "value": 20,
+        "minOrderAmount": 80,
+        "maxDiscountAmount": 30,
+        "usageLimit": 800,
+        "usageCount": 0,
+        "userUsageLimit": 3,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [
+            {
+                "$oid": "64f0b1c2d3e4f5a601000003"
+            }
+        ],
+        "validFrom": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-12-31T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-01-01T00:00:00.000Z"
+        }
+    },
+    {
+        "_id": {
+            "$oid": "65f1a1b2c3d4e5f601000010"
+        },
+        "code": "BLACKFRIDAY40",
+        "name": {
+            "en": "Black Friday Special",
+            "nl": "Black Friday Aanbieding"
+        },
+        "description": {
+            "en": "Massive 40% discount on Black Friday",
+            "nl": "Enorme 40% korting op Black Friday"
+        },
+        "type": "Percentage",
+        "value": 40,
+        "minOrderAmount": 100,
+        "maxDiscountAmount": 100,
+        "usageLimit": 500,
+        "usageCount": 0,
+        "userUsageLimit": 1,
+        "applicableProducts": [],
+        "applicableCategories": [],
+        "excludedProducts": [],
+        "validFrom": {
+            "$date": "2025-11-25T00:00:00.000Z"
+        },
+        "validUntil": {
+            "$date": "2025-11-29T23:59:59.000Z"
+        },
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2025-11-20T00:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-20T00:00:00.000Z"
+        }
+    }
+]

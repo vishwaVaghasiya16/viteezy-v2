@@ -106,11 +106,25 @@ db.blogs.findOne({ status: "published" });
 
 Import के बाद आप इन APIs को test कर सकते हैं:
 
+### Blog APIs
+
 1. **Get Blog Categories**: `GET /api/blogs/categories/list`
 2. **Get Blogs List**: `GET /api/blogs?page=1&limit=10`
 3. **Get Blog Details**: `GET /api/blogs/10-essential-vitamins-for-daily-health`
 4. **Get Popular Blogs**: `GET /api/blogs/popular/list?type=popular&limit=5`
 5. **Increment Views**: `POST /api/blogs/10-essential-vitamins-for-daily-health/increment-views`
+
+### Coupon APIs
+
+1. **Validate Coupon**: `POST /api/coupons/validate`
+   ```json
+   {
+     "couponCode": "WELCOME10",
+     "orderAmount": 100,
+     "productIds": [],
+     "categoryIds": []
+   }
+   ```
 
 ## Troubleshooting
 
@@ -129,6 +143,7 @@ Import के बाद आप इन APIs को test कर सकते ह�
   ```javascript
   db.blog_categories.deleteMany({});
   db.blogs.deleteMany({});
+  db.coupons.deleteMany({});
   ```
 
 ### AuthorId Not Found

@@ -9,6 +9,7 @@ import addressRoutes from "./addressRoutes";
 import faqRoutes from "./faqRoutes";
 import wishlistRoutes from "./wishlistRoutes";
 import orderRoutes from "./orderRoutes";
+import couponRoutes from "./couponRoutes";
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use("/faqs", faqRoutes);
 router.use("/wishlist", wishlistRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/orders", orderRoutes);
+router.use("/coupons", couponRoutes);
 
 export default router;
