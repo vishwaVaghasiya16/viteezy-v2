@@ -1,9 +1,14 @@
 import { Router } from "express";
 import { authenticate } from "@/middleware/auth";
-import { validateRequest } from "@/middleware/validation";
 import {
-  getOrderHistoryValidation,
-  getOrderDetailsValidation,
+  validateJoi,
+  validateQuery,
+  validateParams,
+} from "@/middleware/joiValidation";
+import {
+  getOrderHistoryQuerySchema,
+  getOrderDetailsParamsSchema,
+  createOrderSchema,
 } from "@/validation/orderValidation";
 import { orderController } from "@/controllers/orderController";
 
@@ -15,6 +20,13 @@ const router = Router();
 router.use(authenticate);
 
 /**
+ * @route   POST /api/orders
+ * @desc    Create a new order record prior to payment
+ * @access  Private
+ */
+router.post("/", validateJoi(createOrderSchema), orderController.createOrder);
+
+/**
  * @route   GET /api/orders
  * @desc    Get order history for authenticated user (Paginated)
  * @access  Private
@@ -22,8 +34,7 @@ router.use(authenticate);
  */
 router.get(
   "/",
-  getOrderHistoryValidation,
-  validateRequest,
+  validateQuery(getOrderHistoryQuerySchema),
   orderController.getOrderHistory
 );
 
@@ -35,8 +46,7 @@ router.get(
  */
 router.get(
   "/:orderId",
-  getOrderDetailsValidation,
-  validateRequest,
+  validateParams(getOrderDetailsParamsSchema),
   orderController.getOrderDetails
 );
 

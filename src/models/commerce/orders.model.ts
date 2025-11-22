@@ -10,14 +10,17 @@ import {
 import {
   OrderStatus,
   PaymentStatus,
+  OrderPlanType,
   ORDER_STATUS_VALUES,
   PAYMENT_STATUS_VALUES,
+  ORDER_PLAN_TYPE_VALUES,
 } from "../enums";
 
 export interface IOrder extends Document {
   orderNumber: string;
   userId: mongoose.Types.ObjectId;
   status: OrderStatus;
+  planType: OrderPlanType;
   items: Array<{
     productId: mongoose.Types.ObjectId;
     variantId?: mongoose.Types.ObjectId;
@@ -30,6 +33,8 @@ export interface IOrder extends Document {
   tax: PriceType;
   shipping: PriceType;
   discount: PriceType;
+  couponDiscount: PriceType;
+  membershipDiscount: PriceType;
   total: PriceType;
   shippingAddress: AddressSnapshotType;
   billingAddress: AddressSnapshotType;
@@ -37,7 +42,10 @@ export interface IOrder extends Document {
   paymentStatus: PaymentStatus;
   paymentId?: string;
   couponCode?: string;
+  couponMetadata?: Record<string, any>;
+  membershipMetadata?: Record<string, any>;
   notes?: string;
+  metadata?: Record<string, any>;
   trackingNumber?: string;
   shippedAt?: Date;
   deliveredAt?: Date;
@@ -58,6 +66,11 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       enum: ORDER_STATUS_VALUES,
       default: OrderStatus.PENDING,
+    },
+    planType: {
+      type: String,
+      enum: ORDER_PLAN_TYPE_VALUES,
+      default: OrderPlanType.ONE_TIME,
     },
     items: [
       {
@@ -98,6 +111,14 @@ const OrderSchema = new Schema<IOrder>(
     discount: {
       type: PriceSchema,
     },
+    couponDiscount: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
+    membershipDiscount: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
     total: {
       type: PriceSchema,
     },
@@ -125,9 +146,21 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       trim: true,
     },
+    couponMetadata: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
+    },
+    membershipMetadata: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
+    },
     notes: {
       type: String,
       trim: true,
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
     },
     trackingNumber: {
       type: String,

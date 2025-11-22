@@ -1,36 +1,47 @@
-import { body, param, query } from "express-validator";
+import Joi from "joi";
+import mongoose from "mongoose";
+import { withFieldLabels } from "./helpers";
 
-export const addWishlistItemValidation = [
-  body("productId").isMongoId().withMessage("Valid productId is required"),
-  body("notes")
-    .optional({ nullable: true })
-    .isLength({ max: 500 })
-    .withMessage("Notes cannot exceed 500 characters"),
-];
+const objectIdSchema = Joi.string()
+  .custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  })
+  .messages({
+    "any.invalid": "Invalid ID format",
+  });
 
-export const updateWishlistItemValidation = [
-  param("id").isMongoId().withMessage("Invalid wishlist item ID"),
-  body("notes")
-    .optional({ nullable: true })
-    .isLength({ max: 500 })
-    .withMessage("Notes cannot exceed 500 characters"),
-];
+export const addWishlistItemSchema = Joi.object(
+  withFieldLabels({
+    productId: objectIdSchema.required().messages({
+      "any.required": "Valid productId is required",
+    }),
+    notes: Joi.string().allow(null, "").max(500).optional(),
+  })
+).label("AddWishlistItemPayload");
 
-export const wishlistPaginationValidation = [
-  query("page")
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage("Page must be a positive integer"),
-  query("limit")
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage("Limit must be between 1 and 100"),
-  query("includeProduct")
-    .optional()
-    .isBoolean()
-    .withMessage("includeProduct must be a boolean value"),
-];
+export const updateWishlistItemBodySchema = Joi.object(
+  withFieldLabels({
+    notes: Joi.string().allow(null, "").max(500).optional(),
+  })
+)
+  .min(1)
+  .label("UpdateWishlistItemPayload");
 
-export const wishlistItemParamValidation = [
-  param("id").isMongoId().withMessage("Invalid wishlist item ID"),
-];
+export const wishlistPaginationQuerySchema = Joi.object(
+  withFieldLabels({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    includeProduct: Joi.boolean().optional(),
+  })
+)
+  .default({})
+  .label("WishlistQuery");
+
+export const wishlistItemParamsSchema = Joi.object(
+  withFieldLabels({
+    id: objectIdSchema.required(),
+  })
+).label("WishlistParams");

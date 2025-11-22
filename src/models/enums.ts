@@ -77,6 +77,12 @@ export enum PaymentMethod {
   BANK_TRANSFER = "Bank Transfer",
 }
 
+// Order Plan Types
+export enum OrderPlanType {
+  ONE_TIME = "One-Time",
+  SUBSCRIPTION = "Subscription",
+}
+
 // Shipment Status
 export enum ShipmentStatus {
   PENDING = "Pending",
@@ -261,6 +267,7 @@ export const PAGE_TYPE_VALUES = Object.values(PageType);
 export const ORDER_STATUS_VALUES = Object.values(OrderStatus);
 export const PAYMENT_STATUS_VALUES = Object.values(PaymentStatus);
 export const PAYMENT_METHOD_VALUES = Object.values(PaymentMethod);
+export const ORDER_PLAN_TYPE_VALUES = Object.values(OrderPlanType);
 export const SHIPMENT_STATUS_VALUES = Object.values(ShipmentStatus);
 export const CAMPAIGN_TYPE_VALUES = Object.values(CampaignType);
 export const CAMPAIGN_STATUS_VALUES = Object.values(CampaignStatus);

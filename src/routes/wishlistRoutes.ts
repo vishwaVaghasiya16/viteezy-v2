@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { wishlistController } from "@/controllers/wishlistController";
 import { authenticate } from "@/middleware/auth";
-import { validateRequest } from "@/middleware/validation";
 import {
-  addWishlistItemValidation,
-  updateWishlistItemValidation,
-  wishlistItemParamValidation,
-  wishlistPaginationValidation,
+  validateJoi,
+  validateParams,
+  validateQuery,
+} from "@/middleware/joiValidation";
+import {
+  addWishlistItemSchema,
+  updateWishlistItemBodySchema,
+  wishlistItemParamsSchema,
+  wishlistPaginationQuerySchema,
 } from "@/validation/wishlistValidation";
 
 const router = Router();
@@ -23,8 +27,7 @@ router.get("/count", wishlistController.getCount);
  */
 router.post(
   "/",
-  addWishlistItemValidation,
-  validateRequest,
+  validateJoi(addWishlistItemSchema),
   wishlistController.addItem
 );
 
@@ -33,8 +36,7 @@ router.post(
  */
 router.get(
   "/",
-  wishlistPaginationValidation,
-  validateRequest,
+  validateQuery(wishlistPaginationQuerySchema),
   wishlistController.getItems
 );
 
@@ -43,8 +45,8 @@ router.get(
  */
 router.put(
   "/:id",
-  updateWishlistItemValidation,
-  validateRequest,
+  validateParams(wishlistItemParamsSchema),
+  validateJoi(updateWishlistItemBodySchema),
   wishlistController.updateItem
 );
 
@@ -53,8 +55,7 @@ router.put(
  */
 router.delete(
   "/:id",
-  wishlistItemParamValidation,
-  validateRequest,
+  validateParams(wishlistItemParamsSchema),
   wishlistController.removeItem
 );
 

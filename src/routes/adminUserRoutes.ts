@@ -1,11 +1,15 @@
 import { Router } from "express";
 import { adminUserController } from "@/controllers/adminUserController";
 import { authenticate, authorize } from "@/middleware/auth";
-import { validateRequest } from "@/middleware/validation";
 import {
-  adminGetAllUsersValidation,
-  adminGetUserByIdValidation,
-  adminUpdateUserStatusValidation,
+  validateJoi,
+  validateParams,
+  validateQuery,
+} from "@/middleware/joiValidation";
+import {
+  adminGetAllUsersQuerySchema,
+  adminUserIdParamsSchema,
+  adminUpdateUserStatusSchema,
 } from "@/validation/adminUserValidation";
 
 const router = Router();
@@ -17,8 +21,7 @@ router.get(
   "/",
   authenticate,
   authorize("admin", "moderator"),
-  adminGetAllUsersValidation,
-  validateRequest,
+  validateQuery(adminGetAllUsersQuerySchema),
   adminUserController.getAllUsers
 );
 
@@ -39,8 +42,7 @@ router.get(
   "/:id",
   authenticate,
   authorize("admin", "moderator"),
-  adminGetUserByIdValidation,
-  validateRequest,
+  validateParams(adminUserIdParamsSchema),
   adminUserController.getUserById
 );
 
@@ -51,8 +53,8 @@ router.patch(
   "/:id/status",
   authenticate,
   authorize("admin"),
-  adminUpdateUserStatusValidation,
-  validateRequest,
+  validateParams(adminUserIdParamsSchema),
+  validateJoi(adminUpdateUserStatusSchema),
   adminUserController.updateUserStatus
 );
 
@@ -63,8 +65,7 @@ router.delete(
   "/:id",
   authenticate,
   authorize("admin"),
-  adminGetUserByIdValidation,
-  validateRequest,
+  validateParams(adminUserIdParamsSchema),
   adminUserController.deleteUser
 );
 
