@@ -11,6 +11,7 @@ import wishlistRoutes from "./wishlistRoutes";
 import orderRoutes from "./orderRoutes";
 import couponRoutes from "./couponRoutes";
 import deliveryPostponementRoutes from "./deliveryPostponementRoutes";
+import preCheckoutRoutes from "./preCheckoutRoutes";
 
 const router = Router();
 
@@ -27,5 +28,6 @@ router.use("/addresses", addressRoutes);
 router.use("/orders", orderRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/postponements", deliveryPostponementRoutes);
+router.use("/pre-checkout", preCheckoutRoutes);
 
 export default router;
