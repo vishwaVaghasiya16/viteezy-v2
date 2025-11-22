@@ -10,6 +10,7 @@ import faqRoutes from "./faqRoutes";
 import wishlistRoutes from "./wishlistRoutes";
 import orderRoutes from "./orderRoutes";
 import couponRoutes from "./couponRoutes";
+import deliveryPostponementRoutes from "./deliveryPostponementRoutes";
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use("/wishlist", wishlistRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/orders", orderRoutes);
 router.use("/coupons", couponRoutes);
+router.use("/postponements", deliveryPostponementRoutes);
 
 export default router;

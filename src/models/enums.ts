@@ -256,6 +256,14 @@ export enum Gender {
   GENDER_NEUTRAL = "Gender neutral",
 }
 
+// Delivery Postponement Status
+export enum PostponementStatus {
+  PENDING = "Pending",
+  APPROVED = "Approved",
+  REJECTED = "Rejected",
+  CANCELLED = "Cancelled",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const USER_ROLE_VALUES = Object.values(UserRole);
@@ -291,3 +299,4 @@ export const TIMEZONE_VALUES = Object.values(Timezone);
 export const OTP_TYPE_VALUES = Object.values(OTPType);
 export const OTP_STATUS_VALUES = Object.values(OTPStatus);
 export const GENDER_VALUES = Object.values(Gender);
+export const POSTPONEMENT_STATUS_VALUES = Object.values(PostponementStatus);

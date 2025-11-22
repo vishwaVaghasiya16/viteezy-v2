@@ -184,6 +184,43 @@ class EmailService {
   }
 
   /**
+   * Send admin notification email
+   */
+  async sendAdminNotification(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Admin notification to ${to}: ${subject}`);
+        return true;
+      }
+
+      await this.sendEmail({
+        to,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(`Admin notification sent successfully to ${to} via SendGrid`);
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send admin notification via SendGrid:", {
+        to,
+        subject,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Generic email sending method using SendGrid
    */
   private async sendEmail(options: EmailOptions): Promise<void> {

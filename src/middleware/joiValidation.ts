@@ -21,6 +21,24 @@ const VALIDATION_OPTIONS: Joi.ValidationOptions = {
 };
 
 /**
+ * Clean Joi error message by removing quotes from labels
+ * @function cleanErrorMessage
+ * @description Removes quotes from field labels in Joi error messages
+ * @param {string} message - Original Joi error message
+ * @returns {string} Cleaned error message without quotes
+ * @example
+ * '"ID" is required' -> 'ID is required'
+ * '"Order ID" must be a valid date' -> 'Order ID must be a valid date'
+ */
+const cleanErrorMessage = (message: string): string => {
+  // Remove quotes around field labels (e.g., "ID" -> ID)
+  // Pattern: matches quoted strings at the start of the message or after certain words
+  return message
+    .replace(/"([^"]+)"/g, "$1") // Remove all quotes around labels
+    .trim();
+};
+
+/**
  * Create validation error from Joi error
  * @function createValidationError
  * @description Creates an AppError from Joi validation error
@@ -29,7 +47,8 @@ const VALIDATION_OPTIONS: Joi.ValidationOptions = {
  */
 const createValidationError = (error: JoiValidationError): AppError => {
   const firstError = error.details[0];
-  const firstMessage = firstError?.message || "Validation error";
+  const rawMessage = firstError?.message || "Validation error";
+  const cleanedMessage = cleanErrorMessage(rawMessage);
 
   const appErr = new AppError(
     "Validation error",
@@ -38,10 +57,10 @@ const createValidationError = (error: JoiValidationError): AppError => {
     "Validation Error"
   );
 
-  (appErr as any).error = firstMessage;
+  (appErr as any).error = cleanedMessage;
   (appErr as any).errors = error.details.map((detail) => ({
     field: detail.path.join("."),
-    message: detail.message,
+    message: cleanErrorMessage(detail.message),
     value: detail.context?.value,
   }));
 

@@ -36,6 +36,7 @@ export {
   OTPType,
   OTPStatus,
   Gender,
+  PostponementStatus,
   // Export enum values
   PRODUCT_STATUS_VALUES,
   USER_ROLE_VALUES,
@@ -70,6 +71,7 @@ export {
   OTP_TYPE_VALUES,
   OTP_STATUS_VALUES,
   GENDER_VALUES,
+  POSTPONEMENT_STATUS_VALUES,
 } from "./enums";
 
 // AI Models
