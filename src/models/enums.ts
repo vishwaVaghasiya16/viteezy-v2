@@ -264,6 +264,22 @@ export enum PostponementStatus {
   CANCELLED = "Cancelled",
 }
 
+// Subscription Status
+export enum SubscriptionStatus {
+  ACTIVE = "Active",
+  PAUSED = "Paused",
+  CANCELLED = "Cancelled",
+  EXPIRED = "Expired",
+  SUSPENDED = "Suspended",
+}
+
+// Subscription Cycle Intervals (in days)
+export enum SubscriptionCycle {
+  DAYS_60 = 60,
+  DAYS_90 = 90,
+  DAYS_180 = 180,
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const USER_ROLE_VALUES = Object.values(UserRole);
@@ -300,3 +316,9 @@ export const OTP_TYPE_VALUES = Object.values(OTPType);
 export const OTP_STATUS_VALUES = Object.values(OTPStatus);
 export const GENDER_VALUES = Object.values(Gender);
 export const POSTPONEMENT_STATUS_VALUES = Object.values(PostponementStatus);
+export const SUBSCRIPTION_STATUS_VALUES = Object.values(SubscriptionStatus);
+export const SUBSCRIPTION_CYCLE_VALUES = [
+  SubscriptionCycle.DAYS_60,
+  SubscriptionCycle.DAYS_90,
+  SubscriptionCycle.DAYS_180,
+];

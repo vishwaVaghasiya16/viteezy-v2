@@ -30,7 +30,6 @@ const SavedCardSchema = new Schema<ISavedCard>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     paymentMethod: {
       type: String,
@@ -83,7 +82,6 @@ const SavedCardSchema = new Schema<ISavedCard>(
     gatewayCustomerId: {
       type: String,
       trim: true,
-      index: true,
     },
     isDefault: {
       type: Boolean,
