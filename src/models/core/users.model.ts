@@ -1,6 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
-import { UserRole, USER_ROLE_VALUES, Gender, GENDER_VALUES } from "../enums";
+import {
+  UserRole,
+  USER_ROLE_VALUES,
+  Gender,
+  GENDER_VALUES,
+  MembershipStatus,
+  MEMBERSHIP_STATUS_VALUES,
+} from "../enums";
 
 export interface IUserSessionInfo {
   sessionId: string;
@@ -22,6 +29,11 @@ export interface IUser extends Document {
   profileImage?: string;
   gender?: Gender;
   age?: number;
+  isMember?: boolean;
+  membershipStatus?: MembershipStatus;
+  membershipPlanId?: Schema.Types.ObjectId;
+  membershipExpiresAt?: Date;
+  membershipActivatedAt?: Date;
   lastLogin?: Date;
   sessionIds?: IUserSessionInfo[];
   createdAt: Date;
@@ -91,6 +103,25 @@ const userSchema = new Schema<IUser>(
       min: [1, "Age must be at least 1"],
       max: [150, "Age cannot exceed 150"],
       default: null,
+    },
+    isMember: {
+      type: Boolean,
+      default: false,
+    },
+    membershipStatus: {
+      type: String,
+      enum: MEMBERSHIP_STATUS_VALUES,
+      default: MembershipStatus.EXPIRED,
+    },
+    membershipPlanId: {
+      type: Schema.Types.ObjectId,
+      ref: "membership_plans",
+    },
+    membershipExpiresAt: {
+      type: Date,
+    },
+    membershipActivatedAt: {
+      type: Date,
     },
     lastLogin: {
       type: Date,

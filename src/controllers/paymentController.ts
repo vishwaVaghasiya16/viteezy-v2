@@ -3,7 +3,7 @@ import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { paymentService } from "@/services/payment";
-import { PaymentMethod } from "@/models/enums";
+import { PaymentMethod, PaymentStatus } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -270,6 +270,91 @@ class PaymentController {
           message: "Webhook processing failed",
           error: error instanceof Error ? error.message : "Unknown error",
         });
+      }
+    }
+  );
+
+  /**
+   * Handle payment return/callback from payment gateway
+   * This is called when user is redirected back from payment gateway
+   */
+  handlePaymentReturn = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      try {
+        // Mollie sends payment ID as query parameter
+        const paymentId = req.query.payment_id as string;
+        const orderId = req.query.order_id as string;
+        const membershipId = req.query.membership_id as string;
+
+        if (!paymentId) {
+          // Redirect to frontend with error
+          const frontendUrl =
+            process.env.FRONTEND_URL || "http://localhost:3000";
+          return res.redirect(
+            `${frontendUrl}/payment/failed?error=Payment ID not found`
+          );
+        }
+
+        // Find payment by gateway transaction ID
+        let payment;
+        try {
+          payment = await paymentService.getPaymentByGatewayTransactionId(
+            paymentId,
+            PaymentMethod.MOLLIE
+          );
+        } catch (error) {
+          logger.warn(
+            `Payment not found for gateway transaction: ${paymentId}`,
+            error
+          );
+          const frontendUrl =
+            process.env.FRONTEND_URL || "http://localhost:3000";
+          return res.redirect(
+            `${frontendUrl}/payment/failed?error=Payment not found`
+          );
+        }
+
+        // Verify payment status with gateway
+        const verifiedPayment = await paymentService.verifyPayment(
+          payment._id.toString(),
+          paymentId
+        );
+
+        // Determine redirect URL based on payment type
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+        let redirectUrl = `${frontendUrl}/payment/return`;
+
+        if (verifiedPayment.status === PaymentStatus.COMPLETED) {
+          if (membershipId || payment.membershipId) {
+            redirectUrl = `${frontendUrl}/membership/success?paymentId=${payment._id}`;
+          } else if (orderId || payment.orderId) {
+            redirectUrl = `${frontendUrl}/order/success?paymentId=${
+              payment._id
+            }&orderId=${orderId || payment.orderId}`;
+          } else {
+            redirectUrl = `${frontendUrl}/payment/success?paymentId=${payment._id}`;
+          }
+        } else if (verifiedPayment.status === PaymentStatus.FAILED) {
+          redirectUrl = `${frontendUrl}/payment/failed?paymentId=${
+            payment._id
+          }&error=${verifiedPayment.failureReason || "Payment failed"}`;
+        } else {
+          redirectUrl = `${frontendUrl}/payment/pending?paymentId=${payment._id}`;
+        }
+
+        logger.info(
+          `Payment return handled: ${payment._id}, status: ${verifiedPayment.status}, redirecting to: ${redirectUrl}`
+        );
+
+        res.redirect(redirectUrl);
+      } catch (error) {
+        logger.error("Payment return handling error:", error);
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+        res.redirect(
+          `${frontendUrl}/payment/failed?error=${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
       }
     }
   );

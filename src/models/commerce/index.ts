@@ -11,5 +11,7 @@ export { Products } from "./products.model";
 export { ProductVariants } from "./productVariants.model";
 export { SavedCards } from "./savedCards.model";
 export { Shipments } from "./shipments.model";
+export { MembershipPlans } from "./membershipPlans.model";
+export { Memberships } from "./memberships.model";
 export { Subscriptions } from "./subscriptions.model";
 export { Wishlists } from "./wishlists.model";

@@ -7,13 +7,20 @@ import {
 } from "./interfaces/IPaymentGateway";
 import { StripeAdapter } from "./adapters/StripeAdapter";
 import { MollieAdapter } from "./adapters/MollieAdapter";
-import { PaymentMethod, PaymentStatus, OrderStatus } from "../../models/enums";
+import {
+  PaymentMethod,
+  PaymentStatus,
+  OrderStatus,
+  MembershipStatus,
+} from "../../models/enums";
 import { Payments } from "../../models/commerce/payments.model";
 import { Orders } from "../../models/commerce/orders.model";
+import { Memberships } from "../../models/commerce/memberships.model";
 import { User } from "../../models/index.model";
 import { logger } from "../../utils/logger";
 import { AppError } from "../../utils/AppError";
 import mongoose from "mongoose";
+import { membershipService } from "../membershipService";
 
 /**
  * Unified Payment Service
@@ -264,6 +271,31 @@ export class PaymentService {
         }
       }
 
+      // Update membership status if applicable
+      if (
+        payment.membershipId &&
+        statusChanged &&
+        previousStatus !== PaymentStatus.COMPLETED
+      ) {
+        if (result.status === PaymentStatus.COMPLETED) {
+          await membershipService.activateMembership(
+            payment.membershipId.toString(),
+            payment._id as mongoose.Types.ObjectId
+          );
+          logger.info(
+            `Membership ${payment.membershipId} activated after payment completion`
+          );
+        } else if (
+          result.status === PaymentStatus.FAILED ||
+          result.status === PaymentStatus.CANCELLED
+        ) {
+          await Memberships.findByIdAndUpdate(payment.membershipId, {
+            status: MembershipStatus.CANCELLED,
+            cancelledAt: new Date(),
+          });
+        }
+      }
+
       logger.info(
         `Payment ${payment._id} updated via webhook: ${result.status}`
       );
@@ -405,6 +437,32 @@ export class PaymentService {
     if (!payment) {
       throw new AppError("Payment not found", 404);
     }
+    return payment;
+  }
+
+  /**
+   * Get payment by gateway transaction ID
+   */
+  async getPaymentByGatewayTransactionId(
+    gatewayTransactionId: string,
+    paymentMethod: PaymentMethod
+  ): Promise<any> {
+    if (!gatewayTransactionId) {
+      throw new AppError("Gateway transaction ID is required", 400);
+    }
+
+    const payment = await Payments.findOne({
+      gatewayTransactionId,
+      paymentMethod,
+    })
+      .populate("orderId")
+      .populate("membershipId")
+      .populate("userId", "name email");
+
+    if (!payment) {
+      throw new AppError("Payment not found", 404);
+    }
+
     return payment;
   }
 
@@ -677,6 +735,121 @@ export class PaymentService {
         ? error
         : new AppError(
             error.message || "Failed to verify payment and update order",
+            500
+          );
+    }
+  }
+
+  /**
+   * Create payment intent for membership purchase
+   */
+  async createMembershipPaymentIntent(data: {
+    membershipId: string;
+    userId: string;
+    paymentMethod: PaymentMethod;
+    amount: { value: number; currency: string };
+    description?: string;
+    metadata?: Record<string, string>;
+    returnUrl?: string;
+    webhookUrl?: string;
+  }): Promise<{
+    payment: any;
+    result: PaymentResult;
+  }> {
+    try {
+      if (!mongoose.Types.ObjectId.isValid(data.membershipId)) {
+        throw new AppError("Invalid membership ID format", 400);
+      }
+      if (!mongoose.Types.ObjectId.isValid(data.userId)) {
+        throw new AppError("Invalid user ID format", 400);
+      }
+
+      const membership = await Memberships.findById(data.membershipId);
+      if (!membership) {
+        throw new AppError("Membership not found", 404);
+      }
+
+      if (membership.status !== MembershipStatus.PENDING) {
+        throw new AppError(
+          "Membership payment can only be initiated for pending memberships",
+          400
+        );
+      }
+
+      const user = await User.findById(data.userId);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      const gateway = this.getGateway(data.paymentMethod);
+
+      // Generate webhook URL if not provided
+      // For local development, use a placeholder that Mollie can validate
+      // In production, this should be a publicly accessible URL
+      const webhookUrl =
+        data.webhookUrl ||
+        (process.env.NODE_ENV === "production"
+          ? `${
+              process.env.APP_BASE_URL || "https://20973d5116e5.ngrok-free.app"
+            }/api/v1/payments/webhook/${data.paymentMethod}`
+          : undefined); // Skip webhook in development for localhost
+
+      const paymentIntentData: PaymentIntentData = {
+        amount: Math.round(data.amount.value * 100),
+        currency: data.amount.currency,
+        orderId: data.membershipId,
+        userId: data.userId,
+        description: data.description,
+        metadata: {
+          ...data.metadata,
+          membershipId: data.membershipId,
+        },
+        returnUrl: data.returnUrl,
+        webhookUrl,
+      };
+
+      const result = await gateway.createPaymentIntent(paymentIntentData);
+
+      if (!result.success) {
+        throw new AppError(
+          result.error || "Failed to create membership payment intent",
+          400
+        );
+      }
+
+      const payment = await Payments.create({
+        membershipId: new mongoose.Types.ObjectId(data.membershipId),
+        userId: new mongoose.Types.ObjectId(data.userId),
+        paymentMethod: data.paymentMethod,
+        status: result.status,
+        amount: {
+          amount: data.amount.value,
+          currency: data.amount.currency,
+          taxRate: 0,
+        },
+        currency: data.amount.currency,
+        gatewayTransactionId: result.gatewayTransactionId,
+        gatewayResponse: result.gatewayResponse,
+      });
+
+      membership.paymentMethod = data.paymentMethod;
+      membership.paymentId = payment._id as mongoose.Types.ObjectId;
+      await membership.save();
+
+      logger.info(
+        `Membership payment created: ${payment._id} via ${data.paymentMethod}`
+      );
+
+      return {
+        payment,
+        result,
+      };
+    } catch (error: any) {
+      logger.error("Membership payment creation failed:", error);
+      throw error instanceof AppError
+        ? error
+        : new AppError(
+            error.message || "Failed to create membership payment",
             500
           );
     }

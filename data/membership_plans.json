@@ -1,0 +1,246 @@
+[
+    {
+        "_id": {
+            "$oid": "75a1b2c3d4e5f601000001ab"
+        },
+        "name": "Monthly Premium",
+        "slug": "monthly-premium",
+        "shortDescription": {
+            "en": "Get exclusive discounts and perks every month",
+            "nl": "Krijg elke maand exclusieve kortingen en voordelen",
+            "fr": "Obtenez des réductions et des avantages exclusifs chaque mois",
+            "de": "Erhalten Sie jeden Monat exklusive Rabatte und Vorteile",
+            "es": "Obtenga descuentos y beneficios exclusivos cada mes"
+        },
+        "description": {
+            "en": "Our Monthly Premium membership offers you exclusive discounts on all products, priority customer support, early access to new products, and free shipping on all orders. Perfect for regular customers who want to save on their monthly supplement needs.",
+            "nl": "Ons Maandelijks Premium lidmaatschap biedt u exclusieve kortingen op alle producten, prioritaire klantenservice, vroege toegang tot nieuwe producten en gratis verzending bij alle bestellingen. Perfect voor regelmatige klanten die willen besparen op hun maandelijkse supplementbehoeften.",
+            "fr": "Notre adhésion Premium Mensuelle vous offre des réductions exclusives sur tous les produits, un support client prioritaire, un accès anticipé aux nouveaux produits et la livraison gratuite sur toutes les commandes. Parfait pour les clients réguliers qui souhaitent économiser sur leurs besoins mensuels en suppléments.",
+            "de": "Unsere monatliche Premium-Mitgliedschaft bietet Ihnen exklusive Rabatte auf alle Produkte, prioritären Kundensupport, frühen Zugang zu neuen Produkten und kostenlosen Versand bei allen Bestellungen. Perfekt für regelmäßige Kunden, die bei ihren monatlichen Supplementbedürfnissen sparen möchten.",
+            "es": "Nuestra membresía Premium Mensual le ofrece descuentos exclusivos en todos los productos, soporte al cliente prioritario, acceso anticipado a nuevos productos y envío gratuito en todos los pedidos. Perfecto para clientes habituales que desean ahorrar en sus necesidades mensuales de suplementos."
+        },
+        "price": {
+            "currency": "EUR",
+            "amount": 9.99,
+            "taxRate": 0.21
+        },
+        "interval": "Monthly",
+        "durationDays": 30,
+        "benefits": [
+            "10% discount on all products",
+            "Free shipping on all orders",
+            "Priority customer support",
+            "Early access to new products",
+            "Monthly health tips newsletter"
+        ],
+        "isActive": true,
+        "isAutoRenew": true,
+        "metadata": {
+            "featured": true,
+            "popular": true
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "75a1b2c3d4e5f601000002cd"
+        },
+        "name": "Quarterly Premium",
+        "slug": "quarterly-premium",
+        "shortDescription": {
+            "en": "Save more with our 3-month membership plan",
+            "nl": "Bespaar meer met ons 3-maanden lidmaatschap",
+            "fr": "Économisez plus avec notre plan d'adhésion de 3 mois",
+            "de": "Sparen Sie mehr mit unserem 3-Monats-Mitgliedschaftsplan",
+            "es": "Ahorre más con nuestro plan de membresía de 3 meses"
+        },
+        "description": {
+            "en": "Our Quarterly Premium membership offers the best value for customers who commit to a 3-month plan. Enjoy 15% discount on all products, free express shipping, priority support, exclusive product launches, and quarterly health assessments.",
+            "nl": "Ons Kwartaal Premium lidmaatschap biedt de beste waarde voor klanten die zich committeren aan een 3-maanden plan. Geniet van 15% korting op alle producten, gratis express verzending, prioritaire ondersteuning, exclusieve productlanceringen en kwartaal gezondheidsbeoordelingen.",
+            "fr": "Notre adhésion Premium Trimestrielle offre le meilleur rapport qualité-prix aux clients qui s'engagent dans un plan de 3 mois. Profitez de 15% de réduction sur tous les produits, livraison express gratuite, support prioritaire, lancements de produits exclusifs et évaluations de santé trimestrielles.",
+            "de": "Unsere vierteljährliche Premium-Mitgliedschaft bietet den besten Wert für Kunden, die sich für einen 3-Monats-Plan entscheiden. Genießen Sie 15% Rabatt auf alle Produkte, kostenlosen Expressversand, prioritären Support, exklusive Produkteinführungen und vierteljährliche Gesundheitsbewertungen.",
+            "es": "Nuestra membresía Premium Trimestral ofrece el mejor valor para clientes que se comprometen con un plan de 3 meses. Disfrute de un 15% de descuento en todos los productos, envío express gratuito, soporte prioritario, lanzamientos exclusivos de productos y evaluaciones de salud trimestrales."
+        },
+        "price": {
+            "currency": "EUR",
+            "amount": 24.99,
+            "taxRate": 0.21
+        },
+        "interval": "Quarterly",
+        "durationDays": 90,
+        "benefits": [
+            "15% discount on all products",
+            "Free express shipping",
+            "Priority customer support",
+            "Exclusive product launches",
+            "Quarterly health assessment",
+            "Quarterly health tips newsletter"
+        ],
+        "isActive": true,
+        "isAutoRenew": true,
+        "metadata": {
+            "featured": true,
+            "bestValue": true
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "75a1b2c3d4e5f601000003ef"
+        },
+        "name": "Yearly Premium",
+        "slug": "yearly-premium",
+        "shortDescription": {
+            "en": "Maximum savings with our annual membership",
+            "nl": "Maximale besparingen met ons jaarlijks lidmaatschap",
+            "fr": "Économies maximales avec notre adhésion annuelle",
+            "de": "Maximale Einsparungen mit unserer jährlichen Mitgliedschaft",
+            "es": "Ahorros máximos con nuestra membresía anual"
+        },
+        "description": {
+            "en": "Our Yearly Premium membership is the ultimate plan for serious health enthusiasts. Get 20% discount on all products, free express shipping, 24/7 priority support, exclusive access to expert consultations, annual comprehensive health assessment, and monthly personalized product recommendations.",
+            "nl": "Ons Jaarlijks Premium lidmaatschap is het ultieme plan voor serieuze gezondheidsenthousiastelingen. Krijg 20% korting op alle producten, gratis express verzending, 24/7 prioritaire ondersteuning, exclusieve toegang tot expert consultaties, jaarlijkse uitgebreide gezondheidsbeoordeling en maandelijkse gepersonaliseerde productaanbevelingen.",
+            "fr": "Notre adhésion Premium Annuelle est le plan ultime pour les passionnés de santé sérieux. Obtenez 20% de réduction sur tous les produits, livraison express gratuite, support prioritaire 24/7, accès exclusif aux consultations d'experts, évaluation de santé complète annuelle et recommandations de produits personnalisées mensuelles.",
+            "de": "Unsere jährliche Premium-Mitgliedschaft ist der ultimative Plan für ernsthafte Gesundheitsenthusiasten. Erhalten Sie 20% Rabatt auf alle Produkte, kostenlosen Expressversand, 24/7 prioritären Support, exklusiven Zugang zu Expertenberatungen, jährliche umfassende Gesundheitsbewertung und monatliche personalisierte Produktempfehlungen.",
+            "es": "Nuestra membresía Premium Anual es el plan definitivo para entusiastas serios de la salud. Obtenga un 20% de descuento en todos los productos, envío express gratuito, soporte prioritario 24/7, acceso exclusivo a consultas de expertos, evaluación de salud integral anual y recomendaciones de productos personalizadas mensuales."
+        },
+        "price": {
+            "currency": "EUR",
+            "amount": 79.99,
+            "taxRate": 0.21
+        },
+        "interval": "Yearly",
+        "durationDays": 365,
+        "benefits": [
+            "20% discount on all products",
+            "Free express shipping",
+            "24/7 priority customer support",
+            "Exclusive access to expert consultations",
+            "Annual comprehensive health assessment",
+            "Monthly personalized product recommendations",
+            "Early access to all new products",
+            "Quarterly health tips newsletter"
+        ],
+        "isActive": true,
+        "isAutoRenew": true,
+        "metadata": {
+            "featured": true,
+            "premium": true,
+            "bestValue": true
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "75a1b2c3d4e5f60100000412"
+        },
+        "name": "Monthly Basic",
+        "slug": "monthly-basic",
+        "shortDescription": {
+            "en": "Essential membership for occasional shoppers",
+            "nl": "Essentieel lidmaatschap voor incidentele shoppers",
+            "fr": "Adhésion essentielle pour les acheteurs occasionnels",
+            "de": "Wesentliche Mitgliedschaft für gelegentliche Käufer",
+            "es": "Membresía esencial para compradores ocasionales"
+        },
+        "description": {
+            "en": "Our Monthly Basic membership is perfect for customers who shop occasionally. Enjoy 5% discount on all products and free standard shipping on orders over €50.",
+            "nl": "Ons Maandelijks Basis lidmaatschap is perfect voor klanten die af en toe winkelen. Geniet van 5% korting op alle producten en gratis standaard verzending bij bestellingen boven €50.",
+            "fr": "Notre adhésion Mensuelle de Base est parfaite pour les clients qui achètent occasionnellement. Profitez de 5% de réduction sur tous les produits et de la livraison standard gratuite sur les commandes de plus de 50 €.",
+            "de": "Unsere monatliche Basis-Mitgliedschaft ist perfekt für Kunden, die gelegentlich einkaufen. Genießen Sie 5% Rabatt auf alle Produkte und kostenlosen Standardversand bei Bestellungen über 50 €.",
+            "es": "Nuestra membresía Básica Mensual es perfecta para clientes que compran ocasionalmente. Disfrute de un 5% de descuento en todos los productos y envío estándar gratuito en pedidos superiores a 50 €."
+        },
+        "price": {
+            "currency": "EUR",
+            "amount": 4.99,
+            "taxRate": 0.21
+        },
+        "interval": "Monthly",
+        "durationDays": 30,
+        "benefits": [
+            "5% discount on all products",
+            "Free standard shipping on orders over €50",
+            "Standard customer support"
+        ],
+        "isActive": true,
+        "isAutoRenew": true,
+        "metadata": {
+            "entryLevel": true
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "75a1b2c3d4e5f60100000534"
+        },
+        "name": "Quarterly Basic",
+        "slug": "quarterly-basic",
+        "shortDescription": {
+            "en": "Affordable 3-month membership option",
+            "nl": "Betaalbare 3-maanden lidmaatschap optie",
+            "fr": "Option d'adhésion abordable de 3 mois",
+            "de": "Erschwingliche 3-Monats-Mitgliedschaftsoption",
+            "es": "Opción de membresía asequible de 3 meses"
+        },
+        "description": {
+            "en": "Our Quarterly Basic membership offers a budget-friendly option for customers who want to save on a 3-month commitment. Get 8% discount on all products and free standard shipping on all orders.",
+            "nl": "Ons Kwartaal Basis lidmaatschap biedt een budgetvriendelijke optie voor klanten die willen besparen op een 3-maanden verbintenis. Krijg 8% korting op alle producten en gratis standaard verzending bij alle bestellingen.",
+            "fr": "Notre adhésion Trimestrielle de Base offre une option économique pour les clients qui souhaitent économiser sur un engagement de 3 mois. Obtenez 8% de réduction sur tous les produits et la livraison standard gratuite sur toutes les commandes.",
+            "de": "Unsere vierteljährliche Basis-Mitgliedschaft bietet eine budgetfreundliche Option für Kunden, die bei einer 3-Monats-Verpflichtung sparen möchten. Erhalten Sie 8% Rabatt auf alle Produkte und kostenlosen Standardversand bei allen Bestellungen.",
+            "es": "Nuestra membresía Básica Trimestral ofrece una opción económica para clientes que desean ahorrar en un compromiso de 3 meses. Obtenga un 8% de descuento en todos los productos y envío estándar gratuito en todos los pedidos."
+        },
+        "price": {
+            "currency": "EUR",
+            "amount": 12.99,
+            "taxRate": 0.21
+        },
+        "interval": "Quarterly",
+        "durationDays": 90,
+        "benefits": [
+            "8% discount on all products",
+            "Free standard shipping on all orders",
+            "Standard customer support"
+        ],
+        "isActive": true,
+        "isAutoRenew": true,
+        "metadata": {
+            "entryLevel": true
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-15T08:00:00.000Z"
+        },
+        "__v": 0
+    }
+]

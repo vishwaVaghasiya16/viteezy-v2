@@ -36,7 +36,8 @@ export class MollieAdapter implements IPaymentGateway {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
-      const payment = await this.mollieClient.payments.create({
+      // Build payment data object
+      const paymentData: any = {
         amount: {
           currency: data.currency,
           value: (data.amount / 100).toFixed(2), // Mollie expects amount in major currency units
@@ -47,10 +48,16 @@ export class MollieAdapter implements IPaymentGateway {
           userId: data.userId,
           ...data.metadata,
         },
-        redirectUrl: data.returnUrl || `${this.baseUrl}/payment/return`,
-        webhookUrl:
-          data.webhookUrl || `${this.baseUrl}/api/v1/payments/webhook/mollie`,
-      });
+        redirectUrl: data.returnUrl || `${this.baseUrl}/api/v1/payments/return`,
+      };
+
+      // Only include webhookUrl if provided (skip for local development)
+      // Mollie validates webhook URLs and rejects localhost URLs
+      if (data.webhookUrl) {
+        paymentData.webhookUrl = data.webhookUrl;
+      }
+
+      const payment = await this.mollieClient.payments.create(paymentData);
 
       return {
         success: true,

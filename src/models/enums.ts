@@ -264,6 +264,21 @@ export enum PostponementStatus {
   CANCELLED = "Cancelled",
 }
 
+// Membership Status
+export enum MembershipStatus {
+  PENDING = "Pending",
+  ACTIVE = "Active",
+  EXPIRED = "Expired",
+  CANCELLED = "Cancelled",
+}
+
+// Membership Billing Interval
+export enum MembershipInterval {
+  MONTHLY = "Monthly",
+  QUARTERLY = "Quarterly",
+  YEARLY = "Yearly",
+}
+
 // Subscription Status
 export enum SubscriptionStatus {
   ACTIVE = "Active",
@@ -316,6 +331,8 @@ export const OTP_TYPE_VALUES = Object.values(OTPType);
 export const OTP_STATUS_VALUES = Object.values(OTPStatus);
 export const GENDER_VALUES = Object.values(Gender);
 export const POSTPONEMENT_STATUS_VALUES = Object.values(PostponementStatus);
+export const MEMBERSHIP_STATUS_VALUES = Object.values(MembershipStatus);
+export const MEMBERSHIP_INTERVAL_VALUES = Object.values(MembershipInterval);
 export const SUBSCRIPTION_STATUS_VALUES = Object.values(SubscriptionStatus);
 export const SUBSCRIPTION_CYCLE_VALUES = [
   SubscriptionCycle.DAYS_60,

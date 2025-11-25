@@ -110,6 +110,13 @@ router.post("/webhook/stripe", paymentController.processStripeWebhook);
 router.post("/webhook/mollie", paymentController.processMollieWebhook);
 
 /**
+ * @route   GET /api/v1/payments/return
+ * @desc    Handle payment return/callback from payment gateway
+ * @access  Public (redirect endpoint)
+ */
+router.get("/return", paymentController.handlePaymentReturn);
+
+/**
  * @route   POST /api/v1/payments/refund
  * @desc    Refund a payment
  * @access  Private

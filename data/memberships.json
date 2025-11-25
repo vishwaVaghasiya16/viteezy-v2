@@ -1,0 +1,573 @@
+[
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a601000001ab"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000001"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000001ab"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000001ab"
+            },
+            "name": "Monthly Premium",
+            "slug": "monthly-premium",
+            "interval": "Monthly",
+            "durationDays": 30,
+            "price": {
+                "currency": "EUR",
+                "amount": 9.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "10% discount on all products",
+                "Free shipping on all orders",
+                "Priority customer support",
+                "Early access to new products",
+                "Monthly health tips newsletter"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Stripe",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b601000001ab"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-11-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2024-12-01T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2024-12-01T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-11-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-11-01T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a601000002cd"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000002"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000002cd"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000002cd"
+            },
+            "name": "Quarterly Premium",
+            "slug": "quarterly-premium",
+            "interval": "Quarterly",
+            "durationDays": 90,
+            "price": {
+                "currency": "EUR",
+                "amount": 24.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "15% discount on all products",
+                "Free express shipping",
+                "Priority customer support",
+                "Exclusive product launches",
+                "Quarterly health assessment",
+                "Quarterly health tips newsletter"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Mollie",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b601000002cd"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-10-15T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2025-01-15T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2025-01-15T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": "QUARTERLY10"
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-10-15T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-10-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a601000003ef"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000003"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000003ef"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000003ef"
+            },
+            "name": "Yearly Premium",
+            "slug": "yearly-premium",
+            "interval": "Yearly",
+            "durationDays": 365,
+            "price": {
+                "currency": "EUR",
+                "amount": 79.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "20% discount on all products",
+                "Free express shipping",
+                "24/7 priority customer support",
+                "Exclusive access to expert consultations",
+                "Annual comprehensive health assessment",
+                "Monthly personalized product recommendations",
+                "Early access to all new products",
+                "Quarterly health tips newsletter"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Stripe",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b601000003ef"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-01-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2025-01-01T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2025-01-01T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": "YEARLY20"
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-01-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-01-01T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a60100000412"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000004"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000001ab"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000001ab"
+            },
+            "name": "Monthly Premium",
+            "slug": "monthly-premium",
+            "interval": "Monthly",
+            "durationDays": 30,
+            "price": {
+                "currency": "EUR",
+                "amount": 9.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "10% discount on all products",
+                "Free shipping on all orders",
+                "Priority customer support",
+                "Early access to new products",
+                "Monthly health tips newsletter"
+            ]
+        },
+        "status": "Pending",
+        "paymentMethod": "Stripe",
+        "isAutoRenew": true,
+        "metadata": {
+            "source": "web",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-11-20T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-11-20T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a60100000534"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000005"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000002cd"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000002cd"
+            },
+            "name": "Quarterly Premium",
+            "slug": "quarterly-premium",
+            "interval": "Quarterly",
+            "durationDays": 90,
+            "price": {
+                "currency": "EUR",
+                "amount": 24.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "15% discount on all products",
+                "Free express shipping",
+                "Priority customer support",
+                "Exclusive product launches",
+                "Quarterly health assessment",
+                "Quarterly health tips newsletter"
+            ]
+        },
+        "status": "Expired",
+        "paymentMethod": "Mollie",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b60100000412"
+        },
+        "isAutoRenew": false,
+        "startedAt": {
+            "$date": "2024-07-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2024-09-30T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2024-09-30T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-09-30T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a60100000656"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000006"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000001ab"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000001ab"
+            },
+            "name": "Monthly Premium",
+            "slug": "monthly-premium",
+            "interval": "Monthly",
+            "durationDays": 30,
+            "price": {
+                "currency": "EUR",
+                "amount": 9.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "10% discount on all products",
+                "Free shipping on all orders",
+                "Priority customer support",
+                "Early access to new products",
+                "Monthly health tips newsletter"
+            ]
+        },
+        "status": "Cancelled",
+        "paymentMethod": "Stripe",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b60100000534"
+        },
+        "isAutoRenew": false,
+        "startedAt": {
+            "$date": "2024-08-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2024-08-31T08:00:00.000Z"
+        },
+        "cancelledAt": {
+            "$date": "2024-08-15T08:00:00.000Z"
+        },
+        "cancellationReason": "No longer needed",
+        "metadata": {
+            "source": "web",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-15T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a60100000778"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000007"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f60100000412"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f60100000412"
+            },
+            "name": "Monthly Basic",
+            "slug": "monthly-basic",
+            "interval": "Monthly",
+            "durationDays": 30,
+            "price": {
+                "currency": "EUR",
+                "amount": 4.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "5% discount on all products",
+                "Free standard shipping on orders over €50",
+                "Standard customer support"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Mollie",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b60100000656"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-11-10T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2024-12-10T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2024-12-10T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "mobile",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-11-10T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-11-10T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a6010000089a"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000008"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f60100000534"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f60100000534"
+            },
+            "name": "Quarterly Basic",
+            "slug": "quarterly-basic",
+            "interval": "Quarterly",
+            "durationDays": 90,
+            "price": {
+                "currency": "EUR",
+                "amount": 12.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "8% discount on all products",
+                "Free standard shipping on all orders",
+                "Standard customer support"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Stripe",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b60100000778"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-09-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2024-11-30T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2024-11-30T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": "BASIC5"
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-09-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-09-01T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a601000009bc"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000009"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000003ef"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000003ef"
+            },
+            "name": "Yearly Premium",
+            "slug": "yearly-premium",
+            "interval": "Yearly",
+            "durationDays": 365,
+            "price": {
+                "currency": "EUR",
+                "amount": 79.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "20% discount on all products",
+                "Free express shipping",
+                "24/7 priority customer support",
+                "Exclusive access to expert consultations",
+                "Annual comprehensive health assessment",
+                "Monthly personalized product recommendations",
+                "Early access to all new products",
+                "Quarterly health tips newsletter"
+            ]
+        },
+        "status": "Active",
+        "paymentMethod": "Stripe",
+        "paymentId": {
+            "$oid": "77c1d2e3f4a5b6010000089a"
+        },
+        "isAutoRenew": true,
+        "startedAt": {
+            "$date": "2024-06-01T08:00:00.000Z"
+        },
+        "expiresAt": {
+            "$date": "2025-06-01T08:00:00.000Z"
+        },
+        "nextBillingDate": {
+            "$date": "2025-06-01T08:00:00.000Z"
+        },
+        "metadata": {
+            "source": "web",
+            "promoCode": "YEARLY2024"
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-06-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-06-01T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "76b1c2d3e4f5a60100000ade"
+        },
+        "userId": {
+            "$oid": "64f0f0f0f0f0f0f0f0000010"
+        },
+        "planId": {
+            "$oid": "75a1b2c3d4e5f601000001ab"
+        },
+        "planSnapshot": {
+            "planId": {
+                "$oid": "75a1b2c3d4e5f601000001ab"
+            },
+            "name": "Monthly Premium",
+            "slug": "monthly-premium",
+            "interval": "Monthly",
+            "durationDays": 30,
+            "price": {
+                "currency": "EUR",
+                "amount": 9.99,
+                "taxRate": 0.21
+            },
+            "benefits": [
+                "10% discount on all products",
+                "Free shipping on all orders",
+                "Priority customer support",
+                "Early access to new products",
+                "Monthly health tips newsletter"
+            ]
+        },
+        "status": "Pending",
+        "paymentMethod": "Mollie",
+        "isAutoRenew": true,
+        "metadata": {
+            "source": "mobile",
+            "promoCode": null
+        },
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-11-22T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-11-22T08:00:00.000Z"
+        },
+        "__v": 0
+    }
+]

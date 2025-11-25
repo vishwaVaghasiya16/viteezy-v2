@@ -37,6 +37,8 @@ export {
   OTPStatus,
   Gender,
   PostponementStatus,
+  MembershipStatus,
+  MembershipInterval,
   SubscriptionStatus,
   SubscriptionCycle,
   // Export enum values
@@ -74,6 +76,8 @@ export {
   OTP_STATUS_VALUES,
   GENDER_VALUES,
   POSTPONEMENT_STATUS_VALUES,
+  MEMBERSHIP_STATUS_VALUES,
+  MEMBERSHIP_INTERVAL_VALUES,
   SUBSCRIPTION_STATUS_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
 } from "./enums";

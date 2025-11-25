@@ -14,6 +14,7 @@ import deliveryPostponementRoutes from "./deliveryPostponementRoutes";
 import preCheckoutRoutes from "./preCheckoutRoutes";
 import savedCardRoutes from "./savedCardRoutes";
 import subscriptionRoutes from "./subscriptionRoutes";
+import membershipRoutes from "./membershipRoutes";
 
 const router = Router();
 
@@ -33,5 +34,6 @@ router.use("/postponements", deliveryPostponementRoutes);
 router.use("/pre-checkout", preCheckoutRoutes);
 router.use("/saved-cards", savedCardRoutes);
 router.use("/subscriptions", subscriptionRoutes);
+router.use("/memberships", membershipRoutes);
 
 export default router;
