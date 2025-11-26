@@ -5,6 +5,7 @@ import { validateJoi, validateParams } from "@/middleware/joiValidation";
 import {
   registerWithMemberIdSchema,
   verifyMemberIdParamsSchema,
+  childMemberParamsSchema,
 } from "@/validation/memberValidation";
 
 const router = Router();
@@ -44,5 +45,29 @@ router.get("/me", authMiddleware, memberController.getMyMemberInfo);
  * @access  Private
  */
 router.get("/children", authMiddleware, memberController.getMyChildMembers);
+
+/**
+ * @route   GET /api/v1/members/children/:childUserId/orders
+ * @desc    Get order history for a child member
+ * @access  Private
+ */
+router.get(
+  "/children/:childUserId/orders",
+  authMiddleware,
+  validateParams(childMemberParamsSchema),
+  memberController.getChildOrderHistory
+);
+
+/**
+ * @route   GET /api/v1/members/children/:childUserId/subscriptions
+ * @desc    Get subscription (membership) history for a child member
+ * @access  Private
+ */
+router.get(
+  "/children/:childUserId/subscriptions",
+  authMiddleware,
+  validateParams(childMemberParamsSchema),
+  memberController.getChildSubscriptionHistory
+);
 
 export default router;

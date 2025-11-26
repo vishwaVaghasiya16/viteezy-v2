@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { asyncHandler } from "@/utils";
+import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { User } from "@/models/core/users.model";
 import { MemberReferrals } from "@/models/core/memberReferrals.model";
@@ -11,6 +11,8 @@ import {
 } from "@/utils/memberIdGenerator";
 import { logger } from "@/utils/logger";
 import bcrypt from "bcryptjs";
+import { Orders } from "@/models/commerce/orders.model";
+import { Memberships } from "@/models/commerce/memberships.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -21,6 +23,62 @@ interface AuthenticatedRequest extends Request {
 }
 
 class MemberController {
+  private async getChildContext(
+    parentUserId: string,
+    childUserId: string
+  ): Promise<{
+    childId: mongoose.Types.ObjectId;
+    profile: {
+      id: string;
+      name?: string;
+      email?: string;
+      memberId?: string;
+      isActive?: boolean;
+    };
+  }> {
+    if (!mongoose.Types.ObjectId.isValid(childUserId)) {
+      throw new AppError("Invalid member ID", 400);
+    }
+
+    const normalizedParentId = String(parentUserId);
+    const targetId = new mongoose.Types.ObjectId(childUserId);
+
+    if (normalizedParentId !== childUserId) {
+      const linkExists = await MemberReferrals.exists({
+        parentUserId: new mongoose.Types.ObjectId(parentUserId),
+        childUserId: targetId,
+        isActive: true,
+        isDeleted: false,
+      });
+
+      if (!linkExists) {
+        throw new AppError(
+          "Child member not found or not linked to your account",
+          404
+        );
+      }
+    }
+
+    const child = await User.findById(targetId)
+      .select("name email memberId isActive")
+      .lean();
+
+    if (!child) {
+      throw new AppError("Member not found", 404);
+    }
+
+    return {
+      childId: targetId,
+      profile: {
+        id: child._id.toString(),
+        name: child.name,
+        email: child.email,
+        memberId: child.memberId,
+        isActive: child.isActive,
+      },
+    };
+  }
+
   /**
    * Register user with parent member ID
    * @route POST /api/v1/members/register
@@ -221,6 +279,87 @@ class MemberController {
           count: children.length,
         },
       });
+    }
+  );
+
+  /**
+   * Get child member order history
+   * @route GET /api/v1/members/children/:childUserId/orders
+   * @access Private
+   */
+  getChildOrderHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { childUserId } = req.params;
+      const { childId, profile } = await this.getChildContext(
+        req.user._id,
+        childUserId
+      );
+
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const query = { userId: childId };
+
+      const [orders, total] = await Promise.all([
+        Orders.find(query).sort(sort).skip(skip).limit(limit).lean(),
+        Orders.countDocuments(query),
+      ]);
+
+      const pagination = getPaginationMeta(page, limit, total);
+
+      res.apiSuccess(
+        {
+          child: profile,
+          orders,
+          pagination,
+        },
+        "Child member orders retrieved successfully"
+      );
+    }
+  );
+
+  /**
+   * Get child member subscription history
+   * @route GET /api/v1/members/children/:childUserId/subscriptions
+   * @access Private
+   */
+  getChildSubscriptionHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { childUserId } = req.params;
+      const { childId, profile } = await this.getChildContext(
+        req.user._id,
+        childUserId
+      );
+
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const query = { userId: childId };
+
+      const [memberships, total] = await Promise.all([
+        Memberships.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate("planId", "name slug interval durationDays price")
+          .lean(),
+        Memberships.countDocuments(query),
+      ]);
+
+      const pagination = getPaginationMeta(page, limit, total);
+
+      res.apiSuccess(
+        {
+          child: profile,
+          subscriptions: memberships,
+          pagination,
+        },
+        "Child member subscription history retrieved successfully"
+      );
     }
   );
 

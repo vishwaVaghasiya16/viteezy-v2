@@ -1,4 +1,5 @@
 import Joi from "joi";
+import mongoose from "mongoose";
 
 /**
  * Member Registration Schema
@@ -68,4 +69,19 @@ export const verifyMemberIdParamsSchema = Joi.object({
       "string.pattern.base": "Invalid member ID format. Format: MEM-XXXXXXXX",
     })
     .label("Member ID"),
+});
+
+const objectIdParamSchema = Joi.string()
+  .custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  })
+  .messages({
+    "any.invalid": "Invalid member ID format",
+  });
+
+export const childMemberParamsSchema = Joi.object({
+  childUserId: objectIdParamSchema.required().label("Child User ID"),
 });
