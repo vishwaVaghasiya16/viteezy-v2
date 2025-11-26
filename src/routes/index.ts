@@ -15,6 +15,8 @@ import preCheckoutRoutes from "./preCheckoutRoutes";
 import savedCardRoutes from "./savedCardRoutes";
 import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
+import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
+import memberRoutes from "./memberRoutes";
 
 const router = Router();
 
@@ -22,6 +24,8 @@ const router = Router();
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/admin/users", adminUserRoutes);
+router.use("/admin/membership-plans", adminMembershipPlanRoutes);
+router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);

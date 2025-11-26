@@ -29,6 +29,7 @@ export interface IUser extends Document {
   profileImage?: string;
   gender?: Gender;
   age?: number;
+  memberId?: string; // Unique member ID (e.g., MEM-A9XK72QD)
   isMember?: boolean;
   membershipStatus?: MembershipStatus;
   membershipPlanId?: Schema.Types.ObjectId;
@@ -103,6 +104,15 @@ const userSchema = new Schema<IUser>(
       min: [1, "Age must be at least 1"],
       max: [150, "Age cannot exceed 150"],
       default: null,
+    },
+    memberId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allow null values but ensure uniqueness when present
+      trim: true,
+      uppercase: true,
+      match: [/^MEM-[A-Z0-9]{8}$/, "Invalid member ID format"],
+      index: true,
     },
     isMember: {
       type: Boolean,

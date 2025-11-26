@@ -3,6 +3,7 @@ import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { paymentService } from "@/services/payment";
+import { membershipService } from "@/services/membershipService";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import mongoose from "mongoose";
 import { Payments } from "@/models/commerce/payments.model";
@@ -519,7 +520,8 @@ class PaymentController {
         // Get orderId and userId from query params (we include these in redirect URL)
         const orderId = (req.query.orderId || req.query.order_id) as string;
         const userId = (req.query.userId || req.query.user_id) as string;
-        const membershipId = req.query.membership_id as string;
+        const membershipIdParam = (req.query.membershipId ||
+          req.query.membership_id) as string;
 
         console.log(
           "🟢 [PAYMENT RETURN] - Mollie Payment ID (id param):",
@@ -527,7 +529,7 @@ class PaymentController {
         );
         console.log("🟢 [PAYMENT RETURN] - Order ID:", orderId);
         console.log("🟢 [PAYMENT RETURN] - User ID:", userId);
-        console.log("🟢 [PAYMENT RETURN] - Membership ID:", membershipId);
+        console.log("🟢 [PAYMENT RETURN] - Membership ID:", membershipIdParam);
 
         // If no Mollie payment ID, try to find payment by orderId and userId
         let payment;
@@ -536,15 +538,24 @@ class PaymentController {
             "⚠️ [PAYMENT RETURN] - Mollie payment ID not found in query"
           );
           console.warn(
-            "⚠️ [PAYMENT RETURN] - Trying to find payment by orderId and userId"
+            "⚠️ [PAYMENT RETURN] - Trying to find payment by orderId/membershipId and userId"
           );
 
-          if (orderId && userId) {
+          const orderObjectId =
+            orderId && mongoose.Types.ObjectId.isValid(orderId)
+              ? new mongoose.Types.ObjectId(orderId)
+              : null;
+          const userObjectId =
+            userId && mongoose.Types.ObjectId.isValid(userId)
+              ? new mongoose.Types.ObjectId(userId)
+              : null;
+
+          if (orderObjectId && userObjectId) {
             try {
               // Find most recent payment for this order and user
               const foundPayment = await Payments.findOne({
-                orderId: new mongoose.Types.ObjectId(orderId),
-                userId: new mongoose.Types.ObjectId(userId),
+                orderId: orderObjectId,
+                userId: userObjectId,
                 paymentMethod: PaymentMethod.MOLLIE,
               })
                 .sort({ createdAt: -1 })
@@ -559,7 +570,40 @@ class PaymentController {
               }
             } catch (error) {
               console.error(
-                "❌ [PAYMENT RETURN] - Error finding payment:",
+                "❌ [PAYMENT RETURN] - Error finding payment by orderId/userId:",
+                error
+              );
+            }
+          }
+
+          // If still not found, try membership payments (orderId can actually be membershipId for membership purchases)
+          const membershipLookupId = membershipIdParam || orderId || undefined;
+          const membershipObjectId =
+            membershipLookupId &&
+            mongoose.Types.ObjectId.isValid(membershipLookupId)
+              ? new mongoose.Types.ObjectId(membershipLookupId)
+              : null;
+
+          if (!payment && membershipObjectId) {
+            try {
+              const membershipPayment = await Payments.findOne({
+                membershipId: membershipObjectId,
+                ...(userObjectId ? { userId: userObjectId } : {}),
+                paymentMethod: PaymentMethod.MOLLIE,
+              })
+                .sort({ createdAt: -1 })
+                .exec();
+
+              if (membershipPayment) {
+                console.log(
+                  "✅ [PAYMENT RETURN] - Payment found by membershipId:",
+                  membershipPayment._id
+                );
+                payment = membershipPayment;
+              }
+            } catch (error) {
+              console.error(
+                "❌ [PAYMENT RETURN] - Error finding payment by membershipId:",
                 error
               );
             }
@@ -567,7 +611,7 @@ class PaymentController {
 
           if (!payment) {
             console.error(
-              "❌ [PAYMENT RETURN] - Payment ID not found and cannot find payment by orderId/userId"
+              "❌ [PAYMENT RETURN] - Payment ID not found and cannot find payment by orderId/membershipId"
             );
             console.error(
               "❌ [PAYMENT RETURN] - Available query params:",
@@ -628,47 +672,81 @@ class PaymentController {
           );
         }
 
-        // Use verifyPaymentAndUpdateOrder to ensure both payment and order are updated
+        // Use appropriate verification flow based on payment type (order vs membership)
         console.log(
-          "🟢 [PAYMENT RETURN] - Verifying payment and updating order"
+          "🟢 [PAYMENT RETURN] - Verifying payment and updating entity"
         );
         let verifiedPayment;
+        const isMembershipPayment = !!payment.membershipId;
+
         try {
-          const verifyResult = await paymentService.verifyPaymentAndUpdateOrder(
-            {
-              paymentId: payment._id.toString(),
-              gatewayTransactionId: gatewayIdToVerify,
+          if (isMembershipPayment) {
+            verifiedPayment = await paymentService.verifyPayment(
+              payment._id.toString(),
+              gatewayIdToVerify
+            );
+            console.log("✅ [PAYMENT RETURN] - Membership payment verified");
+            console.log(
+              "✅ [PAYMENT RETURN] - Status:",
+              verifiedPayment.status
+            );
+
+            if (verifiedPayment.status === PaymentStatus.COMPLETED) {
+              try {
+                await membershipService.activateMembership(
+                  verifiedPayment.membershipId?.toString() ||
+                    payment.membershipId?.toString(),
+                  payment._id.toString()
+                );
+                console.log(
+                  "✅ [PAYMENT RETURN] - Membership activated successfully"
+                );
+              } catch (membershipError) {
+                console.error(
+                  "❌ [PAYMENT RETURN] - Failed to activate membership:",
+                  membershipError
+                );
+              }
             }
-          );
-          verifiedPayment = verifyResult.payment;
-          console.log("✅ [PAYMENT RETURN] - Payment verified");
-          console.log("✅ [PAYMENT RETURN] - Status:", verifiedPayment.status);
-          console.log(
-            "✅ [PAYMENT RETURN] - Order updated:",
-            verifyResult.updated
-          );
-          if (verifyResult.updated) {
+          } else {
+            const verifyResult =
+              await paymentService.verifyPaymentAndUpdateOrder({
+                paymentId: payment._id.toString(),
+                gatewayTransactionId: gatewayIdToVerify,
+              });
+            verifiedPayment = verifyResult.payment;
+            console.log("✅ [PAYMENT RETURN] - Payment verified");
             console.log(
-              "✅ [PAYMENT RETURN] - Order paymentStatus:",
-              verifyResult.order.paymentStatus
+              "✅ [PAYMENT RETURN] - Status:",
+              verifiedPayment.status
             );
             console.log(
-              "✅ [PAYMENT RETURN] - Order status:",
-              verifyResult.order.status
+              "✅ [PAYMENT RETURN] - Order updated:",
+              verifyResult.updated
             );
+            if (verifyResult.updated) {
+              console.log(
+                "✅ [PAYMENT RETURN] - Order paymentStatus:",
+                verifyResult.order.paymentStatus
+              );
+              console.log(
+                "✅ [PAYMENT RETURN] - Order status:",
+                verifyResult.order.status
+              );
+            }
           }
         } catch (verifyError) {
           console.error(
             "❌ [PAYMENT RETURN] - Verification failed:",
             verifyError
           );
-          // Fallback to just verify payment if order update fails
+          // Fallback to just verify payment if downstream update fails
           verifiedPayment = await paymentService.verifyPayment(
             payment._id.toString(),
             gatewayIdToVerify
           );
           console.warn(
-            "⚠️ [PAYMENT RETURN] - Used fallback verification (order may not be updated)"
+            "⚠️ [PAYMENT RETURN] - Used fallback verification (entity may not be updated)"
           );
         }
 
@@ -676,8 +754,14 @@ class PaymentController {
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
         let redirectUrl = `${frontendUrl}/payment/return`;
 
+        const resolvedMembershipId =
+          membershipIdParam ||
+          orderId ||
+          payment.membershipId?.toString() ||
+          null;
+
         if (verifiedPayment.status === PaymentStatus.COMPLETED) {
-          if (membershipId || payment.membershipId) {
+          if (resolvedMembershipId || payment.membershipId) {
             redirectUrl = `${frontendUrl}/membership/success?paymentId=${payment._id}`;
           } else if (orderId || payment.orderId) {
             redirectUrl = `${frontendUrl}/order/success?paymentId=${
