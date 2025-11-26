@@ -1,11 +1,34 @@
 import sgMail from "@sendgrid/mail";
 import { logger } from "../utils/logger";
+import { AddressSnapshotType } from "@/models/common.model";
 
 interface EmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+}
+
+interface OrderConfirmationItem {
+  name: string;
+  quantity: number;
+  unitAmount: number;
+  currency: string;
+}
+
+interface OrderConfirmationEmailOptions {
+  to: string;
+  userName?: string;
+  orderNumber: string;
+  orderDate?: Date;
+  paymentMethod?: string;
+  subtotal: { amount: number; currency: string };
+  tax?: { amount: number; currency: string };
+  shipping?: { amount: number; currency: string };
+  discount?: { amount: number; currency: string };
+  total: { amount: number; currency: string };
+  items: OrderConfirmationItem[];
+  shippingAddress?: AddressSnapshotType;
 }
 
 class EmailService {
@@ -212,6 +235,74 @@ class EmailService {
       logger.error("Failed to send admin notification via SendGrid:", {
         to,
         subject,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send order confirmation email
+   */
+  async sendOrderConfirmationEmail(
+    options: OrderConfirmationEmailOptions
+  ): Promise<boolean> {
+    console.log(
+      "📧 [EMAIL SERVICE] ========== Sending Order Confirmation =========="
+    );
+    console.log("📧 [EMAIL SERVICE] To:", options.to);
+    console.log("📧 [EMAIL SERVICE] Order Number:", options.orderNumber);
+    console.log("📧 [EMAIL SERVICE] User Name:", options.userName);
+
+    try {
+      if (!this.isConfigured) {
+        console.log(
+          "ℹ️ [EMAIL SERVICE] - DEV MODE: Email not configured, logging only"
+        );
+        logger.info(
+          `[DEV MODE] Order confirmation email for ${options.to}: Order ${options.orderNumber}`
+        );
+        return true;
+      }
+
+      console.log("📧 [EMAIL SERVICE] Step 1: Preparing email content");
+      const subject = `Your Viteezy order ${options.orderNumber} is confirmed`;
+      const html = this.getOrderConfirmationTemplate(options);
+      const text = this.getOrderConfirmationText(options);
+
+      console.log("📧 [EMAIL SERVICE] - Subject:", subject);
+      console.log("📧 [EMAIL SERVICE] - HTML length:", html.length);
+      console.log("📧 [EMAIL SERVICE] - Text length:", text.length);
+
+      console.log("📧 [EMAIL SERVICE] Step 2: Sending email via SendGrid");
+      await this.sendEmail({
+        to: options.to,
+        subject,
+        html,
+        text,
+      });
+
+      console.log("✅ [EMAIL SERVICE] - Email sent successfully");
+      console.log(
+        "✅ [EMAIL SERVICE] ============================================"
+      );
+
+      logger.info(
+        `Order confirmation email sent to ${options.to} for order ${options.orderNumber}`
+      );
+      return true;
+    } catch (error: any) {
+      console.error("❌ [EMAIL SERVICE] ========== ERROR ==========");
+      console.error("❌ [EMAIL SERVICE] Failed to send email");
+      console.error("❌ [EMAIL SERVICE] Error:", error?.message);
+      console.error("❌ [EMAIL SERVICE] Code:", error?.code);
+      console.error("❌ [EMAIL SERVICE] ===========================");
+
+      logger.error("Failed to send order confirmation email:", {
+        to: options.to,
+        orderNumber: options.orderNumber,
         error: error?.message,
         code: error?.code,
         response: error?.response?.body,
@@ -642,6 +733,261 @@ The Viteezy Team
       </body>
       </html>
     `;
+  }
+  private getOrderConfirmationTemplate(
+    options: OrderConfirmationEmailOptions
+  ): string {
+    const {
+      userName,
+      orderNumber,
+      orderDate,
+      paymentMethod,
+      subtotal,
+      tax,
+      shipping,
+      discount,
+      total,
+      items,
+      shippingAddress,
+    } = options;
+
+    const orderDateDisplay = orderDate
+      ? orderDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : new Date().toLocaleDateString("en-US");
+
+    const itemsRows = items
+      .map(
+        (item) => `
+          <tr>
+            <td>${item.name}</td>
+            <td style="text-align:center;">${item.quantity}</td>
+            <td style="text-align:right;">${this.formatCurrency(
+              item.unitAmount * item.quantity,
+              item.currency
+            )}</td>
+          </tr>`
+      )
+      .join("");
+
+    const shippingBlock = this.formatAddress(shippingAddress);
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Order Confirmation</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #f5f5f7; margin: 0; padding: 0; color: #111827; }
+            .wrapper { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+            .card { background: #ffffff; border-radius: 16px; padding: 32px; box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08); }
+            .title { margin: 0 0 8px; font-size: 24px; font-weight: 600; }
+            table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+            th, td { padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+            th { text-align: left; font-size: 12px; letter-spacing: 0.05em; color: #6b7280; text-transform: uppercase; }
+            .totals td { border-bottom: none; }
+            .grand-total { font-size: 18px; font-weight: 600; }
+            .summary { margin-top: 24px; }
+            .summary p { margin: 4px 0; color: #4b5563; }
+            .footer { text-align: center; margin-top: 32px; color: #6b7280; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="wrapper">
+            <div class="card">
+              <p>Hello ${userName || "there"},</p>
+              <h1 class="title">Thank you for your order!</h1>
+              <p>Your order <strong>${orderNumber}</strong> has been confirmed on ${orderDateDisplay}.</p>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th style="text-align:left;">Item</th>
+                    <th style="text-align:center;">Qty</th>
+                    <th style="text-align:right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsRows}
+                </tbody>
+              </table>
+
+              <table class="totals">
+                <tbody>
+                  <tr>
+                    <td>Subtotal</td>
+                    <td style="text-align:right;">${this.formatCurrency(
+                      subtotal.amount,
+                      subtotal.currency
+                    )}</td>
+                  </tr>
+                  ${
+                    tax && tax.amount
+                      ? `<tr>
+                          <td>Tax</td>
+                          <td style="text-align:right;">${this.formatCurrency(
+                            tax.amount,
+                            tax.currency
+                          )}</td>
+                        </tr>`
+                      : ""
+                  }
+                  ${
+                    shipping && shipping.amount
+                      ? `<tr>
+                          <td>Shipping</td>
+                          <td style="text-align:right;">${this.formatCurrency(
+                            shipping.amount,
+                            shipping.currency
+                          )}</td>
+                        </tr>`
+                      : ""
+                  }
+                  ${
+                    discount && discount.amount
+                      ? `<tr>
+                          <td>Discount</td>
+                          <td style="text-align:right; color:#059669;">-${this.formatCurrency(
+                            discount.amount,
+                            discount.currency
+                          )}</td>
+                        </tr>`
+                      : ""
+                  }
+                  <tr class="grand-total">
+                    <td>Total</td>
+                    <td style="text-align:right;">${this.formatCurrency(
+                      total.amount,
+                      total.currency
+                    )}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="summary">
+                <p><strong>Payment Method:</strong> ${
+                  paymentMethod || "Online payment"
+                }</p>
+                ${
+                  shippingBlock
+                    ? `<p><strong>Shipping Address:</strong><br/>${shippingBlock}</p>`
+                    : ""
+                }
+              </div>
+
+              <p style="margin-top:24px;">We’ll send another email once your order ships. If you have any questions, simply reply to this email.</p>
+              <p style="margin-bottom:0;">— The Viteezy Team</p>
+            </div>
+            <p class="footer">© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+          </div>
+        </body>
+      </html>
+    `;
+  }
+
+  private getOrderConfirmationText(
+    options: OrderConfirmationEmailOptions
+  ): string {
+    const lines = [
+      `Hi ${options.userName || "there"},`,
+      "",
+      `Thanks for your order ${options.orderNumber}. It has been confirmed.`,
+      "",
+      "Order summary:",
+    ];
+
+    options.items.forEach((item) => {
+      lines.push(
+        `- ${item.quantity} x ${item.name} = ${this.formatCurrency(
+          item.unitAmount * item.quantity,
+          item.currency
+        )}`
+      );
+    });
+
+    lines.push("");
+    lines.push(
+      `Subtotal: ${this.formatCurrency(
+        options.subtotal.amount,
+        options.subtotal.currency
+      )}`
+    );
+    if (options.tax?.amount) {
+      lines.push(
+        `Tax: ${this.formatCurrency(options.tax.amount, options.tax.currency)}`
+      );
+    }
+    if (options.shipping?.amount) {
+      lines.push(
+        `Shipping: ${this.formatCurrency(
+          options.shipping.amount,
+          options.shipping.currency
+        )}`
+      );
+    }
+    if (options.discount?.amount) {
+      lines.push(
+        `Discount: -${this.formatCurrency(
+          options.discount.amount,
+          options.discount.currency
+        )}`
+      );
+    }
+    lines.push(
+      `Total: ${this.formatCurrency(
+        options.total.amount,
+        options.total.currency
+      )}`
+    );
+    lines.push("");
+    if (options.paymentMethod) {
+      lines.push(`Paid via: ${options.paymentMethod}`);
+    }
+    if (options.shippingAddress) {
+      lines.push("");
+      lines.push("Shipping address:");
+      lines.push(this.formatAddress(options.shippingAddress));
+    }
+    lines.push("");
+    lines.push("We’ll email again when your order ships.");
+    lines.push("");
+    lines.push("The Viteezy Team");
+
+    return lines.filter(Boolean).join("\n");
+  }
+
+  private formatCurrency(amount: number, currency: string): string {
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency || "EUR",
+      }).format(amount);
+    } catch (_error) {
+      return `${amount.toFixed(2)} ${currency || "EUR"}`;
+    }
+  }
+
+  private formatAddress(address?: AddressSnapshotType): string {
+    if (!address) {
+      return "";
+    }
+
+    const parts = [
+      address.name,
+      address.line1,
+      address.line2,
+      [address.zip, address.city].filter(Boolean).join(" "),
+      address.country,
+    ]
+      .filter(Boolean)
+      .join("<br/>");
+
+    return parts;
   }
 }
 

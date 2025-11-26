@@ -4,23 +4,35 @@ import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { paymentService } from "@/services/payment";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
+import mongoose from "mongoose";
+import { Payments } from "@/models/commerce/payments.model";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
 
+interface RawBodyRequest extends Request {
+  rawBody?: Buffer;
+}
 class PaymentController {
   /**
    * Get available payment methods
    */
   getAvailableMethods = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const methods = paymentService.getAvailablePaymentMethods();
+      const countryCode =
+        (req.query.country as string) ||
+        (req.query.countryCode as string) ||
+        (req.query.shippingCountry as string);
+      const methods = paymentService.getAvailablePaymentMethods(
+        countryCode?.toString()
+      );
 
       res.apiSuccess(
         {
           methods,
+          country: countryCode ? countryCode.toUpperCase() : undefined,
         },
         "Payment methods retrieved successfully"
       );
@@ -69,6 +81,7 @@ class PaymentController {
             redirectUrl: result.result.redirectUrl,
             clientSecret: result.result.clientSecret,
             gatewayTransactionId: result.result.gatewayTransactionId,
+            sessionId: result.result.sessionId,
           },
         },
         "Payment created successfully"
@@ -144,6 +157,7 @@ class PaymentController {
             redirectUrl: result.result.redirectUrl,
             clientSecret: result.result.clientSecret,
             gatewayTransactionId: result.result.gatewayTransactionId,
+            sessionId: result.result.sessionId,
           },
         },
         "Payment intent created successfully"
@@ -209,27 +223,91 @@ class PaymentController {
    */
   processStripeWebhook = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      console.log("🔵 [WEBHOOK] ========== Stripe Webhook Received ==========");
+      console.log("🔵 [WEBHOOK] Timestamp:", new Date().toISOString());
+
       try {
         const signature = req.headers["stripe-signature"] as string;
         const payload = req.body;
+        const rawBody = (req as RawBodyRequest).rawBody;
 
+        console.log("🔵 [WEBHOOK] Step 1: Request received");
+        console.log("🔵 [WEBHOOK] - Has Signature:", !!signature);
+        console.log("🔵 [WEBHOOK] - Has Raw Body:", !!rawBody);
+        console.log("🔵 [WEBHOOK] - Has Payload:", !!payload);
+        console.log("🔵 [WEBHOOK] - Event Type:", payload?.type);
+        console.log("🔵 [WEBHOOK] - Event ID:", payload?.id);
+
+        logger.info("Stripe webhook received", {
+          hasSignature: !!signature,
+          hasRawBody: !!rawBody,
+          hasPayload: !!payload,
+          eventType: payload?.type,
+          eventId: payload?.id,
+        });
+
+        if (!rawBody) {
+          console.error("❌ [WEBHOOK] ERROR: Raw body is missing!");
+          logger.error("Stripe webhook: rawBody is missing");
+          throw new AppError(
+            "Raw body is required for webhook verification",
+            400
+          );
+        }
+
+        console.log(
+          "🔵 [WEBHOOK] Step 2: Calling paymentService.processWebhook"
+        );
         const payment = await paymentService.processWebhook(
           PaymentMethod.STRIPE,
           payload,
-          signature
+          signature,
+          rawBody
         );
 
-        res.apiSuccess(
-          {
+        console.log("✅ [WEBHOOK] Step 3: Webhook processed successfully");
+        console.log("✅ [WEBHOOK] - Payment ID:", payment._id);
+        console.log("✅ [WEBHOOK] - Payment Status:", payment.status);
+        console.log("✅ [WEBHOOK] - Order ID:", payment.orderId);
+        console.log(
+          "✅ [WEBHOOK] ============================================"
+        );
+
+        logger.info("Stripe webhook processed successfully", {
+          paymentId: payment._id,
+          status: payment.status,
+          orderId: payment.orderId,
+        });
+
+        // Use standard Express response (webhook routes are before responseMiddleware)
+        res.status(200).json({
+          success: true,
+          message: "Webhook processed successfully",
+          data: {
             payment: {
               _id: payment._id,
               status: payment.status,
             },
           },
-          "Webhook processed successfully"
-        );
+        });
       } catch (error) {
-        logger.error("Stripe webhook processing error:", error);
+        console.error("❌ [WEBHOOK] ========== ERROR ==========");
+        console.error(
+          "❌ [WEBHOOK] Error Message:",
+          error instanceof Error ? error.message : "Unknown error"
+        );
+        console.error(
+          "❌ [WEBHOOK] Error Stack:",
+          error instanceof Error ? error.stack : undefined
+        );
+        console.error("❌ [WEBHOOK] ==========================");
+
+        logger.error("Stripe webhook processing error:", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+          signature: req.headers["stripe-signature"] ? "present" : "missing",
+          hasRawBody: !!(req as RawBodyRequest).rawBody,
+        });
         // Still return 200 to prevent webhook retries
         res.status(200).json({
           success: false,
@@ -245,25 +323,169 @@ class PaymentController {
    */
   processMollieWebhook = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      try {
-        const payload = req.body;
+      console.log("🔵 [WEBHOOK] ========== Mollie Webhook Received ==========");
+      console.log("🔵 [WEBHOOK] Timestamp:", new Date().toISOString());
 
-        const payment = await paymentService.processWebhook(
-          PaymentMethod.MOLLIE,
-          payload
+      try {
+        const payload = req.body || {};
+        // Mollie sends payment ID in query parameters as 'id'
+        const queryPaymentId = (req.query.id || req.query.payment_id) as string;
+
+        // Also check URL path for payment ID (Mollie sometimes includes it in the path)
+        const urlPath = req.url || req.originalUrl || "";
+        const urlPaymentIdMatch = urlPath.match(/[\/](tr_[a-zA-Z0-9]+)/);
+        const urlPaymentId = urlPaymentIdMatch ? urlPaymentIdMatch[1] : null;
+
+        console.log("🔵 [WEBHOOK] Step 1: Request received");
+        console.log("🔵 [WEBHOOK] - Method:", req.method);
+        console.log("🔵 [WEBHOOK] - URL:", req.url);
+        console.log("🔵 [WEBHOOK] - Original URL:", req.originalUrl);
+        console.log("🔵 [WEBHOOK] - Query params:", req.query);
+        console.log(
+          "🔵 [WEBHOOK] - Has Payload:",
+          !!payload && Object.keys(payload).length > 0
+        );
+        console.log("🔵 [WEBHOOK] - Query Payment ID:", queryPaymentId);
+        console.log("🔵 [WEBHOOK] - URL Payment ID:", urlPaymentId);
+        console.log(
+          "🔵 [WEBHOOK] - Payment ID from payload:",
+          payload?.id || payload?.paymentId
         );
 
-        res.apiSuccess(
-          {
+        // Check if this is a test webhook (Mollie sends test webhooks as arrays)
+        if (
+          Array.isArray(payload) &&
+          payload.length > 0 &&
+          typeof payload[0] === "string"
+        ) {
+          console.log("ℹ️ [WEBHOOK] - Test webhook detected, acknowledging");
+          logger.info("Mollie test webhook received and acknowledged", {
+            testMessage: payload[0],
+          });
+          res.status(200).json({
+            success: true,
+            message: "Test webhook acknowledged",
+            data: { test: true },
+          });
+          return;
+        }
+
+        // Build final payload with payment ID from any available source
+        const finalPayload = { ...payload };
+
+        // Priority: payload.id > query.id > url path > payload.paymentId
+        if (!finalPayload.id) {
+          if (queryPaymentId) {
+            finalPayload.id = queryPaymentId;
+            console.log(
+              "ℹ️ [WEBHOOK] - Using payment ID from query parameter:",
+              queryPaymentId
+            );
+          } else if (urlPaymentId) {
+            finalPayload.id = urlPaymentId;
+            console.log(
+              "ℹ️ [WEBHOOK] - Using payment ID from URL path:",
+              urlPaymentId
+            );
+          } else if (payload.paymentId) {
+            finalPayload.id = payload.paymentId;
+            console.log(
+              "ℹ️ [WEBHOOK] - Using payment ID from payload.paymentId:",
+              payload.paymentId
+            );
+          }
+        }
+
+        const extractedPaymentId =
+          finalPayload.id ||
+          finalPayload.paymentId ||
+          queryPaymentId ||
+          urlPaymentId;
+
+        if (!extractedPaymentId) {
+          console.error("❌ [WEBHOOK] - No payment ID found in webhook");
+          console.error(
+            "❌ [WEBHOOK] - Payload:",
+            JSON.stringify(payload, null, 2)
+          );
+          console.error("❌ [WEBHOOK] - Query:", req.query);
+          // Still acknowledge to prevent retries
+          res.status(200).json({
+            success: true,
+            message: "Webhook received but no payment ID found",
+            data: { acknowledged: true },
+          });
+          return;
+        }
+
+        logger.info("Mollie webhook received", {
+          hasPayload: !!payload,
+          paymentId:
+            finalPayload?.id || finalPayload?.paymentId || queryPaymentId,
+        });
+
+        console.log(
+          "🔵 [WEBHOOK] Step 2: Calling paymentService.processWebhook"
+        );
+        const payment = await paymentService.processWebhook(
+          PaymentMethod.MOLLIE,
+          finalPayload
+        );
+
+        // Check if this was a test webhook or unhandled event
+        if (payment && payment._id === "unhandled_event") {
+          console.log(
+            "ℹ️ [WEBHOOK] - Unhandled event or test webhook acknowledged"
+          );
+          res.status(200).json({
+            success: true,
+            message: "Webhook acknowledged (test or unhandled event)",
+            data: { acknowledged: true },
+          });
+          return;
+        }
+
+        console.log("✅ [WEBHOOK] Step 3: Webhook processed successfully");
+        console.log("✅ [WEBHOOK] - Payment ID:", payment._id);
+        console.log("✅ [WEBHOOK] - Payment Status:", payment.status);
+        console.log("✅ [WEBHOOK] - Order ID:", payment.orderId);
+        console.log(
+          "✅ [WEBHOOK] ============================================"
+        );
+
+        logger.info("Mollie webhook processed successfully", {
+          paymentId: payment._id,
+          status: payment.status,
+          orderId: payment.orderId,
+        });
+
+        // Use standard Express response (webhook routes are before responseMiddleware)
+        res.status(200).json({
+          success: true,
+          message: "Webhook processed successfully",
+          data: {
             payment: {
               _id: payment._id,
               status: payment.status,
             },
           },
-          "Webhook processed successfully"
-        );
+        });
       } catch (error) {
-        logger.error("Mollie webhook processing error:", error);
+        console.error("❌ [WEBHOOK] ========== ERROR ==========");
+        console.error(
+          "❌ [WEBHOOK] Error Message:",
+          error instanceof Error ? error.message : "Unknown error"
+        );
+        console.error(
+          "❌ [WEBHOOK] Error Stack:",
+          error instanceof Error ? error.stack : undefined
+        );
+        console.error("❌ [WEBHOOK] ==========================");
+
+        logger.error("Mollie webhook processing error:", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         // Still return 200 to prevent webhook retries
         res.status(200).json({
           success: false,
@@ -281,44 +503,174 @@ class PaymentController {
   handlePaymentReturn = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       try {
-        // Mollie sends payment ID as query parameter
-        const paymentId = req.query.payment_id as string;
-        const orderId = req.query.order_id as string;
+        console.log(
+          "🟢 [PAYMENT RETURN] ========== Payment Return Handler =========="
+        );
+        console.log("🟢 [PAYMENT RETURN] Query params:", req.query);
+        console.log("🟢 [PAYMENT RETURN] URL:", req.url);
+
+        // Mollie sends payment ID as 'id' query parameter
+        // Also check for payment_id, paymentId for compatibility
+        const molliePaymentId =
+          (req.query.id as string) ||
+          (req.query.payment_id as string) ||
+          (req.query.paymentId as string);
+
+        // Get orderId and userId from query params (we include these in redirect URL)
+        const orderId = (req.query.orderId || req.query.order_id) as string;
+        const userId = (req.query.userId || req.query.user_id) as string;
         const membershipId = req.query.membership_id as string;
 
-        if (!paymentId) {
-          // Redirect to frontend with error
-          const frontendUrl =
-            process.env.FRONTEND_URL || "http://localhost:3000";
-          return res.redirect(
-            `${frontendUrl}/payment/failed?error=Payment ID not found`
+        console.log(
+          "🟢 [PAYMENT RETURN] - Mollie Payment ID (id param):",
+          molliePaymentId
+        );
+        console.log("🟢 [PAYMENT RETURN] - Order ID:", orderId);
+        console.log("🟢 [PAYMENT RETURN] - User ID:", userId);
+        console.log("🟢 [PAYMENT RETURN] - Membership ID:", membershipId);
+
+        // If no Mollie payment ID, try to find payment by orderId and userId
+        let payment;
+        if (!molliePaymentId) {
+          console.warn(
+            "⚠️ [PAYMENT RETURN] - Mollie payment ID not found in query"
           );
+          console.warn(
+            "⚠️ [PAYMENT RETURN] - Trying to find payment by orderId and userId"
+          );
+
+          if (orderId && userId) {
+            try {
+              // Find most recent payment for this order and user
+              const foundPayment = await Payments.findOne({
+                orderId: new mongoose.Types.ObjectId(orderId),
+                userId: new mongoose.Types.ObjectId(userId),
+                paymentMethod: PaymentMethod.MOLLIE,
+              })
+                .sort({ createdAt: -1 })
+                .exec();
+
+              if (foundPayment) {
+                console.log(
+                  "✅ [PAYMENT RETURN] - Payment found by orderId/userId:",
+                  foundPayment._id
+                );
+                payment = foundPayment;
+              }
+            } catch (error) {
+              console.error(
+                "❌ [PAYMENT RETURN] - Error finding payment:",
+                error
+              );
+            }
+          }
+
+          if (!payment) {
+            console.error(
+              "❌ [PAYMENT RETURN] - Payment ID not found and cannot find payment by orderId/userId"
+            );
+            console.error(
+              "❌ [PAYMENT RETURN] - Available query params:",
+              Object.keys(req.query)
+            );
+            const frontendUrl =
+              process.env.FRONTEND_URL || "http://localhost:3000";
+            return res.redirect(
+              `${frontendUrl}/payment/failed?error=Payment ID not found`
+            );
+          }
         }
 
-        // Find payment by gateway transaction ID
-        let payment;
-        try {
-          payment = await paymentService.getPaymentByGatewayTransactionId(
-            paymentId,
-            PaymentMethod.MOLLIE
-          );
-        } catch (error) {
-          logger.warn(
-            `Payment not found for gateway transaction: ${paymentId}`,
-            error
-          );
-          const frontendUrl =
-            process.env.FRONTEND_URL || "http://localhost:3000";
-          return res.redirect(
-            `${frontendUrl}/payment/failed?error=Payment not found`
-          );
+        // If we don't have payment yet, find it by gateway transaction ID
+        if (!payment && molliePaymentId) {
+          try {
+            console.log(
+              "🟢 [PAYMENT RETURN] - Looking up payment with gateway ID:",
+              molliePaymentId
+            );
+            payment = await paymentService.getPaymentByGatewayTransactionId(
+              molliePaymentId,
+              PaymentMethod.MOLLIE
+            );
+            console.log("✅ [PAYMENT RETURN] - Payment found:", payment._id);
+          } catch (error) {
+            console.error(
+              "❌ [PAYMENT RETURN] - Payment lookup failed:",
+              error
+            );
+            logger.warn(
+              `Payment not found for gateway transaction: ${molliePaymentId}`,
+              error
+            );
+            const frontendUrl =
+              process.env.FRONTEND_URL || "http://localhost:3000";
+            return res.redirect(
+              `${frontendUrl}/payment/failed?error=Payment not found for ID: ${molliePaymentId}`
+            );
+          }
         }
 
         // Verify payment status with gateway
-        const verifiedPayment = await paymentService.verifyPayment(
-          payment._id.toString(),
-          paymentId
+        // This ensures database is updated even if webhook didn't fire
+        console.log(
+          "🟢 [PAYMENT RETURN] - Verifying payment status with Mollie"
         );
+        const gatewayIdToVerify =
+          molliePaymentId || payment?.gatewayTransactionId;
+        if (!gatewayIdToVerify) {
+          console.error(
+            "❌ [PAYMENT RETURN] - No gateway ID available for verification"
+          );
+          const frontendUrl =
+            process.env.FRONTEND_URL || "http://localhost:3000";
+          return res.redirect(
+            `${frontendUrl}/payment/failed?error=Payment gateway ID not found`
+          );
+        }
+
+        // Use verifyPaymentAndUpdateOrder to ensure both payment and order are updated
+        console.log(
+          "🟢 [PAYMENT RETURN] - Verifying payment and updating order"
+        );
+        let verifiedPayment;
+        try {
+          const verifyResult = await paymentService.verifyPaymentAndUpdateOrder(
+            {
+              paymentId: payment._id.toString(),
+              gatewayTransactionId: gatewayIdToVerify,
+            }
+          );
+          verifiedPayment = verifyResult.payment;
+          console.log("✅ [PAYMENT RETURN] - Payment verified");
+          console.log("✅ [PAYMENT RETURN] - Status:", verifiedPayment.status);
+          console.log(
+            "✅ [PAYMENT RETURN] - Order updated:",
+            verifyResult.updated
+          );
+          if (verifyResult.updated) {
+            console.log(
+              "✅ [PAYMENT RETURN] - Order paymentStatus:",
+              verifyResult.order.paymentStatus
+            );
+            console.log(
+              "✅ [PAYMENT RETURN] - Order status:",
+              verifyResult.order.status
+            );
+          }
+        } catch (verifyError) {
+          console.error(
+            "❌ [PAYMENT RETURN] - Verification failed:",
+            verifyError
+          );
+          // Fallback to just verify payment if order update fails
+          verifiedPayment = await paymentService.verifyPayment(
+            payment._id.toString(),
+            gatewayIdToVerify
+          );
+          console.warn(
+            "⚠️ [PAYMENT RETURN] - Used fallback verification (order may not be updated)"
+          );
+        }
 
         // Determine redirect URL based on payment type
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";

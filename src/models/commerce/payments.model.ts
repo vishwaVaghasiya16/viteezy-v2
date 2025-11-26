@@ -21,6 +21,7 @@ export interface IPayment extends Document {
   currency: string;
   transactionId?: string;
   gatewayTransactionId?: string;
+  gatewaySessionId?: string;
   gatewayResponse?: Record<string, any>;
   failureReason?: string;
   refundAmount?: PriceType;
@@ -71,6 +72,10 @@ const PaymentSchema = new Schema<IPayment>(
       type: String,
       trim: true,
     },
+    gatewaySessionId: {
+      type: String,
+      trim: true,
+    },
     gatewayResponse: {
       type: Schema.Types.Mixed,
       default: {},
@@ -107,6 +112,7 @@ PaymentSchema.index({ orderId: 1, status: 1 });
 PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ paymentMethod: 1, status: 1 });
 PaymentSchema.index({ gatewayTransactionId: 1 });
+PaymentSchema.index({ gatewaySessionId: 1 });
 PaymentSchema.index({ membershipId: 1, status: 1 });
 PaymentSchema.index({ createdAt: -1 });
 

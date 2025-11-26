@@ -48,8 +48,19 @@ export class MollieAdapter implements IPaymentGateway {
           userId: data.userId,
           ...data.metadata,
         },
-        redirectUrl: data.returnUrl || `${this.baseUrl}/api/v1/payments/return`,
       };
+
+      // Build redirect URL with orderId and userId as query params
+      // This helps identify the payment when Mollie redirects back
+      // Mollie will append ?id=tr_xxxxx to this URL
+      const baseReturnUrl =
+        data.returnUrl || `${this.baseUrl}/api/v1/payments/return`;
+      const returnUrlParams = new URLSearchParams();
+      if (data.orderId) returnUrlParams.append("orderId", data.orderId);
+      if (data.userId) returnUrlParams.append("userId", data.userId);
+      paymentData.redirectUrl = returnUrlParams.toString()
+        ? `${baseReturnUrl}?${returnUrlParams.toString()}`
+        : baseReturnUrl;
 
       // Only include webhookUrl if provided (skip for local development)
       // Mollie validates webhook URLs and rejects localhost URLs
@@ -104,25 +115,107 @@ export class MollieAdapter implements IPaymentGateway {
 
   async processWebhook(
     payload: any,
-    signature?: string
+    signature?: string,
+    _rawBody?: Buffer | string
   ): Promise<PaymentResult> {
+    console.log("🟡 [MOLLIE ADAPTER] ========== Processing Webhook ==========");
+    console.log(
+      "🟡 [MOLLIE ADAPTER] Payload:",
+      JSON.stringify(payload, null, 2)
+    );
+
     try {
-      // Mollie sends payment ID in the payload
-      const paymentId = payload.id || payload.paymentId;
-      if (!paymentId) {
-        throw new Error("Payment ID not found in webhook payload");
+      // Check if this is a test webhook from Mollie
+      // Mollie sends test webhooks as arrays with strings like ["Testing the webhook URL"]
+      if (
+        Array.isArray(payload) &&
+        payload.length > 0 &&
+        typeof payload[0] === "string"
+      ) {
+        console.log(
+          "ℹ️ [MOLLIE ADAPTER] - Test webhook detected, acknowledging"
+        );
+        console.log("ℹ️ [MOLLIE ADAPTER] - Test message:", payload[0]);
+        // Return success for test webhooks to acknowledge them
+        return {
+          success: true,
+          status: PaymentStatus.PENDING,
+          error: "Test webhook acknowledged",
+          gatewayResponse: { test: true, message: payload[0] } as any,
+        };
       }
 
+      // Mollie sends payment ID in the payload
+      // It can be in different formats: payload.id, payload.paymentId, or payload.id field
+      let paymentId = payload.id || payload.paymentId;
+
+      // Sometimes Mollie sends payment ID as a string in the payload
+      if (!paymentId && typeof payload === "string") {
+        paymentId = payload;
+      }
+
+      console.log("🟡 [MOLLIE ADAPTER] Step 1: Extracting payment ID");
+      console.log("🟡 [MOLLIE ADAPTER] - Payment ID:", paymentId);
+      console.log("🟡 [MOLLIE ADAPTER] - Payload type:", typeof payload);
+      console.log("🟡 [MOLLIE ADAPTER] - Is Array:", Array.isArray(payload));
+
+      if (!paymentId) {
+        console.error(
+          "❌ [MOLLIE ADAPTER] ERROR: Payment ID not found in webhook payload"
+        );
+        console.error("❌ [MOLLIE ADAPTER] - Payload structure:", {
+          hasId: !!payload.id,
+          hasPaymentId: !!payload.paymentId,
+          payloadType: typeof payload,
+          isArray: Array.isArray(payload),
+        });
+        // For Mollie, if no payment ID, return success to acknowledge but don't process
+        // This prevents webhook retries
+        return {
+          success: true,
+          status: PaymentStatus.PENDING,
+          error: "Payment ID not found in webhook payload (acknowledged)",
+          gatewayResponse: payload as any,
+        };
+      }
+
+      console.log(
+        "🟡 [MOLLIE ADAPTER] Step 2: Fetching payment from Mollie API"
+      );
       const payment = await this.mollieClient.payments.get(paymentId);
 
-      return {
+      console.log("✅ [MOLLIE ADAPTER] Step 3: Payment fetched successfully");
+      console.log("🟡 [MOLLIE ADAPTER] - Payment ID:", payment.id);
+      console.log("🟡 [MOLLIE ADAPTER] - Payment Status:", payment.status);
+      console.log("🟡 [MOLLIE ADAPTER] - Amount:", payment.amount);
+      console.log(
+        "🟡 [MOLLIE ADAPTER] - Is Paid:",
+        payment.status === MolliePaymentStatus.paid
+      );
+
+      const mappedStatus = this.mapMollieStatusToPaymentStatus(payment.status);
+      console.log("🟡 [MOLLIE ADAPTER] - Mapped Status:", mappedStatus);
+
+      const result = {
         success: payment.status === MolliePaymentStatus.paid,
         paymentId: payment.id,
         gatewayTransactionId: payment.id,
-        status: this.mapMollieStatusToPaymentStatus(payment.status),
+        status: mappedStatus,
         gatewayResponse: payment as any,
       };
+
+      console.log("✅ [MOLLIE ADAPTER] - Result Success:", result.success);
+      console.log(
+        "✅ [MOLLIE ADAPTER] ============================================"
+      );
+
+      return result;
     } catch (error: any) {
+      console.error("❌ [MOLLIE ADAPTER] ========== ERROR ==========");
+      console.error("❌ [MOLLIE ADAPTER] Error:", error.message);
+      console.error("❌ [MOLLIE ADAPTER] Stack:", error.stack);
+      console.error("❌ [MOLLIE ADAPTER] ===========================");
+
       logger.error("Mollie webhook processing failed:", error);
       return {
         success: false,

@@ -22,7 +22,7 @@ const router = Router();
 /**
  * @route   GET /api/v1/payments/methods
  * @route   GET /api/v1/payments/method (alias for backward compatibility)
- * @desc    Get available payment methods
+ * @desc    Get available payment methods (accepts optional country query param)
  * @access  Public
  */
 router.get("/methods", paymentController.getAvailableMethods);
@@ -96,18 +96,12 @@ router.post(
 );
 
 /**
- * @route   POST /api/v1/payments/webhook/stripe
- * @desc    Process Stripe webhook
- * @access  Public (webhook endpoint)
+ * NOTE: Webhook routes are registered directly in index.ts with raw body parser
+ * to ensure proper signature verification for Stripe webhooks.
+ *
+ * @route   POST /api/v1/payments/webhook/stripe (registered in index.ts)
+ * @route   POST /api/v1/payments/webhook/mollie (registered in index.ts)
  */
-router.post("/webhook/stripe", paymentController.processStripeWebhook);
-
-/**
- * @route   POST /api/v1/payments/webhook/mollie
- * @desc    Process Mollie webhook
- * @access  Public (webhook endpoint)
- */
-router.post("/webhook/mollie", paymentController.processMollieWebhook);
 
 /**
  * @route   GET /api/v1/payments/return
