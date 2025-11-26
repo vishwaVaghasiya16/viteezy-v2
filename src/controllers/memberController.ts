@@ -178,6 +178,53 @@ class MemberController {
   );
 
   /**
+   * Get child members linked to the authenticated parent
+   * @route GET /api/v1/members/children
+   * @access Private
+   */
+  getMyChildMembers = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const referrals = await MemberReferrals.find({
+        parentUserId: new mongoose.Types.ObjectId(req.user._id),
+        isActive: true,
+        isDeleted: false,
+      })
+        .populate("childUserId", "name email memberId isActive")
+        .sort({ registeredAt: -1 })
+        .lean();
+
+      const children = referrals
+        .filter((ref) => ref.childUserId)
+        .map((ref) => {
+          const child = ref.childUserId as any;
+          return {
+            userId: child._id,
+            name: child.name,
+            email: child.email,
+            memberId: child.memberId,
+            isActive: child.isActive,
+            registeredAt: ref.registeredAt,
+            registrationSource: ref.registrationSource,
+          };
+        });
+
+      res.status(200).json({
+        success: true,
+        message: "Child members retrieved successfully",
+        data: {
+          parentUserId: req.user._id,
+          children,
+          count: children.length,
+        },
+      });
+    }
+  );
+
+  /**
    * Verify member ID exists
    * @route GET /api/v1/members/verify/:memberId
    * @access Public

@@ -10,6 +10,7 @@ interface PendingMembershipInput {
   plan: IMembershipPlan;
   paymentMethod?: string;
   metadata?: Record<string, any>;
+  purchasedByUserId?: string;
 }
 
 class MembershipService {
@@ -27,6 +28,7 @@ class MembershipService {
     plan,
     paymentMethod,
     metadata,
+    purchasedByUserId,
   }: PendingMembershipInput) {
     const planSnapshot = {
       planId: plan._id as mongoose.Types.ObjectId,
@@ -44,8 +46,16 @@ class MembershipService {
       planSnapshot,
       status: MembershipStatus.PENDING,
       paymentMethod,
+      purchasedByUserId: purchasedByUserId
+        ? new mongoose.Types.ObjectId(purchasedByUserId)
+        : undefined,
       isAutoRenew: plan.isAutoRenew,
-      metadata: metadata || {},
+      metadata: {
+        ...(metadata || {}),
+        purchasedByUserId:
+          purchasedByUserId ||
+          (userId ? new mongoose.Types.ObjectId(userId).toString() : undefined),
+      },
     });
   }
 

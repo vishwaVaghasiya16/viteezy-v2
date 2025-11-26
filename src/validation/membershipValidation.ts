@@ -22,6 +22,7 @@ export const buyMembershipSchema = Joi.object(
       .valid(...PAYMENT_METHOD_VALUES)
       .required(),
     returnUrl: Joi.string().uri().optional(),
+    beneficiaryUserId: objectIdSchema.optional(),
     metadata: Joi.object().unknown(true).optional(),
   })
 ).label("BuyMembershipPayload");

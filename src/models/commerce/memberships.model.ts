@@ -31,6 +31,7 @@ export interface IMembership extends Document {
   status: MembershipStatus;
   paymentMethod?: PaymentMethod;
   paymentId?: mongoose.Types.ObjectId;
+  purchasedByUserId?: mongoose.Types.ObjectId;
   isAutoRenew: boolean;
   startedAt?: Date;
   expiresAt?: Date;
@@ -86,6 +87,11 @@ const MembershipSchema = new Schema<IMembership>(
     paymentId: {
       type: Schema.Types.ObjectId,
       ref: "payments",
+    },
+    purchasedByUserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
     },
     isAutoRenew: {
       type: Boolean,

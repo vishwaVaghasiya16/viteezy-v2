@@ -38,4 +38,11 @@ router.get(
  */
 router.get("/me", authMiddleware, memberController.getMyMemberInfo);
 
+/**
+ * @route   GET /api/v1/members/children
+ * @desc    Get list of child members linked to authenticated parent
+ * @access  Private
+ */
+router.get("/children", authMiddleware, memberController.getMyChildMembers);
+
 export default router;
