@@ -15,6 +15,7 @@ import preCheckoutRoutes from "./preCheckoutRoutes";
 import savedCardRoutes from "./savedCardRoutes";
 import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
+import reviewRoutes from "./reviewRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
 import memberRoutes from "./memberRoutes";
 
@@ -39,5 +40,6 @@ router.use("/pre-checkout", preCheckoutRoutes);
 router.use("/saved-cards", savedCardRoutes);
 router.use("/subscriptions", subscriptionRoutes);
 router.use("/memberships", membershipRoutes);
+router.use("/reviews", reviewRoutes);
 
 export default router;
