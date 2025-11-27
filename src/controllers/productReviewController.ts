@@ -48,13 +48,13 @@ class ProductReviewController {
         throw new AppError("You have already reviewed this product", 400);
       }
 
-      const hasPurchased = await Orders.exists({
+      const purchaseMatch = await Orders.exists({
         userId,
-        "items.productId": new mongoose.Types.ObjectId(productId),
+        "items.productId": productId,
         status: { $ne: OrderStatus.CANCELLED },
       });
 
-      if (!hasPurchased) {
+      if (!purchaseMatch) {
         throw new AppError(
           "You can only review products you have purchased",
           400
