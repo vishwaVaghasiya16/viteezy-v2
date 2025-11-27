@@ -7,14 +7,17 @@ import {
   I18nStringType,
   I18nTextType,
 } from "../common.model";
+import { FAQStatus, FAQ_STATUS_VALUES } from "../enums";
 
 export interface IFAQ extends Document {
   question: I18nStringType;
   answer: I18nTextType;
-  category: string;
+  category?: string;
+  categoryId?: mongoose.Types.ObjectId;
   tags: string[];
   sortOrder: number;
-  isActive: boolean;
+  status: FAQStatus;
+  isActive?: boolean;
   viewCount: number;
   helpfulCount: number;
   notHelpfulCount: number;
@@ -36,6 +39,10 @@ const FAQSchema = new Schema<IFAQ>(
       type: String,
       trim: true,
     },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "faq_categories",
+    },
     tags: [
       {
         type: String,
@@ -45,6 +52,11 @@ const FAQSchema = new Schema<IFAQ>(
     sortOrder: {
       type: Number,
       default: 0,
+    },
+    status: {
+      type: String,
+      enum: FAQ_STATUS_VALUES,
+      default: FAQStatus.ACTIVE,
     },
     isActive: {
       type: Boolean,
@@ -84,7 +96,8 @@ FAQSchema.index({
 });
 
 // Other indexes
-FAQSchema.index({ category: 1, isActive: 1, sortOrder: 1 });
-FAQSchema.index({ isActive: 1, sortOrder: 1 });
+FAQSchema.index({ category: 1, status: 1, sortOrder: 1 });
+FAQSchema.index({ categoryId: 1, status: 1, sortOrder: 1 });
+FAQSchema.index({ status: 1, sortOrder: 1 });
 
 export const FAQs = mongoose.model<IFAQ>("faqs", FAQSchema);

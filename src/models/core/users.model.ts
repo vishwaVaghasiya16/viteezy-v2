@@ -1,10 +1,17 @@
 import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
-import { UserRole, USER_ROLE_VALUES } from "../enums";
+import {
+  UserRole,
+  USER_ROLE_VALUES,
+  Gender,
+  GENDER_VALUES,
+  MembershipStatus,
+  MEMBERSHIP_STATUS_VALUES,
+} from "../enums";
 
 export interface IUserSessionInfo {
   sessionId: string;
-  status: "active" | "revoked";
+  status: "Active" | "Revoked";
   revoked: boolean;
   deviceInfo?: string;
 }
@@ -19,6 +26,15 @@ export interface IUser extends Document {
   isActive: boolean;
   isEmailVerified: boolean;
   avatar?: string;
+  profileImage?: string;
+  gender?: Gender;
+  age?: number;
+  memberId?: string; // Unique member ID (e.g., MEM-A9XK72QD)
+  isMember?: boolean;
+  membershipStatus?: MembershipStatus;
+  membershipPlanId?: Schema.Types.ObjectId;
+  membershipExpiresAt?: Date;
+  membershipActivatedAt?: Date;
   lastLogin?: Date;
   sessionIds?: IUserSessionInfo[];
   createdAt: Date;
@@ -73,6 +89,50 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: null,
     },
+    profileImage: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    gender: {
+      type: String,
+      enum: GENDER_VALUES,
+      default: null,
+    },
+    age: {
+      type: Number,
+      min: [1, "Age must be at least 1"],
+      max: [150, "Age cannot exceed 150"],
+      default: null,
+    },
+    memberId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allow null values but ensure uniqueness when present
+      trim: true,
+      uppercase: true,
+      match: [/^MEM-[A-Z0-9]{8}$/, "Invalid member ID format"],
+      index: true,
+    },
+    isMember: {
+      type: Boolean,
+      default: false,
+    },
+    membershipStatus: {
+      type: String,
+      enum: MEMBERSHIP_STATUS_VALUES,
+      default: MembershipStatus.EXPIRED,
+    },
+    membershipPlanId: {
+      type: Schema.Types.ObjectId,
+      ref: "membership_plans",
+    },
+    membershipExpiresAt: {
+      type: Date,
+    },
+    membershipActivatedAt: {
+      type: Date,
+    },
     lastLogin: {
       type: Date,
       default: null,
@@ -82,8 +142,8 @@ const userSchema = new Schema<IUser>(
         sessionId: { type: String, required: true },
         status: {
           type: String,
-          enum: ["active", "revoked"],
-          default: "active",
+          enum: ["Active", "Revoked"],
+          default: "Active",
         },
         revoked: { type: Boolean, default: false },
         deviceInfo: { type: String, trim: true },

@@ -1,0 +1,202 @@
+[
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000001"
+        },
+        "title": {
+            "en": "Shipping & Delivery",
+            "nl": "Verzending & Levering"
+        },
+        "slug": "shipping-delivery",
+        "sortOrder": 1,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-20T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-20T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000002"
+        },
+        "title": {
+            "en": "Orders & Returns",
+            "nl": "Bestellingen & Retouren"
+        },
+        "slug": "orders-returns",
+        "sortOrder": 2,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-21T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-21T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000003"
+        },
+        "title": {
+            "en": "Supplements",
+            "nl": "Supplementen"
+        },
+        "slug": "supplements",
+        "sortOrder": 3,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-22T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-22T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000004"
+        },
+        "title": {
+            "en": "Membership",
+            "nl": "Lidmaatschap"
+        },
+        "slug": "membership",
+        "sortOrder": 4,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-23T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-23T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000005"
+        },
+        "title": {
+            "en": "Billing & Payments",
+            "nl": "Facturatie & Betalingen"
+        },
+        "slug": "billing-payments",
+        "sortOrder": 5,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-24T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-24T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000006"
+        },
+        "title": {
+            "en": "Personalization",
+            "nl": "Personalisatie"
+        },
+        "slug": "personalization",
+        "sortOrder": 6,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-25T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-25T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000007"
+        },
+        "title": {
+            "en": "Consultations",
+            "nl": "Consultaties"
+        },
+        "slug": "consultations",
+        "sortOrder": 7,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-26T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-26T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000008"
+        },
+        "title": {
+            "en": "Track & Trace",
+            "nl": "Tracking"
+        },
+        "slug": "track-trace",
+        "sortOrder": 8,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-27T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-27T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f601000009"
+        },
+        "title": {
+            "en": "Lab Testing",
+            "nl": "Labtesten"
+        },
+        "slug": "lab-testing",
+        "sortOrder": 9,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-28T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-28T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "84f2a1b2c3d4e5f60100000a"
+        },
+        "title": {
+            "en": "Rewards",
+            "nl": "Beloningen"
+        },
+        "slug": "rewards",
+        "sortOrder": 10,
+        "isActive": true,
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-29T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-29T08:00:00.000Z"
+        },
+        "__v": 0
+    }
+]

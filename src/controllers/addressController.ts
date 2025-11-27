@@ -6,13 +6,66 @@
 
 import { Request, Response } from "express";
 import { asyncHandler } from "@/utils";
+import { AppError } from "@/utils/AppError";
 import { Addresses, IAddress } from "@/models/core/addresses.model";
 import mongoose from "mongoose";
+import {
+  postNLService,
+  PostNLNormalizedAddress,
+} from "@/services/postNLService";
+import { logger } from "@/utils/logger";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
+
+const DUTCH_IDENTIFIERS = new Set([
+  "nl",
+  "netherlands",
+  "the netherlands",
+  "nederland",
+]);
+
+const shouldValidateWithPostNL = (country?: string): boolean => {
+  if (!country) {
+    return false;
+  }
+
+  return DUTCH_IDENTIFIERS.has(country.trim().toLowerCase());
+};
+
+const buildAddressLineFromNormalized = (
+  normalized?: PostNLNormalizedAddress
+): string | undefined => {
+  if (!normalized?.street || !normalized?.houseNumber) {
+    return undefined;
+  }
+
+  const addition = normalized.houseNumberAddition
+    ? ` ${normalized.houseNumberAddition}`
+    : "";
+
+  return `${normalized.street} ${normalized.houseNumber}${addition}`;
+};
+
+const extractHouseNumberFromLine = (line?: string): string | undefined => {
+  if (!line) {
+    return undefined;
+  }
+
+  const match = line.match(/(\d{1,5})/);
+  return match?.[1];
+};
+
+const extractAdditionFromLine = (line?: string): string | undefined => {
+  if (!line) {
+    return undefined;
+  }
+
+  const match = line.match(/\d{1,5}\s*([a-zA-Z]{1,2})$/);
+  return match?.[1];
+};
 
 class AddressController {
   /**
@@ -24,8 +77,7 @@ class AddressController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?.id;
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       const {
@@ -42,7 +94,30 @@ class AddressController {
         type,
         label,
         instructions,
+        houseNumber,
+        houseNumberAddition,
       } = req.body;
+
+      const validationOutcome = await this.validateDutchAddressOrRespond({
+        country,
+        postcode: zip,
+        houseNumber,
+        houseNumberAddition,
+      });
+
+      const normalizedAddress = validationOutcome.normalized;
+      const normalizedAddressLine1 =
+        buildAddressLineFromNormalized(normalizedAddress);
+      const cityToSave = normalizedAddress?.city || city;
+      const stateToSave = normalizedAddress?.state || state;
+      const zipToSave = normalizedAddress?.postcode || zip;
+      const houseNumberToSave =
+        normalizedAddress?.houseNumber ??
+        (houseNumber !== undefined && houseNumber !== null
+          ? String(houseNumber)
+          : undefined);
+      const additionToSave =
+        normalizedAddress?.houseNumberAddition ?? houseNumberAddition;
 
       // If setting as default, unset other default addresses for this user
       if (isDefault === true) {
@@ -62,11 +137,17 @@ class AddressController {
         lastName,
         phone,
         country,
-        state,
-        city,
-        zip,
-        addressLine1,
+        state: stateToSave,
+        city: cityToSave,
+        zip: zipToSave,
+        addressLine1: normalizedAddressLine1 || addressLine1,
         addressLine2,
+        ...(houseNumberToSave !== undefined && {
+          houseNumber: houseNumberToSave,
+        }),
+        ...(additionToSave !== undefined && {
+          houseNumberAddition: additionToSave,
+        }),
         isDefault: isDefault || false,
         type: type || "home",
         label,
@@ -88,8 +169,7 @@ class AddressController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?.id;
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       const addresses = await Addresses.find({
@@ -114,13 +194,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       const address = await Addresses.findOne({
@@ -130,8 +208,7 @@ class AddressController {
       }).lean();
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       res.apiSuccess({ address }, "Address retrieved successfully");
@@ -149,13 +226,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -166,8 +241,7 @@ class AddressController {
       });
 
       if (!existingAddress) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       const {
@@ -184,7 +258,31 @@ class AddressController {
         type,
         label,
         instructions,
+        houseNumber,
+        houseNumberAddition,
       } = req.body;
+
+      const inferredHouseNumber =
+        houseNumber ??
+        existingAddress.houseNumber ??
+        extractHouseNumberFromLine(
+          addressLine1 || existingAddress.addressLine1
+        );
+      const inferredAddition =
+        houseNumberAddition ??
+        existingAddress.houseNumberAddition ??
+        extractAdditionFromLine(addressLine1 || existingAddress.addressLine1);
+
+      const validationOutcome = await this.validateDutchAddressOrRespond({
+        country: country || existingAddress.country,
+        postcode: zip || existingAddress.zip,
+        houseNumber: inferredHouseNumber,
+        houseNumberAddition: inferredAddition,
+      });
+
+      const normalizedAddress = validationOutcome.normalized;
+      const normalizedAddressLine1 =
+        buildAddressLineFromNormalized(normalizedAddress);
 
       // If setting as default, unset other default addresses for this user
       if (isDefault === true && existingAddress.isDefault !== true) {
@@ -198,25 +296,67 @@ class AddressController {
         );
       }
 
+      const updatePayload: Partial<IAddress> = {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(phone && { phone }),
+        ...(country && { country }),
+        ...(state && { state }),
+        ...(city && { city }),
+        ...(zip && { zip }),
+        ...(addressLine1 && { addressLine1 }),
+        ...(addressLine2 !== undefined && { addressLine2 }),
+        ...(isDefault !== undefined && { isDefault }),
+        ...(type && { type }),
+        ...(label !== undefined && { label }),
+        ...(instructions !== undefined && { instructions }),
+        ...(houseNumber !== undefined && {
+          houseNumber: String(houseNumber),
+        }),
+        ...(houseNumberAddition !== undefined && {
+          houseNumberAddition,
+        }),
+        updatedBy: new mongoose.Types.ObjectId(userId),
+      };
+
+      if (normalizedAddressLine1) {
+        updatePayload.addressLine1 = normalizedAddressLine1;
+      }
+      if (normalizedAddress?.city) {
+        updatePayload.city = normalizedAddress.city;
+      }
+      if (normalizedAddress?.state) {
+        updatePayload.state = normalizedAddress.state;
+      }
+      if (normalizedAddress?.postcode) {
+        updatePayload.zip = normalizedAddress.postcode;
+      }
+      if (normalizedAddress?.houseNumber) {
+        updatePayload.houseNumber = normalizedAddress.houseNumber;
+      }
+      if (normalizedAddress?.houseNumberAddition !== undefined) {
+        updatePayload.houseNumberAddition =
+          normalizedAddress.houseNumberAddition;
+      }
+
+      if (
+        updatePayload.houseNumber === undefined &&
+        inferredHouseNumber !== undefined
+      ) {
+        updatePayload.houseNumber = inferredHouseNumber;
+      }
+
+      if (
+        updatePayload.houseNumberAddition === undefined &&
+        inferredAddition !== undefined
+      ) {
+        updatePayload.houseNumberAddition = inferredAddition;
+      }
+
       // Update address
       const updatedAddress = await Addresses.findByIdAndUpdate(
         id,
-        {
-          ...(firstName && { firstName }),
-          ...(lastName && { lastName }),
-          ...(phone && { phone }),
-          ...(country && { country }),
-          ...(state && { state }),
-          ...(city && { city }),
-          ...(zip && { zip }),
-          ...(addressLine1 && { addressLine1 }),
-          ...(addressLine2 !== undefined && { addressLine2 }),
-          ...(isDefault !== undefined && { isDefault }),
-          ...(type && { type }),
-          ...(label !== undefined && { label }),
-          ...(instructions !== undefined && { instructions }),
-          updatedBy: new mongoose.Types.ObjectId(userId),
-        },
+        updatePayload,
         { new: true, runValidators: true }
       ).lean();
 
@@ -238,13 +378,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -255,8 +393,7 @@ class AddressController {
       });
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       // Soft delete the address
@@ -281,13 +418,11 @@ class AddressController {
       const { id } = req.params;
 
       if (!userId) {
-        res.apiError("User not authenticated", 401);
-        return;
+        throw new AppError("User not authenticated", 401);
       }
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-        res.apiError("Invalid address ID", 400);
-        return;
+        throw new AppError("Invalid address ID", 400);
       }
 
       // Check if address exists and belongs to user
@@ -298,8 +433,7 @@ class AddressController {
       });
 
       if (!address) {
-        res.apiNotFound("Address not found");
-        return;
+        throw new AppError("Address not found", 404);
       }
 
       // Unset all other default addresses for this user
@@ -328,6 +462,46 @@ class AddressController {
       );
     }
   );
+
+  private async validateDutchAddressOrRespond(options: {
+    country?: string;
+    postcode?: string;
+    houseNumber?: string | number;
+    houseNumberAddition?: string;
+  }): Promise<{ success: true; normalized?: PostNLNormalizedAddress }> {
+    if (!shouldValidateWithPostNL(options.country)) {
+      return { success: true };
+    }
+
+    if (!options.postcode || !options.houseNumber) {
+      throw new AppError(
+        "Postcode and house number are required for Netherlands addresses",
+        400
+      );
+    }
+
+    try {
+      const validation = await postNLService.validateAddress({
+        postcode: String(options.postcode),
+        houseNumber: String(options.houseNumber),
+        houseNumberAddition: options.houseNumberAddition,
+      });
+
+      if (!validation.isValid) {
+        throw new AppError("Address incorrect", 400);
+      }
+
+      return { success: true, normalized: validation.normalizedAddress };
+    } catch (error: any) {
+      logger.error("PostNL validation failed", {
+        error: error?.message ?? error,
+      });
+      throw new AppError(
+        "Unable to validate address with PostNL. Please try again later.",
+        502
+      );
+    }
+  }
 }
 
 const addressController = new AddressController();

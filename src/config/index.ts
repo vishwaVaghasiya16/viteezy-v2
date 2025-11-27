@@ -39,6 +39,8 @@ const DEFAULT_VALUES = {
   DO_SPACES_ACCESS_KEY: "",
   DO_SPACES_SECRET_KEY: "",
   DO_SPACES_CDN_BASE_URL: "",
+  POSTNL_URL: "https://api.postnl.nl/address/national/v1/validate",
+  POSTNL_TIMEOUT_MS: 5000,
 } as const;
 
 /**
@@ -178,7 +180,17 @@ export const config = {
       process.env.DIGITALOCEAN_CLIENT_SECRET ||
       DEFAULT_VALUES.DO_SPACES_SECRET_KEY,
     cdnBaseUrl:
-      process.env.DO_SPACES_CDN_BASE_URL || DEFAULT_VALUES.DO_SPACES_CDN_BASE_URL,
+      process.env.DO_SPACES_CDN_BASE_URL ||
+      DEFAULT_VALUES.DO_SPACES_CDN_BASE_URL,
+  },
+  postnl: {
+    addressValidationUrl: process.env.POSTNL_URL || DEFAULT_VALUES.POSTNL_URL,
+    apiKey: process.env.POSTNL_API_KEY || "",
+    shipmentApiKey: process.env.POSTNL_SHIPMENT_API_KEY || "",
+    timeoutMs: parseInt(
+      process.env.POSTNL_TIMEOUT_MS || String(DEFAULT_VALUES.POSTNL_TIMEOUT_MS),
+      10
+    ),
   },
 } as const;
 

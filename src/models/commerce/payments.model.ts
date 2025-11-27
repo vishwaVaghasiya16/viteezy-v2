@@ -21,12 +21,14 @@ export interface IPayment extends Document {
   currency: string;
   transactionId?: string;
   gatewayTransactionId?: string;
+  gatewaySessionId?: string;
   gatewayResponse?: Record<string, any>;
   failureReason?: string;
   refundAmount?: PriceType;
   refundReason?: string;
   refundedAt?: Date;
   processedAt?: Date;
+  membershipId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +38,10 @@ const PaymentSchema = new Schema<IPayment>(
     orderId: {
       type: Schema.Types.ObjectId,
       ref: "orders",
+    },
+    membershipId: {
+      type: Schema.Types.ObjectId,
+      ref: "memberships",
     },
     userId: {
       type: Schema.Types.ObjectId,
@@ -63,6 +69,10 @@ const PaymentSchema = new Schema<IPayment>(
       sparse: true,
     },
     gatewayTransactionId: {
+      type: String,
+      trim: true,
+    },
+    gatewaySessionId: {
       type: String,
       trim: true,
     },
@@ -102,6 +112,8 @@ PaymentSchema.index({ orderId: 1, status: 1 });
 PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ paymentMethod: 1, status: 1 });
 PaymentSchema.index({ gatewayTransactionId: 1 });
+PaymentSchema.index({ gatewaySessionId: 1 });
+PaymentSchema.index({ membershipId: 1, status: 1 });
 PaymentSchema.index({ createdAt: -1 });
 
 export const Payments = mongoose.model<IPayment>("payments", PaymentSchema);

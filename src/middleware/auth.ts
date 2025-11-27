@@ -49,13 +49,17 @@ interface AuthenticatedRequest extends Request {
  */
 const extractUserData = (user: any): object => {
   return {
-    id: user._id.toString(),
+    _id: user._id.toString(),
     name: user.name,
     email: user.email,
     phone: user.phone,
     role: user.role,
     isActive: user.isActive,
     isEmailVerified: user.isEmailVerified,
+    avatar: user.avatar,
+    profileImage: user.profileImage,
+    gender: user.gender,
+    age: user.age,
     lastLogin: user.lastLogin,
     createdAt: user.createdAt,
   };

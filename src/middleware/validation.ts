@@ -5,19 +5,23 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import { validationResult, ValidationError } from "express-validator";
+import {
+  validationResult,
+  ValidationError,
+  matchedData,
+} from "express-validator";
 import { AppError } from "@/utils/AppError";
 import { HTTP_STATUS } from "@/constants";
 
 /**
  * Validate Request Middleware
  * @function validateRequest
- * @description Validates request data using express-validator rules
- * Throws AppError if validation fails
+ * @description Validates request data using express-validator rules and checks for unknown fields
+ * Throws AppError if validation fails or unknown fields are found
  * @param {Request} req - Express request object
  * @param {Response} res - Express response object
  * @param {NextFunction} next - Express next function
- * @throws {AppError} If validation fails
+ * @throws {AppError} If validation fails or unknown fields are found
  * @returns {void}
  */
 export const validateRequest = (
@@ -25,6 +29,9 @@ export const validateRequest = (
   res: Response,
   next: NextFunction
 ): void => {
+  // First check for unknown fields (fields not in validation rules)
+  checkUnknownFields(req);
+
   // Get validation results
   const errors = validationResult(req);
 
@@ -49,6 +56,54 @@ export const validateRequest = (
 
   // Continue to next middleware if validation passes
   next();
+};
+
+/**
+ * Check for unknown fields in request body
+ * @function checkUnknownFields
+ * @description Checks if request body contains fields not defined in validation rules
+ * Uses matchedData to get only fields that were validated
+ * @param {Request} req - Express request object
+ * @throws {AppError} If unknown fields are found
+ * @returns {void}
+ */
+const checkUnknownFields = (req: Request): void => {
+  if (!req.body || typeof req.body !== "object") {
+    return;
+  }
+
+  // Get only the data that matched validation rules
+  const matched = matchedData(req, {
+    locations: ["body"],
+    includeOptionals: true,
+  });
+
+  const allowedFields = Object.keys(matched);
+  const bodyKeys = Object.keys(req.body);
+  const unknownFields = bodyKeys.filter((key) => !allowedFields.includes(key));
+
+  if (unknownFields.length > 0) {
+    const fieldNames = unknownFields.join(", ");
+    const errorMessage =
+      unknownFields.length === 1
+        ? `Field '${fieldNames}' is not allowed`
+        : `Fields '${fieldNames}' are not allowed`;
+
+    const appErr = new AppError(
+      errorMessage,
+      HTTP_STATUS.BAD_REQUEST,
+      true,
+      "ValidationError"
+    );
+    (appErr as any).error = errorMessage;
+    (appErr as any).errors = unknownFields.map((field) => ({
+      field,
+      message: `Field '${field}' is not allowed`,
+      value: req.body[field],
+    }));
+
+    throw appErr;
+  }
 };
 
 /**

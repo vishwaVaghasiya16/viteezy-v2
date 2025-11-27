@@ -1,23 +1,49 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes";
 import userRoutes from "./userRoutes";
+import adminUserRoutes from "./adminUserRoutes";
 import exampleRoutes from "./exampleRoutes";
 import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
 import addressRoutes from "./addressRoutes";
 import productRoutes from "./productRoutes";
 import cartRoutes from "./cartRoutes";
+import faqRoutes from "./faqRoutes";
+import wishlistRoutes from "./wishlistRoutes";
+import orderRoutes from "./orderRoutes";
+import couponRoutes from "./couponRoutes";
+import deliveryPostponementRoutes from "./deliveryPostponementRoutes";
+import preCheckoutRoutes from "./preCheckoutRoutes";
+import savedCardRoutes from "./savedCardRoutes";
+import subscriptionRoutes from "./subscriptionRoutes";
+import membershipRoutes from "./membershipRoutes";
+import reviewRoutes from "./reviewRoutes";
+import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
+import memberRoutes from "./memberRoutes";
 
 const router = Router();
 
 // API Routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
+router.use("/admin/users", adminUserRoutes);
+router.use("/admin/membership-plans", adminMembershipPlanRoutes);
+router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
+router.use("/faqs", faqRoutes);
+router.use("/wishlist", wishlistRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/products", productRoutes);
 router.use("/carts", cartRoutes);
+router.use("/orders", orderRoutes);
+router.use("/coupons", couponRoutes);
+router.use("/postponements", deliveryPostponementRoutes);
+router.use("/pre-checkout", preCheckoutRoutes);
+router.use("/saved-cards", savedCardRoutes);
+router.use("/subscriptions", subscriptionRoutes);
+router.use("/memberships", membershipRoutes);
+router.use("/reviews", reviewRoutes);
 
 export default router;

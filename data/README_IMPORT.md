@@ -6,6 +6,8 @@
 
 - `blog_categories.json` - Blog categories data
 - `blogs.json` - Blogs data
+- `membership_plans.json` - Membership plans data
+- `memberships.json` - User memberships data
 
 ## Import Steps
 
@@ -26,6 +28,24 @@ mongoimport --uri="mongodb://localhost:27017/your_database_name" \
 mongoimport --uri="mongodb://localhost:27017/your_database_name" \
   --collection=blogs \
   --file=data/blogs.json \
+  --jsonArray
+```
+
+#### 3. Membership Plans Import
+
+```bash
+mongoimport --uri="mongodb://localhost:27017/your_database_name" \
+  --collection=membership_plans \
+  --file=data/membership_plans.json \
+  --jsonArray
+```
+
+#### 4. Memberships Import
+
+```bash
+mongoimport --uri="mongodb://localhost:27017/your_database_name" \
+  --collection=memberships \
+  --file=data/memberships.json \
   --jsonArray
 ```
 
@@ -54,6 +74,16 @@ db.blog_categories.insertMany([
 db.blogs.insertMany([
   // Copy content from blogs.json here
 ])
+
+// Import membership plans
+db.membership_plans.insertMany([
+  // Copy content from membership_plans.json here
+])
+
+// Import memberships
+db.memberships.insertMany([
+  // Copy content from memberships.json here
+])
 ```
 
 ## Important Notes
@@ -62,6 +92,8 @@ db.blogs.insertMany([
 
 - Blog categories के ObjectIds को blogs में `categoryId` के रूप में use किया गया है
 - `authorId` के लिए आपको अपने users collection से valid ObjectId use करनी होगी
+- Membership plans के ObjectIds को memberships में `planId` के रूप में use किया गया है
+- Memberships में `userId` और `paymentId` के लिए आपको अपने users और payments collections से valid ObjectIds use करनी होंगी
 
 ### AuthorId Update
 
@@ -79,6 +111,21 @@ db.blogs.updateMany(
 ```
 
 या आप JSON files में directly अपने actual user IDs use कर सकते हैं।
+
+### Membership Data Update
+
+Memberships में `userId` और `paymentId` fields हैं जो users और payments collections को reference करती हैं। आपको यह करना होगा:
+
+```javascript
+// अपने users collection से valid user IDs लें
+const userIds = db.users.find({}, { _id: 1 }).toArray();
+
+// अपने payments collection से valid payment IDs लें (optional, अगर payment records exist करते हैं)
+const paymentIds = db.payments.find({}, { _id: 1 }).toArray();
+
+// Memberships में userId और paymentId update करें
+// Note: JSON files में sample ObjectIds हैं, आपको actual IDs से replace करना होगा
+```
 
 ### Date Format
 
@@ -100,17 +147,66 @@ db.blogs.countDocuments({ status: "published" });
 
 // View a sample blog
 db.blogs.findOne({ status: "published" });
+
+// Check membership plans count
+db.membership_plans.countDocuments();
+
+// Check active membership plans
+db.membership_plans.countDocuments({ isActive: true });
+
+// Check memberships count
+db.memberships.countDocuments();
+
+// Check active memberships
+db.memberships.countDocuments({ status: "Active" });
+
+// View a sample membership plan
+db.membership_plans.findOne({ isActive: true });
+
+// View a sample membership
+db.memberships.findOne({ status: "Active" });
 ```
 
 ## API Testing
 
 Import के बाद आप इन APIs को test कर सकते हैं:
 
+### Blog APIs
+
 1. **Get Blog Categories**: `GET /api/blogs/categories/list`
 2. **Get Blogs List**: `GET /api/blogs?page=1&limit=10`
 3. **Get Blog Details**: `GET /api/blogs/10-essential-vitamins-for-daily-health`
 4. **Get Popular Blogs**: `GET /api/blogs/popular/list?type=popular&limit=5`
 5. **Increment Views**: `POST /api/blogs/10-essential-vitamins-for-daily-health/increment-views`
+
+### Coupon APIs
+
+1. **Validate Coupon**: `POST /api/coupons/validate`
+   ```json
+   {
+     "couponCode": "WELCOME10",
+     "orderAmount": 100,
+     "productIds": [],
+     "categoryIds": []
+   }
+   ```
+
+### Membership APIs
+
+1. **Buy Membership**: `POST /api/v1/memberships/buy`
+
+   ```json
+   {
+     "planId": "75a1b2c3d4e5f601000001",
+     "paymentMethod": "Stripe"
+   }
+   ```
+
+2. **Get Membership History**: `GET /api/v1/memberships?page=1&limit=10`
+
+3. **Get Membership Details**: `GET /api/v1/memberships/:membershipId`
+
+4. **Cancel Membership**: `POST /api/v1/memberships/:membershipId/cancel`
 
 ## Troubleshooting
 
@@ -129,6 +225,9 @@ Import के बाद आप इन APIs को test कर सकते ह�
   ```javascript
   db.blog_categories.deleteMany({});
   db.blogs.deleteMany({});
+  db.coupons.deleteMany({});
+  db.membership_plans.deleteMany({});
+  db.memberships.deleteMany({});
   ```
 
 ### AuthorId Not Found

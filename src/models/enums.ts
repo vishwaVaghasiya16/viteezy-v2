@@ -33,6 +33,12 @@ export enum BlogStatus {
   ARCHIVED = "Archived",
 }
 
+// FAQ Status
+export enum FAQStatus {
+  ACTIVE = "Active",
+  INACTIVE = "Inactive",
+}
+
 // Page Status
 export enum PageStatus {
   ACTIVE = "Active",
@@ -74,6 +80,12 @@ export enum PaymentMethod {
   MOLLIE = "Mollie",
   PAYPAL = "Paypal",
   BANK_TRANSFER = "Bank Transfer",
+}
+
+// Order Plan Types
+export enum OrderPlanType {
+  ONE_TIME = "One-Time",
+  SUBSCRIPTION = "Subscription",
 }
 
 // Shipment Status
@@ -242,17 +254,65 @@ export enum Timezone {
   IST = "IST",
 }
 
+// Gender
+export enum Gender {
+  MALE = "Male",
+  FEMALE = "Female",
+  GENDER_NEUTRAL = "Gender neutral",
+}
+
+// Delivery Postponement Status
+export enum PostponementStatus {
+  PENDING = "Pending",
+  APPROVED = "Approved",
+  REJECTED = "Rejected",
+  CANCELLED = "Cancelled",
+}
+
+// Membership Status
+export enum MembershipStatus {
+  PENDING = "Pending",
+  ACTIVE = "Active",
+  EXPIRED = "Expired",
+  CANCELLED = "Cancelled",
+}
+
+// Membership Billing Interval
+export enum MembershipInterval {
+  MONTHLY = "Monthly",
+  QUARTERLY = "Quarterly",
+  YEARLY = "Yearly",
+}
+
+// Subscription Status
+export enum SubscriptionStatus {
+  ACTIVE = "Active",
+  PAUSED = "Paused",
+  CANCELLED = "Cancelled",
+  EXPIRED = "Expired",
+  SUSPENDED = "Suspended",
+}
+
+// Subscription Cycle Intervals (in days)
+export enum SubscriptionCycle {
+  DAYS_60 = 60,
+  DAYS_90 = 90,
+  DAYS_180 = 180,
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
 export const USER_ROLE_VALUES = Object.values(UserRole);
 export const USER_STATUS_VALUES = Object.values(UserStatus);
 export const BLOG_STATUS_VALUES = Object.values(BlogStatus);
+export const FAQ_STATUS_VALUES = Object.values(FAQStatus);
 export const PAGE_STATUS_VALUES = Object.values(PageStatus);
 export const PAGE_TYPE_VALUES = Object.values(PageType);
 export const ORDER_STATUS_VALUES = Object.values(OrderStatus);
 export const PAYMENT_STATUS_VALUES = Object.values(PaymentStatus);
 export const PAYMENT_METHOD_VALUES = Object.values(PaymentMethod);
+export const ORDER_PLAN_TYPE_VALUES = Object.values(OrderPlanType);
 export const SHIPMENT_STATUS_VALUES = Object.values(ShipmentStatus);
 export const CAMPAIGN_TYPE_VALUES = Object.values(CampaignType);
 export const CAMPAIGN_STATUS_VALUES = Object.values(CampaignStatus);
@@ -275,3 +335,13 @@ export const CURRENCY_VALUES = Object.values(Currency);
 export const TIMEZONE_VALUES = Object.values(Timezone);
 export const OTP_TYPE_VALUES = Object.values(OTPType);
 export const OTP_STATUS_VALUES = Object.values(OTPStatus);
+export const GENDER_VALUES = Object.values(Gender);
+export const POSTPONEMENT_STATUS_VALUES = Object.values(PostponementStatus);
+export const MEMBERSHIP_STATUS_VALUES = Object.values(MembershipStatus);
+export const MEMBERSHIP_INTERVAL_VALUES = Object.values(MembershipInterval);
+export const SUBSCRIPTION_STATUS_VALUES = Object.values(SubscriptionStatus);
+export const SUBSCRIPTION_CYCLE_VALUES = [
+  SubscriptionCycle.DAYS_60,
+  SubscriptionCycle.DAYS_90,
+  SubscriptionCycle.DAYS_180,
+];

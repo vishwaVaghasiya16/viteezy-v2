@@ -81,9 +81,27 @@ app.use(
 );
 
 /**
+ * Trust Proxy Configuration
+ * Only set trust proxy if explicitly configured via environment variable
+ * This prevents rate limiter warnings when not behind a proxy
+ * Set BEHIND_PROXY=true in .env if running behind nginx, load balancer, etc.
+ * In production behind a proxy, set to 1 to trust the first proxy (more secure than true)
+ */
+if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
+  // Set to 1 to trust only the first proxy (more secure than true)
+  // For multiple proxies, set TRUST_PROXY to the number of proxies
+  const proxyCount = process.env.TRUST_PROXY
+    ? parseInt(process.env.TRUST_PROXY, 10)
+    : 1;
+  app.set("trust proxy", isNaN(proxyCount) ? 1 : proxyCount);
+  console.log(`ℹ️ Trust proxy enabled: ${app.get("trust proxy")}`);
+}
+
+/**
  * Rate Limiting Middleware
  * Prevents abuse by limiting the number of requests from a single IP
  * Configured via environment variables with sensible defaults
+ * Note: Webhook routes are excluded from rate limiting (registered before this middleware)
  */
 const limiter = rateLimit({
   windowMs: config.rateLimit.windowMs, // Time window in milliseconds (15 minutes default)
@@ -95,12 +113,154 @@ const limiter = rateLimit({
 app.use(limiter);
 
 /**
+ * IMPORTANT: Webhook routes must be registered BEFORE JSON parser
+ * Stripe webhooks require raw body for signature verification
+ */
+import { paymentController } from "@/controllers/paymentController";
+import { PaymentMethod } from "@/models/enums";
+
+// Register webhook routes with raw body parser (BEFORE JSON parser)
+// Add logging middleware to track incoming requests
+app.post(
+  `${API_VERSION}/payments/webhook/stripe`,
+  (req: any, res: any, next: any) => {
+    console.log(
+      "🔵 [WEBHOOK ROUTE] ========== Stripe Webhook Route Hit =========="
+    );
+    console.log("🔵 [WEBHOOK ROUTE] Method:", req.method);
+    console.log("🔵 [WEBHOOK ROUTE] URL:", req.url);
+    console.log("🔵 [WEBHOOK ROUTE] Headers:", {
+      "content-type": req.headers["content-type"],
+      "stripe-signature": req.headers["stripe-signature"]
+        ? "present"
+        : "missing",
+      "user-agent": req.headers["user-agent"],
+    });
+    console.log("🔵 [WEBHOOK ROUTE] IP:", req.ip);
+    next();
+  },
+  express.raw({ type: "application/json", limit: BODY_SIZE_LIMIT }),
+  (req: any, res: any, next: any) => {
+    console.log(
+      "🔵 [WEBHOOK ROUTE] Raw body received, length:",
+      req.body?.length || 0
+    );
+    // Store raw body for signature verification
+    if (req.body && Buffer.isBuffer(req.body)) {
+      req.rawBody = req.body;
+      // Parse JSON for easier access in controllers
+      try {
+        req.body = JSON.parse(req.body.toString());
+        console.log("🔵 [WEBHOOK ROUTE] Body parsed successfully");
+      } catch (e) {
+        // If parsing fails, keep raw body
+        console.warn("⚠️ [WEBHOOK ROUTE] Body parsing failed:", e);
+        req.body = {};
+      }
+    }
+    next();
+  },
+  paymentController.processStripeWebhook
+);
+
+// Mollie webhook route - supports both GET (verification) and POST (notifications)
+// Register GET route separately for verification
+app.get(
+  `${API_VERSION}/payments/webhook/mollie`,
+  (req: any, res: any, next: any) => {
+    console.log(
+      "🔵 [WEBHOOK ROUTE] ========== Mollie Webhook GET (Verification) =========="
+    );
+    console.log("🔵 [WEBHOOK ROUTE] Method:", req.method);
+    console.log("🔵 [WEBHOOK ROUTE] URL:", req.url);
+    console.log("🔵 [WEBHOOK ROUTE] Query:", req.query);
+    console.log("🔵 [WEBHOOK ROUTE] IP:", req.ip);
+    req.body = {}; // No body for GET requests
+    next();
+  },
+  paymentController.processMollieWebhook
+);
+
+// Register POST route for actual webhook notifications
+app.post(
+  `${API_VERSION}/payments/webhook/mollie`,
+  (req: any, res: any, next: any) => {
+    console.log(
+      "🔵 [WEBHOOK ROUTE] ========== Mollie Webhook POST (Notification) =========="
+    );
+    console.log("🔵 [WEBHOOK ROUTE] Method:", req.method);
+    console.log("🔵 [WEBHOOK ROUTE] URL:", req.url);
+    console.log("🔵 [WEBHOOK ROUTE] Full URL:", req.originalUrl);
+    console.log("🔵 [WEBHOOK ROUTE] Query:", req.query);
+    console.log("🔵 [WEBHOOK ROUTE] Headers:", {
+      "content-type": req.headers["content-type"],
+      "user-agent": req.headers["user-agent"],
+    });
+    console.log("🔵 [WEBHOOK ROUTE] IP:", req.ip);
+    next();
+  },
+  express.raw({ type: "application/json", limit: BODY_SIZE_LIMIT }),
+  (req: any, res: any, next: any) => {
+    console.log(
+      "🔵 [WEBHOOK ROUTE] Raw body received, length:",
+      req.body?.length || 0
+    );
+    // Store raw body if needed
+    if (req.body && Buffer.isBuffer(req.body)) {
+      req.rawBody = req.body;
+      const bodyString = req.body.toString();
+      // Only parse if body is not empty
+      if (bodyString.trim().length > 0) {
+        try {
+          req.body = JSON.parse(bodyString);
+          console.log("🔵 [WEBHOOK ROUTE] Body parsed successfully");
+        } catch (e) {
+          console.warn("⚠️ [WEBHOOK ROUTE] Body parsing failed:", e);
+          req.body = {};
+        }
+      } else {
+        // Empty body - set to empty object
+        console.log(
+          "ℹ️ [WEBHOOK ROUTE] Empty body received, setting to empty object"
+        );
+        req.body = {};
+      }
+    } else {
+      // No body at all
+      req.body = {};
+    }
+    next();
+  },
+  paymentController.processMollieWebhook
+);
+
+/**
  * Body Parsing Middleware
  * Parses incoming request bodies in JSON and URL-encoded formats
  * Limits body size to prevent DoS attacks via large payloads
  */
-app.use(express.json({ limit: BODY_SIZE_LIMIT }));
-app.use(express.urlencoded({ extended: true, limit: BODY_SIZE_LIMIT }));
+/**
+ * Capture raw request body (needed for other routes that might need it)
+ */
+const captureRawBody = (req: any, _res: any, buf: Buffer): void => {
+  if (buf && buf.length) {
+    req.rawBody = Buffer.from(buf);
+  }
+};
+
+app.use(
+  express.json({
+    limit: BODY_SIZE_LIMIT,
+    verify: captureRawBody,
+  })
+);
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: BODY_SIZE_LIMIT,
+    verify: captureRawBody,
+  })
+);
 
 /**
  * Compression Middleware
@@ -149,6 +309,41 @@ app.get(HEALTH_CHECK_PATH, (req, res) => {
     environment: NODE_ENV,
   });
 });
+
+/**
+ * Webhook Test Endpoint
+ * Test if webhook endpoint is accessible
+ * @route GET /api/v1/payments/webhook/test
+ */
+app.get(`${API_VERSION}/payments/webhook/test`, (req, res) => {
+  console.log("✅ [WEBHOOK TEST] Test endpoint hit");
+  res.status(200).json({
+    success: true,
+    message: "Webhook endpoint is accessible",
+    timestamp: new Date().toISOString(),
+    endpoint: `${API_VERSION}/payments/webhook/stripe`,
+  });
+});
+
+/**
+ * Webhook Test POST Endpoint
+ * Test POST request to webhook endpoint
+ * @route POST /api/v1/payments/webhook/test
+ */
+app.post(
+  `${API_VERSION}/payments/webhook/test`,
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    console.log("✅ [WEBHOOK TEST] POST test endpoint hit");
+    console.log("✅ [WEBHOOK TEST] Body length:", req.body?.length || 0);
+    res.status(200).json({
+      success: true,
+      message: "Webhook POST endpoint is accessible",
+      timestamp: new Date().toISOString(),
+      bodyLength: req.body?.length || 0,
+    });
+  }
+);
 
 /**
  * API Documentation (Swagger UI)
@@ -226,7 +421,7 @@ const startServer = async (): Promise<void> => {
         `📚 API Documentation: http://${HOST}:${PORT}${API_DOCS_PATH}`
       );
       logger.info(
-        `❤️  Health Check: http://${HOST}:${PORT}${HEALTH_CHECK_PATH}`
+        `=> Health Check: http://${HOST}:${PORT}${HEALTH_CHECK_PATH}`
       );
     });
   } catch (error) {

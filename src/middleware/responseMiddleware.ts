@@ -83,7 +83,7 @@ export const responseMiddleware = (
     const response: ApiResponse<T> = {
       success: true,
       message,
-      data,
+      data: (data !== undefined ? data : null) as T | null,
     };
     res.status(statusCode).json(response);
   };
@@ -102,7 +102,7 @@ export const responseMiddleware = (
     const response: ApiResponse<T> = {
       success: true,
       message,
-      data,
+      data: (data !== undefined ? data : null) as T | null,
     };
     res.status(HTTP_STATUS.CREATED).json(response);
   };
@@ -116,6 +116,7 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: true,
       message,
+      data: null,
     };
     res.status(HTTP_STATUS.NO_CONTENT).json(response);
   };
@@ -171,7 +172,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error,
+      errorType: "Server Error",
+      error: error || message,
+      data: null,
     };
     res.status(statusCode).json(response);
   };
@@ -189,7 +192,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: errors,
+      errorType: "Validation Error",
+      error: errors || message,
+      data: null,
     };
     res.status(HTTP_STATUS.UNPROCESSABLE_ENTITY).json(response);
   };
@@ -203,7 +208,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "NotFoundError",
+      errorType: "Not Found Error",
+      error: message,
+      data: null,
     };
     res.status(HTTP_STATUS.NOT_FOUND).json(response);
   };
@@ -217,7 +224,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "AuthenticationError",
+      errorType: "Authentication Error",
+      error: message,
+      data: null,
     };
     res.status(HTTP_STATUS.UNAUTHORIZED).json(response);
   };
@@ -231,7 +240,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "AuthorizationError",
+      errorType: "Authorization Error",
+      error: message,
+      data: null,
     };
     res.status(HTTP_STATUS.FORBIDDEN).json(response);
   };
@@ -245,7 +256,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "ConflictError",
+      errorType: "Conflict Error",
+      error: message,
+      data: null,
     };
     res.status(HTTP_STATUS.CONFLICT).json(response);
   };
@@ -263,8 +276,9 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "BadRequestError",
-      error: errors,
+      errorType: "Bad Request Error",
+      error: errors || message,
+      data: null,
     };
     res.status(HTTP_STATUS.BAD_REQUEST).json(response);
   };

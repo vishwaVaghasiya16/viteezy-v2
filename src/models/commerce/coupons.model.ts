@@ -33,8 +33,12 @@ const CouponSchema = new Schema<ICoupon>(
   {
     code: {
       type: String,
+      required: [true, "Coupon code is required"],
+      unique: true,
       uppercase: true,
       trim: true,
+      minlength: [1, "Coupon code must be at least 1 character"],
+      maxlength: [50, "Coupon code cannot exceed 50 characters"],
     },
     name: {
       type: I18nString,
@@ -46,11 +50,23 @@ const CouponSchema = new Schema<ICoupon>(
     },
     type: {
       type: String,
+      required: [true, "Coupon type is required"],
       enum: COUPON_TYPE_VALUES,
     },
     value: {
       type: Number,
-      min: 0,
+      required: [true, "Coupon value is required"],
+      min: [0, "Coupon value must be greater than or equal to 0"],
+      validate: {
+        validator: function (this: ICoupon, value: number) {
+          // For percentage type, value should be between 0 and 100
+          if (this.type === CouponType.PERCENTAGE) {
+            return value >= 0 && value <= 100;
+          }
+          return value >= 0;
+        },
+        message: "Percentage coupon value must be between 0 and 100",
+      },
     },
     minOrderAmount: {
       type: Number,
@@ -96,6 +112,16 @@ const CouponSchema = new Schema<ICoupon>(
     },
     validUntil: {
       type: Date,
+      validate: {
+        validator: function (this: ICoupon, value: Date) {
+          // If both validFrom and validUntil are set, validUntil must be after validFrom
+          if (this.validFrom && value) {
+            return value > this.validFrom;
+          }
+          return true;
+        },
+        message: "Valid until date must be after valid from date",
+      },
     },
     isActive: {
       type: Boolean,
@@ -111,10 +137,38 @@ const CouponSchema = new Schema<ICoupon>(
   }
 );
 
+// Pre-save validation hook
+CouponSchema.pre("save", function (next) {
+  // Validate percentage value
+  if (
+    this.type === CouponType.PERCENTAGE &&
+    (this.value < 0 || this.value > 100)
+  ) {
+    return next(new Error("Percentage coupon value must be between 0 and 100"));
+  }
+
+  // Validate date range
+  if (this.validFrom && this.validUntil && this.validUntil <= this.validFrom) {
+    return next(new Error("Valid until date must be after valid from date"));
+  }
+
+  // Validate maxDiscountAmount for percentage coupons
+  if (
+    this.type === CouponType.PERCENTAGE &&
+    this.maxDiscountAmount &&
+    this.maxDiscountAmount < 0
+  ) {
+    return next(new Error("Max discount amount cannot be negative"));
+  }
+
+  next();
+});
+
 // Indexes
 CouponSchema.index({ code: 1, isActive: 1 });
 CouponSchema.index({ validFrom: 1, validUntil: 1, isActive: 1 });
 CouponSchema.index({ applicableProducts: 1 });
 CouponSchema.index({ applicableCategories: 1 });
+CouponSchema.index({ isDeleted: 1, isActive: 1 }); // For soft delete queries
 
 export const Coupons = mongoose.model<ICoupon>("coupons", CouponSchema);

@@ -1,8 +1,16 @@
 import { PaymentMethod, PaymentStatus } from "../../../models/enums";
-import { PriceType } from "../../../models/common.model";
+import { AddressSnapshotType } from "../../../models/common.model";
+
+export interface PaymentLineItem {
+  name: string;
+  amount: number; // Amount per unit in smallest currency unit
+  currency: string;
+  quantity: number;
+  description?: string;
+}
 
 /**
- * Payment Intent Data
+ * Payment Intent/Session Data
  */
 export interface PaymentIntentData {
   amount: number; // Amount in smallest currency unit (cents/pence)
@@ -12,7 +20,14 @@ export interface PaymentIntentData {
   description?: string;
   metadata?: Record<string, string>;
   returnUrl?: string;
+  cancelUrl?: string;
   webhookUrl?: string;
+  customerEmail?: string;
+  customerName?: string;
+  shippingCountry?: string;
+  shippingAddress?: AddressSnapshotType;
+  billingAddress?: AddressSnapshotType;
+  lineItems?: PaymentLineItem[];
 }
 
 /**
@@ -22,6 +37,7 @@ export interface PaymentResult {
   success: boolean;
   paymentId?: string;
   gatewayTransactionId?: string;
+  sessionId?: string;
   status: PaymentStatus;
   redirectUrl?: string; // For redirect-based payments (Mollie)
   clientSecret?: string; // For Stripe client-side confirmation
@@ -74,7 +90,11 @@ export interface IPaymentGateway {
   /**
    * Process webhook from gateway
    */
-  processWebhook(payload: any, signature?: string): Promise<PaymentResult>;
+  processWebhook(
+    payload: any,
+    signature?: string,
+    rawBody?: Buffer | string
+  ): Promise<PaymentResult>;
 
   /**
    * Refund a payment

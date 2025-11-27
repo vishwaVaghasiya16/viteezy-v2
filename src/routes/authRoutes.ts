@@ -5,7 +5,7 @@
  */
 
 import { Router } from "express";
-import { AuthController } from "@/controllers/authController";
+import { authController } from "@/controllers/authController";
 import { validateJoi } from "@/middleware/joiValidation";
 import {
   registerSchema,
@@ -29,44 +29,44 @@ const router = Router();
  */
 
 // User registration endpoint
-router.post("/register", validateJoi(registerSchema), AuthController.register);
+router.post("/register", validateJoi(registerSchema), authController.register);
 
 // User login endpoint
-router.post("/login", validateJoi(loginSchema), AuthController.login);
+router.post("/login", validateJoi(loginSchema), authController.login);
 
 // Refresh token endpoint
 router.post(
   "/refresh-token",
   validateJoi(refreshTokenSchema),
-  AuthController.refreshToken
+  authController.refreshToken
 );
 
 // Verify OTP endpoint
 router.post(
   "/verify-otp",
   validateJoi(verifyOTPSchema),
-  AuthController.verifyOTP
+  authController.verifyOTP
 );
 
 // Resend OTP endpoint
 router.post(
   "/resend-otp",
   validateJoi(resendOTPSchema),
-  AuthController.resendOTP
+  authController.resendOTP
 );
 
 // Forgot password endpoint
 router.post(
   "/forgot-password",
   validateJoi(forgotPasswordSchema),
-  AuthController.forgotPassword
+  authController.forgotPassword
 );
 
 // Reset password endpoint
 router.post(
   "/reset-password",
   validateJoi(resetPasswordSchema),
-  AuthController.resetPassword
+  authController.resetPassword
 );
 
 /**
@@ -79,23 +79,23 @@ router.use(authMiddleware);
 router.post(
   "/change-password",
   validateJoi(changePasswordSchema),
-  AuthController.changePassword
+  authController.changePassword
 );
 
 // Logout endpoint (current device)
-router.post("/logout", AuthController.logout);
+router.post("/logout", authController.logout);
 
 // Logout all devices endpoint
-router.post("/logout-all-devices", AuthController.logoutAllDevices);
+router.post("/logout-all-devices", authController.logoutAllDevices);
 
 // Get user profile endpoint
-router.get("/profile", AuthController.getProfile);
+router.get("/profile", authController.getProfile);
 
 // Update user profile endpoint
 router.put(
   "/profile",
   validateJoi(updateProfileSchema),
-  AuthController.updateProfile
+  authController.updateProfile
 );
 
 /**
@@ -104,9 +104,9 @@ router.put(
  */
 
 // Cleanup expired OTPs endpoint
-router.post("/cleanup-otps", AuthController.cleanupOTPs);
+router.post("/cleanup-otps", authController.cleanupOTPs);
 
 // Get OTP statistics endpoint
-router.get("/otp-stats", AuthController.getOTPStats);
+router.get("/otp-stats", authController.getOTPStats);
 
 export default router;

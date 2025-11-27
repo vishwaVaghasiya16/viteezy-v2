@@ -22,7 +22,7 @@ class ExampleController {
 
       // Mock data for demonstration
       const mockData = Array.from({ length: 50 }, (_, i) => ({
-        id: i + 1,
+        _id: i + 1,
         name: `Item ${i + 1}`,
         description: `This is item number ${i + 1}`,
         createdAt: new Date(Date.now() - i * 24 * 60 * 60 * 1000),
@@ -61,7 +61,7 @@ class ExampleController {
 
       // Mock creation
       const newItem = {
-        id: Math.floor(Math.random() * 1000),
+        _id: Math.floor(Math.random() * 1000),
         name,
         description,
         createdAt: new Date().toISOString(),
@@ -112,8 +112,8 @@ class ExampleController {
     async (req: Request, res: Response): Promise<void> => {
       const data = {
         users: [
-          { id: 1, name: "John Doe", email: "john@example.com" },
-          { id: 2, name: "Jane Smith", email: "jane@example.com" },
+          { _id: 1, name: "John Doe", email: "john@example.com" },
+          { _id: 2, name: "Jane Smith", email: "jane@example.com" },
         ],
         statistics: {
           totalUsers: 2,

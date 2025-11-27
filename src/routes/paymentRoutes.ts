@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { PaymentController } from "../controllers/paymentController";
+import { paymentController } from "@/controllers/paymentController";
 import { authMiddleware } from "../middleware/auth";
 import {
   validatePayment,
@@ -22,18 +22,18 @@ const router = Router();
 /**
  * @route   GET /api/v1/payments/methods
  * @route   GET /api/v1/payments/method (alias for backward compatibility)
- * @desc    Get available payment methods
+ * @desc    Get available payment methods (accepts optional country query param)
  * @access  Public
  */
-router.get("/methods", PaymentController.getAvailableMethods);
-router.get("/method", PaymentController.getAvailableMethods); // Alias for singular
+router.get("/methods", paymentController.getAvailableMethods);
+router.get("/method", paymentController.getAvailableMethods); // Alias for singular
 
 /**
  * @route   GET /api/v1/payments/user/me
  * @desc    Get payments by current user
  * @access  Private
  */
-router.get("/user/me", authMiddleware, PaymentController.getPaymentsByUser);
+router.get("/user/me", authMiddleware, paymentController.getPaymentsByUser);
 
 /**
  * @route   GET /api/v1/payments/order/:orderId
@@ -44,7 +44,7 @@ router.get(
   "/order/:orderId",
   authMiddleware,
   validatePaymentParams(orderIdParamsSchema),
-  PaymentController.getPaymentsByOrder
+  paymentController.getPaymentsByOrder
 );
 
 /**
@@ -56,7 +56,7 @@ router.post(
   "/create",
   authMiddleware,
   validatePayment(createPaymentSchema),
-  PaymentController.createPayment
+  paymentController.createPayment
 );
 
 /**
@@ -68,7 +68,7 @@ router.post(
   "/verify",
   authMiddleware,
   validatePayment(verifyPaymentSchema),
-  PaymentController.verifyPayment
+  paymentController.verifyPayment
 );
 
 /**
@@ -80,7 +80,7 @@ router.post(
   "/intent",
   authMiddleware,
   validatePayment(createPaymentIntentSchema),
-  PaymentController.createPaymentIntent
+  paymentController.createPaymentIntent
 );
 
 /**
@@ -92,22 +92,23 @@ router.post(
   "/verify-callback",
   authMiddleware,
   validatePayment(verifyPaymentCallbackSchema),
-  PaymentController.verifyPaymentCallback
+  paymentController.verifyPaymentCallback
 );
 
 /**
- * @route   POST /api/v1/payments/webhook/stripe
- * @desc    Process Stripe webhook
- * @access  Public (webhook endpoint)
+ * NOTE: Webhook routes are registered directly in index.ts with raw body parser
+ * to ensure proper signature verification for Stripe webhooks.
+ *
+ * @route   POST /api/v1/payments/webhook/stripe (registered in index.ts)
+ * @route   POST /api/v1/payments/webhook/mollie (registered in index.ts)
  */
-router.post("/webhook/stripe", PaymentController.processStripeWebhook);
 
 /**
- * @route   POST /api/v1/payments/webhook/mollie
- * @desc    Process Mollie webhook
- * @access  Public (webhook endpoint)
+ * @route   GET /api/v1/payments/return
+ * @desc    Handle payment return/callback from payment gateway
+ * @access  Public (redirect endpoint)
  */
-router.post("/webhook/mollie", PaymentController.processMollieWebhook);
+router.get("/return", paymentController.handlePaymentReturn);
 
 /**
  * @route   POST /api/v1/payments/refund
@@ -118,7 +119,7 @@ router.post(
   "/refund",
   authMiddleware,
   validatePayment(refundPaymentSchema),
-  PaymentController.refundPayment
+  paymentController.refundPayment
 );
 
 /**
@@ -130,7 +131,7 @@ router.post(
   "/cancel",
   authMiddleware,
   validatePayment(cancelPaymentSchema),
-  PaymentController.cancelPayment
+  paymentController.cancelPayment
 );
 
 /**
@@ -172,7 +173,7 @@ router.get(
     next();
   },
   validatePaymentParams(paymentIdParamsSchema),
-  PaymentController.getPayment
+  paymentController.getPayment
 );
 
 export default router;

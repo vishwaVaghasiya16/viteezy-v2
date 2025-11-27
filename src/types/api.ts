@@ -47,8 +47,8 @@ export interface ApiResponse<T = any> {
   message: string;
   /** Error type/category (only present on errors) */
   errorType?: string;
-  /** Response data (only present on success) */
-  data?: T;
+  /** Response data (always present, null on errors or when no data) */
+  data?: T | null;
   /** Error details (only present on errors) */
   error?: string | any[];
   /** Pagination metadata (only present for paginated responses) */

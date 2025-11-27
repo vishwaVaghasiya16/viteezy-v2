@@ -2,6 +2,7 @@ import Joi from "joi";
 import { PaymentMethod } from "../models/enums";
 import { AppError } from "@/utils/AppError";
 import mongoose from "mongoose";
+import { withFieldLabels } from "./helpers";
 
 // Common validation patterns
 const objectIdSchema = Joi.string()
@@ -51,10 +52,12 @@ const amountValueSchema = Joi.number().positive().required().messages({
   "any.required": "Amount value is required",
 });
 
-const amountSchema = Joi.object({
-  value: amountValueSchema,
-  currency: currencySchema,
-})
+const amountSchema = Joi.object(
+  withFieldLabels({
+    value: amountValueSchema,
+    currency: currencySchema,
+  })
+)
   .required()
   .messages({
     "any.required": "Amount is required",
@@ -94,68 +97,84 @@ const gatewayTransactionIdOptionalSchema = Joi.string()
   .messages({});
 
 // Validation schemas
-export const createPaymentSchema = Joi.object({
-  orderId: objectIdSchema.messages({
-    "any.required": "Order ID is required",
-  }),
-  paymentMethod: paymentMethodSchema,
-  amount: amountSchema,
-  description: descriptionSchema,
-  metadata: metadataSchema,
-  returnUrl: urlSchema,
-  webhookUrl: urlSchema,
-});
+export const createPaymentSchema = Joi.object(
+  withFieldLabels({
+    orderId: objectIdSchema.messages({
+      "any.required": "Order ID is required",
+    }),
+    paymentMethod: paymentMethodSchema,
+    amount: amountSchema,
+    description: descriptionSchema,
+    metadata: metadataSchema,
+    returnUrl: urlSchema,
+    webhookUrl: urlSchema,
+  })
+).label("CreatePaymentPayload");
 
-export const verifyPaymentSchema = Joi.object({
-  paymentId: objectIdSchema.messages({
-    "any.required": "Payment ID is required",
-  }),
-  gatewayTransactionId: gatewayTransactionIdSchema,
-});
+export const verifyPaymentSchema = Joi.object(
+  withFieldLabels({
+    paymentId: objectIdSchema.messages({
+      "any.required": "Payment ID is required",
+    }),
+    gatewayTransactionId: gatewayTransactionIdSchema,
+  })
+).label("VerifyPaymentPayload");
 
-export const createPaymentIntentSchema = Joi.object({
-  orderId: objectIdSchema.messages({
-    "any.required": "Order ID is required",
-  }),
-  paymentMethod: paymentMethodSchema,
-  returnUrl: urlSchema,
-  cancelUrl: urlSchema,
-});
+export const createPaymentIntentSchema = Joi.object(
+  withFieldLabels({
+    orderId: objectIdSchema.messages({
+      "any.required": "Order ID is required",
+    }),
+    paymentMethod: paymentMethodSchema,
+    returnUrl: urlSchema,
+    cancelUrl: urlSchema,
+  })
+).label("CreatePaymentIntentPayload");
 
-export const verifyPaymentCallbackSchema = Joi.object({
-  paymentId: objectIdSchema.messages({
-    "any.required": "Payment ID is required",
-  }),
-  gatewayTransactionId: gatewayTransactionIdOptionalSchema,
-});
+export const verifyPaymentCallbackSchema = Joi.object(
+  withFieldLabels({
+    paymentId: objectIdSchema.messages({
+      "any.required": "Payment ID is required",
+    }),
+    gatewayTransactionId: gatewayTransactionIdOptionalSchema,
+  })
+).label("VerifyPaymentCallbackPayload");
 
-export const refundPaymentSchema = Joi.object({
-  paymentId: objectIdSchema.messages({
-    "any.required": "Payment ID is required",
-  }),
-  amount: refundAmountSchema,
-  reason: refundReasonSchema,
-  metadata: metadataSchema,
-});
+export const refundPaymentSchema = Joi.object(
+  withFieldLabels({
+    paymentId: objectIdSchema.messages({
+      "any.required": "Payment ID is required",
+    }),
+    amount: refundAmountSchema,
+    reason: refundReasonSchema,
+    metadata: metadataSchema,
+  })
+).label("RefundPaymentPayload");
 
-export const cancelPaymentSchema = Joi.object({
-  paymentId: objectIdSchema.messages({
-    "any.required": "Payment ID is required",
-  }),
-});
+export const cancelPaymentSchema = Joi.object(
+  withFieldLabels({
+    paymentId: objectIdSchema.messages({
+      "any.required": "Payment ID is required",
+    }),
+  })
+).label("CancelPaymentPayload");
 
 // Params validation schemas
-export const paymentIdParamsSchema = Joi.object({
-  paymentId: objectIdSchema.messages({
-    "any.required": "Payment ID is required",
-  }),
-});
+export const paymentIdParamsSchema = Joi.object(
+  withFieldLabels({
+    paymentId: objectIdSchema.messages({
+      "any.required": "Payment ID is required",
+    }),
+  })
+).label("PaymentIdParams");
 
-export const orderIdParamsSchema = Joi.object({
-  orderId: objectIdSchema.messages({
-    "any.required": "Order ID is required",
-  }),
-});
+export const orderIdParamsSchema = Joi.object(
+  withFieldLabels({
+    orderId: objectIdSchema.messages({
+      "any.required": "Order ID is required",
+    }),
+  })
+).label("OrderIdParams");
 
 // Validation middleware for body
 export const validatePayment = (schema: Joi.ObjectSchema) => {

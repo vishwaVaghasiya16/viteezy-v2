@@ -68,3 +68,5 @@ uploads/
 
 # Test files
 test-results/
+v1/stage_db_backup_1.sql
+v1/stage_db_backup_1.sql

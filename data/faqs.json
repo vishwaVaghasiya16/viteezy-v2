@@ -1,0 +1,305 @@
+[
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000001"
+        },
+        "question": {
+            "en": "When will my order ship?",
+            "nl": "Wanneer wordt mijn bestelling verzonden?"
+        },
+        "answer": {
+            "en": "Orders leave our NL hub within 24h on weekdays.",
+            "nl": "Bestellingen vertrekken binnen 24 uur op werkdagen."
+        },
+        "category": "Shipping & Delivery",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000001"
+        },
+        "tags": [
+            "shipping",
+            "delivery"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-30T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-30T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000002"
+        },
+        "question": {
+            "en": "Do you ship internationally?",
+            "nl": "Verzenden jullie internationaal?"
+        },
+        "answer": {
+            "en": "Yes, EU + UK with tracked service.",
+            "nl": "Ja, EU + VK met tracking."
+        },
+        "category": "Shipping & Delivery",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000001"
+        },
+        "tags": [
+            "shipping"
+        ],
+        "sortOrder": 2,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-30T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-30T09:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000003"
+        },
+        "question": {
+            "en": "How do returns work?",
+            "nl": "Hoe werken retouren?"
+        },
+        "answer": {
+            "en": "Start a return in your dashboard within 30 days.",
+            "nl": "Start een retour binnen 30 dagen in je dashboard."
+        },
+        "category": "Orders & Returns",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000002"
+        },
+        "tags": [
+            "returns",
+            "orders"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-31T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-31T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000004"
+        },
+        "question": {
+            "en": "Can I change my order?",
+            "nl": "Kan ik mijn bestelling wijzigen?"
+        },
+        "answer": {
+            "en": "Edits are possible until the label is printed.",
+            "nl": "Wijzigingen zijn mogelijk tot het label is geprint."
+        },
+        "category": "Orders & Returns",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000002"
+        },
+        "tags": [
+            "orders"
+        ],
+        "sortOrder": 2,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-07-31T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-07-31T09:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000005"
+        },
+        "question": {
+            "en": "Are supplements vegan?",
+            "nl": "Zijn de supplementen vegan?"
+        },
+        "answer": {
+            "en": "85% of our line is vegan; check each product page badge.",
+            "nl": "85% van ons aanbod is vegan; controleer het productpictogram."
+        },
+        "category": "Supplements",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000003"
+        },
+        "tags": [
+            "supplements",
+            "vegan"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-01T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-01T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000006"
+        },
+        "question": {
+            "en": "Can I pause my membership?",
+            "nl": "Kan ik mijn lidmaatschap pauzeren?"
+        },
+        "answer": {
+            "en": "Yes, choose pause for 1-8 weeks in the portal.",
+            "nl": "Ja, pauzeer 1-8 weken via het portaal."
+        },
+        "category": "Membership",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000004"
+        },
+        "tags": [
+            "membership"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-01T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-01T09:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000007"
+        },
+        "question": {
+            "en": "Which payments are supported?",
+            "nl": "Welke betalingen ondersteunen jullie?"
+        },
+        "answer": {
+            "en": "iDEAL, credit cards, and recurring SEPA.",
+            "nl": "iDEAL, creditcards en terugkerende SEPA."
+        },
+        "category": "Billing & Payments",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000005"
+        },
+        "tags": [
+            "billing"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-02T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-02T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000008"
+        },
+        "question": {
+            "en": "How do personalization quizzes work?",
+            "nl": "Hoe werken personalisatiequizzen?"
+        },
+        "answer": {
+            "en": "Answer lifestyle inputs; algorithm builds stacks instantly.",
+            "nl": "Beantwoord lifestyle vragen; algoritme bouwt direct stacks."
+        },
+        "category": "Personalization",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000006"
+        },
+        "tags": [
+            "personalization"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-02T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-02T09:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f601000009"
+        },
+        "question": {
+            "en": "Do you offer expert consults?",
+            "nl": "Bieden jullie consultaties aan?"
+        },
+        "answer": {
+            "en": "Yes, book 30-min calls with our nutritionists.",
+            "nl": "Ja, boek 30-min gesprekken met onze voedingsdeskundigen."
+        },
+        "category": "Consultations",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000007"
+        },
+        "tags": [
+            "consultations"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-03T08:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-03T08:00:00.000Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "94f3a1b2c3d4e5f60100000a"
+        },
+        "question": {
+            "en": "Where is my tracking link?",
+            "nl": "Waar is mijn tracking link?"
+        },
+        "answer": {
+            "en": "We email it once PostNL scans your parcel.",
+            "nl": "We mailen zodra PostNL het pakket scant."
+        },
+        "category": "Track & Trace",
+        "categoryId": {
+            "$oid": "84f2a1b2c3d4e5f601000008"
+        },
+        "tags": [
+            "tracking"
+        ],
+        "sortOrder": 1,
+        "status": "Active",
+        "isDeleted": false,
+        "createdAt": {
+            "$date": "2024-08-03T09:00:00.000Z"
+        },
+        "updatedAt": {
+            "$date": "2024-08-03T09:00:00.000Z"
+        },
+        "__v": 0
+    }
+]

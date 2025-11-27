@@ -126,7 +126,7 @@ export const createConflictError = (message: string): AppError => {
  * @returns {AppError} Validation error instance
  */
 export const createValidationError = (message: string): AppError => {
-  return new AppError(message, 422, true, "ValidationError");
+  return new AppError(message, 422, true, "Validation Error");
 };
 
 /**

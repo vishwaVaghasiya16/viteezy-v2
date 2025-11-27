@@ -5,14 +5,20 @@
  */
 
 import Joi from "joi";
-import { OTPType, OTP_TYPE_VALUES } from "@/models/enums";
+import {
+  OTPType,
+  OTP_TYPE_VALUES,
+  Gender,
+  GENDER_VALUES,
+} from "@/models/enums";
 import { VALIDATION } from "@/constants";
+import { withFieldLabels } from "./helpers";
 
 /**
  * Email validation schema
  * @constant {Joi.StringSchema} emailSchema
  */
-const emailSchema = Joi.string().email().required().messages({
+const emailSchema = Joi.string().email().required().label("Email").messages({
   "string.email": "Please provide a valid email address",
   "any.required": "Email is required",
 });
@@ -25,6 +31,7 @@ const passwordSchema = Joi.string()
   .min(VALIDATION.PASSWORD.MIN_LENGTH)
   .max(VALIDATION.PASSWORD.MAX_LENGTH)
   .required()
+  .label("Password")
   .messages({
     "string.min": `Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
     "string.max": `Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
@@ -39,6 +46,7 @@ const currentPasswordSchema = Joi.string()
   .min(VALIDATION.PASSWORD.MIN_LENGTH)
   .max(VALIDATION.PASSWORD.MAX_LENGTH)
   .required()
+  .label("Current Password")
   .messages({
     "string.min": `Current Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
     "string.max": `Current Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
@@ -53,6 +61,7 @@ const newPasswordSchema = Joi.string()
   .min(VALIDATION.PASSWORD.MIN_LENGTH)
   .max(VALIDATION.PASSWORD.MAX_LENGTH)
   .required()
+  .label("New Password")
   .messages({
     "string.min": `New Password must be at least ${VALIDATION.PASSWORD.MIN_LENGTH} characters long`,
     "string.max": `New Password cannot exceed ${VALIDATION.PASSWORD.MAX_LENGTH} characters`,
@@ -67,6 +76,7 @@ const nameSchema = Joi.string()
   .min(VALIDATION.NAME.MIN_LENGTH)
   .max(VALIDATION.NAME.MAX_LENGTH)
   .required()
+  .label("Name")
   .messages({
     "string.min": `Name must be at least ${VALIDATION.NAME.MIN_LENGTH} characters long`,
     "string.max": `Name cannot exceed ${VALIDATION.NAME.MAX_LENGTH} characters`,
@@ -77,7 +87,7 @@ const nameSchema = Joi.string()
  * Device info validation schema
  * @constant {Joi.StringSchema} deviceInfoSchema
  */
-const deviceInfoSchema = Joi.string().required().messages({
+const deviceInfoSchema = Joi.string().required().label("Device Info").messages({
   "any.required": "Device Info is required",
 });
 
@@ -89,6 +99,7 @@ const deviceInfoSchema = Joi.string().required().messages({
 const phoneSchema = Joi.string()
   .pattern(/^[+]?[1-9]\d{1,14}$/)
   .optional()
+  .label("Phone")
   .messages({
     "string.pattern.base": "Please provide a valid phone number (E.164 format)",
   });
@@ -101,6 +112,7 @@ const phoneSchema = Joi.string()
 const otpSchema = Joi.string()
   .pattern(/^\d{6}$/)
   .required()
+  .label("OTP")
   .messages({
     "string.pattern.base": "OTP must be a 6-digit number",
     "any.required": "OTP is required",
@@ -114,6 +126,7 @@ const otpSchema = Joi.string()
 const otpTypeSchema = Joi.string()
   .valid(...OTP_TYPE_VALUES)
   .required()
+  .label("OTP Type")
   .messages({
     "any.only": `OTP type must be one of: ${OTP_TYPE_VALUES.join(", ")}`,
     "any.required": "OTP type is required",
@@ -124,102 +137,143 @@ const otpTypeSchema = Joi.string()
  * @constant {Joi.ObjectSchema} registerSchema
  * @description Validates user registration request data
  */
-export const registerSchema = Joi.object({
-  name: nameSchema,
-  email: emailSchema,
-  password: passwordSchema,
-  phone: phoneSchema,
-});
+export const registerSchema = Joi.object(
+  withFieldLabels({
+    name: nameSchema,
+    email: emailSchema,
+    password: passwordSchema,
+    phone: phoneSchema,
+  })
+).label("RegisterPayload");
 
 /**
  * User Login Validation Schema
  * @constant {Joi.ObjectSchema} loginSchema
  * @description Validates user login request data
  */
-export const loginSchema = Joi.object({
-  email: emailSchema,
-  password: passwordSchema,
-  deviceInfo: deviceInfoSchema,
-});
+export const loginSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+    password: passwordSchema,
+    deviceInfo: deviceInfoSchema,
+  })
+).label("LoginPayload");
 
 /**
  * Send OTP Validation Schema
  * @constant {Joi.ObjectSchema} sendOTPSchema
  * @description Validates send OTP request data
  */
-export const sendOTPSchema = Joi.object({
-  email: emailSchema,
-  type: otpTypeSchema,
-});
+export const sendOTPSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+    type: otpTypeSchema,
+  })
+).label("SendOTPPayload");
 
 /**
  * Verify OTP Validation Schema
  * @constant {Joi.ObjectSchema} verifyOTPSchema
  * @description Validates verify OTP request data
  */
-export const verifyOTPSchema = Joi.object({
-  email: emailSchema,
-  otp: otpSchema,
-  type: otpTypeSchema,
-});
+export const verifyOTPSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+    otp: otpSchema,
+    type: otpTypeSchema,
+  })
+).label("VerifyOTPPayload");
 
 /**
  * Resend OTP Validation Schema
  * @constant {Joi.ObjectSchema} resendOTPSchema
  * @description Validates resend OTP request data
  */
-export const resendOTPSchema = Joi.object({
-  email: emailSchema,
-  type: otpTypeSchema,
-});
+export const resendOTPSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+    type: otpTypeSchema,
+  })
+).label("ResendOTPPayload");
 
 /**
  * Forgot Password Validation Schema
  * @constant {Joi.ObjectSchema} forgotPasswordSchema
  * @description Validates forgot password request data
  */
-export const forgotPasswordSchema = Joi.object({
-  email: emailSchema,
-});
+export const forgotPasswordSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+  })
+).label("ForgotPasswordPayload");
 
 /**
  * Reset Password Validation Schema
  * @constant {Joi.ObjectSchema} resetPasswordSchema
  * @description Validates reset password request data
  */
-export const resetPasswordSchema = Joi.object({
-  email: emailSchema,
-  otp: otpSchema,
-  newPassword: passwordSchema,
-});
+export const resetPasswordSchema = Joi.object(
+  withFieldLabels({
+    email: emailSchema,
+    otp: otpSchema,
+    newPassword: passwordSchema,
+  })
+).label("ResetPasswordPayload");
 
 /**
  * Change Password Validation Schema
  * @constant {Joi.ObjectSchema} changePasswordSchema
  * @description Validates change password request data
  */
-export const changePasswordSchema = Joi.object({
-  currentPassword: currentPasswordSchema,
-  newPassword: newPasswordSchema,
-});
+export const changePasswordSchema = Joi.object(
+  withFieldLabels({
+    currentPassword: currentPasswordSchema,
+    newPassword: newPasswordSchema,
+  })
+).label("ChangePasswordPayload");
 
 /**
  * Update Profile Validation Schema
  * @constant {Joi.ObjectSchema} updateProfileSchema
  * @description Validates update profile request data
  */
-export const updateProfileSchema = Joi.object({
-  name: nameSchema.optional(),
-  phone: phoneSchema,
-});
+export const updateProfileSchema = Joi.object(
+  withFieldLabels({
+    name: nameSchema.optional(),
+    phone: phoneSchema,
+    profileImage: Joi.string().uri().optional().allow(null, "").messages({
+      "string.uri": "Profile image must be a valid URL",
+    }),
+    gender: Joi.string()
+      .valid(...GENDER_VALUES)
+      .optional()
+      .allow(null)
+      .messages({
+        "any.only": `Gender must be one of: ${GENDER_VALUES.join(", ")}`,
+      }),
+    age: Joi.number()
+      .integer()
+      .min(1)
+      .max(150)
+      .optional()
+      .allow(null)
+      .messages({
+        "number.min": "Age must be at least 1",
+        "number.max": "Age cannot exceed 150",
+        "number.integer": "Age must be an integer",
+      }),
+  })
+).label("UpdateProfilePayload");
 
 /**
  * Refresh Token Validation Schema
  * @constant {Joi.ObjectSchema} refreshTokenSchema
  * @description Validates refresh token request data
  */
-export const refreshTokenSchema = Joi.object({
-  refreshToken: Joi.string().required().messages({
-    "any.required": "Refresh token is required",
-  }),
-});
+export const refreshTokenSchema = Joi.object(
+  withFieldLabels({
+    refreshToken: Joi.string().required().messages({
+      "any.required": "Refresh token is required",
+    }),
+  })
+).label("RefreshTokenPayload");
