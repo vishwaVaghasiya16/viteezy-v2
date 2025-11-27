@@ -51,10 +51,15 @@ class FileStorageService {
 
   private buildObjectKey(modulePath: string, extension: string): string {
     const datePrefix = new Date().toISOString().split("T")[0];
-    return `${this.projectRoot}/${modulePath}/${datePrefix}/${randomUUID()}.${extension}`;
+    return `${
+      this.projectRoot
+    }/${modulePath}/${datePrefix}/${randomUUID()}.${extension}`;
   }
 
-  async uploadFile(modulePath: string, file: Express.Multer.File): Promise<string> {
+  async uploadFile(
+    modulePath: string,
+    file: Express.Multer.File
+  ): Promise<string> {
     this.ensureConfig();
 
     const extension = file.originalname?.split(".").pop() || "bin";
@@ -120,4 +125,3 @@ class FileStorageService {
 }
 
 export const fileStorageService = new FileStorageService();
-
