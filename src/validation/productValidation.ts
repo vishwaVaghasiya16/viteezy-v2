@@ -1,5 +1,11 @@
 import Joi from "joi";
-import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES, CURRENCY_VALUES } from "../models/enums";
+import {
+  ProductStatus,
+  ProductVariant,
+  PRODUCT_STATUS_VALUES,
+  PRODUCT_VARIANT_VALUES,
+  CURRENCY_VALUES,
+} from "../models/enums";
 import { AppError } from "../utils/AppError";
 
 // Common validation patterns
@@ -15,7 +21,8 @@ const slugSchema = Joi.string()
   .pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .optional()
   .messages({
-    "string.pattern.base": "Slug must be a valid URL-friendly string (lowercase letters, numbers, and hyphens only)",
+    "string.pattern.base":
+      "Slug must be a valid URL-friendly string (lowercase letters, numbers, and hyphens only)",
   });
 
 const descriptionSchema = Joi.string().trim().required().messages({
@@ -27,13 +34,33 @@ const productImageSchema = Joi.string().trim().uri().required().messages({
   "any.required": "Product image is required",
 });
 
-const benefitsSchema = Joi.array().items(Joi.string().trim()).optional().messages({
-  "array.base": "Benefits must be an array of strings",
-});
+const benefitsSchema = Joi.array()
+  .items(Joi.string().trim())
+  .optional()
+  .messages({
+    "array.base": "Benefits must be an array of strings",
+  });
 
-const ingredientsSchema = Joi.array().items(Joi.string().trim()).optional().messages({
-  "array.base": "Ingredients must be an array of strings",
-});
+const ingredientsSchema = Joi.array()
+  .items(Joi.string().trim())
+  .optional()
+  .messages({
+    "array.base": "Ingredients must be an array of strings",
+  });
+
+const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+
+const productIngredientIdsSchema = Joi.array()
+  .items(
+    Joi.string()
+      .trim()
+      .pattern(objectIdRegex)
+      .message("Each product ingredient id must be a valid object id")
+  )
+  .optional()
+  .messages({
+    "array.base": "Product ingredients must be an array of ids",
+  });
 
 const categoriesSchema = Joi.array()
   .items(Joi.string().trim())
@@ -117,9 +144,11 @@ const priceSchema = Joi.object({
     "number.min": "Tax rate must be greater than or equal to 0",
     "number.max": "Tax rate must be less than or equal to 1",
   }),
-}).required().messages({
-  "any.required": "Price is required",
-});
+})
+  .required()
+  .messages({
+    "any.required": "Price is required",
+  });
 
 const variantSchema = Joi.string()
   .valid(...PRODUCT_VARIANT_VALUES)
@@ -139,13 +168,17 @@ const subscriptionPriceSchema = Joi.object({
   oneEightyDays: priceSchema,
 });
 
-const standupPouchPricesSchema = subscriptionPriceSchema.when("hasStandupPouch", {
-  is: true,
-  then: Joi.required().messages({
-    "any.required": "standupPouchPrices is required when hasStandupPouch is true",
-  }),
-  otherwise: Joi.optional(),
-});
+const standupPouchPricesSchema = subscriptionPriceSchema.when(
+  "hasStandupPouch",
+  {
+    is: true,
+    then: Joi.required().messages({
+      "any.required":
+        "standupPouchPrices is required when hasStandupPouch is true",
+    }),
+    otherwise: Joi.optional(),
+  }
+);
 
 // Create product schema
 export const createProductSchema = Joi.object({
@@ -155,6 +188,7 @@ export const createProductSchema = Joi.object({
   productImage: productImageSchema,
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
+  productIngredients: productIngredientIdsSchema,
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
@@ -185,6 +219,7 @@ export const updateProductSchema = Joi.object({
   productImage: productImageSchema.optional(),
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
+  productIngredients: productIngredientIdsSchema,
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
@@ -229,4 +264,3 @@ export const validateProduct = (schema: Joi.ObjectSchema) => {
     next();
   };
 };
-

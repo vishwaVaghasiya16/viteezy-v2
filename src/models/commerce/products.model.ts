@@ -1,11 +1,11 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { PriceSchema, PriceType, SeoSchema, SeoType } from "../common.model";
 import {
-  PriceSchema,
-  PriceType,
-  SeoSchema,
-  SeoType,
-} from "../common.model";
-import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
+  ProductStatus,
+  ProductVariant,
+  PRODUCT_STATUS_VALUES,
+  PRODUCT_VARIANT_VALUES,
+} from "../enums";
 
 // Price structure for subscription periods
 export interface SubscriptionPriceType {
@@ -49,6 +49,7 @@ export interface IProduct extends Document {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  productIngredients?: mongoose.Types.ObjectId[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -98,6 +99,12 @@ const ProductSchema = new Schema<IProduct>(
       {
         type: String,
         trim: true,
+      },
+    ],
+    productIngredients: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "product_ingredients",
       },
     ],
     categories: [
@@ -190,6 +197,7 @@ ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
 ProductSchema.index({ categories: 1 });
 ProductSchema.index({ healthGoals: 1 });
+ProductSchema.index({ productIngredients: 1 });
 
 // Text search index
 ProductSchema.index({ title: "text", description: "text" });

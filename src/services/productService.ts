@@ -1,6 +1,7 @@
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { Ingredients } from "../models/commerce/ingredients.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
@@ -21,6 +22,7 @@ interface CreateProductData {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -90,6 +92,7 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
+  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
@@ -156,7 +159,9 @@ class ProductService {
   /**
    * Create new product
    */
-  async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
+  async createProduct(
+    data: CreateProductData
+  ): Promise<{ product: any; message: string }> {
     const { title, slug, hasStandupPouch, standupPouchPrices } = data;
 
     // Generate slug from title if not provided
@@ -166,13 +171,19 @@ class ProductService {
       finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck: string) => {
-          const existing = await Products.findOne({ slug: slugToCheck, isDeleted: false });
+          const existing = await Products.findOne({
+            slug: slugToCheck,
+            isDeleted: false,
+          });
           return !!existing;
         }
       );
     } else {
       // Check if provided slug already exists
-      const existingProduct = await Products.findOne({ slug: finalSlug, isDeleted: false });
+      const existingProduct = await Products.findOne({
+        slug: finalSlug,
+        isDeleted: false,
+      });
       if (existingProduct) {
         throw new AppError("Product with this slug already exists", 409);
       }
@@ -180,7 +191,10 @@ class ProductService {
 
     // Validate standupPouchPrices if hasStandupPouch is true
     if (hasStandupPouch && !standupPouchPrices) {
-      throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
+      throw new AppError(
+        "standupPouchPrices is required when hasStandupPouch is true",
+        400
+      );
     }
 
     // Create product with generated slug
@@ -265,28 +279,29 @@ class ProductService {
         $text: { $search: search.trim() },
         isDeleted: false,
       };
-      
+
       // Add other filters that can be combined with $text in same stage
       if (status) textSearchMatch.status = status;
       if (variant) textSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined) textSearchMatch.hasStandupPouch = hasStandupPouch;
-      
+      if (hasStandupPouch !== undefined)
+        textSearchMatch.hasStandupPouch = hasStandupPouch;
+
       // Text search must be first stage
       pipeline.push({ $match: textSearchMatch });
-      
+
       // Add relevance score immediately after text search
       pipeline.push({
         $addFields: {
           relevanceScore: { $meta: "textScore" },
         },
       });
-      
+
       // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
       const arrayFilters: Record<string, any> = {};
       if (categories?.length) arrayFilters.categories = { $in: categories };
       if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
       if (ingredients?.length) arrayFilters.ingredients = { $all: ingredients };
-      
+
       if (Object.keys(arrayFilters).length > 0) {
         pipeline.push({ $match: arrayFilters });
       }
@@ -352,10 +367,7 @@ class ProductService {
 
     pipeline.push({
       $facet: {
-        data: [
-          { $skip: skip },
-          { $limit: limit },
-        ],
+        data: [{ $skip: skip }, { $limit: limit }],
         total: [{ $count: "value" }],
       },
     });
@@ -409,6 +421,18 @@ class ProductService {
       }).lean();
     }
 
+    // Fetch linked product ingredient entities (admin curated)
+    let linkedProductIngredients: any[] = [];
+    if (product.productIngredients && product.productIngredients.length > 0) {
+      linkedProductIngredients = await ProductIngredients.find({
+        _id: { $in: product.productIngredients },
+        isDeleted: { $ne: true },
+        isActive: true,
+      })
+        .sort({ name: 1 })
+        .lean();
+    }
+
     // Build meta data if not present
     const meta = product.meta || {
       title: product.title,
@@ -426,6 +450,7 @@ class ProductService {
       ...product,
       variants: variants || [],
       detailedIngredients: detailedIngredients || [],
+      productIngredientDetails: linkedProductIngredients || [],
       meta,
       // Ensure nutritionTable exists (can be empty array)
       nutritionTable: product.nutritionTable || [],
@@ -486,7 +511,10 @@ class ProductService {
 
     // Validate standupPouchPrices if hasStandupPouch is true
     if (hasStandupPouch && !standupPouchPrices) {
-      throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
+      throw new AppError(
+        "standupPouchPrices is required when hasStandupPouch is true",
+        400
+      );
     }
 
     const shouldDeleteOldImage =
@@ -615,14 +643,30 @@ class ProductService {
     sachets: number;
     standupPouch: number;
   }> {
-    const [total, active, draft, hidden, sachets, standupPouch] = await Promise.all([
-      Products.countDocuments({ isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.ACTIVE, isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.DRAFT, isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.HIDDEN, isDeleted: false }),
-      Products.countDocuments({ variant: ProductVariant.SACHETS, isDeleted: false }),
-      Products.countDocuments({ variant: ProductVariant.STAND_UP_POUCH, isDeleted: false }),
-    ]);
+    const [total, active, draft, hidden, sachets, standupPouch] =
+      await Promise.all([
+        Products.countDocuments({ isDeleted: false }),
+        Products.countDocuments({
+          status: ProductStatus.ACTIVE,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          status: ProductStatus.DRAFT,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          status: ProductStatus.HIDDEN,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          variant: ProductVariant.SACHETS,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          variant: ProductVariant.STAND_UP_POUCH,
+          isDeleted: false,
+        }),
+      ]);
 
     return {
       total,
@@ -664,4 +708,3 @@ class ProductService {
 }
 
 export const productService = new ProductService();
-

@@ -19,6 +19,7 @@ import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
+import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
 import memberRoutes from "./memberRoutes";
 
 const router = Router();
@@ -28,6 +29,7 @@ router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/admin/users", adminUserRoutes);
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
+router.use("/admin/product-ingredients", adminProductIngredientRoutes);
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
