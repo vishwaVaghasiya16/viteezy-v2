@@ -37,6 +37,8 @@ export interface IUser extends Document {
   membershipActivatedAt?: Date;
   lastLogin?: Date;
   sessionIds?: IUserSessionInfo[];
+  passwordResetToken?: string;
+  passwordResetTokenExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -149,6 +151,14 @@ const userSchema = new Schema<IUser>(
         deviceInfo: { type: String, trim: true },
       },
     ],
+    passwordResetToken: {
+      type: String,
+      select: false, // Don't include in queries by default
+    },
+    passwordResetTokenExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,

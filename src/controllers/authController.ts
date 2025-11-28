@@ -112,15 +112,15 @@ class AuthController {
   );
 
   /**
-   * Reset password
+   * Reset password using reset token from email link
    */
   resetPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, otp, newPassword } = req.body;
+      const { email, token, newPassword } = req.body;
 
       const result = await authService.resetPassword({
         email,
-        otp,
+        token,
         newPassword,
       });
 

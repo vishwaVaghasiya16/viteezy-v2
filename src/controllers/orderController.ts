@@ -539,6 +539,10 @@ class OrderController {
         .select(
           "orderNumber planType status items subtotal tax shipping discount couponDiscount membershipDiscount total paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
         )
+        .populate(
+          "items.productId",
+          "title slug description media categories tags status"
+        )
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)

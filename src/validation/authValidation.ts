@@ -208,14 +208,28 @@ export const forgotPasswordSchema = Joi.object(
 ).label("ForgotPasswordPayload");
 
 /**
+ * Reset Password Token Validation Schema
+ * @constant {Joi.StringSchema} resetTokenSchema
+ * @description Validates password reset token format
+ */
+const resetTokenSchema = Joi.string()
+  .min(32)
+  .required()
+  .label("Reset Token")
+  .messages({
+    "string.min": "Invalid reset token format",
+    "any.required": "Reset token is required",
+  });
+
+/**
  * Reset Password Validation Schema
  * @constant {Joi.ObjectSchema} resetPasswordSchema
- * @description Validates reset password request data
+ * @description Validates reset password request data (uses token instead of OTP)
  */
 export const resetPasswordSchema = Joi.object(
   withFieldLabels({
     email: emailSchema,
-    otp: otpSchema,
+    token: resetTokenSchema,
     newPassword: passwordSchema,
   })
 ).label("ResetPasswordPayload");

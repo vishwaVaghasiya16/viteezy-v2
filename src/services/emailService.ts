@@ -170,7 +170,7 @@ class EmailService {
   }
 
   /**
-   * Send password reset email
+   * Send password reset email (OTP-based - kept for backward compatibility)
    */
   async sendPasswordResetEmail(email: string, otp: string): Promise<boolean> {
     try {
@@ -202,6 +202,54 @@ class EmailService {
         code: error?.code,
         response: error?.response?.body,
       });
+      return false;
+    }
+  }
+
+  /**
+   * Send password reset link email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param resetUrl - Password reset URL with token
+   */
+  async sendPasswordResetLinkEmail(
+    email: string,
+    name: string,
+    resetUrl: string
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Password reset link for ${email}: ${resetUrl}`);
+        return true;
+      }
+
+      const subject = "Reset Your Password - Viteezy";
+      const html = this.getPasswordResetLinkEmailTemplate(name, resetUrl);
+      const text = `Hello ${name},\n\nPlease click the following link to reset your password:\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this password reset, please ignore this email.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Password reset link sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send password reset link via SendGrid:", {
+        email,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      // In development, log the reset URL
+      if (!this.isConfigured) {
+        logger.info(`[FALLBACK] Password reset link for ${email}: ${resetUrl}`);
+      }
       return false;
     }
   }
@@ -683,7 +731,7 @@ The Viteezy Team
   }
 
   /**
-   * Get password reset email HTML template
+   * Get password reset email HTML template (OTP-based - kept for backward compatibility)
    */
   private getPasswordResetEmailTemplate(otp: string): string {
     return `
@@ -728,6 +776,76 @@ The Viteezy Team
           </div>
           <div class="footer">
             <p>© 2024 Viteezy. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get password reset link email HTML template
+   */
+  private getPasswordResetLinkEmailTemplate(
+    name: string,
+    resetUrl: string
+  ): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Reset Your Password - Viteezy</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #dc2626; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+          .button { 
+            display: inline-block; 
+            background: #dc2626; 
+            color: white; 
+            padding: 14px 28px; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            margin: 20px 0;
+            text-align: center;
+          }
+          .button:hover { background: #b91c1c; }
+          .link-fallback { 
+            color: #6b7280; 
+            font-size: 12px; 
+            word-break: break-all; 
+            margin-top: 10px;
+          }
+          .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 14px; }
+          .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; border-radius: 4px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Viteezy</h1>
+            <h2>Reset Your Password</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>You requested to reset your password. Click the button below to create a new password:</p>
+            <div style="text-align: center;">
+              <a href="${resetUrl}" class="button">Reset Password</a>
+            </div>
+            <p class="link-fallback">If the button doesn't work, copy and paste this link into your browser:<br>${resetUrl}</p>
+            <div class="warning">
+              <strong>⚠️ Important:</strong> This link will expire in 1 hour for security reasons.
+            </div>
+            <p>If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+            <p>Best regards,<br>The Viteezy Team</p>
+          </div>
+          <div class="footer">
+            <p>© 2024 Viteezy. All rights reserved.</p>
+            <p>This is an automated email. Please do not reply.</p>
           </div>
         </div>
       </body>
