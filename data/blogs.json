@@ -26,10 +26,7 @@
             "vitamins",
             "immune"
         ],
-        "featuredImage": {
-            "type": "image",
-            "url": "https://cdn.example.com/blogs/immune-stack.jpg"
-        },
+        "coverImage": "https://cdn.example.com/blogs/immune-stack.jpg",
         "status": "Published",
         "publishedAt": {
             "$date": "2024-08-01T08:00:00.000Z"

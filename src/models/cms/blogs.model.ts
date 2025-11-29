@@ -10,10 +10,11 @@ import {
   I18nTextType,
   MediaType,
   SeoType,
+  AuditType,
 } from "../common.model";
 import { BlogStatus, BLOG_STATUS_VALUES } from "../enums";
 
-export interface IBlog extends Document {
+export interface IBlog extends Document, AuditType {
   slug: string;
   title: I18nStringType;
   excerpt: I18nTextType;
@@ -21,7 +22,7 @@ export interface IBlog extends Document {
   authorId: mongoose.Types.ObjectId;
   categoryId: mongoose.Types.ObjectId;
   tags: string[];
-  featuredImage?: MediaType;
+  coverImage?: string | null;
   gallery?: MediaType[];
   status: BlogStatus;
   publishedAt?: Date;
@@ -29,6 +30,8 @@ export interface IBlog extends Document {
   viewCount: number;
   likeCount: number;
   commentCount: number;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,8 +68,10 @@ const BlogSchema = new Schema<IBlog>(
         trim: true,
       },
     ],
-    featuredImage: {
-      type: MediaSchema,
+    coverImage: {
+      type: String,
+      trim: true,
+      default: null,
     },
     gallery: [
       {
@@ -101,7 +106,7 @@ const BlogSchema = new Schema<IBlog>(
       min: 0,
     },
     ...SoftDelete,
-    ...AuditSchema.obj,
+    ...(AuditSchema.obj as Record<string, unknown>),
   },
   {
     timestamps: true,

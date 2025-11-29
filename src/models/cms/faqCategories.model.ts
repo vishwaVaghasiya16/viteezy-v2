@@ -1,7 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { I18nString, I18nStringType, SoftDelete } from "../common.model";
+import {
+  I18nString,
+  I18nStringType,
+  SoftDelete,
+  AuditSchema,
+  AuditType,
+} from "../common.model";
 
-export interface IFaqCategory extends Document {
+export interface IFaqCategory extends Document, AuditType {
   title: I18nStringType;
   slug?: string;
   isActive: boolean;
@@ -32,6 +38,7 @@ const FaqCategorySchema = new Schema<IFaqCategory>(
       default: 0,
     },
     ...SoftDelete,
+    ...(AuditSchema.obj as Record<string, unknown>),
   },
   {
     timestamps: true,
