@@ -293,6 +293,22 @@ export const updateProfileSchema = Joi.object(
         "number.max": "Age cannot exceed 150",
         "number.integer": "Age must be an integer",
       }),
+    language: Joi.string()
+      .valid(
+        "English",
+        "Dutch",
+        "German",
+        "French",
+        "Spanish",
+        "Italian",
+        "Portuguese"
+      )
+      .optional()
+      .label("Language")
+      .messages({
+        "any.only":
+          "Language must be one of: English, Dutch, German, French, Spanish, Italian, Portuguese",
+      }),
   })
 ).label("UpdateProfilePayload");
 

@@ -217,6 +217,7 @@ class AuthController {
             profileImage: fullUser.profileImage,
             gender: fullUser.gender,
             age: fullUser.age,
+            language: fullUser.language || "English",
             lastLogin: fullUser.lastLogin,
             registeredAt: registrationDate,
             createdAt: fullUser.createdAt,
@@ -233,7 +234,8 @@ class AuthController {
   updateProfile = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id;
-      const { name, phone, countryCode, profileImage, gender, age } = req.body;
+      const { name, phone, countryCode, profileImage, gender, age, language } =
+        req.body;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -247,6 +249,7 @@ class AuthController {
       if (profileImage !== undefined) updateData.profileImage = profileImage;
       if (gender !== undefined) updateData.gender = gender;
       if (age !== undefined) updateData.age = age;
+      if (language !== undefined) updateData.language = language;
 
       // Update user profile
       const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
@@ -277,6 +280,7 @@ class AuthController {
             profileImage: updatedUser.profileImage,
             gender: updatedUser.gender,
             age: updatedUser.age,
+            language: updatedUser.language || "English",
             lastLogin: updatedUser.lastLogin,
             registeredAt: registrationDate,
             createdAt: updatedUser.createdAt,

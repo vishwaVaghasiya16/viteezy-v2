@@ -45,7 +45,8 @@ class UserController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { name, phone, countryCode, profileImage, gender, age } = req.body;
+      const { name, phone, countryCode, profileImage, gender, age, language } =
+        req.body;
 
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
@@ -54,6 +55,7 @@ class UserController {
       if (profileImage !== undefined) updateData.profileImage = profileImage;
       if (gender !== undefined) updateData.gender = gender;
       if (age !== undefined) updateData.age = age;
+      if (language !== undefined) updateData.language = language;
 
       const updatedUser = await User.findByIdAndUpdate(
         req.user._id,

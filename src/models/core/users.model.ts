@@ -30,6 +30,7 @@ export interface IUser extends Document {
   profileImage?: string;
   gender?: Gender;
   age?: number;
+  language?: string; // User's preferred language (default: "English")
   memberId?: string; // Unique member ID (e.g., MEM-A9XK72QD)
   isMember?: boolean;
   membershipStatus?: MembershipStatus;
@@ -114,6 +115,20 @@ const userSchema = new Schema<IUser>(
       min: [1, "Age must be at least 1"],
       max: [150, "Age cannot exceed 150"],
       default: null,
+    },
+    language: {
+      type: String,
+      trim: true,
+      default: "English",
+      enum: [
+        "English",
+        "Dutch",
+        "German",
+        "French",
+        "Spanish",
+        "Italian",
+        "Portuguese",
+      ],
     },
     registeredAt: {
       type: Date,

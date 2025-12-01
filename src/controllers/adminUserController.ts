@@ -169,7 +169,7 @@ class AdminUserController {
       // Get user basic info
       const user = await User.findById(id)
         .select(
-          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt"
+          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt language"
         )
         .lean();
 
@@ -293,7 +293,7 @@ class AdminUserController {
         email: user.email,
         phone: user.phone || null,
         countryCode: user.countryCode || null,
-        language: null, // Language field not found in user model
+        language: user.language || "English", // Default to English if not set
       };
 
       // Format linked family list

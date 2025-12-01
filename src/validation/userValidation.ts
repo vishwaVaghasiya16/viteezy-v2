@@ -22,6 +22,22 @@ export const updateCurrentUserSchema = Joi.object(
       .allow(null)
       .valid(...GENDER_VALUES),
     age: Joi.number().integer().min(1).max(150).allow(null),
+    language: Joi.string()
+      .valid(
+        "English",
+        "Dutch",
+        "German",
+        "French",
+        "Spanish",
+        "Italian",
+        "Portuguese"
+      )
+      .optional()
+      .label("Language")
+      .messages({
+        "any.only":
+          "Language must be one of: English, Dutch, German, French, Spanish, Italian, Portuguese",
+      }),
   })
 )
   .min(1)
