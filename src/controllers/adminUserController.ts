@@ -2,8 +2,15 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { User } from "@/models/core";
-import { Orders } from "@/models/commerce";
+import { User, MemberReferrals, Addresses } from "@/models/core";
+import {
+  Orders,
+  Subscriptions,
+  Memberships,
+  Payments,
+  Products,
+} from "@/models/commerce";
+import { PaymentStatus } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -145,7 +152,7 @@ class AdminUserController {
   );
 
   /**
-   * Get user by ID
+   * Get user by ID with comprehensive details
    * @route GET /api/v1/admin/users/:id
    * @access Admin
    */
@@ -157,9 +164,12 @@ class AdminUserController {
         throw new AppError("Invalid user ID", 400);
       }
 
+      const userId = new mongoose.Types.ObjectId(id);
+
+      // Get user basic info
       const user = await User.findById(id)
         .select(
-          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt"
         )
         .lean();
 
@@ -167,13 +177,181 @@ class AdminUserController {
         throw new AppError("User not found", 404);
       }
 
-      // Get user order count and determine type
-      const orderCount = await Orders.countDocuments({
-        userId: new mongoose.Types.ObjectId(id),
+      // Get all data in parallel
+      const [
+        totalOrderCount,
+        totalSpentResult,
+        subscriptions,
+        activeMembership,
+        addresses,
+        linkedFamilyMembers,
+        recentOrders,
+      ] = await Promise.all([
+        // Total order count
+        Orders.countDocuments({ userId }),
+
+        // Total spent (sum of all successful order totals)
+        Orders.aggregate([
+          {
+            $match: {
+              userId,
+              paymentStatus: PaymentStatus.COMPLETED, // Only count completed/paid orders
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalSpent: { $sum: "$total.amount" },
+              currency: { $first: "$total.currency" },
+            },
+          },
+        ]),
+
+        // Active subscriptions
+        Subscriptions.find({
+          userId,
+          status: "Active",
+          isDeleted: { $ne: true },
+        })
+          .select(
+            "subscriptionNumber createdAt nextBillingDate cycleDays status"
+          )
+          .sort({ createdAt: -1 })
+          .lean(),
+
+        // Active membership
+        Memberships.findOne({
+          userId,
+          status: "Active",
+          isDeleted: { $ne: true },
+          expiresAt: { $gt: new Date() },
+        })
+          .select("startedAt expiresAt status planSnapshot")
+          .lean(),
+
+        // User addresses
+        Addresses.find({ userId, isDeleted: { $ne: true } })
+          .select(
+            "firstName lastName phone country state city zip addressLine1 addressLine2 houseNumber houseNumberAddition isDefault type label"
+          )
+          .sort({ isDefault: -1, createdAt: -1 })
+          .lean(),
+
+        // Linked family members (children registered using this user's member ID)
+        MemberReferrals.find({
+          parentUserId: userId,
+          isActive: true,
+          isDeleted: { $ne: true },
+        })
+          .populate("childUserId", "name email phone countryCode profileImage")
+          .select("childUserId registeredAt")
+          .sort({ registeredAt: -1 })
+          .lean(),
+
+        // Recent orders (last 10)
+        Orders.find({ userId })
+          .select(
+            "_id orderNumber paymentMethod createdAt total items paymentStatus paymentId"
+          )
+          .populate("items.productId", "title productImage slug")
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean(),
+      ]);
+
+      // Calculate total spent
+      const totalSpent =
+        totalSpentResult.length > 0
+          ? {
+              amount: totalSpentResult[0].totalSpent || 0,
+              currency: totalSpentResult[0].currency || "EUR",
+            }
+          : { amount: 0, currency: "EUR" };
+
+      // Format subscriptions
+      const subscriptionDetails = subscriptions.map((sub) => ({
+        purchaseDate: sub.createdAt,
+        nextBillingDate: sub.nextBillingDate,
+        dayPlans: sub.cycleDays, // 60, 90, or 180 days
+        subscriptionNumber: sub.subscriptionNumber,
+        status: sub.status,
+      }));
+
+      // Format membership
+      const membershipDetails = activeMembership
+        ? {
+            planStartDate: activeMembership.startedAt || null,
+            planEndDate: activeMembership.expiresAt || null,
+            membershipStatus: activeMembership.status || null,
+            planName: activeMembership.planSnapshot?.name || null,
+          }
+        : null;
+
+      // Format addresses
+      const personalDetails = {
+        address: addresses.length > 0 ? addresses[0] : null, // Default or first address
+        email: user.email,
+        phone: user.phone || null,
+        countryCode: user.countryCode || null,
+        language: null, // Language field not found in user model
+      };
+
+      // Format linked family list
+      const linkedFamilyList = linkedFamilyMembers.map((referral: any) => {
+        const childUser = referral.childUserId;
+        return {
+          profileImage: childUser?.profileImage || null,
+          email: childUser?.email || null,
+          phone: childUser?.phone || null,
+          countryCode: childUser?.countryCode || null,
+          registeredAt: referral.registeredAt,
+        };
       });
 
-      const isRecurring =
-        orderCount > 0 || (user.lastLogin && user.lastLogin !== null);
+      // Get payment details for recent orders
+      const orderIds = recentOrders.map((order: any) => order._id);
+      const payments = await Payments.find({
+        orderId: { $in: orderIds },
+      })
+        .select("orderId paymentMethod")
+        .lean();
+
+      const paymentMethodMap = new Map(
+        payments.map((payment: any) => [
+          payment.orderId.toString(),
+          payment.paymentMethod,
+        ])
+      );
+
+      // Format recent orders
+      const formattedRecentOrders = recentOrders.map((order: any) => {
+        // Get payment method from payment record, fallback to order paymentMethod
+        const paymentMethod =
+          paymentMethodMap.get(order._id.toString()) ||
+          order.paymentMethod ||
+          "Unknown";
+
+        // Format order items
+        const orderItems = (order.items || []).map((item: any) => {
+          const product = item.productId || {};
+          return {
+            productName: item.name || product.title || "Unknown Product",
+            productImage: product.productImage || null,
+            productPrice: item.price || null,
+            quantity: item.quantity || 1,
+          };
+        });
+
+        return {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          paymentMethod: paymentMethod, // Mollie, Stripe, etc.
+          orderCreatedDate: order.createdAt,
+          orderTotalAmount: order.total || null,
+          items: orderItems,
+          paymentStatus: order.paymentStatus,
+        };
+      });
 
       // Use registeredAt if set, otherwise fallback to createdAt
       const registrationDate = user.registeredAt || user.createdAt;
@@ -181,20 +359,40 @@ class AdminUserController {
       res.apiSuccess(
         {
           user: {
-            _id: user._id,
+            // Basic Info
             name: user.name,
-            email: user.email,
-            phone: user.phone || null,
-            memberId: user.memberId || null,
-            countryCode: user.countryCode || null,
-            registeredAt: registrationDate,
-            status: {
-              userType: isRecurring ? "recurring" : "new",
-              isActive: user.isActive,
-            },
+            profileImage: user.profileImage || null,
+
+            // Status
+            isPremiumMember: user.isMember || false,
+            isActive: user.isActive,
+
+            // Registration & Membership
+            registrationDate: registrationDate,
+            membershipId: user.memberId || null,
+
+            // Order Statistics
+            totalOrderCount: totalOrderCount,
+            totalSpent: totalSpent,
+
+            // Subscription Details
+            subscriptionDetails:
+              subscriptionDetails.length > 0 ? subscriptionDetails : null,
+
+            // Membership Details
+            membership: membershipDetails,
+
+            // Personal Details
+            personalDetails: personalDetails,
+
+            // Linked Family List
+            linkedFamilyList: linkedFamilyList,
+
+            // Recent Orders
+            recentOrders: formattedRecentOrders,
           },
         },
-        "User retrieved successfully"
+        "User details retrieved successfully"
       );
     }
   );
