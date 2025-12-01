@@ -27,6 +27,7 @@ import adminCouponRoutes from "./adminCouponRoutes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 import adminProductTestimonialRoutes from "./adminProductTestimonialRoutes";
 import adminUserRoutes from "./adminUserRoutes";
+import adminGeneralSettingsRoutes from "./adminGeneralSettingsRoutes";
 import memberRoutes from "./memberRoutes";
 
 const router = Router();
@@ -45,6 +46,7 @@ router.use("/admin/coupons", adminCouponRoutes);
 router.use("/admin/dashboard", adminDashboardRoutes);
 router.use("/admin/product-testimonials", adminProductTestimonialRoutes);
 router.use("/admin/users", adminUserRoutes);
+router.use("/admin/general-settings", adminGeneralSettingsRoutes);
 
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);

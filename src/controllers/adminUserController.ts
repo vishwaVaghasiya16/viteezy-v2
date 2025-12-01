@@ -453,7 +453,7 @@ class AdminUserController {
             countryCode: user.countryCode || null,
             registeredAt: user.registeredAt || user.createdAt,
             status: {
-              userType: "recurring", // Will be calculated if needed
+              userType: "Recurring User", // Will be calculated if needed
               isActive: user.isActive,
             },
           },
