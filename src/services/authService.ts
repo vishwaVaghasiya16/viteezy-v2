@@ -13,6 +13,7 @@ interface RegisterData {
   email: string;
   password: string;
   phone?: string;
+  countryCode?: string;
 }
 
 interface LoginData {
@@ -201,7 +202,7 @@ class AuthService {
    * Register new user
    */
   async register(data: RegisterData): Promise<{ user: any; message: string }> {
-    const { name, email, password, phone } = data;
+    const { name, email, password, phone, countryCode } = data;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -219,6 +220,14 @@ class AuthService {
 
       if (typeof phone !== "undefined" && existingUser.phone !== phone) {
         existingUser.phone = phone;
+        userUpdated = true;
+      }
+
+      if (
+        typeof countryCode !== "undefined" &&
+        existingUser.countryCode !== countryCode
+      ) {
+        existingUser.countryCode = countryCode;
         userUpdated = true;
       }
 
@@ -258,14 +267,20 @@ class AuthService {
         );
       }
 
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate =
+        existingUser.registeredAt || existingUser.createdAt;
+
       return {
         user: {
           _id: existingUser._id,
           name: existingUser.name,
           email: existingUser.email,
           phone: existingUser.phone,
+          countryCode: existingUser.countryCode,
           memberId: existingUser.memberId,
           isEmailVerified: existingUser.isEmailVerified,
+          registeredAt: registrationDate,
         },
         message:
           "Registration successful. Please verify your email with the OTP sent.",
@@ -276,11 +291,13 @@ class AuthService {
     const memberId = await generateMemberId();
 
     // Create user (password will be hashed by pre-save hook)
+    // registeredAt will be automatically set by pre-save hook
     const user = await User.create({
       name,
       email,
       password, // Let the pre-save hook handle hashing
       phone,
+      countryCode,
       memberId, // Assign generated member ID
       isEmailVerified: false,
     });
@@ -299,14 +316,19 @@ class AuthService {
     // Send welcome email asynchronously to avoid delaying the API response
     this.sendWelcomeEmailAsync(email, name);
 
+    // Use registeredAt if set, otherwise fallback to createdAt
+    const registrationDate = user.registeredAt || user.createdAt;
+
     return {
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
+        countryCode: user.countryCode,
         memberId: user.memberId, // Include member ID in response
         isEmailVerified: user.isEmailVerified,
+        registeredAt: registrationDate,
       },
       message:
         "Registration successful. Please verify your email with the OTP sent.",

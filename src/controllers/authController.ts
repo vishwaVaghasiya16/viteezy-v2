@@ -16,13 +16,14 @@ class AuthController {
    */
   register = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { name, email, password, phone } = req.body;
+      const { name, email, password, phone, countryCode } = req.body;
 
       const result = await authService.register({
         name,
         email,
         password,
         phone,
+        countryCode,
       });
 
       res.apiCreated(
@@ -191,22 +192,34 @@ class AuthController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const user = req.user;
 
+      // Get full user data from database to ensure we have all fields
+      const fullUser = await User.findById(user?.id).select("-password").lean();
+
+      if (!fullUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate = fullUser.registeredAt || fullUser.createdAt;
+
       res.apiSuccess(
         {
           user: {
-            _id: user?.id,
-            name: user?.name,
-            email: user?.email,
-            phone: user?.phone,
-            isEmailVerified: user?.isEmailVerified,
-            role: user?.role,
-            isActive: user?.isActive,
-            avatar: user?.avatar,
-            profileImage: user?.profileImage,
-            gender: user?.gender,
-            age: user?.age,
-            lastLogin: user?.lastLogin,
-            createdAt: user?.createdAt,
+            _id: fullUser._id,
+            name: fullUser.name,
+            email: fullUser.email,
+            phone: fullUser.phone,
+            countryCode: fullUser.countryCode,
+            isEmailVerified: fullUser.isEmailVerified,
+            role: fullUser.role,
+            isActive: fullUser.isActive,
+            avatar: fullUser.avatar,
+            profileImage: fullUser.profileImage,
+            gender: fullUser.gender,
+            age: fullUser.age,
+            lastLogin: fullUser.lastLogin,
+            registeredAt: registrationDate,
+            createdAt: fullUser.createdAt,
           },
         },
         "Profile retrieved successfully"
@@ -220,7 +233,7 @@ class AuthController {
   updateProfile = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?.id;
-      const { name, phone, profileImage, gender, age } = req.body;
+      const { name, phone, countryCode, profileImage, gender, age } = req.body;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -230,6 +243,7 @@ class AuthController {
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (phone !== undefined) updateData.phone = phone;
+      if (countryCode !== undefined) updateData.countryCode = countryCode;
       if (profileImage !== undefined) updateData.profileImage = profileImage;
       if (gender !== undefined) updateData.gender = gender;
       if (age !== undefined) updateData.age = age;
@@ -244,6 +258,10 @@ class AuthController {
         throw new AppError("User not found", 404);
       }
 
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate =
+        updatedUser.registeredAt || updatedUser.createdAt;
+
       res.apiSuccess(
         {
           user: {
@@ -251,6 +269,7 @@ class AuthController {
             name: updatedUser.name,
             email: updatedUser.email,
             phone: updatedUser.phone,
+            countryCode: updatedUser.countryCode,
             isEmailVerified: updatedUser.isEmailVerified,
             role: updatedUser.role,
             isActive: updatedUser.isActive,
@@ -259,6 +278,7 @@ class AuthController {
             gender: updatedUser.gender,
             age: updatedUser.age,
             lastLogin: updatedUser.lastLogin,
+            registeredAt: registrationDate,
             createdAt: updatedUser.createdAt,
             updatedAt: updatedUser.updatedAt,
           },

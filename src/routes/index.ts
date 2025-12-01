@@ -1,7 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes";
 import userRoutes from "./userRoutes";
-import adminUserRoutes from "./adminUserRoutes";
 import exampleRoutes from "./exampleRoutes";
 import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
@@ -27,6 +26,7 @@ import adminFaqRoutes from "./adminFaqRoutes";
 import adminCouponRoutes from "./adminCouponRoutes";
 import adminDashboardRoutes from "./adminDashboardRoutes";
 import adminProductTestimonialRoutes from "./adminProductTestimonialRoutes";
+import adminUserRoutes from "./adminUserRoutes";
 import memberRoutes from "./memberRoutes";
 
 const router = Router();
@@ -34,7 +34,7 @@ const router = Router();
 // API Routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-router.use("/admin/users", adminUserRoutes);
+
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
 router.use("/admin/product-ingredients", adminProductIngredientRoutes);
 router.use("/admin/blog-categories", adminBlogCategoryRoutes);
@@ -44,6 +44,8 @@ router.use("/admin/faqs", adminFaqRoutes);
 router.use("/admin/coupons", adminCouponRoutes);
 router.use("/admin/dashboard", adminDashboardRoutes);
 router.use("/admin/product-testimonials", adminProductTestimonialRoutes);
+router.use("/admin/users", adminUserRoutes);
+
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);

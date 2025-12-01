@@ -20,6 +20,7 @@ export interface IUser extends Document {
   _id: string;
   name: string;
   email: string;
+  countryCode?: string;
   password: string;
   phone?: string;
   role: UserRole;
@@ -39,6 +40,7 @@ export interface IUser extends Document {
   sessionIds?: IUserSessionInfo[];
   passwordResetToken?: string;
   passwordResetTokenExpires?: Date;
+  registeredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -67,6 +69,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true,
       match: [/^[+]?[1-9]\d{1,14}$/, "Please enter a valid phone number"],
+      default: null,
+    },
+    countryCode: {
+      type: String,
+      trim: true,
+      default: null,
     },
     password: {
       type: String,
@@ -107,6 +115,10 @@ const userSchema = new Schema<IUser>(
       max: [150, "Age cannot exceed 150"],
       default: null,
     },
+    registeredAt: {
+      type: Date,
+      default: null,
+    },
     memberId: {
       type: String,
       unique: true,
@@ -123,7 +135,7 @@ const userSchema = new Schema<IUser>(
     membershipStatus: {
       type: String,
       enum: MEMBERSHIP_STATUS_VALUES,
-      default: MembershipStatus.EXPIRED,
+      default: MembershipStatus.NONE, // New users haven't purchased membership yet
     },
     membershipPlanId: {
       type: Schema.Types.ObjectId,
@@ -171,6 +183,15 @@ const userSchema = new Schema<IUser>(
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
+
+// Set registeredAt to createdAt if not already set (for new users)
+userSchema.pre("save", function (next) {
+  // Only set registeredAt if it's a new document and registeredAt is not set
+  if (this.isNew && !this.registeredAt) {
+    this.registeredAt = new Date();
+  }
+  next();
+});
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {

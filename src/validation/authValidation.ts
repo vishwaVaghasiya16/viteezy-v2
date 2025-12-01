@@ -105,6 +105,21 @@ const phoneSchema = Joi.string()
   });
 
 /**
+ * Country code validation schema
+ * @constant {Joi.StringSchema} countryCodeSchema
+ * @description Validates country code (e.g., "US", "NL", "IN")
+ */
+const countryCodeSchema = Joi.string()
+  .length(2)
+  .uppercase()
+  .optional()
+  .label("Country Code")
+  .messages({
+    "string.length": "Country code must be 2 characters",
+    "string.uppercase": "Country code must be uppercase",
+  });
+
+/**
  * OTP validation schema
  * @constant {Joi.StringSchema} otpSchema
  * @description Validates 6-digit OTP code
@@ -143,6 +158,7 @@ export const registerSchema = Joi.object(
     email: emailSchema,
     password: passwordSchema,
     phone: phoneSchema,
+    countryCode: countryCodeSchema,
   })
 ).label("RegisterPayload");
 
@@ -255,6 +271,7 @@ export const updateProfileSchema = Joi.object(
   withFieldLabels({
     name: nameSchema.optional(),
     phone: phoneSchema,
+    countryCode: countryCodeSchema,
     profileImage: Joi.string().uri().optional().allow(null, "").messages({
       "string.uri": "Profile image must be a valid URL",
     }),

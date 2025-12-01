@@ -24,7 +24,18 @@ class UserController {
         throw new AppError("User not found", 404);
       }
 
-      res.apiSuccess({ user }, "User retrieved successfully");
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate = user.registeredAt || user.createdAt;
+
+      res.apiSuccess(
+        {
+          user: {
+            ...user.toObject(),
+            registeredAt: registrationDate,
+          },
+        },
+        "User retrieved successfully"
+      );
     }
   );
 
@@ -34,11 +45,12 @@ class UserController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { name, phone, profileImage, gender, age } = req.body;
+      const { name, phone, countryCode, profileImage, gender, age } = req.body;
 
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (phone !== undefined) updateData.phone = phone;
+      if (countryCode !== undefined) updateData.countryCode = countryCode;
       if (profileImage !== undefined) updateData.profileImage = profileImage;
       if (gender !== undefined) updateData.gender = gender;
       if (age !== undefined) updateData.age = age;
@@ -53,8 +65,17 @@ class UserController {
         throw new AppError("User not found", 404);
       }
 
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate =
+        updatedUser.registeredAt || updatedUser.createdAt;
+
       res.apiSuccess(
-        { user: updatedUser },
+        {
+          user: {
+            ...updatedUser.toObject(),
+            registeredAt: registrationDate,
+          },
+        },
         "User profile updated successfully"
       );
     }

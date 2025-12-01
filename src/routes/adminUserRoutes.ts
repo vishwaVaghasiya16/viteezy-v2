@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { adminUserController } from "@/controllers/adminUserController";
-import { authenticate, authorize } from "@/middleware/auth";
+import { authMiddleware, authorize } from "@/middleware/auth";
 import {
-  validateJoi,
-  validateParams,
   validateQuery,
+  validateParams,
+  validateJoi,
 } from "@/middleware/joiValidation";
+import { adminUserController } from "@/controllers/adminUserController";
 import {
   adminGetAllUsersQuerySchema,
   adminUserIdParamsSchema,
@@ -14,59 +14,54 @@ import {
 
 const router = Router();
 
+router.use(authMiddleware);
+router.use(authorize("Admin"));
+
 /**
- * Get paginated list of users (Admin/Moderator only)
+ * @route GET /api/v1/admin/users
+ * @desc Get all users with pagination and filters
+ * @access Admin
+ * @query {Number} [page] - Page number (default: 1)
+ * @query {Number} [limit] - Items per page (default: 10)
+ * @query {String} [search] - Search by name or email
+ * @query {Boolean} [isActive] - Filter by active status (true/false)
+ * @query {String} [userType] - Filter by user type: "new" or "recurring"
  */
 router.get(
   "/",
-  authenticate,
-  authorize("admin", "moderator"),
   validateQuery(adminGetAllUsersQuerySchema),
   adminUserController.getAllUsers
 );
 
 /**
- * Get aggregate statistics for users (Admin only)
+ * @route GET /api/v1/admin/users/stats
+ * @desc Get user statistics
+ * @access Admin
  */
-router.get(
-  "/stats",
-  authenticate,
-  authorize("admin"),
-  adminUserController.getUserStats
-);
+router.get("/stats", adminUserController.getUserStats);
 
 /**
- * Get a single user by ID (Admin/Moderator only)
+ * @route GET /api/v1/admin/users/:id
+ * @desc Get user by ID
+ * @access Admin
  */
 router.get(
   "/:id",
-  authenticate,
-  authorize("admin", "moderator"),
   validateParams(adminUserIdParamsSchema),
   adminUserController.getUserById
 );
 
 /**
- * Update a user's active status (Admin only)
+ * @route PATCH /api/v1/admin/users/:id/status
+ * @desc Toggle user active status (block/unblock or activate)
+ * @access Admin
+ * @body {Boolean} isActive - Active status (true to activate, false to block)
  */
 router.patch(
   "/:id/status",
-  authenticate,
-  authorize("admin"),
   validateParams(adminUserIdParamsSchema),
   validateJoi(adminUpdateUserStatusSchema),
-  adminUserController.updateUserStatus
-);
-
-/**
- * Delete a user (Admin only)
- */
-router.delete(
-  "/:id",
-  authenticate,
-  authorize("admin"),
-  validateParams(adminUserIdParamsSchema),
-  adminUserController.deleteUser
+  adminUserController.toggleUserStatus
 );
 
 export default router;

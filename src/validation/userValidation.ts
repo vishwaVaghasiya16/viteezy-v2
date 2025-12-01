@@ -8,6 +8,15 @@ export const updateCurrentUserSchema = Joi.object(
     phone: Joi.string()
       .pattern(/^[+]?[1-9]\d{1,14}$/)
       .message("Phone must be a valid E.164 number"),
+    countryCode: Joi.string()
+      .length(2)
+      .uppercase()
+      .optional()
+      .allow(null)
+      .label("Country Code")
+      .messages({
+        "string.length": "Country code must be 2 characters",
+      }),
     profileImage: Joi.string().uri().allow(null),
     gender: Joi.string()
       .allow(null)
