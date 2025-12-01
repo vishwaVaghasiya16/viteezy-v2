@@ -136,7 +136,7 @@ const SubscriptionSchema = new Schema<ISubscription>(
     gatewaySubscriptionId: {
       type: String,
       trim: true,
-      sparse: true,
+      // Note: sparse and unique are handled in schema.index() below
     },
     gatewayCustomerId: {
       type: String,

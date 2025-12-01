@@ -25,6 +25,8 @@ import adminBlogRoutes from "./adminBlogRoutes";
 import adminFaqCategoryRoutes from "./adminFaqCategoryRoutes";
 import adminFaqRoutes from "./adminFaqRoutes";
 import adminCouponRoutes from "./adminCouponRoutes";
+import adminDashboardRoutes from "./adminDashboardRoutes";
+import adminProductTestimonialRoutes from "./adminProductTestimonialRoutes";
 import memberRoutes from "./memberRoutes";
 
 const router = Router();
@@ -40,6 +42,8 @@ router.use("/admin/blogs", adminBlogRoutes);
 router.use("/admin/faq-categories", adminFaqCategoryRoutes);
 router.use("/admin/faqs", adminFaqRoutes);
 router.use("/admin/coupons", adminCouponRoutes);
+router.use("/admin/dashboard", adminDashboardRoutes);
+router.use("/admin/product-testimonials", adminProductTestimonialRoutes);
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);

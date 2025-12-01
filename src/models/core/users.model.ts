@@ -114,7 +114,7 @@ const userSchema = new Schema<IUser>(
       trim: true,
       uppercase: true,
       match: [/^MEM-[A-Z0-9]{8}$/, "Invalid member ID format"],
-      index: true,
+      // Note: unique: true automatically creates an index, so index: true is not needed
     },
     isMember: {
       type: Boolean,

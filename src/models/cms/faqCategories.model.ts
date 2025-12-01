@@ -27,7 +27,7 @@ const FaqCategorySchema = new Schema<IFaqCategory>(
       type: String,
       trim: true,
       lowercase: true,
-      sparse: true,
+      // Note: sparse and unique are handled in schema.index() below
     },
     isActive: {
       type: Boolean,

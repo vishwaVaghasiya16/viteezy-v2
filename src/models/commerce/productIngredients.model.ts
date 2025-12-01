@@ -28,7 +28,7 @@ const ProductIngredientSchema = new Schema<IProductIngredient>(
       required: true,
       lowercase: true,
       trim: true,
-      unique: true,
+      // Note: unique constraint is handled in schema.index() below with partialFilterExpression
     },
     description: {
       type: String,

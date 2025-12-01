@@ -1,0 +1,1103 @@
+[
+    {
+        "_id": {
+            "$oid": "6927dd01888781f3493ea823"
+        },
+        "title": "Vitamin C + Zinc Immune Booster",
+        "slug": "vitamin-c-zinc-immune-booster",
+        "description": "Powerful immune support formula combining high-dose Vitamin C with Zinc for enhanced immune function and antioxidant protection",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/6f615e1c-4869-4e69-b004-c1a4970214e2.png",
+        "benefits": [
+            "Strengthens immune system",
+            "Antioxidant protection",
+            "Supports wound healing",
+            "Reduces cold duration"
+        ],
+        "ingredients": [
+            "Vitamin C (Ascorbic Acid)",
+            "Zinc (Zinc Gluconate)",
+            "Rosehip Extract",
+            "Bioflavonoids"
+        ],
+        "categories": [
+            "Immune Support",
+            "Vitamins",
+            "Antioxidants",
+            "Cold & Flu"
+        ],
+        "healthGoals": [
+            "Immune Support",
+            "Cold Prevention",
+            "Antioxidant Protection",
+            "Recovery Support"
+        ],
+        "nutritionInfo": "Each serving provides 1000mg Vitamin C and 15mg Zinc for optimal immune support",
+        "nutritionTable": [
+            {
+                "nutrient": "Vitamin C",
+                "amount": "1000",
+                "unit": "mg",
+                "dailyValue": "1111%"
+            },
+            {
+                "nutrient": "Zinc",
+                "amount": "15",
+                "unit": "mg",
+                "dailyValue": "100%"
+            },
+            {
+                "nutrient": "Rosehip Extract",
+                "amount": "50",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Bioflavonoids",
+                "amount": "25",
+                "unit": "mg",
+                "dailyValue": "-"
+            }
+        ],
+        "howToUse": "Take one sachet daily, preferably with food. Increase to 2-3 sachets daily during cold season or as needed.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 24.99,
+            "taxRate": 0.21
+        },
+        "variant": "SACHETS",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Vitamin C + Zinc Immune Booster - Enhanced Immunity",
+            "description": "Powerful immune support with 1000mg Vitamin C and 15mg Zinc for enhanced immune function",
+            "keywords": "vitamin c, zinc, immune support, immune booster, cold prevention, antioxidants",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Immune Health Labs",
+            "countryOfOrigin": "Belgium",
+            "certification": [
+                "GMP",
+                "ISO 22000"
+            ],
+            "batchNumber": "VCZ-2025-156",
+            "expiryDate": {
+                "$date": "2026-03-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:09:21.491Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:09:21.491Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd02888781f3493ea824"
+        },
+        "title": "Omega-3 Premium Fish Oil",
+        "slug": "omega-3-premium-fish-oil",
+        "description": "High-quality fish oil supplement rich in EPA and DHA omega-3 fatty acids for heart, brain, and joint health support",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/7a725f2d-5970-5f7a-c115-d2b5081325f3.png",
+        "benefits": [
+            "Supports heart health",
+            "Promotes brain function",
+            "Reduces inflammation",
+            "Supports joint mobility"
+        ],
+        "ingredients": [
+            "Fish Oil (Sardine, Anchovy)",
+            "EPA (Eicosapentaenoic Acid)",
+            "DHA (Docosahexaenoic Acid)",
+            "Vitamin E (Natural Tocopherols)"
+        ],
+        "categories": [
+            "Heart Health",
+            "Brain Support",
+            "Omega-3",
+            "Joint Health"
+        ],
+        "healthGoals": [
+            "Heart Health",
+            "Brain Function",
+            "Inflammation Reduction",
+            "Joint Support"
+        ],
+        "nutritionInfo": "Each softgel provides 1000mg fish oil with 300mg EPA and 200mg DHA",
+        "nutritionTable": [
+            {
+                "nutrient": "Fish Oil",
+                "amount": "1000",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "EPA",
+                "amount": "300",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "DHA",
+                "amount": "200",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Vitamin E",
+                "amount": "10",
+                "unit": "IU",
+                "dailyValue": "33%"
+            }
+        ],
+        "howToUse": "Take 2 softgels daily with meals, or as directed by your healthcare provider.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 29.99,
+            "taxRate": 0.21
+        },
+        "variant": "SOFTGELS",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Omega-3 Premium Fish Oil - Heart & Brain Support",
+            "description": "High-quality fish oil with 300mg EPA and 200mg DHA for optimal heart and brain health",
+            "keywords": "omega-3, fish oil, EPA, DHA, heart health, brain support, joint health",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Marine Health Solutions",
+            "countryOfOrigin": "Norway",
+            "certification": [
+                "IFOS Certified",
+                "GMP",
+                "MSC Certified"
+            ],
+            "batchNumber": "OM3-2025-287",
+            "expiryDate": {
+                "$date": "2026-06-30T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:15:30.123Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:15:30.123Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd03888781f3493ea825"
+        },
+        "title": "Daily Multivitamin Complete",
+        "slug": "daily-multivitamin-complete",
+        "description": "Comprehensive daily multivitamin with 25 essential vitamins and minerals to support overall health and wellness",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/8b836e3e-6a81-6f8b-d226-e3c6192436g4.png",
+        "benefits": [
+            "Complete nutritional support",
+            "Energy production",
+            "Immune system support",
+            "Bone health maintenance"
+        ],
+        "ingredients": [
+            "Vitamin A",
+            "Vitamin C",
+            "Vitamin D3",
+            "Vitamin E",
+            "B-Complex Vitamins",
+            "Calcium",
+            "Magnesium",
+            "Zinc",
+            "Iron",
+            "Selenium"
+        ],
+        "categories": [
+            "Multivitamins",
+            "Daily Essentials",
+            "General Health",
+            "Energy Support"
+        ],
+        "healthGoals": [
+            "Overall Wellness",
+            "Energy Boost",
+            "Immune Support",
+            "Nutritional Gap Filling"
+        ],
+        "nutritionInfo": "One tablet provides 100% or more of the daily value for most essential vitamins and minerals",
+        "nutritionTable": [
+            {
+                "nutrient": "Vitamin A",
+                "amount": "5000",
+                "unit": "IU",
+                "dailyValue": "100%"
+            },
+            {
+                "nutrient": "Vitamin C",
+                "amount": "90",
+                "unit": "mg",
+                "dailyValue": "100%"
+            },
+            {
+                "nutrient": "Vitamin D3",
+                "amount": "800",
+                "unit": "IU",
+                "dailyValue": "200%"
+            },
+            {
+                "nutrient": "Calcium",
+                "amount": "200",
+                "unit": "mg",
+                "dailyValue": "15%"
+            },
+            {
+                "nutrient": "Iron",
+                "amount": "18",
+                "unit": "mg",
+                "dailyValue": "100%"
+            }
+        ],
+        "howToUse": "Take one tablet daily with a meal and a full glass of water.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 19.99,
+            "taxRate": 0.21
+        },
+        "variant": "TABLETS",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Daily Multivitamin Complete - Essential Nutrition",
+            "description": "Comprehensive daily multivitamin with 25 essential vitamins and minerals for overall health",
+            "keywords": "multivitamin, daily vitamins, nutrition, wellness, energy, immune support",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Wellness Nutrition Labs",
+            "countryOfOrigin": "Netherlands",
+            "certification": [
+                "GMP",
+                "NSF Certified"
+            ],
+            "batchNumber": "MVI-2025-412",
+            "expiryDate": {
+                "$date": "2026-09-30T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:22:45.234Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:22:45.234Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd04888781f3493ea826"
+        },
+        "title": "Magnesium Citrate Sleep Support",
+        "slug": "magnesium-citrate-sleep-support",
+        "description": "High-absorption magnesium citrate formula designed to promote restful sleep, reduce muscle tension, and support relaxation",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/9c947f4f-7b92-7g9c-e337-f4d72a3547h5.png",
+        "benefits": [
+            "Promotes restful sleep",
+            "Reduces muscle tension",
+            "Supports relaxation",
+            "Improves sleep quality"
+        ],
+        "ingredients": [
+            "Magnesium Citrate",
+            "Magnesium Glycinate",
+            "L-Theanine",
+            "Melatonin"
+        ],
+        "categories": [
+            "Sleep Support",
+            "Magnesium",
+            "Relaxation",
+            "Muscle Support"
+        ],
+        "healthGoals": [
+            "Better Sleep",
+            "Relaxation",
+            "Muscle Recovery",
+            "Stress Reduction"
+        ],
+        "nutritionInfo": "Each capsule provides 400mg elemental magnesium and 3mg melatonin for optimal sleep support",
+        "nutritionTable": [
+            {
+                "nutrient": "Magnesium (Elemental)",
+                "amount": "400",
+                "unit": "mg",
+                "dailyValue": "95%"
+            },
+            {
+                "nutrient": "Magnesium Citrate",
+                "amount": "2000",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "L-Theanine",
+                "amount": "100",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Melatonin",
+                "amount": "3",
+                "unit": "mg",
+                "dailyValue": "-"
+            }
+        ],
+        "howToUse": "Take 2 capsules 30-60 minutes before bedtime with water. Do not exceed recommended dosage.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 27.99,
+            "taxRate": 0.21
+        },
+        "variant": "CAPSULES",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Magnesium Citrate Sleep Support - Restful Sleep Formula",
+            "description": "High-absorption magnesium with melatonin for promoting restful sleep and relaxation",
+            "keywords": "magnesium, sleep support, melatonin, relaxation, muscle tension, better sleep",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Sleep Wellness Labs",
+            "countryOfOrigin": "Germany",
+            "certification": [
+                "GMP",
+                "TÜV Certified"
+            ],
+            "batchNumber": "MGS-2025-523",
+            "expiryDate": {
+                "$date": "2026-12-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:30:12.456Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:30:12.456Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd05888781f3493ea827"
+        },
+        "title": "Probiotic 50 Billion CFU",
+        "slug": "probiotic-50-billion-cfu",
+        "description": "Advanced probiotic formula with 50 billion CFU from 10 diverse strains to support digestive health and immune function",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/ad058g60-8ca3-8h0d-f448-g5e83b4658i6.png",
+        "benefits": [
+            "Supports digestive health",
+            "Enhances immune function",
+            "Promotes gut balance",
+            "Improves nutrient absorption"
+        ],
+        "ingredients": [
+            "Lactobacillus Acidophilus",
+            "Bifidobacterium Lactis",
+            "Lactobacillus Plantarum",
+            "Bifidobacterium Bifidum",
+            "Lactobacillus Casei",
+            "Bifidobacterium Longum",
+            "Lactobacillus Rhamnosus",
+            "Streptococcus Thermophilus",
+            "Lactobacillus Bulgaricus",
+            "Bifidobacterium Breve"
+        ],
+        "categories": [
+            "Probiotics",
+            "Digestive Health",
+            "Gut Health",
+            "Immune Support"
+        ],
+        "healthGoals": [
+            "Digestive Health",
+            "Gut Balance",
+            "Immune Support",
+            "Bloating Relief"
+        ],
+        "nutritionInfo": "Each capsule delivers 50 billion live cultures from 10 probiotic strains with delayed-release technology",
+        "nutritionTable": [
+            {
+                "nutrient": "Total Probiotics",
+                "amount": "50",
+                "unit": "Billion CFU",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Lactobacillus Acidophilus",
+                "amount": "10",
+                "unit": "Billion CFU",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Bifidobacterium Lactis",
+                "amount": "8",
+                "unit": "Billion CFU",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Lactobacillus Plantarum",
+                "amount": "7",
+                "unit": "Billion CFU",
+                "dailyValue": "-"
+            }
+        ],
+        "howToUse": "Take one capsule daily on an empty stomach, preferably in the morning with water. Refrigerate after opening.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 34.99,
+            "taxRate": 0.21
+        },
+        "variant": "CAPSULES",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Probiotic 50 Billion CFU - Advanced Digestive Support",
+            "description": "50 billion CFU from 10 probiotic strains for optimal digestive and immune health support",
+            "keywords": "probiotics, digestive health, gut health, immune support, 50 billion CFU, lactobacillus",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Gut Health Innovations",
+            "countryOfOrigin": "Denmark",
+            "certification": [
+                "GMP",
+                "NSF Certified",
+                "Non-GMO Project Verified"
+            ],
+            "batchNumber": "PRO-2025-634",
+            "expiryDate": {
+                "$date": "2026-08-15T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:37:28.567Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:37:28.567Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd06888781f3493ea828"
+        },
+        "title": "Vitamin D3 5000 IU",
+        "slug": "vitamin-d3-5000-iu",
+        "description": "High-potency Vitamin D3 supplement in easy-to-swallow softgels to support bone health, immune function, and mood",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/be169h71-9db4-9i1e-g559-h6f94c5769j7.png",
+        "benefits": [
+            "Supports bone health",
+            "Enhances immune function",
+            "Improves mood",
+            "Promotes calcium absorption"
+        ],
+        "ingredients": [
+            "Vitamin D3 (Cholecalciferol)",
+            "Medium Chain Triglycerides (MCT Oil)",
+            "Gelatin",
+            "Glycerin"
+        ],
+        "categories": [
+            "Vitamins",
+            "Bone Health",
+            "Immune Support",
+            "Mood Support"
+        ],
+        "healthGoals": [
+            "Bone Strength",
+            "Immune Support",
+            "Mood Enhancement",
+            "Calcium Absorption"
+        ],
+        "nutritionInfo": "Each softgel provides 5000 IU of Vitamin D3 for optimal bone and immune health",
+        "nutritionTable": [
+            {
+                "nutrient": "Vitamin D3",
+                "amount": "5000",
+                "unit": "IU",
+                "dailyValue": "1250%"
+            },
+            {
+                "nutrient": "Calcium (from absorption)",
+                "amount": "-",
+                "unit": "-",
+                "dailyValue": "Enhanced"
+            }
+        ],
+        "howToUse": "Take one softgel daily with a meal containing fat for optimal absorption.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 16.99,
+            "taxRate": 0.21
+        },
+        "variant": "SOFTGELS",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Vitamin D3 5000 IU - Bone & Immune Support",
+            "description": "High-potency Vitamin D3 supplement for optimal bone health, immune function, and mood support",
+            "keywords": "vitamin d3, bone health, immune support, mood, calcium absorption, cholecalciferol",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Sunshine Vitamins Co.",
+            "countryOfOrigin": "United Kingdom",
+            "certification": [
+                "GMP",
+                "UKAS Certified"
+            ],
+            "batchNumber": "VD3-2025-745",
+            "expiryDate": {
+                "$date": "2027-01-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:44:15.678Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:44:15.678Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd07888781f3493ea829"
+        },
+        "title": "Collagen Peptides Powder",
+        "slug": "collagen-peptides-powder",
+        "description": "Hydrolyzed collagen peptides powder to support skin elasticity, joint health, and hair strength",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/cf27ai82-aec5-0j2f-h66a-i7ga5d6870k8.png",
+        "benefits": [
+            "Supports skin elasticity",
+            "Promotes joint health",
+            "Strengthens hair and nails",
+            "Improves skin hydration"
+        ],
+        "ingredients": [
+            "Hydrolyzed Collagen Peptides (Type I & III)",
+            "Bovine Collagen",
+            "Natural Vanilla Flavor",
+            "Stevia Extract"
+        ],
+        "categories": [
+            "Beauty & Skin",
+            "Joint Health",
+            "Collagen",
+            "Anti-Aging"
+        ],
+        "healthGoals": [
+            "Skin Health",
+            "Joint Support",
+            "Hair Strength",
+            "Anti-Aging"
+        ],
+        "nutritionInfo": "Each serving (20g) provides 18g of hydrolyzed collagen peptides",
+        "nutritionTable": [
+            {
+                "nutrient": "Collagen Peptides",
+                "amount": "18",
+                "unit": "g",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Protein",
+                "amount": "18",
+                "unit": "g",
+                "dailyValue": "36%"
+            },
+            {
+                "nutrient": "Calories",
+                "amount": "70",
+                "unit": "kcal",
+                "dailyValue": "3%"
+            }
+        ],
+        "howToUse": "Mix one scoop (20g) with 250ml of water, juice, or your favorite beverage. Best taken in the morning on an empty stomach.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 39.99,
+            "taxRate": 0.21
+        },
+        "variant": "POWDER",
+        "hasStandupPouch": true,
+        "standupPouchPrices": {
+            "oneTime": {
+                "currency": "EUR",
+                "amount": 39.99,
+                "taxRate": 0.21
+            },
+            "thirtyDays": {
+                "currency": "EUR",
+                "amount": 35.99,
+                "taxRate": 0.21
+            },
+            "sixtyDays": {
+                "currency": "EUR",
+                "amount": 32.99,
+                "taxRate": 0.21
+            },
+            "ninetyDays": {
+                "currency": "EUR",
+                "amount": 29.99,
+                "taxRate": 0.21
+            },
+            "oneEightyDays": {
+                "currency": "EUR",
+                "amount": 26.99,
+                "taxRate": 0.21
+            }
+        },
+        "meta": {
+            "title": "Collagen Peptides Powder - Skin & Joint Support",
+            "description": "Hydrolyzed collagen peptides powder for skin elasticity, joint health, and hair strength",
+            "keywords": "collagen, collagen peptides, skin health, joint health, anti-aging, hair strength",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Beauty & Wellness Labs",
+            "countryOfOrigin": "France",
+            "certification": [
+                "GMP",
+                "GRAS Certified",
+                "Halal Certified"
+            ],
+            "batchNumber": "COL-2025-856",
+            "expiryDate": {
+                "$date": "2026-11-30T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:51:42.789Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:51:42.789Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd08888781f3493ea82a"
+        },
+        "title": "Iron + Vitamin C Complex",
+        "slug": "iron-vitamin-c-complex",
+        "description": "Gentle iron supplement with Vitamin C for enhanced absorption, supporting energy levels and preventing iron deficiency",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/dg38bj93-bfd6-1k3g-i77b-j8hb6e7981l9.png",
+        "benefits": [
+            "Prevents iron deficiency",
+            "Boosts energy levels",
+            "Supports red blood cell production",
+            "Enhanced absorption with Vitamin C"
+        ],
+        "ingredients": [
+            "Iron (Ferrous Fumarate)",
+            "Vitamin C (Ascorbic Acid)",
+            "Folic Acid",
+            "Vitamin B12"
+        ],
+        "categories": [
+            "Iron Supplements",
+            "Energy Support",
+            "Blood Health",
+            "Anemia Support"
+        ],
+        "healthGoals": [
+            "Energy Boost",
+            "Iron Deficiency Prevention",
+            "Blood Health",
+            "Anemia Support"
+        ],
+        "nutritionInfo": "Each tablet provides 18mg iron with 60mg Vitamin C for optimal absorption",
+        "nutritionTable": [
+            {
+                "nutrient": "Iron",
+                "amount": "18",
+                "unit": "mg",
+                "dailyValue": "100%"
+            },
+            {
+                "nutrient": "Vitamin C",
+                "amount": "60",
+                "unit": "mg",
+                "dailyValue": "67%"
+            },
+            {
+                "nutrient": "Folic Acid",
+                "amount": "400",
+                "unit": "mcg",
+                "dailyValue": "100%"
+            },
+            {
+                "nutrient": "Vitamin B12",
+                "amount": "2.5",
+                "unit": "mcg",
+                "dailyValue": "100%"
+            }
+        ],
+        "howToUse": "Take one tablet daily with food and a full glass of water. Avoid taking with coffee or tea.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 14.99,
+            "taxRate": 0.21
+        },
+        "variant": "TABLETS",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Iron + Vitamin C Complex - Energy & Blood Support",
+            "description": "Gentle iron supplement with Vitamin C for enhanced absorption and energy support",
+            "keywords": "iron, iron supplement, vitamin c, energy, anemia, blood health, iron deficiency",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Blood Health Solutions",
+            "countryOfOrigin": "Belgium",
+            "certification": [
+                "GMP",
+                "ISO 22000"
+            ],
+            "batchNumber": "IRN-2025-967",
+            "expiryDate": {
+                "$date": "2026-10-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T05:58:59.890Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:58:59.890Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd09888781f3493ea82b"
+        },
+        "title": "B-Complex Energy Formula",
+        "slug": "b-complex-energy-formula",
+        "description": "Complete B-vitamin complex with all 8 essential B vitamins to support energy metabolism, brain function, and stress management",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/eh49ck04-cge7-2l4h-j88c-k9ic7f8092m0.png",
+        "benefits": [
+            "Boosts energy metabolism",
+            "Supports brain function",
+            "Reduces fatigue",
+            "Manages stress levels"
+        ],
+        "ingredients": [
+            "Thiamine (B1)",
+            "Riboflavin (B2)",
+            "Niacin (B3)",
+            "Pantothenic Acid (B5)",
+            "Pyridoxine (B6)",
+            "Biotin (B7)",
+            "Folic Acid (B9)",
+            "Cobalamin (B12)"
+        ],
+        "categories": [
+            "B Vitamins",
+            "Energy Support",
+            "Brain Health",
+            "Stress Support"
+        ],
+        "healthGoals": [
+            "Energy Boost",
+            "Brain Function",
+            "Stress Management",
+            "Fatigue Reduction"
+        ],
+        "nutritionInfo": "Each capsule provides high-potency B-complex vitamins for optimal energy and brain support",
+        "nutritionTable": [
+            {
+                "nutrient": "Thiamine (B1)",
+                "amount": "50",
+                "unit": "mg",
+                "dailyValue": "4167%"
+            },
+            {
+                "nutrient": "Riboflavin (B2)",
+                "amount": "50",
+                "unit": "mg",
+                "dailyValue": "3846%"
+            },
+            {
+                "nutrient": "Niacin (B3)",
+                "amount": "50",
+                "unit": "mg",
+                "dailyValue": "313%"
+            },
+            {
+                "nutrient": "Vitamin B12",
+                "amount": "100",
+                "unit": "mcg",
+                "dailyValue": "4167%"
+            }
+        ],
+        "howToUse": "Take one capsule daily with a meal, preferably in the morning for optimal energy support.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 18.99,
+            "taxRate": 0.21
+        },
+        "variant": "CAPSULES",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "B-Complex Energy Formula - Complete B Vitamins",
+            "description": "Complete B-vitamin complex with all 8 essential B vitamins for energy, brain function, and stress support",
+            "keywords": "b complex, b vitamins, energy, brain function, stress, fatigue, metabolism",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Energy Nutrition Labs",
+            "countryOfOrigin": "Netherlands",
+            "certification": [
+                "GMP",
+                "NSF Certified"
+            ],
+            "batchNumber": "BCX-2025-178",
+            "expiryDate": {
+                "$date": "2026-07-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T06:05:26.901Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T05:05:26.901Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd0a888781f3493ea82c"
+        },
+        "title": "Turmeric Curcumin 1000mg",
+        "slug": "turmeric-curcumin-1000mg",
+        "description": "High-potency turmeric extract with 95% curcuminoids and black pepper for enhanced absorption to support joint health and reduce inflammation",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/fi50dl15-dhf8-3m5i-k99d-l0jd8g9103n1.png",
+        "benefits": [
+            "Reduces inflammation",
+            "Supports joint health",
+            "Antioxidant protection",
+            "Promotes recovery"
+        ],
+        "ingredients": [
+            "Turmeric Root Extract",
+            "Curcumin (95% Curcuminoids)",
+            "Black Pepper Extract (Piperine)",
+            "Ginger Root Extract"
+        ],
+        "categories": [
+            "Anti-Inflammatory",
+            "Joint Health",
+            "Turmeric",
+            "Recovery Support"
+        ],
+        "healthGoals": [
+            "Inflammation Reduction",
+            "Joint Support",
+            "Recovery",
+            "Antioxidant Protection"
+        ],
+        "nutritionInfo": "Each capsule provides 1000mg turmeric extract with 95% curcuminoids and 5mg black pepper for enhanced absorption",
+        "nutritionTable": [
+            {
+                "nutrient": "Turmeric Extract",
+                "amount": "1000",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Curcumin (95%)",
+                "amount": "950",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Black Pepper Extract",
+                "amount": "5",
+                "unit": "mg",
+                "dailyValue": "-"
+            },
+            {
+                "nutrient": "Ginger Root Extract",
+                "amount": "50",
+                "unit": "mg",
+                "dailyValue": "-"
+            }
+        ],
+        "howToUse": "Take 2 capsules daily with a meal containing fat for optimal absorption.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 22.99,
+            "taxRate": 0.21
+        },
+        "variant": "CAPSULES",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Turmeric Curcumin 1000mg - Joint & Inflammation Support",
+            "description": "High-potency turmeric with 95% curcuminoids and black pepper for joint health and inflammation reduction",
+            "keywords": "turmeric, curcumin, joint health, inflammation, anti-inflammatory, recovery, antioxidant",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Herbal Health Innovations",
+            "countryOfOrigin": "India",
+            "certification": [
+                "GMP",
+                "Organic Certified",
+                "USDA Organic"
+            ],
+            "batchNumber": "TUR-2025-289",
+            "expiryDate": {
+                "$date": "2026-05-31T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T06:12:13.012Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T06:12:13.012Z"
+        },
+        "__v": 0
+    },
+    {
+        "_id": {
+            "$oid": "6927dd0b888781f3493ea82d"
+        },
+        "title": "Zinc Picolinate 30mg",
+        "slug": "zinc-picolinate-30mg",
+        "description": "Highly bioavailable zinc picolinate supplement to support immune function, wound healing, and skin health",
+        "productImage": "https://milestone.blr1.digitaloceanspaces.com/viteezy-phase-2/products/2025-11-27/gj61em26-eig9-4n6j-l00e-m1ke9h0214o2.png",
+        "benefits": [
+            "Supports immune function",
+            "Promotes wound healing",
+            "Improves skin health",
+            "Antioxidant protection"
+        ],
+        "ingredients": [
+            "Zinc Picolinate",
+            "Zinc (Elemental)",
+            "Vegetable Cellulose",
+            "Silica"
+        ],
+        "categories": [
+            "Minerals",
+            "Immune Support",
+            "Skin Health",
+            "Wound Healing"
+        ],
+        "healthGoals": [
+            "Immune Support",
+            "Skin Health",
+            "Wound Healing",
+            "Antioxidant Protection"
+        ],
+        "nutritionInfo": "Each capsule provides 30mg of highly bioavailable zinc picolinate",
+        "nutritionTable": [
+            {
+                "nutrient": "Zinc (from Zinc Picolinate)",
+                "amount": "30",
+                "unit": "mg",
+                "dailyValue": "273%"
+            },
+            {
+                "nutrient": "Zinc Picolinate",
+                "amount": "150",
+                "unit": "mg",
+                "dailyValue": "-"
+            }
+        ],
+        "howToUse": "Take one capsule daily with food. Do not exceed recommended dosage.",
+        "status": "Active",
+        "price": {
+            "currency": "EUR",
+            "amount": 12.99,
+            "taxRate": 0.21
+        },
+        "variant": "CAPSULES",
+        "hasStandupPouch": false,
+        "meta": {
+            "title": "Zinc Picolinate 30mg - Immune & Skin Support",
+            "description": "Highly bioavailable zinc picolinate for optimal immune function, wound healing, and skin health",
+            "keywords": "zinc, zinc picolinate, immune support, skin health, wound healing, antioxidant",
+            "hreflang": []
+        },
+        "sourceInfo": {
+            "manufacturer": "Mineral Health Labs",
+            "countryOfOrigin": "Germany",
+            "certification": [
+                "GMP",
+                "TÜV Certified"
+            ],
+            "batchNumber": "ZNP-2025-390",
+            "expiryDate": {
+                "$date": "2026-04-30T00:00:00.000Z"
+            }
+        },
+        "isDeleted": false,
+        "createdBy": {
+            "$oid": "6927dccc888781f3493ea810"
+        },
+        "createdAt": {
+            "$date": "2025-11-27T06:18:47.123Z"
+        },
+        "updatedAt": {
+            "$date": "2025-11-27T06:18:47.123Z"
+        },
+        "__v": 0
+    }
+]
