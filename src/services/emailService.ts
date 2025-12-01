@@ -292,6 +292,58 @@ class EmailService {
   }
 
   /**
+   * Send user account status change email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param isActive - Whether account is activated (true) or deactivated (false)
+   */
+  async sendUserStatusChangeEmail(
+    email: string,
+    name: string,
+    isActive: boolean
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] User status change email for ${email}: Account ${
+            isActive ? "activated" : "deactivated"
+          }`
+        );
+        return true;
+      }
+
+      const subject = isActive
+        ? "Your Account Has Been Activated - Viteezy"
+        : "Your Account Has Been Deactivated - Viteezy";
+
+      const html = this.getUserStatusChangeEmailTemplate(name, isActive);
+      const text = this.getUserStatusChangeEmailText(name, isActive);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `User status change email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send user status change email via SendGrid:", {
+        email,
+        isActive,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Send order confirmation email
    */
   async sendOrderConfirmationEmail(
@@ -1106,6 +1158,172 @@ The Viteezy Team
       .join("<br/>");
 
     return parts;
+  }
+
+  /**
+   * Get user status change email HTML template
+   */
+  private getUserStatusChangeEmailTemplate(
+    name: string,
+    isActive: boolean
+  ): string {
+    const title = isActive
+      ? "Your Account Has Been Activated"
+      : "Your Account Has Been Deactivated";
+    const headerColor = isActive ? "#059669" : "#dc2626";
+    const icon = isActive ? "✅" : "⚠️";
+    const message = isActive
+      ? "Great news! Your account has been activated by our admin team. You can now log in and access all features of Viteezy."
+      : "Your account has been deactivated by our admin team. You will not be able to log in until your account is reactivated.";
+    const actionMessage = isActive
+      ? "You can now log in to your account and start using all our services."
+      : "If you believe this is a mistake or have any questions, please contact our support team immediately.";
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>${title} - Viteezy</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333333; 
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+          }
+          .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+          }
+          .header { 
+            background: ${headerColor}; 
+            color: #ffffff; 
+            padding: 30px 20px; 
+            text-align: center; 
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .header .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+          }
+          .content { 
+            background: #ffffff; 
+            padding: 40px 30px; 
+          }
+          .content p {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333333;
+          }
+          .status-box {
+            background: ${isActive ? "#d1fae5" : "#fee2e2"};
+            border-left: 4px solid ${headerColor};
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+          }
+          .status-box p {
+            margin: 0;
+            color: ${isActive ? "#065f46" : "#991b1b"};
+            font-weight: 500;
+          }
+          .footer { 
+            text-align: center; 
+            padding: 20px 30px;
+            background-color: #f9fafb;
+            color: #6b7280; 
+            font-size: 12px; 
+            border-top: 1px solid #e5e7eb;
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+          .support-link {
+            color: #4f46e5;
+            text-decoration: none;
+          }
+          .support-link:hover {
+            text-decoration: underline;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="header">
+            <div class="icon">${icon}</div>
+            <h1>${title}</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>${message}</p>
+            <div class="status-box">
+              <p><strong>Account Status:</strong> ${
+                isActive ? "Active" : "Deactivated"
+              }</p>
+            </div>
+            <p>${actionMessage}</p>
+            ${
+              !isActive
+                ? '<p>If you need assistance, please contact our support team at <a href="mailto:support@viteezy.com" class="support-link">support@viteezy.com</a>.</p>'
+                : ""
+            }
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get user status change email text template
+   */
+  private getUserStatusChangeEmailText(
+    name: string,
+    isActive: boolean
+  ): string {
+    const title = isActive
+      ? "Your Account Has Been Activated"
+      : "Your Account Has Been Deactivated";
+    const message = isActive
+      ? "Great news! Your account has been activated by our admin team. You can now log in and access all features of Viteezy."
+      : "Your account has been deactivated by our admin team. You will not be able to log in until your account is reactivated.";
+    const actionMessage = isActive
+      ? "You can now log in to your account and start using all our services."
+      : "If you believe this is a mistake or have any questions, please contact our support team immediately at support@viteezy.com.";
+
+    return `
+Viteezy - ${title}
+
+Hello ${name},
+
+${message}
+
+Account Status: ${isActive ? "Active" : "Deactivated"}
+
+${actionMessage}
+
+Best regards,
+The Viteezy Team
+
+---
+© ${new Date().getFullYear()} Viteezy. All rights reserved.
+This is an automated message, please do not reply to this email.
+    `;
   }
 }
 

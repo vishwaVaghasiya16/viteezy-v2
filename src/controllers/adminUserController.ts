@@ -11,6 +11,8 @@ import {
   Products,
 } from "@/models/commerce";
 import { PaymentStatus } from "@/models/enums";
+import { emailService } from "@/services/emailService";
+import { logger } from "@/utils/logger";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -425,6 +427,21 @@ class AdminUserController {
 
       user.isActive = isActive;
       await user.save();
+
+      // Send email notification to user about status change
+      if (user.email) {
+        emailService
+          .sendUserStatusChangeEmail(user.email, user.name, isActive)
+          .catch((error) => {
+            // Log error but don't break the API response
+            logger.error("Failed to send user status change email:", {
+              userId: id,
+              email: user.email,
+              isActive,
+              error: error?.message,
+            });
+          });
+      }
 
       res.apiSuccess(
         {
