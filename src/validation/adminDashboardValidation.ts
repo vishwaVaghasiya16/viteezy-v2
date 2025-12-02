@@ -16,6 +16,14 @@ export const revenueOverviewQuerySchema = Joi.object(
 export const topSellingPlansQuerySchema = Joi.object(
   withFieldLabels({
     date: Joi.date().iso().optional().label("Date"),
+    month: Joi.string()
+      .pattern(/^\d{4}-\d{2}$/)
+      .optional()
+      .label("Month")
+      .messages({
+        "string.pattern.base":
+          "Month must be in YYYY-MM format (e.g., 2025-01)",
+      }),
   })
 ).label("TopSellingPlansQuery");
 

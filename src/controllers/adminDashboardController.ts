@@ -10,6 +10,7 @@ import {
   Memberships,
   Products,
   ProductVariants,
+  Categories,
 } from "@/models/commerce";
 
 import {
@@ -322,11 +323,28 @@ class AdminDashboardController {
         }
       });
 
+      // Month names for display
+      const monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+
       const chartData = [];
       const cursor = new Date(start);
 
       while (cursor <= end) {
         let key: string;
+        let label: string;
 
         if (dateFormat === "daily") {
           const y = cursor.getFullYear();
@@ -334,17 +352,20 @@ class AdminDashboardController {
           const d = String(cursor.getDate()).padStart(2, "0");
 
           key = `${y}-${m}-${d}`;
+          label = `${monthNames[cursor.getMonth()]} ${d}`;
           cursor.setDate(cursor.getDate() + 1);
         } else {
           const y = cursor.getFullYear();
           const m = String(cursor.getMonth() + 1).padStart(2, "0");
 
           key = `${y}-${m}`;
+          label = monthNames[cursor.getMonth()];
           cursor.setMonth(cursor.getMonth() + 1);
         }
 
         chartData.push({
           date: key,
+          label: label,
           revenue: map.get(key)?.revenue || 0,
           count: map.get(key)?.count || 0,
         });
@@ -369,18 +390,40 @@ class AdminDashboardController {
    */
   getTopSellingPlans = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
-      const { date } = req.query as { date?: string };
+      const { date, month } = req.query as {
+        date?: string;
+        month?: string;
+      };
 
-      let start = new Date();
-      let end = new Date();
+      let start: Date;
+      let end: Date;
 
-      if (date) {
+      // Support monthly filter (YYYY-MM format) or single date
+      if (month) {
+        // Parse month string (e.g., "2025-01")
+        const [year, monthNum] = month.split("-").map(Number);
+        start = new Date(year, monthNum - 1, 1);
+        end = new Date(year, monthNum, 0, 23, 59, 59, 999);
+      } else if (date) {
+        // Single date filter
         start = new Date(date);
         end = new Date(date);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+      } else {
+        // Default: current month
+        const now = new Date();
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        );
       }
-
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
 
       const [subscriptionsData, oneTimeOrders] = await Promise.all([
         Subscriptions.aggregate([
@@ -412,7 +455,7 @@ class AdminDashboardController {
       const total = total90 + total60 + totalOneTime;
 
       const pct = (value: number) =>
-        total === 0 ? 0 : Number(((value / total) * 100).toFixed(2));
+        total === 0 ? 0 : Number(((value / total) * 100).toFixed(1));
 
       const plans = [
         { name: "90 days plan", count: total90, percentage: pct(total90) },
@@ -426,7 +469,7 @@ class AdminDashboardController {
 
       res.apiSuccess(
         {
-          date: start.toISOString().split("T")[0],
+          date: month || start.toISOString().split("T")[0],
           total,
           plans,
         },
@@ -470,20 +513,36 @@ class AdminDashboardController {
       ]);
 
       const productIds = productSales.map((i) => i._id);
-      const products = await Products.find({
-        _id: { $in: productIds },
-        isDeleted: { $ne: true },
-      })
-        .select("title slug categories price productImage")
-        .lean();
+      const [products, variants, categories] = await Promise.all([
+        Products.find({
+          _id: { $in: productIds },
+          isDeleted: { $ne: true },
+        })
+          .select("title slug categories price productImage")
+          .lean(),
+        ProductVariants.find({
+          productId: { $in: productIds },
+          isDeleted: { $ne: true },
+          isActive: true,
+        })
+          .select("productId inventory")
+          .lean(),
+        Categories.find({
+          isDeleted: { $ne: true },
+          isActive: true,
+        })
+          .select("_id name")
+          .lean(),
+      ]);
 
-      const variants = await ProductVariants.find({
-        productId: { $in: productIds },
-        isDeleted: { $ne: true },
-        isActive: true,
-      })
-        .select("productId inventory")
-        .lean();
+      // Create category map for quick lookup
+      const categoryMap = new Map();
+      categories.forEach((cat) => {
+        categoryMap.set(
+          cat._id.toString(),
+          cat.name?.en || cat.name?.nl || "Uncategorized"
+        );
+      });
 
       const variantMap = new Map();
       variants.forEach((v) => {
@@ -502,9 +561,9 @@ class AdminDashboardController {
           total += available;
         });
 
-        if (total === 0) return "outOfStock";
-        if (total <= 10) return "lowStock";
-        return "inStock";
+        if (total === 0) return "Out of Stock";
+        if (total <= 10) return "Low Stock";
+        return "In Stock";
       };
 
       const finalData = productSales.map((item) => {
@@ -512,11 +571,18 @@ class AdminDashboardController {
           (p) => p._id.toString() === item._id.toString()
         );
 
+        // Get category name from first category ID
+        let categoryName = "Uncategorized";
+        if (product?.categories && product.categories.length > 0) {
+          const firstCategoryId = product.categories[0].toString();
+          categoryName = categoryMap.get(firstCategoryId) || "Uncategorized";
+        }
+
         return {
           productId: item._id,
           productName: product?.title || item.productName,
           productImage: product?.productImage || null,
-          category: product?.categories?.[0] || "Uncategorized",
+          category: categoryName,
           price: product?.price?.amount || 0,
           currency: product?.price?.currency || "EUR",
           totalSales: item.totalSales,
