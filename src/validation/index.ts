@@ -15,3 +15,6 @@ export * from "./blogValidation";
 
 // Export address validation schemas
 export * from "./addressValidation";
+
+// Export common/shared validation schemas
+export * from "./commonValidation";

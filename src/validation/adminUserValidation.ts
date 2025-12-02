@@ -1,9 +1,6 @@
 import Joi from "joi";
 import mongoose from "mongoose";
-import { USER_ROLE_VALUES } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
-
-const ROLE_QUERY_VALUES = USER_ROLE_VALUES.map((role) => role.toLowerCase());
 
 const objectIdSchema = Joi.string()
   .custom((value, helpers) => {
@@ -18,32 +15,33 @@ const objectIdSchema = Joi.string()
 
 export const adminUserIdParamsSchema = Joi.object(
   withFieldLabels({
-    id: objectIdSchema.required(),
+    id: objectIdSchema.required().label("User ID"),
   })
 ).label("AdminUserParams");
 
 export const adminUpdateUserStatusSchema = Joi.object(
   withFieldLabels({
-    isActive: Joi.boolean().required().messages({
-      "any.required": "Is active is required",
+    isActive: Joi.boolean().required().label("Active Status").messages({
+      "any.required": "Active status is required",
     }),
   })
 ).label("AdminUpdateUserStatusPayload");
 
 export const adminGetAllUsersQuerySchema = Joi.object(
   withFieldLabels({
-    page: Joi.number().integer().min(1).optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    search: Joi.string().trim().min(1).max(100).optional(),
-    role: Joi.string()
-      .valid(...ROLE_QUERY_VALUES)
-      .optional(),
-    isActive: Joi.boolean().optional(),
-    sort: Joi.string()
-      .valid("name", "email", "createdAt", "updatedAt")
-      .optional(),
-    order: Joi.string().valid("asc", "desc").optional(),
+    page: Joi.number().integer().min(1).optional().default(1).label("Page"),
+    limit: Joi.number()
+      .integer()
+      .min(1)
+      .max(100)
+      .optional()
+      .default(10)
+      .label("Limit"),
+    search: Joi.string().trim().min(1).max(100).optional().label("Search"),
+    isActive: Joi.boolean().optional().label("Active Status"),
+    userType: Joi.string()
+      .valid("New User", "Recurring User")
+      .optional()
+      .label("User Type"),
   })
-)
-  .default({})
-  .label("AdminGetUsersQuery");
+).label("AdminGetUsersQuery");

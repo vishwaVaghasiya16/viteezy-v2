@@ -1,7 +1,6 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes";
 import userRoutes from "./userRoutes";
-import adminUserRoutes from "./adminUserRoutes";
 import exampleRoutes from "./exampleRoutes";
 import paymentRoutes from "./paymentRoutes";
 import blogRoutes from "./blogRoutes";
@@ -20,6 +19,17 @@ import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
+import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
+import adminBlogCategoryRoutes from "./adminBlogCategoryRoutes";
+import adminBlogRoutes from "./adminBlogRoutes";
+import adminFaqCategoryRoutes from "./adminFaqCategoryRoutes";
+import adminFaqRoutes from "./adminFaqRoutes";
+import adminCouponRoutes from "./adminCouponRoutes";
+import adminDashboardRoutes from "./adminDashboardRoutes";
+import adminProductTestimonialRoutes from "./adminProductTestimonialRoutes";
+import adminUserRoutes from "./adminUserRoutes";
+import adminGeneralSettingsRoutes from "./adminGeneralSettingsRoutes";
+import adminProductCategoryRoutes from "./adminProductCategoryRoutes";
 import memberRoutes from "./memberRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 
@@ -28,8 +38,20 @@ const router = Router();
 // API Routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-router.use("/admin/users", adminUserRoutes);
+
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
+router.use("/admin/product-ingredients", adminProductIngredientRoutes);
+router.use("/admin/blog-categories", adminBlogCategoryRoutes);
+router.use("/admin/blogs", adminBlogRoutes);
+router.use("/admin/faq-categories", adminFaqCategoryRoutes);
+router.use("/admin/faqs", adminFaqRoutes);
+router.use("/admin/coupons", adminCouponRoutes);
+router.use("/admin/dashboard", adminDashboardRoutes);
+router.use("/admin/product-testimonials", adminProductTestimonialRoutes);
+router.use("/admin/users", adminUserRoutes);
+router.use("/admin/general-settings", adminGeneralSettingsRoutes);
+router.use("/admin/product-categories", adminProductCategoryRoutes);
+
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);

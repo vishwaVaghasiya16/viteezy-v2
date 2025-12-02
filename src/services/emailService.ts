@@ -170,7 +170,7 @@ class EmailService {
   }
 
   /**
-   * Send password reset email
+   * Send password reset email (OTP-based - kept for backward compatibility)
    */
   async sendPasswordResetEmail(email: string, otp: string): Promise<boolean> {
     try {
@@ -207,6 +207,54 @@ class EmailService {
   }
 
   /**
+   * Send password reset link email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param resetUrl - Password reset URL with token
+   */
+  async sendPasswordResetLinkEmail(
+    email: string,
+    name: string,
+    resetUrl: string
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Password reset link for ${email}: ${resetUrl}`);
+        return true;
+      }
+
+      const subject = "Reset Your Password - Viteezy";
+      const html = this.getPasswordResetLinkEmailTemplate(name, resetUrl);
+      const text = `Hello ${name},\n\nPlease click the following link to reset your password:\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this password reset, please ignore this email.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Password reset link sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send password reset link via SendGrid:", {
+        email,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      // In development, log the reset URL
+      if (!this.isConfigured) {
+        logger.info(`[FALLBACK] Password reset link for ${email}: ${resetUrl}`);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Send admin notification email
    */
   async sendAdminNotification(
@@ -235,6 +283,58 @@ class EmailService {
       logger.error("Failed to send admin notification via SendGrid:", {
         to,
         subject,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send user account status change email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param isActive - Whether account is activated (true) or deactivated (false)
+   */
+  async sendUserStatusChangeEmail(
+    email: string,
+    name: string,
+    isActive: boolean
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] User status change email for ${email}: Account ${
+            isActive ? "activated" : "deactivated"
+          }`
+        );
+        return true;
+      }
+
+      const subject = isActive
+        ? "Your Account Has Been Activated - Viteezy"
+        : "Your Account Has Been Deactivated - Viteezy";
+
+      const html = this.getUserStatusChangeEmailTemplate(name, isActive);
+      const text = this.getUserStatusChangeEmailText(name, isActive);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `User status change email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send user status change email via SendGrid:", {
+        email,
+        isActive,
         error: error?.message,
         code: error?.code,
         response: error?.response?.body,
@@ -683,7 +783,7 @@ The Viteezy Team
   }
 
   /**
-   * Get password reset email HTML template
+   * Get password reset email HTML template (OTP-based - kept for backward compatibility)
    */
   private getPasswordResetEmailTemplate(otp: string): string {
     return `
@@ -728,6 +828,76 @@ The Viteezy Team
           </div>
           <div class="footer">
             <p>© 2024 Viteezy. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get password reset link email HTML template
+   */
+  private getPasswordResetLinkEmailTemplate(
+    name: string,
+    resetUrl: string
+  ): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Reset Your Password - Viteezy</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #dc2626; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+          .button { 
+            display: inline-block; 
+            background: #dc2626; 
+            color: white; 
+            padding: 14px 28px; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            margin: 20px 0;
+            text-align: center;
+          }
+          .button:hover { background: #b91c1c; }
+          .link-fallback { 
+            color: #6b7280; 
+            font-size: 12px; 
+            word-break: break-all; 
+            margin-top: 10px;
+          }
+          .footer { text-align: center; margin-top: 20px; color: #6b7280; font-size: 14px; }
+          .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 20px 0; border-radius: 4px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Viteezy</h1>
+            <h2>Reset Your Password</h2>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>You requested to reset your password. Click the button below to create a new password:</p>
+            <div style="text-align: center;">
+              <a href="${resetUrl}" class="button">Reset Password</a>
+            </div>
+            <p class="link-fallback">If the button doesn't work, copy and paste this link into your browser:<br>${resetUrl}</p>
+            <div class="warning">
+              <strong>⚠️ Important:</strong> This link will expire in 1 hour for security reasons.
+            </div>
+            <p>If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+            <p>Best regards,<br>The Viteezy Team</p>
+          </div>
+          <div class="footer">
+            <p>© 2024 Viteezy. All rights reserved.</p>
+            <p>This is an automated email. Please do not reply.</p>
           </div>
         </div>
       </body>
@@ -988,6 +1158,172 @@ The Viteezy Team
       .join("<br/>");
 
     return parts;
+  }
+
+  /**
+   * Get user status change email HTML template
+   */
+  private getUserStatusChangeEmailTemplate(
+    name: string,
+    isActive: boolean
+  ): string {
+    const title = isActive
+      ? "Your Account Has Been Activated"
+      : "Your Account Has Been Deactivated";
+    const headerColor = isActive ? "#059669" : "#dc2626";
+    const icon = isActive ? "✅" : "⚠️";
+    const message = isActive
+      ? "Great news! Your account has been activated by our admin team. You can now log in and access all features of Viteezy."
+      : "Your account has been deactivated by our admin team. You will not be able to log in until your account is reactivated.";
+    const actionMessage = isActive
+      ? "You can now log in to your account and start using all our services."
+      : "If you believe this is a mistake or have any questions, please contact our support team immediately.";
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>${title} - Viteezy</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333333; 
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+          }
+          .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+          }
+          .header { 
+            background: ${headerColor}; 
+            color: #ffffff; 
+            padding: 30px 20px; 
+            text-align: center; 
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .header .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+          }
+          .content { 
+            background: #ffffff; 
+            padding: 40px 30px; 
+          }
+          .content p {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333333;
+          }
+          .status-box {
+            background: ${isActive ? "#d1fae5" : "#fee2e2"};
+            border-left: 4px solid ${headerColor};
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+          }
+          .status-box p {
+            margin: 0;
+            color: ${isActive ? "#065f46" : "#991b1b"};
+            font-weight: 500;
+          }
+          .footer { 
+            text-align: center; 
+            padding: 20px 30px;
+            background-color: #f9fafb;
+            color: #6b7280; 
+            font-size: 12px; 
+            border-top: 1px solid #e5e7eb;
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+          .support-link {
+            color: #4f46e5;
+            text-decoration: none;
+          }
+          .support-link:hover {
+            text-decoration: underline;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="header">
+            <div class="icon">${icon}</div>
+            <h1>${title}</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>${message}</p>
+            <div class="status-box">
+              <p><strong>Account Status:</strong> ${
+                isActive ? "Active" : "Deactivated"
+              }</p>
+            </div>
+            <p>${actionMessage}</p>
+            ${
+              !isActive
+                ? '<p>If you need assistance, please contact our support team at <a href="mailto:support@viteezy.com" class="support-link">support@viteezy.com</a>.</p>'
+                : ""
+            }
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get user status change email text template
+   */
+  private getUserStatusChangeEmailText(
+    name: string,
+    isActive: boolean
+  ): string {
+    const title = isActive
+      ? "Your Account Has Been Activated"
+      : "Your Account Has Been Deactivated";
+    const message = isActive
+      ? "Great news! Your account has been activated by our admin team. You can now log in and access all features of Viteezy."
+      : "Your account has been deactivated by our admin team. You will not be able to log in until your account is reactivated.";
+    const actionMessage = isActive
+      ? "You can now log in to your account and start using all our services."
+      : "If you believe this is a mistake or have any questions, please contact our support team immediately at support@viteezy.com.";
+
+    return `
+Viteezy - ${title}
+
+Hello ${name},
+
+${message}
+
+Account Status: ${isActive ? "Active" : "Deactivated"}
+
+${actionMessage}
+
+Best regards,
+The Viteezy Team
+
+---
+© ${new Date().getFullYear()} Viteezy. All rights reserved.
+This is an automated message, please do not reply to this email.
+    `;
   }
 }
 

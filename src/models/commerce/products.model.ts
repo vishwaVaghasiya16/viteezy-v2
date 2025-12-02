@@ -1,11 +1,11 @@
 import mongoose, { Schema, Document } from "mongoose";
+import { PriceSchema, PriceType, SeoSchema, SeoType } from "../common.model";
 import {
-  PriceSchema,
-  PriceType,
-  SeoSchema,
-  SeoType,
-} from "../common.model";
-import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
+  ProductStatus,
+  ProductVariant,
+  PRODUCT_STATUS_VALUES,
+  PRODUCT_VARIANT_VALUES,
+} from "../enums";
 
 // Extended price type for subscription periods with additional metadata
 // amount is optional here as it will be calculated from totalAmount
@@ -134,7 +134,8 @@ export interface IProduct extends Document {
   productImage: string;
   benefits: string[];
   ingredients: string[];
-  categories?: string[];
+  productIngredients?: mongoose.Types.ObjectId[];
+  categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
   nutritionInfo: string;
   nutritionTable?: NutritionTableItem[];
@@ -201,10 +202,16 @@ const ProductSchema = new Schema<IProduct>(
         trim: true,
       },
     ],
+    productIngredients: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "product_ingredients",
+      },
+    ],
     categories: [
       {
-        type: String,
-        trim: true,
+        type: Schema.Types.ObjectId,
+        ref: "categories",
       },
     ],
     healthGoals: [
@@ -340,6 +347,7 @@ ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
 ProductSchema.index({ categories: 1 });
 ProductSchema.index({ healthGoals: 1 });
+ProductSchema.index({ productIngredients: 1 });
 
 // Text search index
 ProductSchema.index({ title: "text", description: "text" });

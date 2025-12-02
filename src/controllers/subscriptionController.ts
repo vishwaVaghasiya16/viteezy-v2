@@ -492,6 +492,90 @@ class SubscriptionController {
       });
     }
   );
+
+  /**
+   * Subscription widget overview for user dashboard
+   * @route GET /api/subscriptions/widget/overview
+   * @access Private
+   */
+  getSubscriptionWidget = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const subscription = await Subscriptions.findOne({
+        userId,
+        isDeleted: false,
+        status: { $in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.PAUSED] },
+      })
+        .sort({ nextBillingDate: 1, createdAt: -1 })
+        .lean();
+
+      if (!subscription) {
+        res.status(200).json({
+          success: true,
+          message: "No active subscription",
+          data: {
+            widget: {
+              hasActiveSubscription: false,
+              headline:
+                "Try Subscription Plans - Save more with scheduled deliveries",
+              cta: {
+                label: "Explore Plans",
+                action: "explore-subscriptions",
+              },
+            },
+          },
+        });
+        return;
+      }
+
+      const metrics = computeSubscriptionMetrics(subscription);
+      const totalCycles =
+        (subscription.metadata && subscription.metadata.totalCycles) || null;
+      const currentCycleNumber = Math.max(1, (metrics.cycleCount ?? 0) + 1);
+
+      res.status(200).json({
+        success: true,
+        message: "Subscription widget data retrieved successfully",
+        data: {
+          widget: {
+            hasActiveSubscription: true,
+            subscriptionId: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            status: subscription.status,
+            cycleDays: subscription.cycleDays,
+            nextDeliveryDate: subscription.nextDeliveryDate,
+            nextBillingDate: subscription.nextBillingDate,
+            daysUntilNextDelivery: metrics.daysUntilNextDelivery,
+            daysUntilNextBilling: metrics.daysUntilNextBilling,
+            currentCycle: {
+              current: currentCycleNumber,
+              total: totalCycles,
+              label: totalCycles
+                ? `${Math.min(currentCycleNumber, totalCycles)}/${totalCycles}`
+                : `${currentCycleNumber}`,
+            },
+            actions: {
+              manage: {
+                label: "Manage Plan",
+                action: "manage-subscription",
+                subscriptionId: subscription._id,
+              },
+              cancel: {
+                label: "Cancel Plan",
+                action: "cancel-subscription",
+                subscriptionId: subscription._id,
+              },
+            },
+          },
+        },
+      });
+    }
+  );
 }
 
 export const subscriptionController = new SubscriptionController();
