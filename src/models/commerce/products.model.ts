@@ -50,7 +50,7 @@ export interface IProduct extends Document {
   benefits: string[];
   ingredients: string[];
   productIngredients?: mongoose.Types.ObjectId[];
-  categories?: string[];
+  categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
   nutritionInfo: string;
   nutritionTable?: NutritionTableItem[];
@@ -109,8 +109,8 @@ const ProductSchema = new Schema<IProduct>(
     ],
     categories: [
       {
-        type: String,
-        trim: true,
+        type: Schema.Types.ObjectId,
+        ref: "categories",
       },
     ],
     healthGoals: [
