@@ -103,6 +103,8 @@ class AdminMembershipPlanController {
         isActive,
         isAutoRenew,
         metadata,
+        // New: universal discount % for products
+        discountPercentage,
       } = req.body;
 
       if (!name) {
@@ -151,7 +153,12 @@ class AdminMembershipPlanController {
         benefits: benefits || [],
         isActive: isActive !== undefined ? isActive : true,
         isAutoRenew: isAutoRenew !== undefined ? isAutoRenew : true,
-        metadata: metadata || {},
+        metadata: {
+          ...(metadata || {}),
+          ...(discountPercentage !== undefined
+            ? { discountPercentage: Number(discountPercentage) }
+            : {}),
+        },
         createdBy: new mongoose.Types.ObjectId(req.user?._id),
         updatedBy: new mongoose.Types.ObjectId(req.user?._id),
       });
@@ -267,6 +274,8 @@ class AdminMembershipPlanController {
         isActive,
         isAutoRenew,
         metadata,
+        // New: universal discount % for products
+        discountPercentage,
       } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -337,6 +346,12 @@ class AdminMembershipPlanController {
       if (isActive !== undefined) updateData.isActive = isActive;
       if (isAutoRenew !== undefined) updateData.isAutoRenew = isAutoRenew;
       if (metadata !== undefined) updateData.metadata = metadata;
+      if (discountPercentage !== undefined) {
+        updateData.metadata = {
+          ...(updateData.metadata || plan.metadata || {}),
+          discountPercentage: Number(discountPercentage),
+        };
+      }
 
       if (req.user?._id) {
         updateData.updatedBy = new mongoose.Types.ObjectId(req.user._id);

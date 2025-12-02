@@ -14,12 +14,14 @@ import orderRoutes from "./orderRoutes";
 import couponRoutes from "./couponRoutes";
 import deliveryPostponementRoutes from "./deliveryPostponementRoutes";
 import preCheckoutRoutes from "./preCheckoutRoutes";
+import checkoutRoutes from "./checkoutRoutes";
 import savedCardRoutes from "./savedCardRoutes";
 import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
 import memberRoutes from "./memberRoutes";
+import dashboardRoutes from "./dashboardRoutes";
 
 const router = Router();
 
@@ -41,6 +43,8 @@ router.use("/orders", orderRoutes);
 router.use("/coupons", couponRoutes);
 router.use("/postponements", deliveryPostponementRoutes);
 router.use("/pre-checkout", preCheckoutRoutes);
+router.use("/checkout", checkoutRoutes);
+router.use("/dashboard", dashboardRoutes);
 router.use("/saved-cards", savedCardRoutes);
 router.use("/subscriptions", subscriptionRoutes);
 router.use("/memberships", membershipRoutes);

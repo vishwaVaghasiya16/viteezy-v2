@@ -23,5 +23,8 @@ router.delete("/items/:index", CartController.removeItem);
 // Clear cart
 router.delete("/", CartController.clearCart);
 
+// Validate cart (includes membership discount calculation)
+router.post("/validate", CartController.validateCart);
+
 export default router;
 

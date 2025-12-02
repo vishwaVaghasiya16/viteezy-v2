@@ -7,7 +7,81 @@ import {
 } from "../common.model";
 import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
 
-// Price structure for subscription periods
+// Extended price type for subscription periods with additional metadata
+// amount is optional here as it will be calculated from totalAmount
+export interface SubscriptionPriceWithMetadata extends Omit<PriceType, 'amount'> {
+  amount?: number; // Optional - will be calculated from totalAmount if not provided
+  totalAmount?: number; // Total price for the entire subscription period (e.g., $163.38 for 6 months)
+  durationDays?: number; // Duration in days (e.g., 30, 60, 90, 180)
+  capsuleCount?: number; // Number of capsules for this subscription period
+  savingsPercentage?: number; // Savings percentage (e.g., 30 for "Save 30%")
+  features?: string[]; // Features like "Free shipping", "Can be cancelled at any time"
+  icon?: string; // URL to icon/image for this subscription option
+}
+
+const SubscriptionPriceWithMetadataSchema = new Schema<SubscriptionPriceWithMetadata>(
+  {
+    currency: { type: String, default: "EUR" },
+    amount: { type: Number, optional: true }, // Optional - will be calculated from totalAmount
+    taxRate: { type: Number, default: 0 },
+    totalAmount: { type: Number, optional: true },
+    durationDays: { type: Number, optional: true },
+    capsuleCount: { type: Number, optional: true },
+    savingsPercentage: { type: Number, optional: true },
+    features: [{ type: String, trim: true }],
+    icon: { type: String, trim: true, optional: true },
+  },
+  { _id: false }
+);
+
+// Price structure for subscription periods (for Sachets)
+export interface SachetOneTimeCapsuleOptions {
+  count30: PriceType & { capsuleCount?: number }; // 30 count price
+  count60: PriceType & { capsuleCount?: number }; // 60 count price
+}
+
+const SachetOneTimeCapsuleOptionsSchema = new Schema<SachetOneTimeCapsuleOptions>(
+  {
+    count30: {
+      type: new Schema({
+        currency: { type: String, default: "EUR" },
+        amount: { type: Number, required: true },
+        taxRate: { type: Number, default: 0 },
+        capsuleCount: { type: Number, optional: true },
+      }, { _id: false }),
+    },
+    count60: {
+      type: new Schema({
+        currency: { type: String, default: "EUR" },
+        amount: { type: Number, required: true },
+        taxRate: { type: Number, default: 0 },
+        capsuleCount: { type: Number, optional: true },
+      }, { _id: false }),
+    },
+  },
+  { _id: false }
+);
+
+export interface SachetPricesType {
+  thirtyDays: SubscriptionPriceWithMetadata;
+  sixtyDays: SubscriptionPriceWithMetadata;
+  ninetyDays: SubscriptionPriceWithMetadata;
+  oneEightyDays: SubscriptionPriceWithMetadata;
+  oneTime: SachetOneTimeCapsuleOptions; // One-time purchase with capsule options (30/60 count)
+}
+
+const SachetPricesSchema = new Schema<SachetPricesType>(
+  {
+    thirtyDays: { type: SubscriptionPriceWithMetadataSchema },
+    sixtyDays: { type: SubscriptionPriceWithMetadataSchema },
+    ninetyDays: { type: SubscriptionPriceWithMetadataSchema },
+    oneEightyDays: { type: SubscriptionPriceWithMetadataSchema },
+    oneTime: { type: SachetOneTimeCapsuleOptionsSchema },
+  },
+  { _id: false }
+);
+
+// Legacy subscription price type (kept for backward compatibility)
 export interface SubscriptionPriceType {
   oneTime: PriceType;
   thirtyDays: PriceType;
@@ -42,6 +116,17 @@ export interface SourceInfo {
   expiryDate?: Date;
 }
 
+export interface ComparisonRow {
+  label: string;
+  values: boolean[]; // yes/no per comparison column
+}
+
+export interface ComparisonSection {
+  title: string; // Main title (e.g. "How Green tea extract Compares:")
+  columns: string[]; // Comparison titles (e.g. ["Green tea extract", "Most Melatonin Sleep Aids", ...])
+  rows: ComparisonRow[]; // Each row with label + yes/no per column
+}
+
 export interface IProduct extends Document {
   title: string;
   slug: string;
@@ -55,12 +140,24 @@ export interface IProduct extends Document {
   nutritionTable?: NutritionTableItem[];
   howToUse: string;
   status: ProductStatus;
-  price: PriceType;
+  price: PriceType; // Base price (for Sachets - default)
   variant: ProductVariant;
   hasStandupPouch: boolean;
+  // Sachet prices (subscription + one-time with capsule options)
+  sachetPrices?: SachetPricesType;
+  sachetImages?: string[]; // Separate images for sachet variant
+  // Stand-up pouch: only one-time purchase (no subscription)
+  standupPouchPrice?: PriceType | SachetOneTimeCapsuleOptions; // Single one-time price or oneTime structure with count30/count60
+  standupPouchImages?: string[]; // Separate images for stand-up pouch variant
+  // Legacy field (kept for backward compatibility)
   standupPouchPrices?: SubscriptionPriceType;
   meta?: SeoType;
   sourceInfo?: SourceInfo;
+  // New fields for admin Add Product screen
+  shortDescription?: string;
+  galleryImages?: string[]; // Additional product images
+  isFeatured?: boolean; // Featured product checkbox
+  comparisonSection?: ComparisonSection; // Comparison section data
   isDeleted: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
@@ -81,6 +178,10 @@ const ProductSchema = new Schema<IProduct>(
       trim: true,
     },
     description: {
+      type: String,
+      trim: true,
+    },
+    shortDescription: {
       type: String,
       trim: true,
     },
@@ -116,6 +217,12 @@ const ProductSchema = new Schema<IProduct>(
       type: String,
       trim: true,
     },
+    galleryImages: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     nutritionTable: [
       {
         nutrient: { type: String, trim: true },
@@ -145,6 +252,24 @@ const ProductSchema = new Schema<IProduct>(
       type: Boolean,
       default: false,
     },
+    sachetPrices: {
+      type: SachetPricesSchema,
+    },
+    sachetImages: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    standupPouchPrice: {
+      type: Schema.Types.Mixed, // Can be PriceSchema or SachetOneTimeCapsuleOptionsSchema
+    },
+    standupPouchImages: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     standupPouchPrices: {
       type: SubscriptionPriceSchema,
     },
@@ -158,6 +283,31 @@ const ProductSchema = new Schema<IProduct>(
       batchNumber: { type: String, trim: true },
       expiryDate: { type: Date },
       _id: false,
+    },
+    comparisonSection: {
+      title: { type: String, trim: true },
+      columns: [
+        {
+          type: String,
+          trim: true,
+        },
+      ],
+      rows: [
+        {
+          label: { type: String, trim: true },
+          values: [
+            {
+              type: Boolean,
+            },
+          ],
+          _id: false,
+        },
+      ],
+      _id: false,
+    },
+    isFeatured: {
+      type: Boolean,
+      default: false,
     },
     isDeleted: {
       type: Boolean,

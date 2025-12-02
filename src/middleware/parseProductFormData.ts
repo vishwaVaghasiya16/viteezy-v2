@@ -1,8 +1,25 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "@/utils/AppError";
 
-const ARRAY_FIELDS = ["benefits", "ingredients", "categories", "healthGoals"];
-const JSON_FIELDS = ["price", "standupPouchPrices", "nutritionTable", "meta", "sourceInfo"];
+const ARRAY_FIELDS = [
+  "benefits",
+  "ingredients",
+  "categories",
+  "healthGoals",
+  "galleryImages",
+  "sachetImages",
+  "standupPouchImages",
+];
+const JSON_FIELDS = [
+  "price",
+  "sachetPrices",
+  "standupPouchPrice",
+  "standupPouchPrices", // Legacy field
+  "nutritionTable",
+  "meta",
+  "sourceInfo",
+  "comparisonSection",
+];
 
 const toBoolean = (value: any): boolean | undefined => {
   if (typeof value === "boolean") return value;

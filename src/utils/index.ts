@@ -12,6 +12,8 @@ export {
 } from './apiDecorators';
 export { getPaginationOptions, getPaginationMeta } from './pagination';
 export { generateSlug, generateUniqueSlug } from './slug';
+export { calculateMemberPrice, calculateMemberPrices } from './membershipPrice';
+export type { MemberPriceResult, ProductPriceSource } from './membershipPrice';
 
 // Add more utilities here as you create them
 // export { emailService } from './emailService';

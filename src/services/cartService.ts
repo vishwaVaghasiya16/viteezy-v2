@@ -3,6 +3,7 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
+import { calculateMemberPrice, ProductPriceSource } from "../utils/membershipPrice";
 import mongoose from "mongoose";
 
 interface AddCartItemData {
@@ -483,6 +484,166 @@ class CartService {
 
     return {
       message: "Cart cleared successfully",
+    };
+  }
+
+  /**
+   * Validate cart and calculate member pricing
+   */
+  async validateCart(userId: string): Promise<{
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+    cart: any;
+    pricing: {
+      subtotal: { currency: string; amount: number; taxRate: number };
+      originalSubtotal: { currency: string; amount: number; taxRate: number };
+      membershipDiscount: { currency: string; amount: number; taxRate: number };
+      tax: { currency: string; amount: number; taxRate: number };
+      shipping: { currency: string; amount: number; taxRate: number };
+      total: { currency: string; amount: number; taxRate: number };
+    };
+    items: Array<{
+      productId: string;
+      variantId?: string;
+      quantity: number;
+      originalPrice: { currency: string; amount: number; taxRate: number };
+      memberPrice?: { currency: string; amount: number; taxRate: number };
+      discount?: { amount: number; percentage: number };
+      isAvailable: boolean;
+      isValid: boolean;
+      isMember?: boolean;
+    }>;
+  }> {
+    const cart = await this.getOrCreateCart(userId);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const validatedItems: any[] = [];
+
+    if (!cart.items || cart.items.length === 0) {
+      return {
+        isValid: false,
+        errors: ["Cart is empty"],
+        warnings: [],
+        cart,
+        pricing: {
+          subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
+          originalSubtotal: { currency: "EUR", amount: 0, taxRate: 0 },
+          membershipDiscount: { currency: "EUR", amount: 0, taxRate: 0 },
+          tax: { currency: "EUR", amount: 0, taxRate: 0 },
+          shipping: { currency: "EUR", amount: 0, taxRate: 0 },
+          total: { currency: "EUR", amount: 0, taxRate: 0 },
+        },
+        items: [],
+      };
+    }
+
+    let originalSubtotal = 0;
+    let memberSubtotal = 0;
+    let currency = cart.items[0]?.price?.currency || "EUR";
+    let taxRate = cart.items[0]?.price?.taxRate || 0;
+
+    // Validate each cart item
+    for (const item of cart.items) {
+      const product = await Products.findById(item.productId).lean();
+      if (!product || product.isDeleted || product.status !== "Active") {
+        errors.push(`Product ${item.productId} is not available`);
+        continue;
+      }
+
+      let variant: any = null;
+      if (item.variantId) {
+        variant = await ProductVariants.findById(item.variantId).lean();
+        if (!variant || variant.isDeleted || !variant.isActive) {
+          errors.push(`Variant ${item.variantId} is not available`);
+          continue;
+        }
+      }
+
+      // Get price source (variant price takes precedence)
+      const productMetadata = (product as any).metadata || {};
+      const variantMetadata = variant ? ((variant as any).metadata || {}) : {};
+      
+      const priceSource: ProductPriceSource = {
+        price: variant?.price || product.price,
+        memberPrice: variantMetadata?.memberPrice || productMetadata?.memberPrice,
+        memberDiscountOverride: variantMetadata?.memberDiscountOverride || productMetadata?.memberDiscountOverride,
+      };
+
+      // Calculate member price
+      const memberPriceResult = await calculateMemberPrice(priceSource, userId);
+
+      const originalItemPrice = priceSource.price.amount;
+      const memberItemPrice = memberPriceResult.memberPrice.amount;
+      const originalItemTotal = originalItemPrice * item.quantity;
+      const memberItemTotal = memberItemPrice * item.quantity;
+
+      originalSubtotal += originalItemTotal;
+      memberSubtotal += memberItemTotal;
+
+      validatedItems.push({
+        productId: item.productId.toString(),
+        variantId: item.variantId?.toString(),
+        quantity: item.quantity,
+        originalPrice: { ...priceSource.price },
+        memberPrice: memberPriceResult.isMember ? memberPriceResult.memberPrice : undefined,
+        discount: memberPriceResult.isMember && memberPriceResult.discountAmount > 0 ? {
+          amount: memberPriceResult.discountAmount,
+          percentage: memberPriceResult.discountPercentage,
+        } : undefined,
+        isAvailable: true,
+        isValid: true,
+        isMember: memberPriceResult.isMember,
+      });
+    }
+
+    // Calculate membership discount
+    const membershipDiscountAmount = Math.max(0, originalSubtotal - memberSubtotal);
+    const finalSubtotal = memberSubtotal;
+
+    // Use existing cart tax and shipping (or calculate if needed)
+    const taxAmount = cart.tax?.amount || 0;
+    const shippingAmount = cart.shipping?.amount || 0;
+    const totalAmount = finalSubtotal + taxAmount + shippingAmount;
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings,
+      cart,
+      pricing: {
+        subtotal: {
+          currency,
+          amount: Math.round((finalSubtotal + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        originalSubtotal: {
+          currency,
+          amount: Math.round((originalSubtotal + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        membershipDiscount: {
+          currency,
+          amount: Math.round((membershipDiscountAmount + Number.EPSILON) * 100) / 100,
+          taxRate: 0,
+        },
+        tax: {
+          currency,
+          amount: Math.round((taxAmount + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        shipping: {
+          currency,
+          amount: Math.round((shippingAmount + Number.EPSILON) * 100) / 100,
+          taxRate: 0,
+        },
+        total: {
+          currency,
+          amount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+      },
+      items: validatedItems,
     };
   }
 }

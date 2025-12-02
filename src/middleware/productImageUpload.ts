@@ -7,10 +7,46 @@ export const handleProductImageUpload = async (
   next: NextFunction
 ) => {
   try {
-    if (req.file) {
-      const imageUrl = await fileStorageService.uploadFile("products", req.file);
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+
+    // Handle productImage (single file)
+    if (files?.productImage && files.productImage.length > 0) {
+      const imageUrl = await fileStorageService.uploadFile("products", files.productImage[0]);
       req.body.productImage = imageUrl;
     }
+
+    // Handle galleryImages (multiple files)
+    if (files?.galleryImages && files.galleryImages.length > 0) {
+      const galleryUrls = await Promise.all(
+        files.galleryImages.map((file) => fileStorageService.uploadFile("products", file))
+      );
+      // Merge with existing galleryImages if any (from form data)
+      const existingGallery = Array.isArray(req.body.galleryImages) ? req.body.galleryImages : [];
+      req.body.galleryImages = [...existingGallery, ...galleryUrls];
+    }
+
+    // Handle sachetImages (multiple files)
+    if (files?.sachetImages && files.sachetImages.length > 0) {
+      const sachetUrls = await Promise.all(
+        files.sachetImages.map((file) => fileStorageService.uploadFile("products", file))
+      );
+      // Merge with existing sachetImages if any (from form data)
+      const existingSachet = Array.isArray(req.body.sachetImages) ? req.body.sachetImages : [];
+      req.body.sachetImages = [...existingSachet, ...sachetUrls];
+    }
+
+    // Handle standupPouchImages (multiple files)
+    if (files?.standupPouchImages && files.standupPouchImages.length > 0) {
+      const standupPouchUrls = await Promise.all(
+        files.standupPouchImages.map((file) => fileStorageService.uploadFile("products", file))
+      );
+      // Merge with existing standupPouchImages if any (from form data)
+      const existingStandupPouch = Array.isArray(req.body.standupPouchImages)
+        ? req.body.standupPouchImages
+        : [];
+      req.body.standupPouchImages = [...existingStandupPouch, ...standupPouchUrls];
+    }
+
     next();
   } catch (error) {
     next(error);

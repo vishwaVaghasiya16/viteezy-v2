@@ -7,6 +7,7 @@ import {
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { getPaginationOptions, getPaginationMeta } from "../utils/pagination";
+import { calculateMemberPrice, calculateMemberPrices, ProductPriceSource } from "../utils/membershipPrice";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -64,8 +65,9 @@ export class ProductController {
 
   /**
    * Get all products with pagination
+   * Includes member pricing if user is authenticated and a member
    */
-  static async getAllProducts(req: Request, res: Response, next: NextFunction) {
+  static async getAllProducts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const {
@@ -109,12 +111,52 @@ export class ProductController {
         sortBy: sortByValue,
       });
 
+      // Get user ID if authenticated (optional)
+      const userId = req.user?._id || req.userId;
+
+      // Calculate member prices for all products
+      const productsWithMemberPrices = await Promise.all(
+        result.products.map(async (product: any) => {
+          const productPriceSource: ProductPriceSource = {
+            price: product.price,
+            // Check for product-specific member price overrides in metadata
+            memberPrice: product.metadata?.memberPrice,
+            memberDiscountOverride: product.metadata?.memberDiscountOverride,
+          };
+
+          const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+
+          // Keep original product structure intact, only add member pricing fields at product level
+          const enrichedProduct: any = {
+            ...product,
+            // Keep price object exactly as it was - don't modify it
+            price: product.price,
+          };
+
+          // Only add member pricing fields if user is a member
+          if (memberPriceResult.isMember) {
+            enrichedProduct.memberPrice = memberPriceResult.memberPrice;
+            enrichedProduct.originalPrice = memberPriceResult.originalPrice;
+            enrichedProduct.discount = {
+              amount: memberPriceResult.discountAmount,
+              percentage: memberPriceResult.discountPercentage,
+              type: memberPriceResult.appliedDiscount?.type,
+            };
+            enrichedProduct.isMember = true;
+          } else {
+            enrichedProduct.isMember = false;
+          }
+
+          return enrichedProduct;
+        })
+      );
+
       const pagination = getPaginationMeta(page, limit, result.total);
 
       res.status(200).json({
         success: true,
         message: "Products retrieved successfully",
-        data: result.products,
+        data: productsWithMemberPrices,
         pagination,
       });
     } catch (error) {
@@ -140,17 +182,90 @@ export class ProductController {
 
   /**
    * Get product by ID
+   * Includes member pricing if user is authenticated and a member
    */
-  static async getProductById(req: Request, res: Response, next: NextFunction) {
+  static async getProductById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
       const result = await productService.getProductById(id);
+
+      // Get user ID if authenticated (optional)
+      const userId = req.user?._id || req.userId;
+
+      // Calculate member price for the product
+      const productPriceSource: ProductPriceSource = {
+        price: result.product.price,
+        memberPrice: result.product.metadata?.memberPrice,
+        memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
+      };
+
+      const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+
+      // Include variants with member pricing if they exist
+      let variantsWithMemberPrices = result.product.variants;
+      if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
+        variantsWithMemberPrices = await Promise.all(
+          variantsWithMemberPrices.map(async (variant: any) => {
+            const variantPriceSource: ProductPriceSource = {
+              price: variant.price,
+              memberPrice: variant.metadata?.memberPrice,
+              memberDiscountOverride: variant.metadata?.memberDiscountOverride,
+            };
+
+            const variantMemberPrice = await calculateMemberPrice(variantPriceSource, userId || "");
+
+            const enrichedVariant: any = {
+              ...variant,
+              // Keep price object exactly as it was - don't modify it
+              price: variant.price,
+            };
+
+            // Add member pricing fields at variant level
+            if (variantMemberPrice.isMember) {
+              enrichedVariant.memberPrice = variantMemberPrice.memberPrice;
+              enrichedVariant.originalPrice = variantMemberPrice.originalPrice;
+              enrichedVariant.discount = {
+                amount: variantMemberPrice.discountAmount,
+                percentage: variantMemberPrice.discountPercentage,
+                type: variantMemberPrice.appliedDiscount?.type,
+              };
+              enrichedVariant.isMember = true;
+            } else {
+              enrichedVariant.isMember = false;
+            }
+
+            return enrichedVariant;
+          })
+        );
+      }
+      
+      // Keep original product structure intact
+      const enrichedProduct: any = {
+        ...result.product,
+        // Keep price object exactly as it was - don't modify it
+        price: result.product.price,
+        variants: variantsWithMemberPrices || result.product.variants || [],
+      };
+
+      // Add member pricing fields at product level
+      if (memberPriceResult.isMember) {
+        enrichedProduct.memberPrice = memberPriceResult.memberPrice;
+        enrichedProduct.originalPrice = memberPriceResult.originalPrice;
+        enrichedProduct.discount = {
+          amount: memberPriceResult.discountAmount,
+          percentage: memberPriceResult.discountPercentage,
+          type: memberPriceResult.appliedDiscount?.type,
+        };
+        enrichedProduct.isMember = true;
+      } else {
+        enrichedProduct.isMember = false;
+      }
 
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
         data: {
-          product: result.product,
+          product: enrichedProduct,
         },
       });
     } catch (error) {
@@ -160,17 +275,90 @@ export class ProductController {
 
   /**
    * Get product by slug
+   * Includes member pricing if user is authenticated and a member
    */
-  static async getProductBySlug(req: Request, res: Response, next: NextFunction) {
+  static async getProductBySlug(req: AuthenticatedRequest, res: Response, next: NextFunction) {
     try {
       const { slug } = req.params;
       const result = await productService.getProductBySlug(slug);
+
+      // Get user ID if authenticated (optional)
+      const userId = req.user?._id || req.userId;
+
+      // Calculate member price for the product
+      const productPriceSource: ProductPriceSource = {
+        price: result.product.price,
+        memberPrice: result.product.metadata?.memberPrice,
+        memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
+      };
+
+      const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+
+      // Include variants with member pricing if they exist
+      let variantsWithMemberPrices = result.product.variants;
+      if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
+        variantsWithMemberPrices = await Promise.all(
+          variantsWithMemberPrices.map(async (variant: any) => {
+            const variantPriceSource: ProductPriceSource = {
+              price: variant.price,
+              memberPrice: variant.metadata?.memberPrice,
+              memberDiscountOverride: variant.metadata?.memberDiscountOverride,
+            };
+
+            const variantMemberPrice = await calculateMemberPrice(variantPriceSource, userId || "");
+
+            const enrichedVariant: any = {
+              ...variant,
+              // Keep price object exactly as it was - don't modify it
+              price: variant.price,
+            };
+
+            // Add member pricing fields at variant level
+            if (variantMemberPrice.isMember) {
+              enrichedVariant.memberPrice = variantMemberPrice.memberPrice;
+              enrichedVariant.originalPrice = variantMemberPrice.originalPrice;
+              enrichedVariant.discount = {
+                amount: variantMemberPrice.discountAmount,
+                percentage: variantMemberPrice.discountPercentage,
+                type: variantMemberPrice.appliedDiscount?.type,
+              };
+              enrichedVariant.isMember = true;
+            } else {
+              enrichedVariant.isMember = false;
+            }
+
+            return enrichedVariant;
+          })
+        );
+      }
+
+      // Keep original product structure intact
+      const enrichedProduct: any = {
+        ...result.product,
+        // Keep price object exactly as it was - don't modify it
+        price: result.product.price,
+        variants: variantsWithMemberPrices || result.product.variants || [],
+      };
+
+      // Add member pricing fields at product level
+      if (memberPriceResult.isMember) {
+        enrichedProduct.memberPrice = memberPriceResult.memberPrice;
+        enrichedProduct.originalPrice = memberPriceResult.originalPrice;
+        enrichedProduct.discount = {
+          amount: memberPriceResult.discountAmount,
+          percentage: memberPriceResult.discountPercentage,
+          type: memberPriceResult.appliedDiscount?.type,
+        };
+        enrichedProduct.isMember = true;
+      } else {
+        enrichedProduct.isMember = false;
+      }
 
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
         data: {
-          product: result.product,
+          product: enrichedProduct,
         },
       });
     } catch (error) {
@@ -194,6 +382,34 @@ export class ProductController {
         ...req.body,
         updatedBy: userId ? new mongoose.Types.ObjectId(userId) : undefined,
       });
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          product: result.product,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update product status (enable/disable)
+   * enabled: true -> Product visible to users
+   * enabled: false -> Product hidden from users
+   */
+  static async updateProductStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const { id } = req.params;
+      const { enabled } = req.body;
+
+      const result = await productService.updateProductStatus(id, enabled);
 
       res.status(200).json({
         success: true,

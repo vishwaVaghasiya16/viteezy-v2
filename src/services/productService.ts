@@ -32,13 +32,80 @@ interface CreateProductData {
   }>;
   howToUse: string;
   status: ProductStatus;
-  price: {
+  price?: {
     currency: string;
     amount: number;
     taxRate: number;
   };
   variant: ProductVariant;
   hasStandupPouch: boolean;
+  sachetPrices?: {
+    thirtyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    sixtyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    ninetyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    oneEightyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    oneTime: {
+      count30: {
+        currency: string;
+        amount: number;
+        taxRate: number;
+        capsuleCount?: number;
+      };
+      count60: {
+        currency: string;
+        amount: number;
+        taxRate: number;
+        capsuleCount?: number;
+      };
+    };
+  };
+  standupPouchPrice?: {
+    currency: string;
+    amount: number;
+    taxRate: number;
+  };
+  sachetImages?: string[];
+  standupPouchImages?: string[];
   standupPouchPrices?: {
     oneTime: {
       currency: string;
@@ -79,6 +146,18 @@ interface CreateProductData {
     certification?: string[];
     batchNumber?: string;
     expiryDate?: Date;
+  };
+  // New fields for admin Add Product screen
+  shortDescription?: string;
+  galleryImages?: string[];
+  isFeatured?: boolean;
+  comparisonSection?: {
+    title: string;
+    columns: string[];
+    rows: Array<{
+      label: string;
+      values: boolean[];
+    }>;
   };
   createdBy?: mongoose.Types.ObjectId;
 }
@@ -108,6 +187,73 @@ interface UpdateProductData {
   };
   variant?: ProductVariant;
   hasStandupPouch?: boolean;
+  sachetPrices?: {
+    thirtyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    sixtyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    ninetyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    oneEightyDays: {
+      currency: string;
+      amount?: number; // Optional - will be calculated from totalAmount
+      taxRate: number;
+      totalAmount?: number;
+      durationDays?: number;
+      capsuleCount?: number;
+      savingsPercentage?: number;
+      features?: string[];
+      icon?: string;
+    };
+    oneTime: {
+      count30: {
+        currency: string;
+        amount: number;
+        taxRate: number;
+        capsuleCount?: number;
+      };
+      count60: {
+        currency: string;
+        amount: number;
+        taxRate: number;
+        capsuleCount?: number;
+      };
+    };
+  };
+  standupPouchPrice?: {
+    currency: string;
+    amount: number;
+    taxRate: number;
+  };
+  sachetImages?: string[];
+  standupPouchImages?: string[];
   standupPouchPrices?: {
     oneTime: {
       currency: string;
@@ -149,6 +295,18 @@ interface UpdateProductData {
     batchNumber?: string;
     expiryDate?: Date;
   };
+  // New fields for admin Edit Product screen
+  shortDescription?: string;
+  galleryImages?: string[];
+  isFeatured?: boolean;
+  comparisonSection?: {
+    title: string;
+    columns: string[];
+    rows: Array<{
+      label: string;
+      values: boolean[];
+    }>;
+  };
   updatedBy?: mongoose.Types.ObjectId;
 }
 
@@ -157,7 +315,7 @@ class ProductService {
    * Create new product
    */
   async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
-    const { title, slug, hasStandupPouch, standupPouchPrices } = data;
+    const { title, slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices, variant } = data;
 
     // Generate slug from title if not provided
     let finalSlug = slug;
@@ -178,21 +336,44 @@ class ProductService {
       }
     }
 
-    // Validate standupPouchPrices if hasStandupPouch is true
-    if (hasStandupPouch && !standupPouchPrices) {
-      throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
+    // Validate standupPouchPrice if hasStandupPouch is true (standupPouchPrices is legacy field)
+    if (hasStandupPouch && !standupPouchPrice && !standupPouchPrices) {
+      throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
     }
 
-    // Create product with generated slug
+    // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
+    let finalPrice = price;
+    if (!finalPrice && sachetPrices && sachetPrices.thirtyDays) {
+      const thirtyDaysPrice = sachetPrices.thirtyDays;
+      finalPrice = {
+        currency: thirtyDaysPrice.currency || "EUR",
+        amount: thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0,
+        taxRate: thirtyDaysPrice.taxRate || 0,
+      };
+    }
+
+    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
+    let normalizedStandupPouchPrice = standupPouchPrice;
+    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
+      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
+    }
+
+    // Create product with generated slug and derived price
     const product = await Products.create({
       ...data,
+      price: finalPrice,
+      standupPouchPrice: normalizedStandupPouchPrice,
       slug: finalSlug,
     });
 
     logger.info(`Product created successfully: ${product.slug}`);
 
+    // Calculate monthly amounts for subscription prices in response
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(product.toObject());
+
     return {
-      product: product.toObject(),
+      product: productWithMonthlyAmounts,
       message: "Product created successfully",
     };
   }
@@ -227,10 +408,18 @@ class ProductService {
       sortBy,
     } = filters;
 
-    const matchStage: Record<string, any> = { isDeleted: false };
+    // Base match: not deleted
+    const matchStage: Record<string, any> = { 
+      isDeleted: false,
+    };
 
+    // If status filter is provided, use it (admin can filter by status)
+    // Otherwise, exclude hidden products (users should not see hidden products)
     if (status) {
       matchStage.status = status;
+    } else {
+      // Exclude hidden products for regular users
+      matchStage.status = { $ne: ProductStatus.HIDDEN };
     }
 
     if (variant) {
@@ -267,7 +456,12 @@ class ProductService {
       };
       
       // Add other filters that can be combined with $text in same stage
-      if (status) textSearchMatch.status = status;
+      if (status) {
+        textSearchMatch.status = status;
+      } else {
+        // Exclude hidden products for regular users
+        textSearchMatch.status = { $ne: ProductStatus.HIDDEN };
+      }
       if (variant) textSearchMatch.variant = variant;
       if (hasStandupPouch !== undefined) textSearchMatch.hasStandupPouch = hasStandupPouch;
       
@@ -364,7 +558,12 @@ class ProductService {
     const products = aggregationResult?.data ?? [];
     const total = aggregationResult?.total?.[0]?.value ?? 0;
 
-    return { products, total };
+    // Calculate monthly amounts for all products
+    const productsWithMonthlyAmounts = products.map((product: any) =>
+      this.calculateMonthlyAmounts(product)
+    );
+
+    return { products: productsWithMonthlyAmounts, total };
   }
 
   /**
@@ -421,8 +620,8 @@ class ProductService {
       ogImage: product.productImage,
     };
 
-    // Build structured response
-    const enrichedProduct = {
+    // Calculate monthly amount for subscription prices if totalAmount is provided
+    const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
       variants: variants || [],
       detailedIngredients: detailedIngredients || [],
@@ -431,7 +630,7 @@ class ProductService {
       nutritionTable: product.nutritionTable || [],
       // Ensure sourceInfo exists
       sourceInfo: product.sourceInfo || {},
-    };
+    });
 
     return { product: enrichedProduct };
   }
@@ -449,7 +648,10 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    return { product };
+    // Calculate monthly amount for subscription prices if totalAmount is provided
+    const enrichedProduct = this.calculateMonthlyAmounts(product);
+
+    return { product: enrichedProduct };
   }
 
   /**
@@ -459,7 +661,7 @@ class ProductService {
     productId: string,
     data: UpdateProductData
   ): Promise<{ product: any; message: string }> {
-    const { slug, hasStandupPouch, standupPouchPrices } = data;
+    const { slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices } = data;
 
     // Check if product exists
     const existingProduct = await Products.findOne({
@@ -484,20 +686,100 @@ class ProductService {
       }
     }
 
-    // Validate standupPouchPrices if hasStandupPouch is true
-    if (hasStandupPouch && !standupPouchPrices) {
-      throw new AppError("standupPouchPrices is required when hasStandupPouch is true", 400);
+    // Validate standupPouchPrice only if hasStandupPouch is being set to true
+    // If hasStandupPouch is undefined, it means it's not being updated, so skip validation
+    if (hasStandupPouch === true && !standupPouchPrice && !standupPouchPrices) {
+      // Check if existing product already has standupPouchPrice (for backward compatibility)
+      if (!existingProduct.standupPouchPrice && !existingProduct.standupPouchPrices) {
+        throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
+      }
     }
 
-    const shouldDeleteOldImage =
-      !!data.productImage &&
-      !!existingProduct.productImage &&
-      data.productImage !== existingProduct.productImage;
+    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
+    let normalizedStandupPouchPrice = standupPouchPrice;
+    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
+      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
+    }
 
-    // Update product
+    // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
+    let finalPrice = price;
+    if (!finalPrice && sachetPrices && sachetPrices.thirtyDays) {
+      const thirtyDaysPrice = sachetPrices.thirtyDays;
+      finalPrice = {
+        currency: thirtyDaysPrice.currency || "EUR",
+        amount: thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0,
+        taxRate: thirtyDaysPrice.taxRate || 0,
+      };
+    }
+
+    // Handle old image deletion
+    const imagesToDelete: string[] = [];
+
+    // Check productImage
+    if (data.productImage && existingProduct.productImage && data.productImage !== existingProduct.productImage) {
+      imagesToDelete.push(existingProduct.productImage);
+    }
+
+    // Check galleryImages - delete old ones that are not in new list
+    if (data.galleryImages && Array.isArray(data.galleryImages) && existingProduct.galleryImages) {
+      const oldGalleryImages = Array.isArray(existingProduct.galleryImages) ? existingProduct.galleryImages : [];
+      const imagesToKeep = new Set(data.galleryImages);
+      oldGalleryImages.forEach((oldUrl: string) => {
+        if (!imagesToKeep.has(oldUrl)) {
+          imagesToDelete.push(oldUrl);
+        }
+      });
+    }
+
+    // Check sachetImages - delete old ones that are not in new list
+    if (data.sachetImages && Array.isArray(data.sachetImages) && existingProduct.sachetImages) {
+      const oldSachetImages = Array.isArray(existingProduct.sachetImages) ? existingProduct.sachetImages : [];
+      const imagesToKeep = new Set(data.sachetImages);
+      oldSachetImages.forEach((oldUrl: string) => {
+        if (!imagesToKeep.has(oldUrl)) {
+          imagesToDelete.push(oldUrl);
+        }
+      });
+    }
+
+    // Check standupPouchImages - delete old ones that are not in new list
+    if (data.standupPouchImages && Array.isArray(data.standupPouchImages) && existingProduct.standupPouchImages) {
+      const oldStandupPouchImages = Array.isArray(existingProduct.standupPouchImages) ? existingProduct.standupPouchImages : [];
+      const imagesToKeep = new Set(data.standupPouchImages);
+      oldStandupPouchImages.forEach((oldUrl: string) => {
+        if (!imagesToKeep.has(oldUrl)) {
+          imagesToDelete.push(oldUrl);
+        }
+      });
+    }
+
+    // Prepare update object - only include fields that are being updated (not undefined)
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    // Only include fields that are explicitly provided (not undefined)
+    Object.keys(data).forEach((key) => {
+      if (data[key as keyof UpdateProductData] !== undefined) {
+        updateData[key] = data[key as keyof UpdateProductData];
+      }
+    });
+
+    // Handle normalized standupPouchPrice if provided
+    if (standupPouchPrice !== undefined) {
+      updateData.standupPouchPrice = normalizedStandupPouchPrice;
+    }
+
+    // Handle derived price if sachetPrices is being updated
+    if (finalPrice !== undefined) {
+      updateData.price = finalPrice;
+    }
+
+    // Update product with only provided fields
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
-      { ...data, updatedAt: new Date() },
+      updateData,
       { new: true, runValidators: true }
     ).lean();
 
@@ -505,15 +787,68 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    if (shouldDeleteOldImage) {
-      await fileStorageService.deleteFileByUrl(existingProduct.productImage);
+    // Delete old images asynchronously (don't wait for it)
+    if (imagesToDelete.length > 0) {
+      Promise.all(imagesToDelete.map(url => fileStorageService.deleteFileByUrl(url))).catch((err) => {
+        logger.error(`Error deleting old images: ${err.message}`);
+      });
     }
 
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
 
+    // Calculate monthly amounts for subscription prices in response
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+
     return {
-      product: updatedProduct,
+      product: productWithMonthlyAmounts,
       message: "Product updated successfully",
+    };
+  }
+
+  /**
+   * Update product status (enable/disable)
+   * enabled = true -> Active (visible to users)
+   * enabled = false -> Hidden (not visible to users)
+   */
+  async updateProductStatus(
+    productId: string,
+    enabled: boolean
+  ): Promise<{ product: any; message: string }> {
+    // Check if product exists
+    const existingProduct = await Products.findOne({
+      _id: productId,
+      isDeleted: false,
+    });
+
+    if (!existingProduct) {
+      throw new AppError("Product not found", 404);
+    }
+
+    // Set status based on enabled flag
+    const status = enabled ? ProductStatus.ACTIVE : ProductStatus.HIDDEN;
+
+    // Update only status
+    const updatedProduct = await Products.findByIdAndUpdate(
+      productId,
+      {
+        status,
+        updatedAt: new Date(),
+      },
+      { new: true, runValidators: true }
+    ).lean();
+
+    if (!updatedProduct) {
+      throw new AppError("Product not found", 404);
+    }
+
+    logger.info(`Product ${enabled ? "enabled" : "disabled"} successfully: ${updatedProduct.slug}`);
+
+    // Calculate monthly amounts for subscription prices in response
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+
+    return {
+      product: productWithMonthlyAmounts,
+      message: `Product ${enabled ? "enabled" : "disabled"} successfully`,
     };
   }
 
@@ -631,6 +966,53 @@ class ProductService {
       hidden,
       sachets,
       standupPouch,
+    };
+  }
+
+  /**
+   * Calculate monthly amount from totalAmount and durationDays
+   * Formula: monthlyAmount = totalAmount / (durationDays / 30)
+   */
+  private calculateMonthlyAmount(
+    totalAmount: number | undefined,
+    durationDays: number | undefined
+  ): number | undefined {
+    if (!totalAmount || !durationDays || durationDays <= 0) {
+      return undefined;
+    }
+    const months = durationDays / 30;
+    return Math.round((totalAmount / months) * 100) / 100; // Round to 2 decimal places
+  }
+
+  /**
+   * Calculate monthly amounts for all subscription prices in a product
+   */
+  private calculateMonthlyAmounts(product: any): any {
+    if (!product.sachetPrices) {
+      return product;
+    }
+
+    const sachetPrices = { ...product.sachetPrices };
+
+    // Calculate monthly amount for each subscription period
+    const periods = ['thirtyDays', 'sixtyDays', 'ninetyDays', 'oneEightyDays'] as const;
+    
+    periods.forEach((period) => {
+      if (sachetPrices[period]) {
+        const periodData = sachetPrices[period];
+        // Only calculate if amount is not already set and totalAmount exists
+        if (!periodData.amount && periodData.totalAmount && periodData.durationDays) {
+          periodData.amount = this.calculateMonthlyAmount(
+            periodData.totalAmount,
+            periodData.durationDays
+          );
+        }
+      }
+    });
+
+    return {
+      ...product,
+      sachetPrices,
     };
   }
 

@@ -138,5 +138,36 @@ export class CartController {
       next(error);
     }
   }
+
+  /**
+   * Validate cart and calculate member pricing
+   */
+  static async validateCart(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const result = await cartService.validateCart(userId);
+
+      res.status(200).json({
+        success: true,
+        message: result.isValid
+          ? "Cart validation successful"
+          : "Cart validation failed",
+        data: {
+          isValid: result.isValid,
+          errors: result.errors,
+          warnings: result.warnings,
+          cart: result.cart,
+          pricing: result.pricing,
+          items: result.items,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 

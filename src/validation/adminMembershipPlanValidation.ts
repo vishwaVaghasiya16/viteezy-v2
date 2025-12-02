@@ -49,6 +49,12 @@ export const createMembershipPlanSchema = Joi.object({
   })
     .required()
     .label("Price"),
+  // Universal discount % for products
+  discountPercentage: Joi.number()
+    .min(0)
+    .max(100)
+    .optional()
+    .label("Discount Percentage"),
   interval: Joi.string()
     .valid(...MEMBERSHIP_INTERVAL_VALUES)
     .required()
@@ -96,6 +102,12 @@ export const updateMembershipPlanSchema = Joi.object({
   })
     .optional()
     .label("Price"),
+  // Universal discount % for products
+  discountPercentage: Joi.number()
+    .min(0)
+    .max(100)
+    .optional()
+    .label("Discount Percentage"),
   interval: Joi.string()
     .valid(...MEMBERSHIP_INTERVAL_VALUES)
     .optional()
