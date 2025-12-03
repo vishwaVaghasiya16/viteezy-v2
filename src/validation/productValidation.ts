@@ -67,6 +67,13 @@ const ingredientsSchema = Joi.array()
     "array.base": "Ingredients must be an array of ingredient IDs",
   });
 
+const productIngredientIdsSchema = Joi.array()
+  .items(objectIdSchema)
+  .optional()
+  .messages({
+    "array.base": "Product ingredients must be an array of ingredient IDs",
+  });
+
 const categoriesSchema = Joi.array()
   .items(Joi.string().trim())
   .optional()
