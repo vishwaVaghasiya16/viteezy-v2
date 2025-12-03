@@ -8,8 +8,8 @@ export enum ProductStatus {
 }
 
 export enum ProductVariant {
-  SACHETS = 'SACHETS',
-  STAND_UP_POUCH = 'STAND_UP_POUCH'
+  SACHETS = "SACHETS",
+  STAND_UP_POUCH = "STAND_UP_POUCH",
 }
 
 // User Roles
@@ -271,6 +271,7 @@ export enum PostponementStatus {
 
 // Membership Status
 export enum MembershipStatus {
+  NONE = "None", // User hasn't purchased any membership yet
   PENDING = "Pending",
   ACTIVE = "Active",
   EXPIRED = "Expired",

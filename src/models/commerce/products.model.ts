@@ -4,8 +4,17 @@ import {
   PriceType,
   SeoSchema,
   SeoType,
+  I18nString,
+  I18nText,
+  I18nStringType,
+  I18nTextType,
 } from "../common.model";
-import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES } from "../enums";
+import {
+  ProductStatus,
+  ProductVariant,
+  PRODUCT_STATUS_VALUES,
+  PRODUCT_VARIANT_VALUES,
+} from "../enums";
 
 // Extended price type for subscription periods with additional metadata
 // amount is optional here as it will be calculated from totalAmount
@@ -128,17 +137,18 @@ export interface ComparisonSection {
 }
 
 export interface IProduct extends Document {
-  title: string;
+  title: I18nStringType | string; // Support both I18n and plain string for backward compatibility
   slug: string;
-  description: string;
+  description: I18nTextType | string;
   productImage: string;
-  benefits: string[];
-  ingredients: string[];
-  categories?: string[];
+  benefits: string[]; // Array of strings (can be translated individually)
+  ingredients: string[]; // Array of strings
+  productIngredients?: mongoose.Types.ObjectId[];
+  categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
-  nutritionInfo: string;
+  nutritionInfo: I18nTextType | string;
   nutritionTable?: NutritionTableItem[];
-  howToUse: string;
+  howToUse: I18nTextType | string;
   status: ProductStatus;
   price: PriceType; // Base price (for Sachets - default)
   variant: ProductVariant;
@@ -169,7 +179,7 @@ export interface IProduct extends Document {
 const ProductSchema = new Schema<IProduct>(
   {
     title: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nString and String
       trim: true,
     },
     slug: {
@@ -178,7 +188,7 @@ const ProductSchema = new Schema<IProduct>(
       trim: true,
     },
     description: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     shortDescription: {
@@ -201,10 +211,16 @@ const ProductSchema = new Schema<IProduct>(
         trim: true,
       },
     ],
+    productIngredients: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "product_ingredients",
+      },
+    ],
     categories: [
       {
-        type: String,
-        trim: true,
+        type: Schema.Types.ObjectId,
+        ref: "categories",
       },
     ],
     healthGoals: [
@@ -214,7 +230,7 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     nutritionInfo: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     galleryImages: [
@@ -233,7 +249,7 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     howToUse: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     status: {
@@ -340,6 +356,7 @@ ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
 ProductSchema.index({ categories: 1 });
 ProductSchema.index({ healthGoals: 1 });
+ProductSchema.index({ productIngredients: 1 });
 
 // Text search index
 ProductSchema.index({ title: "text", description: "text" });

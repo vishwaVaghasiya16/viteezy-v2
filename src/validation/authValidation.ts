@@ -105,6 +105,21 @@ const phoneSchema = Joi.string()
   });
 
 /**
+ * Country code validation schema
+ * @constant {Joi.StringSchema} countryCodeSchema
+ * @description Validates country code (e.g., "US", "NL", "IN")
+ */
+const countryCodeSchema = Joi.string()
+  .length(2)
+  .uppercase()
+  .optional()
+  .label("Country Code")
+  .messages({
+    "string.length": "Country code must be 2 characters",
+    "string.uppercase": "Country code must be uppercase",
+  });
+
+/**
  * OTP validation schema
  * @constant {Joi.StringSchema} otpSchema
  * @description Validates 6-digit OTP code
@@ -143,6 +158,7 @@ export const registerSchema = Joi.object(
     email: emailSchema,
     password: passwordSchema,
     phone: phoneSchema,
+    countryCode: countryCodeSchema,
   })
 ).label("RegisterPayload");
 
@@ -208,14 +224,28 @@ export const forgotPasswordSchema = Joi.object(
 ).label("ForgotPasswordPayload");
 
 /**
+ * Reset Password Token Validation Schema
+ * @constant {Joi.StringSchema} resetTokenSchema
+ * @description Validates password reset token format
+ */
+const resetTokenSchema = Joi.string()
+  .min(32)
+  .required()
+  .label("Reset Token")
+  .messages({
+    "string.min": "Invalid reset token format",
+    "any.required": "Reset token is required",
+  });
+
+/**
  * Reset Password Validation Schema
  * @constant {Joi.ObjectSchema} resetPasswordSchema
- * @description Validates reset password request data
+ * @description Validates reset password request data (uses token instead of OTP)
  */
 export const resetPasswordSchema = Joi.object(
   withFieldLabels({
     email: emailSchema,
-    otp: otpSchema,
+    token: resetTokenSchema,
     newPassword: passwordSchema,
   })
 ).label("ResetPasswordPayload");
@@ -241,6 +271,7 @@ export const updateProfileSchema = Joi.object(
   withFieldLabels({
     name: nameSchema.optional(),
     phone: phoneSchema,
+    countryCode: countryCodeSchema,
     profileImage: Joi.string().uri().optional().allow(null, "").messages({
       "string.uri": "Profile image must be a valid URL",
     }),
@@ -261,6 +292,22 @@ export const updateProfileSchema = Joi.object(
         "number.min": "Age must be at least 1",
         "number.max": "Age cannot exceed 150",
         "number.integer": "Age must be an integer",
+      }),
+    language: Joi.string()
+      .valid(
+        "English",
+        "Dutch",
+        "German",
+        "French",
+        "Spanish",
+        "Italian",
+        "Portuguese"
+      )
+      .optional()
+      .label("Language")
+      .messages({
+        "any.only":
+          "Language must be one of: English, Dutch, German, French, Spanish, Italian, Portuguese",
       }),
   })
 ).label("UpdateProfilePayload");

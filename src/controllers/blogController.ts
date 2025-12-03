@@ -94,7 +94,7 @@ class BlogController {
         .populate("categoryId", "slug title")
         .populate("authorId", "name email")
         .select(
-          "slug title excerpt featuredImage categoryId tags seo viewCount likeCount commentCount publishedAt createdAt"
+          "slug title excerpt coverImage categoryId tags seo viewCount likeCount commentCount publishedAt createdAt"
         )
         .sort(sortOptions)
         .skip(skip)
@@ -122,7 +122,7 @@ class BlogController {
           title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
           content:
             blog.excerpt?.[lang as "en" | "nl"] || blog.excerpt?.en || "",
-          coverImage: blog.featuredImage?.url || null,
+          coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],
           metaTitle: blog.seo?.title || "",
@@ -204,7 +204,7 @@ class BlogController {
         slug: blog.slug,
         title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
         content: blog.content?.[lang as "en" | "nl"] || blog.content?.en || "",
-        coverImage: blog.featuredImage?.url || null,
+        coverImage: blog.coverImage || null,
         category,
         tags: blog.tags || [],
         metaTitle: blog.seo?.title || "",
@@ -289,7 +289,7 @@ class BlogController {
       const blogs = await Blogs.find(filter)
         .populate("categoryId", "slug title")
         .select(
-          "slug title excerpt featuredImage categoryId tags seo viewCount likeCount commentCount publishedAt"
+          "slug title excerpt coverImage categoryId tags seo viewCount likeCount commentCount publishedAt"
         )
         .sort(sortOptions)
         .limit(blogLimit)
@@ -302,7 +302,7 @@ class BlogController {
           typeof blog.categoryId === "object" &&
           !(blog.categoryId instanceof mongoose.Types.ObjectId)
             ? {
-              _id: blog.categoryId._id,
+                _id: blog.categoryId._id,
                 slug: blog.categoryId.slug,
                 title:
                   blog.categoryId.title?.[lang as "en" | "nl"] ||
@@ -316,7 +316,7 @@ class BlogController {
           title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
           content:
             blog.excerpt?.[lang as "en" | "nl"] || blog.excerpt?.en || "",
-          coverImage: blog.featuredImage?.url || null,
+          coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],
           metaTitle: blog.seo?.title || "",

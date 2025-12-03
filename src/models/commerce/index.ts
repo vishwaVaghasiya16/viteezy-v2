@@ -5,6 +5,7 @@ export { Categories } from "./categories.model";
 export { Coupons } from "./coupons.model";
 export { DeliveryPostponements } from "./deliveryPostponements.model";
 export { Ingredients } from "./ingredients.model";
+export { ProductIngredients } from "./productIngredients.model";
 export { Orders } from "./orders.model";
 export { Payments } from "./payments.model";
 export { Products } from "./products.model";

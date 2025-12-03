@@ -13,6 +13,7 @@ interface RegisterData {
   email: string;
   password: string;
   phone?: string;
+  countryCode?: string;
 }
 
 interface LoginData {
@@ -37,7 +38,8 @@ interface LoginResult {
 
 interface PasswordResetData {
   email: string;
-  otp: string;
+  token?: string;
+  otp?: string; // Keep for backward compatibility if needed
   newPassword: string;
 }
 
@@ -200,7 +202,7 @@ class AuthService {
    * Register new user
    */
   async register(data: RegisterData): Promise<{ user: any; message: string }> {
-    const { name, email, password, phone } = data;
+    const { name, email, password, phone, countryCode } = data;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -218,6 +220,14 @@ class AuthService {
 
       if (typeof phone !== "undefined" && existingUser.phone !== phone) {
         existingUser.phone = phone;
+        userUpdated = true;
+      }
+
+      if (
+        typeof countryCode !== "undefined" &&
+        existingUser.countryCode !== countryCode
+      ) {
+        existingUser.countryCode = countryCode;
         userUpdated = true;
       }
 
@@ -257,14 +267,20 @@ class AuthService {
         );
       }
 
+      // Use registeredAt if set, otherwise fallback to createdAt
+      const registrationDate =
+        existingUser.registeredAt || existingUser.createdAt;
+
       return {
         user: {
           _id: existingUser._id,
           name: existingUser.name,
           email: existingUser.email,
           phone: existingUser.phone,
+          countryCode: existingUser.countryCode,
           memberId: existingUser.memberId,
           isEmailVerified: existingUser.isEmailVerified,
+          registeredAt: registrationDate,
         },
         message:
           "Registration successful. Please verify your email with the OTP sent.",
@@ -275,11 +291,13 @@ class AuthService {
     const memberId = await generateMemberId();
 
     // Create user (password will be hashed by pre-save hook)
+    // registeredAt will be automatically set by pre-save hook
     const user = await User.create({
       name,
       email,
       password, // Let the pre-save hook handle hashing
       phone,
+      countryCode,
       memberId, // Assign generated member ID
       isEmailVerified: false,
     });
@@ -298,14 +316,19 @@ class AuthService {
     // Send welcome email asynchronously to avoid delaying the API response
     this.sendWelcomeEmailAsync(email, name);
 
+    // Use registeredAt if set, otherwise fallback to createdAt
+    const registrationDate = user.registeredAt || user.createdAt;
+
     return {
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
+        countryCode: user.countryCode,
         memberId: user.memberId, // Include member ID in response
         isEmailVerified: user.isEmailVerified,
+        registeredAt: registrationDate,
       },
       message:
         "Registration successful. Please verify your email with the OTP sent.",
@@ -463,7 +486,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "active",
+          status: "Active",
           revoked: false,
           deviceInfo: deviceInfo || "Web",
         },
@@ -546,7 +569,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "active",
+          status: "Active",
           revoked: false,
           deviceInfo: deviceInfo,
         },
@@ -592,38 +615,94 @@ class AuthService {
   }
 
   /**
-   * Forgot password
+   * Forgot password - Send reset link via email
    */
   async forgotPassword(email: string): Promise<{ message: string }> {
     const user = await User.findOne({ email });
     if (!user) {
-      throw new AppError("User not found", 404);
+      // Don't reveal if user exists or not for security
+      return {
+        message:
+          "If an account exists with this email, a password reset link has been sent.",
+      };
     }
 
-    return await this.sendOTPForVerification(
-      user._id.toString(),
-      email,
-      OTPType.PASSWORD_RESET
-    );
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save reset token to user (need to select password field to update)
+    await User.findByIdAndUpdate(user._id, {
+      passwordResetToken: resetToken,
+      passwordResetTokenExpires: resetTokenExpires,
+    });
+
+    // Generate reset URL
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.CLIENT_URL ||
+      "http://localhost:3000";
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
+      email
+    )}`;
+
+    // Send reset link via email
+    try {
+      const emailSent = await emailService.sendPasswordResetLinkEmail(
+        email,
+        user.name,
+        resetUrl
+      );
+
+      if (emailSent) {
+        logger.info(`Password reset link sent successfully to ${email}`);
+      } else {
+        logger.error(`Failed to send password reset link to ${email}`);
+        throw new AppError(
+          "Failed to send password reset email. Please try again later.",
+          502
+        );
+      }
+    } catch (error) {
+      logger.error("Error sending password reset email:", error);
+      throw new AppError(
+        "Failed to send password reset email. Please try again later.",
+        502
+      );
+    }
+
+    return {
+      message:
+        "If an account exists with this email, a password reset link has been sent.",
+    };
   }
 
   /**
-   * Reset password
+   * Reset password using reset token
    */
   async resetPassword(data: PasswordResetData): Promise<{ message: string }> {
-    const { email, otp, newPassword } = data;
+    const { email, token, newPassword } = data;
 
-    // Verify OTP first
-    await this.verifyOTP({ email, otp, type: OTPType.PASSWORD_RESET });
+    if (!token) {
+      throw new AppError("Reset token is required", 400);
+    }
 
-    // Find user
-    const user = await User.findOne({ email });
+    // Find user with reset token
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      passwordResetToken: token,
+      passwordResetTokenExpires: { $gt: new Date() },
+    }).select("+passwordResetToken +passwordResetTokenExpires");
+
     if (!user) {
-      throw new AppError("User not found", 404);
+      throw new AppError("Invalid or expired reset token", 400);
     }
 
     // Update password (will be hashed by pre-save hook)
     user.password = newPassword;
+    // Clear reset token
+    user.passwordResetToken = undefined;
+    user.passwordResetTokenExpires = undefined;
     await user.save(); // This will trigger the pre-save hook
 
     // Invalidate all existing sessions
@@ -635,10 +714,12 @@ class AuthService {
     // Mark all user's stored sessionIds as revoked
     await User.findByIdAndUpdate(user._id, {
       $set: {
-        "sessionIds.$[].status": "revoked",
+        "sessionIds.$[].status": "Revoked",
         "sessionIds.$[].revoked": true,
       },
     });
+
+    logger.info(`Password reset successfully for user: ${user.email}`);
 
     return {
       message:
@@ -692,7 +773,7 @@ class AuthService {
       { "sessionIds.sessionId": sessionId },
       {
         $set: {
-          "sessionIds.$[elem].status": "revoked",
+          "sessionIds.$[elem].status": "Revoked",
           "sessionIds.$[elem].revoked": true,
         },
       },
@@ -716,7 +797,7 @@ class AuthService {
     // Mark all sessionIds as revoked on user
     await User.findByIdAndUpdate(userId, {
       $set: {
-        "sessionIds.$[].status": "revoked",
+        "sessionIds.$[].status": "Revoked",
         "sessionIds.$[].revoked": true,
       },
     });
@@ -833,7 +914,7 @@ class AuthService {
         { _id: user._id, "sessionIds.sessionId": session.sessionId },
         {
           $set: {
-            "sessionIds.$.status": "revoked",
+            "sessionIds.$.status": "Revoked",
             "sessionIds.$.revoked": true,
           },
         }
@@ -856,7 +937,7 @@ class AuthService {
         $push: {
           sessionIds: {
             sessionId: newSessionId,
-            status: "active",
+            status: "Active",
             revoked: false,
             deviceInfo,
           },

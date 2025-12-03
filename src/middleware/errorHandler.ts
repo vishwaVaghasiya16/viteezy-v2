@@ -214,6 +214,32 @@ export const errorHandler = (
     errorType = "Validation Error";
     errorText = "Invalid ID format";
   }
+  // Handle Multer errors (file upload errors)
+  else if (error.name === "MulterError") {
+    statusCode = HTTP_STATUS.BAD_REQUEST;
+    message = "File upload error";
+    errorType = "File Upload Error";
+
+    const multerError = error as any;
+    switch (multerError.code) {
+      case "LIMIT_UNEXPECTED_FILE":
+        errorText = "Only one file is allowed. Please upload a single file.";
+        break;
+      case "LIMIT_FILE_SIZE":
+        errorText = `File size too large. Maximum allowed size is ${Math.round(
+          (req as any).uploadLimit || 5
+        )}MB.`;
+        break;
+      case "LIMIT_FILE_COUNT":
+        errorText = "Too many files. Only one file is allowed.";
+        break;
+      case "LIMIT_FIELD_KEY":
+        errorText = "Invalid field name for file upload.";
+        break;
+      default:
+        errorText = multerError.message || "File upload failed.";
+    }
+  }
   // Handle other unexpected errors
   else {
     // Log unexpected errors for debugging

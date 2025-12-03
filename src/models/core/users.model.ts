@@ -20,6 +20,7 @@ export interface IUser extends Document {
   _id: string;
   name: string;
   email: string;
+  countryCode?: string;
   password: string;
   phone?: string;
   role: UserRole;
@@ -29,6 +30,7 @@ export interface IUser extends Document {
   profileImage?: string;
   gender?: Gender;
   age?: number;
+  language?: string; // User's preferred language (default: "English")
   memberId?: string; // Unique member ID (e.g., MEM-A9XK72QD)
   isMember?: boolean;
   membershipStatus?: MembershipStatus;
@@ -37,6 +39,9 @@ export interface IUser extends Document {
   membershipActivatedAt?: Date;
   lastLogin?: Date;
   sessionIds?: IUserSessionInfo[];
+  passwordResetToken?: string;
+  passwordResetTokenExpires?: Date;
+  registeredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -65,6 +70,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       trim: true,
       match: [/^[+]?[1-9]\d{1,14}$/, "Please enter a valid phone number"],
+      default: null,
+    },
+    countryCode: {
+      type: String,
+      trim: true,
+      default: null,
     },
     password: {
       type: String,
@@ -105,6 +116,24 @@ const userSchema = new Schema<IUser>(
       max: [150, "Age cannot exceed 150"],
       default: null,
     },
+    language: {
+      type: String,
+      trim: true,
+      default: "English",
+      enum: [
+        "English",
+        "Dutch",
+        "German",
+        "French",
+        "Spanish",
+        "Italian",
+        "Portuguese",
+      ],
+    },
+    registeredAt: {
+      type: Date,
+      default: null,
+    },
     memberId: {
       type: String,
       unique: true,
@@ -112,7 +141,7 @@ const userSchema = new Schema<IUser>(
       trim: true,
       uppercase: true,
       match: [/^MEM-[A-Z0-9]{8}$/, "Invalid member ID format"],
-      index: true,
+      // Note: unique: true automatically creates an index, so index: true is not needed
     },
     isMember: {
       type: Boolean,
@@ -121,7 +150,7 @@ const userSchema = new Schema<IUser>(
     membershipStatus: {
       type: String,
       enum: MEMBERSHIP_STATUS_VALUES,
-      default: MembershipStatus.EXPIRED,
+      default: MembershipStatus.NONE, // New users haven't purchased membership yet
     },
     membershipPlanId: {
       type: Schema.Types.ObjectId,
@@ -149,6 +178,14 @@ const userSchema = new Schema<IUser>(
         deviceInfo: { type: String, trim: true },
       },
     ],
+    passwordResetToken: {
+      type: String,
+      select: false, // Don't include in queries by default
+    },
+    passwordResetTokenExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -161,6 +198,15 @@ const userSchema = new Schema<IUser>(
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
+
+// Set registeredAt to createdAt if not already set (for new users)
+userSchema.pre("save", function (next) {
+  // Only set registeredAt if it's a new document and registeredAt is not set
+  if (this.isNew && !this.registeredAt) {
+    this.registeredAt = new Date();
+  }
+  next();
+});
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {

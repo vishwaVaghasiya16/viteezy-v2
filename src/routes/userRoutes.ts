@@ -21,4 +21,14 @@ router.put(
   userController.updateCurrentUser
 );
 
+/**
+ * Get transaction history for the logged-in user with optional filters
+ * Query params: page, limit, sort, order, status, paymentMethod, search
+ */
+router.get(
+  "/me/transactions",
+  authenticate,
+  userController.getTransactionHistory
+);
+
 export default router;

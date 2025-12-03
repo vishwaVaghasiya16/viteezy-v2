@@ -6,10 +6,11 @@ import {
   SoftDelete,
   I18nStringType,
   I18nTextType,
+  AuditType,
 } from "../common.model";
 import { FAQStatus, FAQ_STATUS_VALUES } from "../enums";
 
-export interface IFAQ extends Document {
+export interface IFAQ extends Document, AuditType {
   question: I18nStringType;
   answer: I18nTextType;
   category?: string;
@@ -21,6 +22,8 @@ export interface IFAQ extends Document {
   viewCount: number;
   helpfulCount: number;
   notHelpfulCount: number;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,7 +81,7 @@ const FAQSchema = new Schema<IFAQ>(
       min: 0,
     },
     ...SoftDelete,
-    ...AuditSchema.obj,
+    ...(AuditSchema.obj as Record<string, unknown>),
   },
   {
     timestamps: true,

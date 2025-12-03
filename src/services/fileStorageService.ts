@@ -33,8 +33,22 @@ class FileStorageService {
       !spaces.accessKeyId ||
       !spaces.secretAccessKey
     ) {
+      const missingFields = [];
+      if (!spaces.bucket) missingFields.push("bucket");
+      if (!spaces.endpoint) missingFields.push("endpoint");
+      if (!spaces.accessKeyId) missingFields.push("accessKeyId");
+      if (!spaces.secretAccessKey) missingFields.push("secretAccessKey");
+
+      logger.error("File storage configuration incomplete", {
+        missingFields,
+        bucket: spaces.bucket || "NOT SET",
+        endpoint: spaces.endpoint || "NOT SET",
+      });
+
       throw new AppError(
-        "File storage is not configured. Please set DigitalOcean Spaces credentials.",
+        `File storage is not configured. Missing: ${missingFields.join(
+          ", "
+        )}. Please set DigitalOcean Spaces credentials in environment variables.`,
         500
       );
     }
@@ -51,10 +65,15 @@ class FileStorageService {
 
   private buildObjectKey(modulePath: string, extension: string): string {
     const datePrefix = new Date().toISOString().split("T")[0];
-    return `${this.projectRoot}/${modulePath}/${datePrefix}/${randomUUID()}.${extension}`;
+    return `${
+      this.projectRoot
+    }/${modulePath}/${datePrefix}/${randomUUID()}.${extension}`;
   }
 
-  async uploadFile(modulePath: string, file: Express.Multer.File): Promise<string> {
+  async uploadFile(
+    modulePath: string,
+    file: Express.Multer.File
+  ): Promise<string> {
     this.ensureConfig();
 
     const extension = file.originalname?.split(".").pop() || "bin";
@@ -69,10 +88,34 @@ class FileStorageService {
       ACL: "public-read",
     });
 
-    await s3Client.send(command);
-    logger.info(`Uploaded product image to Spaces: ${key}`);
+    try {
+      await s3Client.send(command);
+      logger.info(`Uploaded file to Spaces: ${key}`, {
+        bucket: spaces.bucket,
+        module: sanitizedModule,
+      });
 
-    return this.buildPublicUrl(key);
+      return this.buildPublicUrl(key);
+    } catch (error: any) {
+      logger.error("Failed to upload file to Spaces", {
+        bucket: spaces.bucket,
+        endpoint: spaces.endpoint,
+        region: spaces.region,
+        key,
+        error: error.message,
+        errorName: error.name,
+      });
+
+      // Re-throw with more context
+      if (error.name === "NoSuchBucket") {
+        throw new AppError(
+          `DigitalOcean Spaces bucket "${spaces.bucket}" does not exist. Please check your bucket name and region configuration.`,
+          500
+        );
+      }
+
+      throw error;
+    }
   }
 
   private extractKeyFromUrl(url?: string | null): string | null {
@@ -120,4 +163,3 @@ class FileStorageService {
 }
 
 export const fileStorageService = new FileStorageService();
-

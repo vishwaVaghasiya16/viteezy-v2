@@ -80,4 +80,11 @@ router.post(
   subscriptionController.cancelSubscription
 );
 
+/**
+ * @route   GET /api/subscriptions/widget/overview
+ * @desc    Widget data for user dashboard subscription section
+ * @access  Private
+ */
+router.get("/widget/overview", subscriptionController.getSubscriptionWidget);
+
 export default router;

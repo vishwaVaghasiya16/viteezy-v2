@@ -5,10 +5,11 @@ import {
   AuditSchema,
   SoftDelete,
   I18nStringType,
+  AuditType,
 } from "../common.model";
 import { CouponType, COUPON_TYPE_VALUES } from "../enums";
 
-export interface ICoupon extends Document {
+export interface ICoupon extends Document, AuditType {
   code: string;
   name: I18nStringType;
   description: I18nStringType;
@@ -22,9 +23,13 @@ export interface ICoupon extends Document {
   applicableProducts: mongoose.Types.ObjectId[];
   applicableCategories: mongoose.Types.ObjectId[];
   excludedProducts: mongoose.Types.ObjectId[];
-  validFrom: Date;
-  validUntil: Date;
+  validFrom?: Date;
+  validUntil?: Date;
   isActive: boolean;
+  isRecurring?: boolean;
+  oneTimeUse?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -127,8 +132,19 @@ const CouponSchema = new Schema<ICoupon>(
       type: Boolean,
       default: true,
     },
+    isRecurring: {
+      type: Boolean,
+      default: false,
+      description: "If true, coupon can be used again on subscription renewals",
+    },
+    oneTimeUse: {
+      type: Boolean,
+      default: false,
+      description:
+        "If true, customer can use this coupon only once in their lifetime",
+    },
     ...SoftDelete,
-    ...AuditSchema.obj,
+    ...(AuditSchema.obj as Record<string, unknown>),
   },
   {
     timestamps: true,

@@ -77,7 +77,7 @@ const SavedCardSchema = new Schema<ISavedCard>(
     gatewayToken: {
       type: String,
       trim: true,
-      sparse: true, // Allow multiple nulls but enforce uniqueness when present
+      // Note: sparse and unique are handled in schema.index() below
     },
     gatewayCustomerId: {
       type: String,

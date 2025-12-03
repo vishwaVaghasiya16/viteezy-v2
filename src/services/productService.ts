@@ -1,6 +1,7 @@
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { Ingredients } from "../models/commerce/ingredients.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
@@ -21,6 +22,7 @@ interface CreateProductData {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -169,6 +171,7 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
+  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
@@ -314,8 +317,19 @@ class ProductService {
   /**
    * Create new product
    */
-  async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
-    const { title, slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices, variant } = data;
+  async createProduct(
+    data: CreateProductData
+  ): Promise<{ product: any; message: string }> {
+    const {
+      title,
+      slug,
+      hasStandupPouch,
+      standupPouchPrice,
+      standupPouchPrices,
+      price,
+      sachetPrices,
+      variant,
+    } = data;
 
     // Generate slug from title if not provided
     let finalSlug = slug;
@@ -324,13 +338,19 @@ class ProductService {
       finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck: string) => {
-          const existing = await Products.findOne({ slug: slugToCheck, isDeleted: false });
+          const existing = await Products.findOne({
+            slug: slugToCheck,
+            isDeleted: false,
+          });
           return !!existing;
         }
       );
     } else {
       // Check if provided slug already exists
-      const existingProduct = await Products.findOne({ slug: finalSlug, isDeleted: false });
+      const existingProduct = await Products.findOne({
+        slug: finalSlug,
+        isDeleted: false,
+      });
       if (existingProduct) {
         throw new AppError("Product with this slug already exists", 409);
       }
@@ -338,7 +358,10 @@ class ProductService {
 
     // Validate standupPouchPrice if hasStandupPouch is true (standupPouchPrices is legacy field)
     if (hasStandupPouch && !standupPouchPrice && !standupPouchPrices) {
-      throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
+      throw new AppError(
+        "standupPouchPrice is required when hasStandupPouch is true",
+        400
+      );
     }
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
@@ -354,7 +377,11 @@ class ProductService {
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
-    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+    if (
+      standupPouchPrice &&
+      typeof standupPouchPrice === "object" &&
+      "oneTime" in standupPouchPrice
+    ) {
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
@@ -370,7 +397,9 @@ class ProductService {
     logger.info(`Product created successfully: ${product.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(product.toObject());
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(
+      product.toObject()
+    );
 
     return {
       product: productWithMonthlyAmounts,
@@ -409,7 +438,7 @@ class ProductService {
     } = filters;
 
     // Base match: not deleted
-    const matchStage: Record<string, any> = { 
+    const matchStage: Record<string, any> = {
       isDeleted: false,
     };
 
@@ -454,7 +483,7 @@ class ProductService {
         $text: { $search: search.trim() },
         isDeleted: false,
       };
-      
+
       // Add other filters that can be combined with $text in same stage
       if (status) {
         textSearchMatch.status = status;
@@ -463,24 +492,25 @@ class ProductService {
         textSearchMatch.status = { $ne: ProductStatus.HIDDEN };
       }
       if (variant) textSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined) textSearchMatch.hasStandupPouch = hasStandupPouch;
-      
+      if (hasStandupPouch !== undefined)
+        textSearchMatch.hasStandupPouch = hasStandupPouch;
+
       // Text search must be first stage
       pipeline.push({ $match: textSearchMatch });
-      
+
       // Add relevance score immediately after text search
       pipeline.push({
         $addFields: {
           relevanceScore: { $meta: "textScore" },
         },
       });
-      
+
       // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
       const arrayFilters: Record<string, any> = {};
       if (categories?.length) arrayFilters.categories = { $in: categories };
       if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
       if (ingredients?.length) arrayFilters.ingredients = { $all: ingredients };
-      
+
       if (Object.keys(arrayFilters).length > 0) {
         pipeline.push({ $match: arrayFilters });
       }
@@ -538,6 +568,45 @@ class ProductService {
         $project: {
           ratingSummary: 0,
         },
+      },
+      // Lookup ingredients by ObjectId
+      {
+        $lookup: {
+          from: "ingredients",
+          let: { ingredientIds: "$ingredients" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $in: [{ $toString: "$_id" }, "$$ingredientIds"],
+                    },
+                    { $ne: ["$isDeleted", true] },
+                    { $ne: ["$isActive", false] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "ingredientDetails",
+        },
+      },
+      {
+        $addFields: {
+          ingredients: {
+            $cond: {
+              if: { $gt: [{ $size: "$ingredientDetails" }, 0] },
+              then: "$ingredientDetails",
+              else: "$ingredients", // Keep original IDs if no ingredients found
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          ingredientDetails: 0,
+        },
       }
     );
 
@@ -546,10 +615,7 @@ class ProductService {
 
     pipeline.push({
       $facet: {
-        data: [
-          { $skip: skip },
-          { $limit: limit },
-        ],
+        data: [{ $skip: skip }, { $limit: limit }],
         total: [{ $count: "value" }],
       },
     });
@@ -608,6 +674,18 @@ class ProductService {
       }).lean();
     }
 
+    // Fetch linked product ingredient entities (admin curated)
+    let linkedProductIngredients: any[] = [];
+    if (product.productIngredients && product.productIngredients.length > 0) {
+      linkedProductIngredients = await ProductIngredients.find({
+        _id: { $in: product.productIngredients },
+        isDeleted: { $ne: true },
+        isActive: true,
+      })
+        .sort({ name: 1 })
+        .lean();
+    }
+
     // Build meta data if not present
     const meta = product.meta || {
       title: product.title,
@@ -625,6 +703,7 @@ class ProductService {
       ...product,
       variants: variants || [],
       detailedIngredients: detailedIngredients || [],
+      productIngredientDetails: linkedProductIngredients || [],
       meta,
       // Ensure nutritionTable exists (can be empty array)
       nutritionTable: product.nutritionTable || [],
@@ -661,7 +740,14 @@ class ProductService {
     productId: string,
     data: UpdateProductData
   ): Promise<{ product: any; message: string }> {
-    const { slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices } = data;
+    const {
+      slug,
+      hasStandupPouch,
+      standupPouchPrice,
+      standupPouchPrices,
+      price,
+      sachetPrices,
+    } = data;
 
     // Check if product exists
     const existingProduct = await Products.findOne({
@@ -690,14 +776,24 @@ class ProductService {
     // If hasStandupPouch is undefined, it means it's not being updated, so skip validation
     if (hasStandupPouch === true && !standupPouchPrice && !standupPouchPrices) {
       // Check if existing product already has standupPouchPrice (for backward compatibility)
-      if (!existingProduct.standupPouchPrice && !existingProduct.standupPouchPrices) {
-        throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
+      if (
+        !existingProduct.standupPouchPrice &&
+        !existingProduct.standupPouchPrices
+      ) {
+        throw new AppError(
+          "standupPouchPrice is required when hasStandupPouch is true",
+          400
+        );
       }
     }
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
-    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+    if (
+      standupPouchPrice &&
+      typeof standupPouchPrice === "object" &&
+      "oneTime" in standupPouchPrice
+    ) {
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
@@ -717,13 +813,23 @@ class ProductService {
     const imagesToDelete: string[] = [];
 
     // Check productImage
-    if (data.productImage && existingProduct.productImage && data.productImage !== existingProduct.productImage) {
+    if (
+      data.productImage &&
+      existingProduct.productImage &&
+      data.productImage !== existingProduct.productImage
+    ) {
       imagesToDelete.push(existingProduct.productImage);
     }
 
     // Check galleryImages - delete old ones that are not in new list
-    if (data.galleryImages && Array.isArray(data.galleryImages) && existingProduct.galleryImages) {
-      const oldGalleryImages = Array.isArray(existingProduct.galleryImages) ? existingProduct.galleryImages : [];
+    if (
+      data.galleryImages &&
+      Array.isArray(data.galleryImages) &&
+      existingProduct.galleryImages
+    ) {
+      const oldGalleryImages = Array.isArray(existingProduct.galleryImages)
+        ? existingProduct.galleryImages
+        : [];
       const imagesToKeep = new Set(data.galleryImages);
       oldGalleryImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -733,8 +839,14 @@ class ProductService {
     }
 
     // Check sachetImages - delete old ones that are not in new list
-    if (data.sachetImages && Array.isArray(data.sachetImages) && existingProduct.sachetImages) {
-      const oldSachetImages = Array.isArray(existingProduct.sachetImages) ? existingProduct.sachetImages : [];
+    if (
+      data.sachetImages &&
+      Array.isArray(data.sachetImages) &&
+      existingProduct.sachetImages
+    ) {
+      const oldSachetImages = Array.isArray(existingProduct.sachetImages)
+        ? existingProduct.sachetImages
+        : [];
       const imagesToKeep = new Set(data.sachetImages);
       oldSachetImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -744,8 +856,16 @@ class ProductService {
     }
 
     // Check standupPouchImages - delete old ones that are not in new list
-    if (data.standupPouchImages && Array.isArray(data.standupPouchImages) && existingProduct.standupPouchImages) {
-      const oldStandupPouchImages = Array.isArray(existingProduct.standupPouchImages) ? existingProduct.standupPouchImages : [];
+    if (
+      data.standupPouchImages &&
+      Array.isArray(data.standupPouchImages) &&
+      existingProduct.standupPouchImages
+    ) {
+      const oldStandupPouchImages = Array.isArray(
+        existingProduct.standupPouchImages
+      )
+        ? existingProduct.standupPouchImages
+        : [];
       const imagesToKeep = new Set(data.standupPouchImages);
       oldStandupPouchImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -789,7 +909,9 @@ class ProductService {
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
-      Promise.all(imagesToDelete.map(url => fileStorageService.deleteFileByUrl(url))).catch((err) => {
+      Promise.all(
+        imagesToDelete.map((url) => fileStorageService.deleteFileByUrl(url))
+      ).catch((err) => {
         logger.error(`Error deleting old images: ${err.message}`);
       });
     }
@@ -797,7 +919,8 @@ class ProductService {
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+    const productWithMonthlyAmounts =
+      this.calculateMonthlyAmounts(updatedProduct);
 
     return {
       product: productWithMonthlyAmounts,
@@ -841,10 +964,15 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    logger.info(`Product ${enabled ? "enabled" : "disabled"} successfully: ${updatedProduct.slug}`);
+    logger.info(
+      `Product ${enabled ? "enabled" : "disabled"} successfully: ${
+        updatedProduct.slug
+      }`
+    );
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+    const productWithMonthlyAmounts =
+      this.calculateMonthlyAmounts(updatedProduct);
 
     return {
       product: productWithMonthlyAmounts,
@@ -950,14 +1078,30 @@ class ProductService {
     sachets: number;
     standupPouch: number;
   }> {
-    const [total, active, draft, hidden, sachets, standupPouch] = await Promise.all([
-      Products.countDocuments({ isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.ACTIVE, isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.DRAFT, isDeleted: false }),
-      Products.countDocuments({ status: ProductStatus.HIDDEN, isDeleted: false }),
-      Products.countDocuments({ variant: ProductVariant.SACHETS, isDeleted: false }),
-      Products.countDocuments({ variant: ProductVariant.STAND_UP_POUCH, isDeleted: false }),
-    ]);
+    const [total, active, draft, hidden, sachets, standupPouch] =
+      await Promise.all([
+        Products.countDocuments({ isDeleted: false }),
+        Products.countDocuments({
+          status: ProductStatus.ACTIVE,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          status: ProductStatus.DRAFT,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          status: ProductStatus.HIDDEN,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          variant: ProductVariant.SACHETS,
+          isDeleted: false,
+        }),
+        Products.countDocuments({
+          variant: ProductVariant.STAND_UP_POUCH,
+          isDeleted: false,
+        }),
+      ]);
 
     return {
       total,
@@ -995,13 +1139,22 @@ class ProductService {
     const sachetPrices = { ...product.sachetPrices };
 
     // Calculate monthly amount for each subscription period
-    const periods = ['thirtyDays', 'sixtyDays', 'ninetyDays', 'oneEightyDays'] as const;
-    
+    const periods = [
+      "thirtyDays",
+      "sixtyDays",
+      "ninetyDays",
+      "oneEightyDays",
+    ] as const;
+
     periods.forEach((period) => {
       if (sachetPrices[period]) {
         const periodData = sachetPrices[period];
         // Only calculate if amount is not already set and totalAmount exists
-        if (!periodData.amount && periodData.totalAmount && periodData.durationDays) {
+        if (
+          !periodData.amount &&
+          periodData.totalAmount &&
+          periodData.durationDays
+        ) {
           periodData.amount = this.calculateMonthlyAmount(
             periodData.totalAmount,
             periodData.durationDays
@@ -1046,4 +1199,3 @@ class ProductService {
 }
 
 export const productService = new ProductService();
-

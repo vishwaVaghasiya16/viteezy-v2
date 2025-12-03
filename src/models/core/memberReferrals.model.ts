@@ -23,7 +23,6 @@ const MemberReferralSchema = new Schema<IMemberReferral>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     parentUserId: {
       type: Schema.Types.ObjectId,
