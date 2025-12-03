@@ -21,6 +21,7 @@ import { config } from "@/config";
 import { errorHandler } from "@/middleware/errorHandler";
 import { notFoundHandler } from "@/middleware/notFoundHandler";
 import { responseMiddleware } from "@/middleware/responseMiddleware";
+import { localeMiddleware } from "@/middleware/locale";
 import { logger } from "@/utils/logger";
 import apiRoutes from "@/routes";
 import { swaggerSpec } from "@/docs/swagger";
@@ -288,6 +289,13 @@ app.use(
  * Must be registered before routes to be available in route handlers
  */
 app.use(responseMiddleware);
+
+/**
+ * Locale Detection Middleware
+ * Detects language from ?lang= query parameter
+ * Must be before routes to set req.locale
+ */
+app.use(localeMiddleware);
 
 /**
  * ============================================================================

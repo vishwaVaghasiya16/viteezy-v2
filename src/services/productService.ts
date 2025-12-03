@@ -363,7 +363,11 @@ class ProductService {
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
-    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+    if (
+      standupPouchPrice &&
+      typeof standupPouchPrice === "object" &&
+      "oneTime" in standupPouchPrice
+    ) {
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
@@ -379,7 +383,9 @@ class ProductService {
     logger.info(`Product created successfully: ${product.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(product.toObject());
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(
+      product.toObject()
+    );
 
     return {
       product: productWithMonthlyAmounts,
@@ -418,7 +424,7 @@ class ProductService {
     } = filters;
 
     // Base match: not deleted
-    const matchStage: Record<string, any> = { 
+    const matchStage: Record<string, any> = {
       isDeleted: false,
     };
 
@@ -723,7 +729,14 @@ class ProductService {
     productId: string,
     data: UpdateProductData
   ): Promise<{ product: any; message: string }> {
-    const { slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices } = data;
+    const {
+      slug,
+      hasStandupPouch,
+      standupPouchPrice,
+      standupPouchPrices,
+      price,
+      sachetPrices,
+    } = data;
 
     // Check if product exists
     const existingProduct = await Products.findOne({
@@ -752,14 +765,24 @@ class ProductService {
     // If hasStandupPouch is undefined, it means it's not being updated, so skip validation
     if (hasStandupPouch === true && !standupPouchPrice && !standupPouchPrices) {
       // Check if existing product already has standupPouchPrice (for backward compatibility)
-      if (!existingProduct.standupPouchPrice && !existingProduct.standupPouchPrices) {
-        throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
+      if (
+        !existingProduct.standupPouchPrice &&
+        !existingProduct.standupPouchPrices
+      ) {
+        throw new AppError(
+          "standupPouchPrice is required when hasStandupPouch is true",
+          400
+        );
       }
     }
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
-    if (standupPouchPrice && typeof standupPouchPrice === 'object' && 'oneTime' in standupPouchPrice) {
+    if (
+      standupPouchPrice &&
+      typeof standupPouchPrice === "object" &&
+      "oneTime" in standupPouchPrice
+    ) {
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
@@ -779,13 +802,23 @@ class ProductService {
     const imagesToDelete: string[] = [];
 
     // Check productImage
-    if (data.productImage && existingProduct.productImage && data.productImage !== existingProduct.productImage) {
+    if (
+      data.productImage &&
+      existingProduct.productImage &&
+      data.productImage !== existingProduct.productImage
+    ) {
       imagesToDelete.push(existingProduct.productImage);
     }
 
     // Check galleryImages - delete old ones that are not in new list
-    if (data.galleryImages && Array.isArray(data.galleryImages) && existingProduct.galleryImages) {
-      const oldGalleryImages = Array.isArray(existingProduct.galleryImages) ? existingProduct.galleryImages : [];
+    if (
+      data.galleryImages &&
+      Array.isArray(data.galleryImages) &&
+      existingProduct.galleryImages
+    ) {
+      const oldGalleryImages = Array.isArray(existingProduct.galleryImages)
+        ? existingProduct.galleryImages
+        : [];
       const imagesToKeep = new Set(data.galleryImages);
       oldGalleryImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -795,8 +828,14 @@ class ProductService {
     }
 
     // Check sachetImages - delete old ones that are not in new list
-    if (data.sachetImages && Array.isArray(data.sachetImages) && existingProduct.sachetImages) {
-      const oldSachetImages = Array.isArray(existingProduct.sachetImages) ? existingProduct.sachetImages : [];
+    if (
+      data.sachetImages &&
+      Array.isArray(data.sachetImages) &&
+      existingProduct.sachetImages
+    ) {
+      const oldSachetImages = Array.isArray(existingProduct.sachetImages)
+        ? existingProduct.sachetImages
+        : [];
       const imagesToKeep = new Set(data.sachetImages);
       oldSachetImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -806,8 +845,16 @@ class ProductService {
     }
 
     // Check standupPouchImages - delete old ones that are not in new list
-    if (data.standupPouchImages && Array.isArray(data.standupPouchImages) && existingProduct.standupPouchImages) {
-      const oldStandupPouchImages = Array.isArray(existingProduct.standupPouchImages) ? existingProduct.standupPouchImages : [];
+    if (
+      data.standupPouchImages &&
+      Array.isArray(data.standupPouchImages) &&
+      existingProduct.standupPouchImages
+    ) {
+      const oldStandupPouchImages = Array.isArray(
+        existingProduct.standupPouchImages
+      )
+        ? existingProduct.standupPouchImages
+        : [];
       const imagesToKeep = new Set(data.standupPouchImages);
       oldStandupPouchImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
@@ -851,7 +898,9 @@ class ProductService {
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
-      Promise.all(imagesToDelete.map(url => fileStorageService.deleteFileByUrl(url))).catch((err) => {
+      Promise.all(
+        imagesToDelete.map((url) => fileStorageService.deleteFileByUrl(url))
+      ).catch((err) => {
         logger.error(`Error deleting old images: ${err.message}`);
       });
     }
@@ -859,7 +908,8 @@ class ProductService {
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+    const productWithMonthlyAmounts =
+      this.calculateMonthlyAmounts(updatedProduct);
 
     return {
       product: productWithMonthlyAmounts,
@@ -903,10 +953,15 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    logger.info(`Product ${enabled ? "enabled" : "disabled"} successfully: ${updatedProduct.slug}`);
+    logger.info(
+      `Product ${enabled ? "enabled" : "disabled"} successfully: ${
+        updatedProduct.slug
+      }`
+    );
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(updatedProduct);
+    const productWithMonthlyAmounts =
+      this.calculateMonthlyAmounts(updatedProduct);
 
     return {
       product: productWithMonthlyAmounts,
@@ -1073,13 +1128,22 @@ class ProductService {
     const sachetPrices = { ...product.sachetPrices };
 
     // Calculate monthly amount for each subscription period
-    const periods = ['thirtyDays', 'sixtyDays', 'ninetyDays', 'oneEightyDays'] as const;
-    
+    const periods = [
+      "thirtyDays",
+      "sixtyDays",
+      "ninetyDays",
+      "oneEightyDays",
+    ] as const;
+
     periods.forEach((period) => {
       if (sachetPrices[period]) {
         const periodData = sachetPrices[period];
         // Only calculate if amount is not already set and totalAmount exists
-        if (!periodData.amount && periodData.totalAmount && periodData.durationDays) {
+        if (
+          !periodData.amount &&
+          periodData.totalAmount &&
+          periodData.durationDays
+        ) {
           periodData.amount = this.calculateMonthlyAmount(
             periodData.totalAmount,
             periodData.durationDays
