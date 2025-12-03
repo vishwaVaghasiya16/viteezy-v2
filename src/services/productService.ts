@@ -548,6 +548,48 @@ class ProductService {
         $project: {
           ratingSummary: 0,
         },
+      },
+      // Lookup ingredients by ObjectId
+      {
+        $lookup: {
+          from: "ingredients",
+          let: { ingredientIds: "$ingredients" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $in: [
+                        { $toString: "$_id" },
+                        "$$ingredientIds",
+                      ],
+                    },
+                    { $ne: ["$isDeleted", true] },
+                    { $ne: ["$isActive", false] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "ingredientDetails",
+        },
+      },
+      {
+        $addFields: {
+          ingredients: {
+            $cond: {
+              if: { $gt: [{ $size: "$ingredientDetails" }, 0] },
+              then: "$ingredientDetails",
+              else: "$ingredients", // Keep original IDs if no ingredients found
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          ingredientDetails: 0,
+        },
       }
     );
 

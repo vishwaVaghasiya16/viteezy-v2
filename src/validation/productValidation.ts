@@ -292,7 +292,6 @@ export const createProductSchema = Joi.object({
   galleryImages: galleryImagesSchema,
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
-  productIngredients: productIngredientIdsSchema,
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
