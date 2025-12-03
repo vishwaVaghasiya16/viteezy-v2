@@ -1,0 +1,772 @@
+// ============================================================================
+// VITEEZY PHASE 2 - DATABASE SCHEMA DIAGRAM
+// ============================================================================
+// Generated from src/models/
+// Format: dbdiagram.io (DBML)
+// ============================================================================
+
+// ======================
+// CORE COLLECTIONS
+// ======================
+
+Table users {
+  _id ObjectId [pk]
+  name string
+  email string [unique]
+  countryCode string
+  password string
+  phone string
+  role string [default: 'User']
+  isActive boolean [default: true]
+  isEmailVerified boolean [default: false]
+  avatar string
+  profileImage string
+  gender string
+  age number
+  language string [default: 'English']
+  memberId string [unique, sparse]
+  isMember boolean [default: false]
+  membershipStatus string [default: 'None']
+  membershipPlanId ObjectId [ref: > membership_plans._id]
+  membershipExpiresAt timestamp
+  membershipActivatedAt timestamp
+  lastLogin timestamp
+  sessionIds json
+  passwordResetToken string
+  passwordResetTokenExpires timestamp
+  registeredAt timestamp
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table addresses {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  firstName string
+  lastName string
+  phone string
+  country string
+  state string
+  city string
+  zip string
+  addressLine1 string
+  addressLine2 string
+  houseNumber string
+  houseNumberAddition string
+  isDefault boolean [default: false]
+  type string [default: 'Home']
+  label string
+  instructions string
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table auth_sessions {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  deviceInfo string
+  ip string
+  userAgent string
+  sessionId string
+  expiresAt timestamp
+  isRevoked boolean [default: false]
+  revokedAt timestamp
+  lastUsedAt timestamp
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table member_referrals {
+  _id ObjectId [pk]
+  childUserId ObjectId [ref: > users._id, unique]
+  parentUserId ObjectId [ref: > users._id]
+  parentMemberId string
+  registeredAt timestamp
+  registrationSource string [default: 'registration']
+  isActive boolean [default: true]
+  metadata json
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table otp {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  email string
+  phone string
+  otpHash string
+  type string
+  status string [default: 'Pending']
+  expiresAt timestamp
+  attempts number [default: 0]
+  maxAttempts number [default: 3]
+  verifiedAt timestamp
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// ======================
+// COMMERCE COLLECTIONS
+// ======================
+
+Table products {
+  _id ObjectId [pk]
+  title json // I18nStringType | string
+  slug string [unique]
+  description json // I18nTextType | string
+  productImage string
+  benefits string[]
+  ingredients string[]
+  productIngredients ObjectId[] [ref: > product_ingredients._id]
+  categories ObjectId[] [ref: > categories._id]
+  healthGoals string[]
+  nutritionInfo json // I18nTextType | string
+  nutritionTable json[]
+  howToUse json // I18nTextType | string
+  status string [default: 'Draft']
+  price json // PriceType
+  variant string
+  hasStandupPouch boolean [default: false]
+  standupPouchPrices json
+  meta json // SeoType
+  sourceInfo json
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table product_variants {
+  _id ObjectId [pk]
+  productId ObjectId [ref: > products._id]
+  sku string
+  name json // I18nStringType
+  attributes json
+  price json // PriceType
+  compareAtPrice json // PriceType
+  costPrice json // PriceType
+  weight number
+  dimensions json
+  inventory json
+  images json[] // MediaType[]
+  isActive boolean [default: true]
+  sortOrder number [default: 0]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table categories {
+  _id ObjectId [pk]
+  slug string
+  name json // I18nStringType
+  description json // I18nTextType
+  parentId ObjectId [ref: > categories._id]
+  children ObjectId[] [ref: > categories._id]
+  level number [default: 0]
+  sortOrder number [default: 0]
+  icon string
+  image json // MediaType
+  seo json // SeoType
+  isActive boolean [default: true]
+  productCount number [default: 0]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table product_ingredients {
+  _id ObjectId [pk]
+  productId ObjectId [ref: > products._id]
+  ingredientId ObjectId [ref: > ingredients._id]
+  quantity number
+  unit string
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table ingredients {
+  _id ObjectId [pk]
+  name json // I18nStringType
+  scientificName string
+  description json // I18nTextType
+  category string
+  type string
+  benefits json // I18nTextType
+  dosage json
+  contraindications json // I18nTextType
+  sideEffects json // I18nTextType
+  interactions string[]
+  image json // MediaType
+  isActive boolean [default: true]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table orders {
+  _id ObjectId [pk]
+  orderNumber string
+  userId ObjectId [ref: > users._id]
+  status string [default: 'Pending']
+  planType string [default: 'One-Time']
+  items json[]
+  subtotal json // PriceType
+  tax json // PriceType
+  shipping json // PriceType
+  discount json // PriceType
+  couponDiscount json // PriceType
+  membershipDiscount json // PriceType
+  total json // PriceType
+  shippingAddress json // AddressSnapshotType
+  billingAddress json // AddressSnapshotType
+  paymentMethod string
+  paymentStatus string [default: 'Pending']
+  paymentId string
+  couponCode string
+  couponMetadata json
+  membershipMetadata json
+  notes string
+  metadata json
+  trackingNumber string
+  shippedAt timestamp
+  deliveredAt timestamp
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table payments {
+  _id ObjectId [pk]
+  orderId ObjectId [ref: > orders._id]
+  membershipId ObjectId [ref: > memberships._id]
+  userId ObjectId [ref: > users._id]
+  paymentMethod string
+  status string [default: 'Pending']
+  amount json // PriceType
+  currency string
+  transactionId string
+  gatewayTransactionId string
+  gatewaySessionId string
+  gatewayResponse json
+  failureReason string
+  refundAmount json // PriceType
+  refundReason string
+  refundedAt timestamp
+  processedAt timestamp
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table subscriptions {
+  _id ObjectId [pk]
+  subscriptionNumber string [unique]
+  userId ObjectId [ref: > users._id]
+  orderId ObjectId [ref: > orders._id]
+  status string [default: 'Active']
+  cycleDays number // 60, 90, or 180
+  items json[]
+  amount json // PriceType
+  paymentMethod string
+  gatewaySubscriptionId string
+  gatewayCustomerId string
+  gatewayPaymentMethodId string
+  initialDeliveryDate timestamp
+  nextDeliveryDate timestamp
+  nextBillingDate timestamp
+  lastBilledDate timestamp
+  lastDeliveredDate timestamp
+  cancelledAt timestamp
+  cancelledBy ObjectId [ref: > users._id]
+  cancellationReason string
+  pausedAt timestamp
+  pausedUntil timestamp
+  metadata json
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table memberships {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  planId ObjectId [ref: > membership_plans._id]
+  planSnapshot json
+  status string [default: 'Active']
+  paymentMethod string
+  paymentId ObjectId [ref: > payments._id]
+  purchasedByUserId ObjectId [ref: > users._id]
+  isAutoRenew boolean [default: false]
+  startedAt timestamp
+  expiresAt timestamp
+  nextBillingDate timestamp
+  cancelledAt timestamp
+  cancellationReason string
+  metadata json
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table membership_plans {
+  _id ObjectId [pk]
+  name string
+  slug string [unique]
+  shortDescription json // I18nStringType
+  description json // I18nTextType
+  price json // PriceType
+  interval string
+  durationDays number
+  benefits string[]
+  isActive boolean [default: true]
+  isAutoRenew boolean [default: false]
+  metadata json
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table carts {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  sessionId string
+  items json[]
+  subtotal json // PriceType
+  tax json // PriceType
+  shipping json // PriceType
+  discount json // PriceType
+  total json // PriceType
+  couponCode string
+  expiresAt timestamp
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table wishlists {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  productId ObjectId [ref: > products._id]
+  notes string
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table coupons {
+  _id ObjectId [pk]
+  code string [unique]
+  name json // I18nStringType
+  description json // I18nStringType
+  type string
+  value number
+  minOrderAmount number
+  maxDiscountAmount number
+  usageLimit number
+  usageCount number [default: 0]
+  userUsageLimit number
+  applicableProducts ObjectId[] [ref: > products._id]
+  applicableCategories ObjectId[] [ref: > categories._id]
+  excludedProducts ObjectId[] [ref: > products._id]
+  validFrom timestamp
+  validUntil timestamp
+  isActive boolean [default: true]
+  isRecurring boolean
+  oneTimeUse boolean
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table saved_cards {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  paymentMethod string
+  gatewayToken string
+  gatewayCustomerId string
+  cardLast4 string
+  cardBrand string
+  cardExpMonth number
+  cardExpYear number
+  isDefault boolean [default: false]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table shipments {
+  _id ObjectId [pk]
+  orderId ObjectId [ref: > orders._id]
+  trackingNumber string
+  carrier string
+  service string
+  status string [default: 'Pending']
+  items json[]
+  shippingAddress json // AddressSnapshotType
+  estimatedDelivery timestamp
+  actualDelivery timestamp
+  weight number
+  dimensions json
+  trackingEvents json[]
+  notes string
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  updatedAt timestamp
+}
+
+Table delivery_postponements {
+  _id ObjectId [pk]
+  subscriptionId ObjectId [ref: > subscriptions._id]
+  userId ObjectId [ref: > users._id]
+  originalDeliveryDate timestamp
+  newDeliveryDate timestamp
+  reason string
+  status string [default: 'Pending']
+  approvedBy ObjectId [ref: > users._id]
+  approvedAt timestamp
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table campaigns {
+  _id ObjectId [pk]
+  name string
+  type string
+  status string [default: 'Draft']
+  startDate timestamp
+  endDate timestamp
+  discountType string
+  discountValue number
+  applicableProducts ObjectId[] [ref: > products._id]
+  applicableCategories ObjectId[] [ref: > categories._id]
+  minOrderAmount number
+  maxDiscountAmount number
+  usageLimit number
+  usageCount number [default: 0]
+  isActive boolean [default: true]
+  metadata json
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// ======================
+// CMS COLLECTIONS
+// ======================
+
+Table blogs {
+  _id ObjectId [pk]
+  slug string
+  title json // I18nStringType
+  excerpt json // I18nTextType
+  content json // I18nTextType
+  authorId ObjectId [ref: > users._id]
+  categoryId ObjectId [ref: > blog_categories._id]
+  tags string[]
+  coverImage string
+  gallery json[] // MediaType[]
+  status string [default: 'Draft']
+  publishedAt timestamp
+  seo json // SeoType
+  viewCount number [default: 0]
+  likeCount number [default: 0]
+  commentCount number [default: 0]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table blog_categories {
+  _id ObjectId [pk]
+  slug string
+  title json // I18nStringType
+  sortOrder number [default: 0]
+  isActive boolean [default: true]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table faqs {
+  _id ObjectId [pk]
+  question json // I18nStringType
+  answer json // I18nTextType
+  category string
+  categoryId ObjectId [ref: > faq_categories._id]
+  tags string[]
+  sortOrder number [default: 0]
+  status string [default: 'Active']
+  isActive boolean [default: true]
+  viewCount number [default: 0]
+  helpfulCount number [default: 0]
+  notHelpfulCount number [default: 0]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table faq_categories {
+  _id ObjectId [pk]
+  slug string
+  title json // I18nStringType
+  sortOrder number [default: 0]
+  isActive boolean [default: true]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table reviews {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  productId ObjectId [ref: > products._id]
+  serviceId ObjectId
+  rating number
+  title json // I18nStringType
+  content json // I18nTextType
+  images string[]
+  isVerified boolean [default: false]
+  isPublic boolean [default: true]
+  helpfulCount number [default: 0]
+  notHelpfulCount number [default: 0]
+  status string [default: 'Pending']
+  moderatorNotes string
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table product_testimonials {
+  _id ObjectId [pk]
+  products ObjectId[] [ref: > products._id]
+  video string
+  videoThumbnail string
+  testimonialText json // I18nTextType
+  customerName string
+  customerImage string
+  rating number
+  isVisibleOnHomepage boolean [default: false]
+  displayOrder number [default: 0]
+  isActive boolean [default: true]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table pages {
+  _id ObjectId [pk]
+  slug string [unique]
+  title json // I18nStringType
+  content json // I18nTextType
+  type string [default: 'Static']
+  status string [default: 'Draft']
+  seo json // SeoType
+  isPublished boolean [default: false]
+  publishedAt timestamp
+  viewCount number [default: 0]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table general_settings {
+  _id ObjectId [pk]
+  logoLight string
+  logoDark string
+  tagline string
+  supportEmail string
+  supportPhone string
+  address json
+  socialMedia json
+  languages json[]
+  isDeleted boolean [default: false]
+  deletedAt timestamp
+  createdBy ObjectId [ref: > users._id]
+  updatedBy ObjectId [ref: > users._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// ======================
+// CONSULTATION COLLECTIONS
+// ======================
+
+Table experts {
+  _id ObjectId [pk]
+  name string
+  email string
+  photo string
+  bio json // I18nTextType
+  languages string[]
+  specializations string[]
+  pricing json // PriceType
+  bufferMins number
+  active boolean [default: true]
+  rating number
+  reviewCount number [default: 0]
+  experience number
+  qualifications string[]
+  availability json
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table expert_slots {
+  _id ObjectId [pk]
+  expertId ObjectId [ref: > experts._id]
+  startTime timestamp
+  endTime timestamp
+  status string [default: 'Available']
+  consultationId ObjectId [ref: > consultations._id]
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table consultations {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  expertId ObjectId [ref: > experts._id]
+  slotId ObjectId [ref: > expert_slots._id]
+  status string [default: 'Pending']
+  scheduledAt timestamp
+  startedAt timestamp
+  endedAt timestamp
+  duration number
+  notes string
+  rating number
+  review string
+  paymentId ObjectId [ref: > payments._id]
+  metadata json
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// ======================
+// AI COLLECTIONS
+// ======================
+
+Table ai_conversations {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  sessionId string
+  messages json[]
+  context json
+  status string [default: 'Active']
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+Table avatar_jobs {
+  _id ObjectId [pk]
+  userId ObjectId [ref: > users._id]
+  jobType string
+  status string [default: 'Pending']
+  inputData json
+  outputData json
+  errorMessage string
+  progress number [default: 0]
+  metadata json
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// ============================================================================
+// RELATIONSHIPS SUMMARY
+// ============================================================================
+// Users -> Addresses (1:N)
+// Users -> Orders (1:N)
+// Users -> Subscriptions (1:N)
+// Users -> Memberships (1:N)
+// Users -> Carts (1:N)
+// Users -> Wishlists (1:N)
+// Users -> Reviews (1:N)
+// Users -> Consultations (1:N)
+// Users -> AIConversations (1:N)
+// Users -> MemberReferrals (Parent/Child)
+// Products -> ProductVariants (1:N)
+// Products -> Categories (N:M)
+// Products -> ProductIngredients (N:M)
+// Products -> Ingredients (N:M via ProductIngredients)
+// Products -> Orders (N:M via items)
+// Products -> Wishlists (N:M)
+// Products -> Reviews (1:N)
+// Categories -> Categories (Self-referencing Parent/Child)
+// Orders -> Payments (1:1)
+// Orders -> Subscriptions (1:1)
+// Orders -> Shipments (1:N)
+// Subscriptions -> DeliveryPostponements (1:N)
+// MembershipPlans -> Memberships (1:N)
+// Blogs -> BlogCategories (N:1)
+// FAQs -> FAQCategories (N:1)
+// Experts -> ExpertSlots (1:N)
+// Experts -> Consultations (1:N)
+// ExpertSlots -> Consultations (1:1)
+// ============================================================================
+

@@ -1,5 +1,14 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { PriceSchema, PriceType, SeoSchema, SeoType } from "../common.model";
+import {
+  PriceSchema,
+  PriceType,
+  SeoSchema,
+  SeoType,
+  I18nString,
+  I18nText,
+  I18nStringType,
+  I18nTextType,
+} from "../common.model";
 import {
   ProductStatus,
   ProductVariant,
@@ -43,18 +52,18 @@ export interface SourceInfo {
 }
 
 export interface IProduct extends Document {
-  title: string;
+  title: I18nStringType | string; // Support both I18n and plain string for backward compatibility
   slug: string;
-  description: string;
+  description: I18nTextType | string;
   productImage: string;
-  benefits: string[];
-  ingredients: string[];
+  benefits: string[]; // Array of strings (can be translated individually)
+  ingredients: string[]; // Array of strings
   productIngredients?: mongoose.Types.ObjectId[];
   categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
-  nutritionInfo: string;
+  nutritionInfo: I18nTextType | string;
   nutritionTable?: NutritionTableItem[];
-  howToUse: string;
+  howToUse: I18nTextType | string;
   status: ProductStatus;
   price: PriceType;
   variant: ProductVariant;
@@ -73,7 +82,7 @@ export interface IProduct extends Document {
 const ProductSchema = new Schema<IProduct>(
   {
     title: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nString and String
       trim: true,
     },
     slug: {
@@ -82,7 +91,7 @@ const ProductSchema = new Schema<IProduct>(
       trim: true,
     },
     description: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     productImage: {
@@ -120,7 +129,7 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     nutritionInfo: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     nutritionTable: [
@@ -133,7 +142,7 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     howToUse: {
-      type: String,
+      type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
     },
     status: {

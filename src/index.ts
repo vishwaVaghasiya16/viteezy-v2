@@ -21,6 +21,8 @@ import { config } from "@/config";
 import { errorHandler } from "@/middleware/errorHandler";
 import { notFoundHandler } from "@/middleware/notFoundHandler";
 import { responseMiddleware } from "@/middleware/responseMiddleware";
+import { localeMiddleware } from "@/middleware/locale";
+import { responseTransformMiddleware } from "@/middleware/responseTransform";
 import { logger } from "@/utils/logger";
 import apiRoutes from "@/routes";
 import { swaggerSpec } from "@/docs/swagger";
@@ -288,6 +290,20 @@ app.use(
  * Must be registered before routes to be available in route handlers
  */
 app.use(responseMiddleware);
+
+/**
+ * Locale Detection Middleware
+ * Detects language from ?lang= query parameter
+ * Must be before routes to set req.locale
+ */
+app.use(localeMiddleware);
+
+/**
+ * Response Transformation Middleware
+ * Transforms I18n objects in responses to single values based on locale
+ * Must be after localeMiddleware but before routes
+ */
+app.use(responseTransformMiddleware);
 
 /**
  * ============================================================================

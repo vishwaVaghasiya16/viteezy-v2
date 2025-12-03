@@ -1,15 +1,32 @@
 import mongoose, { Schema } from "mongoose";
 import { MEDIA_TYPE_VALUES, CURRENCY_VALUES } from "./enums";
 
+// Supported languages
+export type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
+  "en",
+  "nl",
+  "de",
+  "fr",
+  "es",
+];
+export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
+
 // Type definitions
 export interface I18nStringType {
   en?: string;
   nl?: string;
+  de?: string;
+  fr?: string;
+  es?: string;
 }
 
 export interface I18nTextType {
   en?: string;
   nl?: string;
+  de?: string;
+  fr?: string;
+  es?: string;
 }
 
 export interface MediaType {
@@ -51,11 +68,23 @@ export interface AuditType {
 
 // Schema definitions
 export const I18nString = new Schema<I18nStringType>(
-  { en: { type: String, trim: true }, nl: { type: String, trim: true } },
+  {
+    en: { type: String, trim: true },
+    nl: { type: String, trim: true },
+    de: { type: String, trim: true },
+    fr: { type: String, trim: true },
+    es: { type: String, trim: true },
+  },
   { _id: false }
 );
 export const I18nText = new Schema<I18nTextType>(
-  { en: { type: String, trim: true }, nl: { type: String, trim: true } },
+  {
+    en: { type: String, trim: true },
+    nl: { type: String, trim: true },
+    de: { type: String, trim: true },
+    fr: { type: String, trim: true },
+    es: { type: String, trim: true },
+  },
   { _id: false }
 );
 

@@ -8,6 +8,12 @@ import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
 import { fileStorageService } from "./fileStorageService";
 import mongoose, { PipelineStage } from "mongoose";
+import { translationService } from "./translationService";
+import {
+  I18nStringType,
+  I18nTextType,
+  SUPPORTED_LANGUAGES,
+} from "../models/common.model";
 
 export type ProductSortOption =
   | "relevance"
@@ -165,9 +171,12 @@ class ProductService {
     const { title, slug, hasStandupPouch, standupPouchPrices } = data;
 
     // Generate slug from title if not provided
+    // Handle both string and I18nString types
+    const titleString =
+      typeof title === "string" ? title : (title as I18nStringType)?.en || "";
     let finalSlug = slug;
     if (!finalSlug) {
-      const baseSlug = generateSlug(title);
+      const baseSlug = generateSlug(titleString);
       finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck: string) => {
@@ -197,9 +206,47 @@ class ProductService {
       );
     }
 
-    // Create product with generated slug
+    // Translate translatable fields
+    const translatedData: any = { ...data };
+
+    // Translate title
+    if (data.title && typeof data.title === "string") {
+      translatedData.title = await translationService.translateI18nString(
+        { en: data.title },
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate description
+    if (data.description && typeof data.description === "string") {
+      translatedData.description = await translationService.translateI18nText(
+        { en: data.description },
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate howToUse
+    if (data.howToUse && typeof data.howToUse === "string") {
+      translatedData.howToUse = await translationService.translateI18nText(
+        { en: data.howToUse },
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate nutritionInfo
+    if (data.nutritionInfo && typeof data.nutritionInfo === "string") {
+      translatedData.nutritionInfo = await translationService.translateI18nText(
+        { en: data.nutritionInfo },
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate benefits array (optional - can be done later if needed)
+    // For now, we'll keep benefits as string array
+
+    // Create product with generated slug and translations
     const product = await Products.create({
-      ...data,
+      ...translatedData,
       slug: finalSlug,
     });
 
@@ -522,10 +569,75 @@ class ProductService {
       !!existingProduct.productImage &&
       data.productImage !== existingProduct.productImage;
 
+    // Translate translatable fields if they are plain strings
+    const translatedData: any = { ...data };
+
+    // Translate title if it's a string (not already I18n)
+    if (data.title && typeof data.title === "string") {
+      // Merge with existing translations if they exist
+      const existingTitle = existingProduct.title as I18nStringType | string;
+      const baseTitle: I18nStringType =
+        typeof existingTitle === "object" && existingTitle !== null
+          ? { ...existingTitle, en: data.title }
+          : { en: data.title };
+
+      translatedData.title = await translationService.translateI18nString(
+        baseTitle,
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate description if it's a string
+    if (data.description && typeof data.description === "string") {
+      const existingDesc = existingProduct.description as I18nTextType | string;
+      const baseDesc: I18nTextType =
+        typeof existingDesc === "object" && existingDesc !== null
+          ? { ...existingDesc, en: data.description }
+          : { en: data.description };
+
+      translatedData.description = await translationService.translateI18nText(
+        baseDesc,
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate howToUse if it's a string
+    if (data.howToUse && typeof data.howToUse === "string") {
+      const existingHowToUse = existingProduct.howToUse as
+        | I18nTextType
+        | string;
+      const baseHowToUse: I18nTextType =
+        typeof existingHowToUse === "object" && existingHowToUse !== null
+          ? { ...existingHowToUse, en: data.howToUse }
+          : { en: data.howToUse };
+
+      translatedData.howToUse = await translationService.translateI18nText(
+        baseHowToUse,
+        SUPPORTED_LANGUAGES
+      );
+    }
+
+    // Translate nutritionInfo if it's a string
+    if (data.nutritionInfo && typeof data.nutritionInfo === "string") {
+      const existingNutritionInfo = existingProduct.nutritionInfo as
+        | I18nTextType
+        | string;
+      const baseNutritionInfo: I18nTextType =
+        typeof existingNutritionInfo === "object" &&
+        existingNutritionInfo !== null
+          ? { ...existingNutritionInfo, en: data.nutritionInfo }
+          : { en: data.nutritionInfo };
+
+      translatedData.nutritionInfo = await translationService.translateI18nText(
+        baseNutritionInfo,
+        SUPPORTED_LANGUAGES
+      );
+    }
+
     // Update product
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
-      { ...data, updatedAt: new Date() },
+      { ...translatedData, updatedAt: new Date() },
       { new: true, runValidators: true }
     ).lean();
 
