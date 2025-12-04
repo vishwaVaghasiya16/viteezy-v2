@@ -10,7 +10,7 @@ import {
   Memberships,
   Products,
   ProductVariants,
-  Categories,
+  ProductCategory,
 } from "@/models/commerce";
 
 import {
@@ -527,7 +527,7 @@ class AdminDashboardController {
         })
           .select("productId inventory")
           .lean(),
-        Categories.find({
+        ProductCategory.find({
           isDeleted: { $ne: true },
           isActive: true,
         })

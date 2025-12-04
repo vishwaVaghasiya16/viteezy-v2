@@ -76,14 +76,17 @@ const CouponSchema = new Schema<ICoupon>(
     minOrderAmount: {
       type: Number,
       min: 0,
+      default: null,
     },
     maxDiscountAmount: {
       type: Number,
       min: 0,
+      default: null,
     },
     usageLimit: {
       type: Number,
       min: 1,
+      default: null,
     },
     usageCount: {
       type: Number,
@@ -93,6 +96,7 @@ const CouponSchema = new Schema<ICoupon>(
     userUsageLimit: {
       type: Number,
       min: 1,
+      default: null,
     },
     applicableProducts: [
       {
@@ -103,7 +107,7 @@ const CouponSchema = new Schema<ICoupon>(
     applicableCategories: [
       {
         type: Schema.Types.ObjectId,
-        ref: "categories",
+        ref: "product_categories",
       },
     ],
     excludedProducts: [
@@ -114,9 +118,11 @@ const CouponSchema = new Schema<ICoupon>(
     ],
     validFrom: {
       type: Date,
+      default: null,
     },
     validUntil: {
       type: Date,
+      default: null,
       validate: {
         validator: function (this: ICoupon, value: Date) {
           // If both validFrom and validUntil are set, validUntil must be after validFrom

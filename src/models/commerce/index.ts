@@ -1,7 +1,7 @@
 // Commerce Models
 export { Campaigns } from "./campaigns.model";
 export { Carts } from "./carts.model";
-export { Categories } from "./categories.model";
+export { ProductCategory } from "./categories.model";
 export { Coupons } from "./coupons.model";
 export { DeliveryPostponements } from "./deliveryPostponements.model";
 export { Ingredients } from "./ingredients.model";

@@ -15,8 +15,8 @@ import { HTTP_STATUS } from "@/constants";
  */
 const VALIDATION_OPTIONS: Joi.ValidationOptions = {
   abortEarly: false, // Return all validation errors, not just the first
-  stripUnknown: true, // Remove unknown fields from the validated object
-  allowUnknown: false, // Don't allow unknown fields
+  stripUnknown: false, // Don't remove unknown fields - throw error instead
+  allowUnknown: false, // Don't allow unknown fields - throw error if found
   convert: true, // Convert types where possible
 };
 
@@ -48,7 +48,16 @@ const cleanErrorMessage = (message: string): string => {
 const createValidationError = (error: JoiValidationError): AppError => {
   const firstError = error.details[0];
   const rawMessage = firstError?.message || "Validation error";
-  const cleanedMessage = cleanErrorMessage(rawMessage);
+
+  // Check if error is about unknown field
+  const isUnknownField = rawMessage.includes("is not allowed");
+
+  // Format error message for unknown fields
+  let cleanedMessage = cleanErrorMessage(rawMessage);
+  if (isUnknownField) {
+    const fieldName = firstError?.path?.join(".") || "field";
+    cleanedMessage = `${fieldName} is not allowed`;
+  }
 
   const appErr = new AppError(
     "Validation error",
@@ -58,11 +67,17 @@ const createValidationError = (error: JoiValidationError): AppError => {
   );
 
   (appErr as any).error = cleanedMessage;
-  (appErr as any).errors = error.details.map((detail) => ({
-    field: detail.path.join("."),
-    message: cleanErrorMessage(detail.message),
-    value: detail.context?.value,
-  }));
+  (appErr as any).errors = error.details.map((detail) => {
+    const isUnknown = detail.message.includes("is not allowed");
+    const fieldName = detail.path.join(".");
+    return {
+      field: fieldName,
+      message: isUnknown
+        ? `${fieldName} is not allowed`
+        : cleanErrorMessage(detail.message),
+      value: detail.context?.value,
+    };
+  });
 
   return appErr;
 };

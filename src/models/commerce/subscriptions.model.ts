@@ -117,10 +117,12 @@ const SubscriptionSchema = new Schema<ISubscription>(
         name: {
           type: String,
           trim: true,
+          default: null,
         },
         sku: {
           type: String,
           trim: true,
+          default: null,
         },
       },
     ],
@@ -136,15 +138,18 @@ const SubscriptionSchema = new Schema<ISubscription>(
     gatewaySubscriptionId: {
       type: String,
       trim: true,
+      default: null,
       // Note: sparse and unique are handled in schema.index() below
     },
     gatewayCustomerId: {
       type: String,
       trim: true,
+      default: null,
     },
     gatewayPaymentMethodId: {
       type: String,
       trim: true,
+      default: null,
     },
     initialDeliveryDate: {
       type: Date,
@@ -160,27 +165,34 @@ const SubscriptionSchema = new Schema<ISubscription>(
     },
     lastBilledDate: {
       type: Date,
+      default: null,
     },
     lastDeliveredDate: {
       type: Date,
+      default: null,
     },
     cancelledAt: {
       type: Date,
+      default: null,
     },
     cancelledBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      default: null,
     },
     cancellationReason: {
       type: String,
       trim: true,
       maxlength: 500,
+      default: null,
     },
     pausedAt: {
       type: Date,
+      default: null,
     },
     pausedUntil: {
       type: Date,
+      default: null,
     },
     metadata: {
       type: Schema.Types.Mixed,

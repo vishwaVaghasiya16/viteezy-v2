@@ -78,10 +78,6 @@ export const createProductCategorySchema = Joi.object(
           "Slug must contain only lowercase letters, numbers, and hyphens",
       }),
     description: i18nTextSchema.label("Description"),
-    parentId: objectIdSchema
-      .optional()
-      .allow(null, "")
-      .label("Parent Category ID"),
     sortOrder: Joi.number()
       .integer()
       .min(0)
@@ -109,10 +105,6 @@ export const updateProductCategorySchema = Joi.object(
           "Slug must contain only lowercase letters, numbers, and hyphens",
       }),
     description: i18nTextSchema.label("Description"),
-    parentId: objectIdSchema
-      .optional()
-      .allow(null, "")
-      .label("Parent Category ID"),
     sortOrder: Joi.number().integer().min(0).optional().label("Sort Order"),
     icon: Joi.string().trim().optional().allow(null, "").label("Icon"),
     image: mediaSchema.label("Image"),
@@ -140,11 +132,6 @@ export const getProductCategoriesQuerySchema = Joi.object(
       .default(10)
       .label("Limit"),
     search: Joi.string().trim().optional().label("Search"),
-    parentId: objectIdSchema
-      .optional()
-      .allow(null, "")
-      .label("Parent Category ID"),
     isActive: Joi.boolean().optional().label("Is Active"),
-    level: Joi.number().integer().min(0).optional().label("Level"),
   })
 ).label("GetProductCategoriesQuery");

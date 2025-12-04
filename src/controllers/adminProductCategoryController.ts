@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Categories } from "@/models/commerce";
+import { ProductCategory } from "@/models/commerce";
 import { Products } from "@/models/commerce";
 import { generateSlug, generateUniqueSlug } from "@/utils/slug";
 import { fileStorageService } from "@/services/fileStorageService";
@@ -26,17 +26,8 @@ class AdminProductCategoryController {
    */
   createCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
-      const {
-        name,
-        slug,
-        description,
-        parentId,
-        sortOrder,
-        icon,
-        image,
-        seo,
-        isActive,
-      } = req.body;
+      const { name, slug, description, sortOrder, icon, image, seo, isActive } =
+        req.body;
 
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -56,32 +47,11 @@ class AdminProductCategoryController {
       const finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck) =>
-          Categories.exists({
+          ProductCategory.exists({
             slug: slugToCheck,
             isDeleted: false,
           }).then((existing) => Boolean(existing))
       );
-
-      // Validate parent category if provided
-      let level = 0;
-      let parentCategory = null;
-      if (parentId) {
-        parentCategory = await Categories.findOne({
-          _id: parentId,
-          isDeleted: { $ne: true },
-        });
-
-        if (!parentCategory) {
-          throw new AppError("Parent category not found", 404);
-        }
-
-        level = (parentCategory.level || 0) + 1;
-
-        // Prevent too deep nesting (max 3 levels)
-        if (level > 3) {
-          throw new AppError("Category nesting is limited to 3 levels", 400);
-        }
-      }
 
       // Handle icon upload
       let iconUrl: string | null = icon || null;
@@ -132,29 +102,19 @@ class AdminProductCategoryController {
       }
 
       // Create category
-      const category = await Categories.create({
+      const category = await ProductCategory.create({
         slug: finalSlug,
         name: name || {},
         description: description || {},
-        parentId: parentId ? new mongoose.Types.ObjectId(parentId) : undefined,
-        level,
         sortOrder: sortOrder || 0,
         icon: iconUrl,
         image: imageData,
         seo: seo || {},
         isActive: isActive !== undefined ? isActive : true,
         productCount: 0,
-        children: [],
         createdBy: requesterId,
         updatedBy: requesterId,
       });
-
-      // Update parent's children array if parent exists
-      if (parentCategory) {
-        await Categories.findByIdAndUpdate(parentId, {
-          $push: { children: category._id },
-        });
-      }
 
       res.apiCreated({ category }, "Product category created successfully");
     }
@@ -165,43 +125,22 @@ class AdminProductCategoryController {
    * @route GET /api/v1/admin/product-categories
    * @access Admin
    */
-  getCategories = asyncHandler(
+  getProductCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
-      const { search, parentId, isActive, level } = req.query as {
+      const { search, isActive } = req.query as {
         search?: string;
-        parentId?: string;
         isActive?: string | boolean;
-        level?: string | number;
       };
 
       const filter: any = {
         isDeleted: { $ne: true },
       };
 
-      // Filter by parent
-      if (parentId === "null" || parentId === null) {
-        filter.parentId = { $exists: false };
-      } else if (parentId) {
-        if (!mongoose.Types.ObjectId.isValid(parentId)) {
-          throw new AppError("Invalid parent category ID", 400);
-        }
-        filter.parentId = new mongoose.Types.ObjectId(parentId);
-      }
-
       // Filter by active status
       if (isActive !== undefined) {
         const value: string | boolean = isActive;
         filter.isActive = value === "true" || value === true || value === "1";
-      }
-
-      // Filter by level
-      if (level !== undefined) {
-        const levelNum =
-          typeof level === "string" ? parseInt(level, 10) : level;
-        if (!isNaN(levelNum)) {
-          filter.level = levelNum;
-        }
       }
 
       // Search functionality
@@ -220,14 +159,12 @@ class AdminProductCategoryController {
       };
 
       const [categories, total] = await Promise.all([
-        Categories.find(filter)
-          .populate("parentId", "name slug")
-          .populate("children", "name slug")
+        ProductCategory.find(filter)
           .sort(sortOptions)
           .skip(skip)
           .limit(limit)
           .lean(),
-        Categories.countDocuments(filter),
+        ProductCategory.countDocuments(filter),
       ]);
 
       const pagination = getPaginationMeta(page, limit, total);
@@ -253,13 +190,10 @@ class AdminProductCategoryController {
         throw new AppError("Invalid category ID", 400);
       }
 
-      const category = await Categories.findOne({
+      const category = await ProductCategory.findOne({
         _id: id,
         isDeleted: { $ne: true },
-      })
-        .populate("parentId", "name slug level")
-        .populate("children", "name slug level isActive productCount")
-        .lean();
+      }).lean();
 
       if (!category) {
         throw new AppError("Category not found", 404);
@@ -277,17 +211,8 @@ class AdminProductCategoryController {
   updateCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
       const { id } = req.params;
-      const {
-        name,
-        slug,
-        description,
-        parentId,
-        sortOrder,
-        icon,
-        image,
-        seo,
-        isActive,
-      } = req.body;
+      const { name, slug, description, sortOrder, icon, image, seo, isActive } =
+        req.body;
 
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -295,7 +220,7 @@ class AdminProductCategoryController {
         throw new AppError("Invalid category ID", 400);
       }
 
-      const category = await Categories.findOne({
+      const category = await ProductCategory.findOne({
         _id: id,
         isDeleted: { $ne: true },
       });
@@ -322,7 +247,7 @@ class AdminProductCategoryController {
             const finalSlug = await generateUniqueSlug(
               baseSlug,
               async (slugToCheck) =>
-                Categories.exists({
+                ProductCategory.exists({
                   slug: slugToCheck,
                   _id: { $ne: id },
                   isDeleted: false,
@@ -336,7 +261,7 @@ class AdminProductCategoryController {
       // Update slug if provided separately
       if (slug !== undefined && slug !== category.slug) {
         const finalSlug = await generateUniqueSlug(slug, async (slugToCheck) =>
-          Categories.exists({
+          ProductCategory.exists({
             slug: slugToCheck,
             _id: { $ne: id },
             isDeleted: false,
@@ -482,81 +407,12 @@ class AdminProductCategoryController {
       if (seo !== undefined) updateData.seo = seo || {};
       if (isActive !== undefined) updateData.isActive = isActive;
 
-      // Handle parent change
-      if (parentId !== undefined) {
-        const oldParentId = category.parentId;
-
-        if (parentId === null || parentId === "") {
-          // Remove parent
-          updateData.parentId = undefined;
-          updateData.level = 0;
-
-          // Remove from old parent's children
-          if (oldParentId) {
-            await Categories.findByIdAndUpdate(oldParentId, {
-              $pull: { children: category._id },
-            });
-          }
-        } else {
-          // Validate new parent
-          if (!mongoose.Types.ObjectId.isValid(parentId)) {
-            throw new AppError("Invalid parent category ID", 400);
-          }
-
-          // Prevent setting self as parent
-          if (parentId === id) {
-            throw new AppError("Category cannot be its own parent", 400);
-          }
-
-          // Prevent circular reference (check if parent is a descendant)
-          const isDescendant = await this.isDescendant(id, parentId);
-          if (isDescendant) {
-            throw new AppError(
-              "Cannot set a descendant category as parent",
-              400
-            );
-          }
-
-          const newParent = await Categories.findOne({
-            _id: parentId,
-            isDeleted: { $ne: true },
-          });
-
-          if (!newParent) {
-            throw new AppError("Parent category not found", 404);
-          }
-
-          const newLevel = (newParent.level || 0) + 1;
-          if (newLevel > 3) {
-            throw new AppError("Category nesting is limited to 3 levels", 400);
-          }
-
-          updateData.parentId = new mongoose.Types.ObjectId(parentId);
-          updateData.level = newLevel;
-
-          // Remove from old parent's children
-          if (oldParentId && oldParentId.toString() !== parentId) {
-            await Categories.findByIdAndUpdate(oldParentId, {
-              $pull: { children: category._id },
-            });
-          }
-
-          // Add to new parent's children
-          await Categories.findByIdAndUpdate(parentId, {
-            $addToSet: { children: category._id },
-          });
-        }
-      }
-
       // Update category
-      const updatedCategory = await Categories.findByIdAndUpdate(
+      const updatedCategory = await ProductCategory.findByIdAndUpdate(
         id,
         updateData,
         { new: true, runValidators: true }
-      )
-        .populate("parentId", "name slug")
-        .populate("children", "name slug")
-        .lean();
+      ).lean();
 
       res.apiSuccess(
         { category: updatedCategory },
@@ -578,7 +434,7 @@ class AdminProductCategoryController {
         throw new AppError("Invalid category ID", 400);
       }
 
-      const category = await Categories.findOne({
+      const category = await ProductCategory.findOne({
         _id: id,
         isDeleted: { $ne: true },
       });
@@ -598,21 +454,6 @@ class AdminProductCategoryController {
           `Cannot delete category. ${productCount} product(s) are assigned to this category. Please reassign products before deleting.`,
           400
         );
-      }
-
-      // Check if category has children
-      if (category.children && category.children.length > 0) {
-        throw new AppError(
-          "Cannot delete category with child categories. Please delete or move child categories first.",
-          400
-        );
-      }
-
-      // Remove from parent's children array
-      if (category.parentId) {
-        await Categories.findByIdAndUpdate(category.parentId, {
-          $pull: { children: category._id },
-        });
       }
 
       // Delete icon and image from cloud storage
@@ -646,7 +487,7 @@ class AdminProductCategoryController {
       await Promise.all(deletePromises);
 
       // Soft delete
-      await Categories.findByIdAndUpdate(id, {
+      await ProductCategory.findByIdAndUpdate(id, {
         isDeleted: true,
         deletedAt: new Date(),
         updatedBy: req.user?._id
@@ -657,25 +498,6 @@ class AdminProductCategoryController {
       res.apiSuccess(null, "Category deleted successfully");
     }
   );
-
-  /**
-   * Helper method to check if a category is a descendant of another
-   */
-  private async isDescendant(
-    ancestorId: string,
-    descendantId: string
-  ): Promise<boolean> {
-    const descendant = await Categories.findById(descendantId).lean();
-    if (!descendant || !descendant.parentId) {
-      return false;
-    }
-
-    if (descendant.parentId.toString() === ancestorId) {
-      return true;
-    }
-
-    return this.isDescendant(ancestorId, descendant.parentId.toString());
-  }
 }
 
 export const adminProductCategoryController =

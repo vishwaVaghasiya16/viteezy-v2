@@ -6,6 +6,7 @@ import { User } from "@/models/index.model";
 import { Payments } from "@/models/commerce";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import { IPayment } from "@/models/commerce/payments.model";
+import { fileStorageService } from "@/services/fileStorageService";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -45,17 +46,115 @@ class UserController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { name, phone, countryCode, profileImage, gender, age, language } =
-        req.body;
+      // Get current user to check existing profile image and avatar
+      const currentUser = await User.findById(req.user._id).select(
+        "profileImage avatar"
+      );
+      if (!currentUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      const {
+        name,
+        phone,
+        countryCode,
+        profileImage,
+        avatar,
+        gender,
+        age,
+        language,
+      } = req.body;
 
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (phone !== undefined) updateData.phone = phone;
       if (countryCode !== undefined) updateData.countryCode = countryCode;
-      if (profileImage !== undefined) updateData.profileImage = profileImage;
       if (gender !== undefined) updateData.gender = gender;
       if (age !== undefined) updateData.age = age;
       if (language !== undefined) updateData.language = language;
+
+      // Extract files from multer.fields() result
+      const files = req.files as
+        | { [fieldname: string]: Express.Multer.File[] }
+        | undefined;
+
+      // Handle profile image upload
+      const profileImageFile = files?.["profileImage"]?.[0];
+
+      if (profileImageFile) {
+        // Upload new image to cloud storage
+        const imageUrl = await fileStorageService.uploadFile(
+          "user-profiles",
+          profileImageFile
+        );
+        updateData.profileImage = imageUrl;
+
+        // Delete old profile image if exists
+        if (currentUser.profileImage) {
+          await fileStorageService
+            .deleteFileByUrl(currentUser.profileImage)
+            .catch((error) => {
+              // Log error but don't fail the request
+              console.error("Failed to delete old profile image:", error);
+            });
+        }
+      } else if (profileImage !== undefined) {
+        // If profileImage is explicitly set (including null to remove)
+        if (profileImage === null || profileImage === "") {
+          // Delete old image if exists
+          if (currentUser.profileImage) {
+            await fileStorageService
+              .deleteFileByUrl(currentUser.profileImage)
+              .catch((error) => {
+                console.error("Failed to delete profile image:", error);
+              });
+          }
+          updateData.profileImage = null;
+        } else {
+          // Update with provided URL (if updating from external source)
+          updateData.profileImage = profileImage;
+        }
+      }
+
+      // Handle avatar upload
+      const avatarFile = files?.["avatar"]?.[0];
+
+      if (avatarFile) {
+        // Upload new avatar to cloud storage
+        const avatarUrl = await fileStorageService.uploadFile(
+          "user-avatars",
+          avatarFile
+        );
+        updateData.avatar = avatarUrl;
+
+        // Delete old avatar if exists
+        if (currentUser.avatar) {
+          await fileStorageService
+            .deleteFileByUrl(currentUser.avatar)
+            .catch((error) => {
+              // Log error but don't fail the request
+              console.error("Failed to delete old avatar:", error);
+            });
+        }
+      } else if (avatar !== undefined) {
+        // If avatar is explicitly set (including null to remove)
+        if (avatar === null || avatar === "") {
+          // Delete old avatar if exists
+          if (currentUser.avatar) {
+            await fileStorageService
+              .deleteFileByUrl(currentUser.avatar)
+              .catch((error) => {
+                console.error("Failed to delete avatar:", error);
+              });
+          }
+          updateData.avatar = null;
+        } else {
+          // Update with provided URL (if updating from external source)
+          updateData.avatar = avatar;
+        }
+      }
+
+      console.log({ updateData });
 
       const updatedUser = await User.findByIdAndUpdate(
         req.user._id,
@@ -79,6 +178,102 @@ class UserController {
           },
         },
         "User profile updated successfully"
+      );
+    }
+  );
+
+  /**
+   * Remove profile image
+   */
+  removeProfileImage = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const user = await User.findById(req.user._id).select("profileImage");
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Delete image from cloud storage if exists
+      if (user.profileImage) {
+        await fileStorageService
+          .deleteFileByUrl(user.profileImage)
+          .catch((error) => {
+            console.error("Failed to delete profile image:", error);
+          });
+      }
+
+      // Remove profile image from user record
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user._id,
+        { profileImage: null },
+        { new: true, runValidators: true }
+      ).select("-password");
+
+      if (!updatedUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      const registrationDate =
+        updatedUser.registeredAt || updatedUser.createdAt;
+
+      res.apiSuccess(
+        {
+          user: {
+            ...updatedUser.toObject(),
+            registeredAt: registrationDate,
+          },
+        },
+        "Profile image removed successfully"
+      );
+    }
+  );
+
+  /**
+   * Remove avatar
+   */
+  removeAvatar = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const user = await User.findById(req.user._id).select("avatar");
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Delete avatar from cloud storage if exists
+      if (user.avatar) {
+        await fileStorageService.deleteFileByUrl(user.avatar).catch((error) => {
+          console.error("Failed to delete avatar:", error);
+        });
+      }
+
+      // Remove avatar from user record
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user._id,
+        { avatar: null },
+        { new: true, runValidators: true }
+      ).select("-password");
+
+      if (!updatedUser) {
+        throw new AppError("User not found", 404);
+      }
+
+      const registrationDate =
+        updatedUser.registeredAt || updatedUser.createdAt;
+
+      res.apiSuccess(
+        {
+          user: {
+            ...updatedUser.toObject(),
+            registeredAt: registrationDate,
+          },
+        },
+        "Avatar removed successfully"
       );
     }
   );

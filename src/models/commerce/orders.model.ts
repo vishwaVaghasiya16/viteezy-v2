@@ -57,10 +57,12 @@ const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: {
       type: String,
+      default: null,
     },
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      default: null,
     },
     status: {
       type: String,
@@ -92,24 +94,30 @@ const OrderSchema = new Schema<IOrder>(
         name: {
           type: String,
           trim: true,
+          default: null,
         },
         sku: {
           type: String,
           trim: true,
+          default: null,
         },
       },
     ],
     subtotal: {
       type: PriceSchema,
+      default: null,
     },
     tax: {
       type: PriceSchema,
+      default: null,
     },
     shipping: {
       type: PriceSchema,
+      default: null,
     },
     discount: {
       type: PriceSchema,
+      default: null,
     },
     couponDiscount: {
       type: PriceSchema,
@@ -121,17 +129,20 @@ const OrderSchema = new Schema<IOrder>(
     },
     total: {
       type: PriceSchema,
+      default: null,
     },
     shippingAddress: {
       type: AddressSnapshotSchema,
+      default: null,
     },
     billingAddress: {
       type: AddressSnapshotSchema,
+      default: null,
     },
     paymentMethod: {
       type: String,
-
       trim: true,
+      default: null,
     },
     paymentStatus: {
       type: String,
@@ -141,10 +152,12 @@ const OrderSchema = new Schema<IOrder>(
     paymentId: {
       type: String,
       trim: true,
+      default: null,
     },
     couponCode: {
       type: String,
       trim: true,
+      default: null,
     },
     couponMetadata: {
       type: Schema.Types.Mixed,
@@ -157,6 +170,7 @@ const OrderSchema = new Schema<IOrder>(
     notes: {
       type: String,
       trim: true,
+      default: null,
     },
     metadata: {
       type: Schema.Types.Mixed,
@@ -165,12 +179,15 @@ const OrderSchema = new Schema<IOrder>(
     trackingNumber: {
       type: String,
       trim: true,
+      default: null,
     },
     shippedAt: {
       type: Date,
+      default: null,
     },
     deliveredAt: {
       type: Date,
+      default: null,
     },
     ...SoftDelete,
     ...AuditSchema.obj,

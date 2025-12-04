@@ -38,18 +38,22 @@ const PaymentSchema = new Schema<IPayment>(
     orderId: {
       type: Schema.Types.ObjectId,
       ref: "orders",
+      default: null,
     },
     membershipId: {
       type: Schema.Types.ObjectId,
       ref: "memberships",
+      default: null,
     },
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      default: null,
     },
     paymentMethod: {
       type: String,
       enum: PAYMENT_METHOD_VALUES,
+      default: null,
     },
     status: {
       type: String,
@@ -58,23 +62,28 @@ const PaymentSchema = new Schema<IPayment>(
     },
     amount: {
       type: PriceSchema,
+      default: null,
     },
     currency: {
       type: String,
       uppercase: true,
+      default: null,
     },
     transactionId: {
       type: String,
       trim: true,
       sparse: true,
+      default: null,
     },
     gatewayTransactionId: {
       type: String,
       trim: true,
+      default: null,
     },
     gatewaySessionId: {
       type: String,
       trim: true,
+      default: null,
     },
     gatewayResponse: {
       type: Schema.Types.Mixed,
@@ -83,19 +92,24 @@ const PaymentSchema = new Schema<IPayment>(
     failureReason: {
       type: String,
       trim: true,
+      default: null,
     },
     refundAmount: {
       type: PriceSchema,
+      default: null,
     },
     refundReason: {
       type: String,
       trim: true,
+      default: null,
     },
     refundedAt: {
       type: Date,
+      default: null,
     },
     processedAt: {
       type: Date,
+      default: null,
     },
     ...SoftDelete,
     ...AuditSchema.obj,

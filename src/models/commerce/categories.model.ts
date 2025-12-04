@@ -12,13 +12,10 @@ import {
   SeoType,
 } from "../common.model";
 
-export interface ICategory extends Document {
+export interface IProductCategory extends Document {
   slug: string;
   name: I18nStringType;
   description: I18nTextType;
-  parentId?: mongoose.Types.ObjectId;
-  children: mongoose.Types.ObjectId[];
-  level: number;
   sortOrder: number;
   icon?: string;
   image?: MediaType;
@@ -29,11 +26,12 @@ export interface ICategory extends Document {
   updatedAt: Date;
 }
 
-const CategorySchema = new Schema<ICategory>(
+const ProductCategorySchema = new Schema<IProductCategory>(
   {
     slug: {
       type: String,
       lowercase: true,
+      default: null,
     },
     name: {
       type: I18nString,
@@ -43,21 +41,6 @@ const CategorySchema = new Schema<ICategory>(
       type: I18nText,
       default: () => ({}),
     },
-    parentId: {
-      type: Schema.Types.ObjectId,
-      ref: "categories",
-    },
-    children: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "categories",
-      },
-    ],
-    level: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
     sortOrder: {
       type: Number,
       default: 0,
@@ -65,9 +48,11 @@ const CategorySchema = new Schema<ICategory>(
     icon: {
       type: String,
       trim: true,
+      default: null,
     },
     image: {
       type: MediaSchema,
+      default: null,
     },
     seo: {
       type: SeoSchema,
@@ -93,7 +78,7 @@ const CategorySchema = new Schema<ICategory>(
 );
 
 // Text search index
-CategorySchema.index({
+ProductCategorySchema.index({
   "name.en": "text",
   "name.nl": "text",
   "description.en": "text",
@@ -101,11 +86,10 @@ CategorySchema.index({
 });
 
 // Other indexes
-CategorySchema.index({ parentId: 1, isActive: 1, sortOrder: 1 });
-CategorySchema.index({ level: 1, isActive: 1 });
-CategorySchema.index({ isActive: 1, productCount: -1 });
+ProductCategorySchema.index({ isActive: 1, sortOrder: 1 });
+ProductCategorySchema.index({ isActive: 1, productCount: -1 });
 
-export const Categories = mongoose.model<ICategory>(
-  "categories",
-  CategorySchema
+export const ProductCategory = mongoose.model<IProductCategory>(
+  "product_categories",
+  ProductCategorySchema
 );

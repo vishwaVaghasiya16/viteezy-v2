@@ -47,6 +47,7 @@ const IngredientSchema = new Schema<IIngredient>(
     scientificName: {
       type: String,
       trim: true,
+      default: null,
     },
     description: {
       type: I18nText,
@@ -55,10 +56,12 @@ const IngredientSchema = new Schema<IIngredient>(
     category: {
       type: String,
       trim: true,
+      default: null,
     },
     type: {
       type: String,
       enum: INGREDIENT_TYPE_VALUES,
+      default: null,
     },
     benefits: {
       type: I18nText,
@@ -76,6 +79,7 @@ const IngredientSchema = new Schema<IIngredient>(
       unit: {
         type: String,
         trim: true,
+        default: null,
       },
       frequency: {
         type: String,
@@ -91,14 +95,13 @@ const IngredientSchema = new Schema<IIngredient>(
       type: I18nText,
       default: () => ({}),
     },
-    interactions: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    interactions: {
+      type: [String],
+      default: [],
+    },
     image: {
       type: MediaSchema,
+      default: null,
     },
     isActive: {
       type: Boolean,

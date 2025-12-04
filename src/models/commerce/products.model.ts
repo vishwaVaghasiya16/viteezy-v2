@@ -18,7 +18,8 @@ import {
 
 // Extended price type for subscription periods with additional metadata
 // amount is optional here as it will be calculated from totalAmount
-export interface SubscriptionPriceWithMetadata extends Omit<PriceType, 'amount'> {
+export interface SubscriptionPriceWithMetadata
+  extends Omit<PriceType, "amount"> {
   amount?: number; // Optional - will be calculated from totalAmount if not provided
   totalAmount?: number; // Total price for the entire subscription period (e.g., $163.38 for 6 months)
   durationDays?: number; // Duration in days (e.g., 30, 60, 90, 180)
@@ -28,20 +29,21 @@ export interface SubscriptionPriceWithMetadata extends Omit<PriceType, 'amount'>
   icon?: string; // URL to icon/image for this subscription option
 }
 
-const SubscriptionPriceWithMetadataSchema = new Schema<SubscriptionPriceWithMetadata>(
-  {
-    currency: { type: String, default: "EUR" },
-    amount: { type: Number, optional: true }, // Optional - will be calculated from totalAmount
-    taxRate: { type: Number, default: 0 },
-    totalAmount: { type: Number, optional: true },
-    durationDays: { type: Number, optional: true },
-    capsuleCount: { type: Number, optional: true },
-    savingsPercentage: { type: Number, optional: true },
-    features: [{ type: String, trim: true }],
-    icon: { type: String, trim: true, optional: true },
-  },
-  { _id: false }
-);
+const SubscriptionPriceWithMetadataSchema =
+  new Schema<SubscriptionPriceWithMetadata>(
+    {
+      currency: { type: String, default: "EUR" },
+      amount: { type: Number, optional: true }, // Optional - will be calculated from totalAmount
+      taxRate: { type: Number, default: 0 },
+      totalAmount: { type: Number, optional: true },
+      durationDays: { type: Number, optional: true },
+      capsuleCount: { type: Number, optional: true },
+      savingsPercentage: { type: Number, optional: true },
+      features: [{ type: String, trim: true }],
+      icon: { type: String, trim: true, optional: true },
+    },
+    { _id: false }
+  );
 
 // Price structure for subscription periods (for Sachets)
 export interface SachetOneTimeCapsuleOptions {
@@ -49,27 +51,34 @@ export interface SachetOneTimeCapsuleOptions {
   count60: PriceType & { capsuleCount?: number }; // 60 count price
 }
 
-const SachetOneTimeCapsuleOptionsSchema = new Schema<SachetOneTimeCapsuleOptions>(
-  {
-    count30: {
-      type: new Schema({
-        currency: { type: String, default: "EUR" },
-        amount: { type: Number, required: true },
-        taxRate: { type: Number, default: 0 },
-        capsuleCount: { type: Number, optional: true },
-      }, { _id: false }),
+const SachetOneTimeCapsuleOptionsSchema =
+  new Schema<SachetOneTimeCapsuleOptions>(
+    {
+      count30: {
+        type: new Schema(
+          {
+            currency: { type: String, default: "EUR" },
+            amount: { type: Number, required: true },
+            taxRate: { type: Number, default: 0 },
+            capsuleCount: { type: Number, optional: true },
+          },
+          { _id: false }
+        ),
+      },
+      count60: {
+        type: new Schema(
+          {
+            currency: { type: String, default: "EUR" },
+            amount: { type: Number, required: true },
+            taxRate: { type: Number, default: 0 },
+            capsuleCount: { type: Number, optional: true },
+          },
+          { _id: false }
+        ),
+      },
     },
-    count60: {
-      type: new Schema({
-        currency: { type: String, default: "EUR" },
-        amount: { type: Number, required: true },
-        taxRate: { type: Number, default: 0 },
-        capsuleCount: { type: Number, optional: true },
-      }, { _id: false }),
-    },
-  },
-  { _id: false }
-);
+    { _id: false }
+  );
 
 export interface SachetPricesType {
   thirtyDays: SubscriptionPriceWithMetadata;
@@ -181,36 +190,37 @@ const ProductSchema = new Schema<IProduct>(
     title: {
       type: Schema.Types.Mixed, // Support both I18nString and String
       trim: true,
+      default: null,
     },
     slug: {
       type: String,
       lowercase: true,
       trim: true,
+      default: null,
     },
     description: {
       type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
+      default: null,
     },
     shortDescription: {
       type: String,
       trim: true,
+      default: null,
     },
     productImage: {
       type: String,
       trim: true,
+      default: null,
     },
-    benefits: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    ingredients: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    benefits: {
+      type: [String],
+      default: [],
+    },
+    ingredients: {
+      type: [String],
+      default: [],
+    },
     productIngredients: [
       {
         type: Schema.Types.ObjectId,
@@ -220,37 +230,38 @@ const ProductSchema = new Schema<IProduct>(
     categories: [
       {
         type: Schema.Types.ObjectId,
-        ref: "categories",
+        ref: "product_categories",
       },
     ],
-    healthGoals: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    healthGoals: {
+      type: [String],
+      default: [],
+    },
     nutritionInfo: {
       type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
+      default: null,
     },
-    galleryImages: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    nutritionTable: [
-      {
-        nutrient: { type: String, trim: true },
-        amount: { type: String, trim: true },
-        unit: { type: String, trim: true },
-        dailyValue: { type: String, trim: true },
-        _id: false,
-      },
-    ],
+    galleryImages: {
+      type: [String],
+      default: [],
+    },
+    nutritionTable: {
+      type: [
+        {
+          nutrient: { type: String, trim: true, default: null },
+          amount: { type: String, trim: true, default: null },
+          unit: { type: String, trim: true, default: null },
+          dailyValue: { type: String, trim: true, default: null },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
     howToUse: {
       type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
+      default: null,
     },
     status: {
       type: String,
@@ -259,10 +270,12 @@ const ProductSchema = new Schema<IProduct>(
     },
     price: {
       type: PriceSchema,
+      default: null,
     },
     variant: {
       type: String,
       enum: PRODUCT_VARIANT_VALUES,
+      default: null,
     },
     hasStandupPouch: {
       type: Boolean,
@@ -270,56 +283,59 @@ const ProductSchema = new Schema<IProduct>(
     },
     sachetPrices: {
       type: SachetPricesSchema,
+      default: null,
     },
-    sachetImages: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    sachetImages: {
+      type: [String],
+      default: [],
+    },
     standupPouchPrice: {
       type: Schema.Types.Mixed, // Can be PriceSchema or SachetOneTimeCapsuleOptionsSchema
+      default: null,
     },
-    standupPouchImages: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    standupPouchImages: {
+      type: [String],
+      default: [],
+    },
     standupPouchPrices: {
       type: SubscriptionPriceSchema,
+      default: null,
     },
     meta: {
       type: SeoSchema,
+      default: null,
     },
     sourceInfo: {
-      manufacturer: { type: String, trim: true },
-      countryOfOrigin: { type: String, trim: true },
-      certification: [{ type: String, trim: true }],
-      batchNumber: { type: String, trim: true },
-      expiryDate: { type: Date },
+      type: {
+        manufacturer: { type: String, trim: true, default: null },
+        countryOfOrigin: { type: String, trim: true, default: null },
+        certification: { type: [String], default: [] },
+        batchNumber: { type: String, trim: true, default: null },
+        expiryDate: { type: Date, default: null },
+      },
       _id: false,
+      default: null,
     },
     comparisonSection: {
-      title: { type: String, trim: true },
-      columns: [
-        {
-          type: String,
-          trim: true,
+      type: {
+        title: { type: String, trim: true, default: null },
+        columns: {
+          type: [String],
+          default: [],
         },
-      ],
-      rows: [
-        {
-          label: { type: String, trim: true },
-          values: [
-            {
-              type: Boolean,
+        rows: [
+          {
+            label: { type: String, trim: true, default: null },
+            values: {
+              type: [Boolean],
+              default: [],
             },
-          ],
-          _id: false,
-        },
-      ],
+            _id: false,
+          },
+        ],
+      },
       _id: false,
+      default: null,
     },
     isFeatured: {
       type: Boolean,
@@ -331,14 +347,17 @@ const ProductSchema = new Schema<IProduct>(
     },
     deletedAt: {
       type: Date,
+      default: null,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "users",
+      default: null,
     },
     updatedBy: {
       type: Schema.Types.ObjectId,
       ref: "users",
+      default: null,
     },
   },
   {
