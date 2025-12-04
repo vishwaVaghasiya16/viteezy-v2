@@ -1,11 +1,6 @@
 import Joi from "joi";
-import {
-  ProductStatus,
-  ProductVariant,
-  PRODUCT_STATUS_VALUES,
-  PRODUCT_VARIANT_VALUES,
-  CURRENCY_VALUES,
-} from "../models/enums";
+import mongoose from "mongoose";
+import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES, CURRENCY_VALUES } from "../models/enums";
 import { AppError } from "../utils/AppError";
 
 // Common validation patterns
@@ -49,32 +44,34 @@ const galleryImagesSchema = Joi.array()
     "array.base": "Gallery images must be an array of image URLs",
   });
 
-const benefitsSchema = Joi.array()
-  .items(Joi.string().trim())
-  .optional()
+const benefitsSchema = Joi.array().items(Joi.string().trim()).optional().messages({
+  "array.base": "Benefits must be an array of strings",
+});
+
+// ObjectId validation helper
+const objectIdSchema = Joi.string()
+  .custom((value, helpers) => {
+    if (!mongoose.Types.ObjectId.isValid(value)) {
+      return helpers.error("any.invalid");
+    }
+    return value;
+  })
   .messages({
-    "array.base": "Benefits must be an array of strings",
+    "any.invalid": "Invalid ingredient ID format",
   });
 
 const ingredientsSchema = Joi.array()
-  .items(Joi.string().trim())
+  .items(objectIdSchema)
   .optional()
   .messages({
-    "array.base": "Ingredients must be an array of strings",
+    "array.base": "Ingredients must be an array of ingredient IDs",
   });
 
-const objectIdRegex = /^[0-9a-fA-F]{24}$/;
-
 const productIngredientIdsSchema = Joi.array()
-  .items(
-    Joi.string()
-      .trim()
-      .pattern(objectIdRegex)
-      .message("Each product ingredient id must be a valid object id")
-  )
+  .items(objectIdSchema)
   .optional()
   .messages({
-    "array.base": "Product ingredients must be an array of ids",
+    "array.base": "Product ingredients must be an array of ingredient IDs",
   });
 
 const categoriesSchema = Joi.array()
@@ -280,14 +277,11 @@ const legacySubscriptionPriceSchema = Joi.object({
   oneEightyDays: priceSchema,
 });
 
-const standupPouchPricesSchema = legacySubscriptionPriceSchema.when(
-  "hasStandupPouch",
-  {
-    is: true,
-    then: Joi.optional(), // Legacy field, optional now
-    otherwise: Joi.optional(),
-  }
-);
+const standupPouchPricesSchema = legacySubscriptionPriceSchema.when("hasStandupPouch", {
+  is: true,
+  then: Joi.optional(), // Legacy field, optional now
+  otherwise: Joi.optional(),
+});
 
 const isFeaturedSchema = Joi.boolean().optional().default(false);
 
@@ -316,7 +310,6 @@ export const createProductSchema = Joi.object({
   galleryImages: galleryImagesSchema,
   benefits: benefitsSchema,
   ingredients: ingredientsSchema,
-  productIngredients: productIngredientIdsSchema,
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,

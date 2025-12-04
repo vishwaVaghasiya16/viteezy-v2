@@ -317,19 +317,8 @@ class ProductService {
   /**
    * Create new product
    */
-  async createProduct(
-    data: CreateProductData
-  ): Promise<{ product: any; message: string }> {
-    const {
-      title,
-      slug,
-      hasStandupPouch,
-      standupPouchPrice,
-      standupPouchPrices,
-      price,
-      sachetPrices,
-      variant,
-    } = data;
+  async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
+    const { title, slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices, variant } = data;
 
     // Generate slug from title if not provided
     let finalSlug = slug;
@@ -358,10 +347,7 @@ class ProductService {
 
     // Validate standupPouchPrice if hasStandupPouch is true (standupPouchPrices is legacy field)
     if (hasStandupPouch && !standupPouchPrice && !standupPouchPrices) {
-      throw new AppError(
-        "standupPouchPrice is required when hasStandupPouch is true",
-        400
-      );
+      throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
     }
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
@@ -580,7 +566,10 @@ class ProductService {
                 $expr: {
                   $and: [
                     {
-                      $in: [{ $toString: "$_id" }, "$$ingredientIds"],
+                      $in: [
+                        { $toString: "$_id" },
+                        "$$ingredientIds",
+                      ],
                     },
                     { $ne: ["$isDeleted", true] },
                     { $ne: ["$isActive", false] },

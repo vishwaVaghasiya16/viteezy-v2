@@ -7,3 +7,4 @@ export { Pages } from "./pages.model";
 export { Reviews } from "./reviews.model";
 export { ProductTestimonials } from "./productTestimonials.model";
 export { GeneralSettings } from "./generalSettings.model";
+export { LandingPages } from "./landingPage.model";

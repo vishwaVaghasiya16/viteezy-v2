@@ -1,0 +1,133 @@
+import { Request, Response, NextFunction } from "express";
+
+const toBoolean = (value: any): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    return ["true", "1", "yes", "on"].includes(value.toLowerCase());
+  }
+  return undefined;
+};
+
+const getValue = (value: any): string | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" || trimmed === "null" || trimmed === "undefined" ? undefined : trimmed;
+  }
+  return String(value);
+};
+
+/**
+ * Simple field mapping - converts flat form-data fields to nested structure
+ * Supports underscore notation: heroSection_title, howItWorksSection_steps_0_title
+ */
+const buildNestedStructure = (body: any): any => {
+  const result: any = {};
+  
+  // Helper to set nested value with array support
+  const setNestedValue = (obj: any, path: string[], value: any) => {
+    let current = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+      const pathKey = path[i];
+      const nextKey = path[i + 1];
+      const isNextArrayIndex = /^\d+$/.test(nextKey);
+      
+      if (isNextArrayIndex) {
+        // Handle array: steps[0]
+        if (!current[pathKey]) current[pathKey] = [];
+        const index = parseInt(nextKey);
+        // Ensure array is large enough
+        while (current[pathKey].length <= index) {
+          current[pathKey].push({});
+        }
+        current = current[pathKey][index];
+        i++; // Skip the index
+      } else {
+        // Handle object
+        if (!current[pathKey]) current[pathKey] = {};
+        current = current[pathKey];
+      }
+    }
+    
+    const finalKey = path[path.length - 1];
+    current[finalKey] = value;
+  };
+  
+  // Process all fields
+  for (const [key, value] of Object.entries(body)) {
+    if (value === undefined || value === null || value === "") continue;
+    
+    // Handle simple flat fields
+    if (key === "isActive") {
+      const boolValue = toBoolean(value);
+      if (boolValue !== undefined) result[key] = boolValue;
+      continue;
+    }
+    
+    // Skip file upload fields (handled by image upload middleware)
+    if (key === "heroSection_media_url" ||
+        key === "heroSectionMedia" || 
+        key === "membershipBackgroundImage" || 
+        key === "missionBackgroundImage" ||
+        key === "howItWorksStepImages" ||
+        key === "designedByScienceStepImages" ||
+        key === "featureIcons") {
+      continue;
+    }
+    
+    const stringValue = getValue(value);
+    if (stringValue === undefined) continue;
+    
+    // Handle nested fields with underscore notation
+    // Examples: heroSection_title, howItWorksSection_steps_0_title
+    if (key.includes("_")) {
+      const parts = key.split("_");
+      if (parts.length >= 2) {
+        // Build path array, handling numbers as array indices
+        const path: string[] = [];
+        for (let i = 0; i < parts.length; i++) {
+          path.push(parts[i]);
+        }
+        setNestedValue(result, path, stringValue);
+      }
+    }
+    // Handle dot notation: heroSection.title
+    else if (key.includes(".")) {
+      const path = key.split(".");
+      setNestedValue(result, path, stringValue);
+    }
+    // Keep other fields as-is
+    else {
+      result[key] = stringValue;
+    }
+  }
+  
+  return result;
+};
+
+export const parseLandingPageFormData = (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  try {
+    // Parse nested fields from form-data
+    const parsed = buildNestedStructure(req.body);
+    
+    // Merge parsed fields back into req.body
+    Object.assign(req.body, parsed);
+    
+    // Handle isActive separately
+    if (req.body.isActive !== undefined) {
+      const boolValue = toBoolean(req.body.isActive);
+      if (boolValue !== undefined) {
+        req.body.isActive = boolValue;
+      }
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+

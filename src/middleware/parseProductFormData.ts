@@ -47,15 +47,62 @@ const parseArrayField = (value: any): string[] | undefined => {
   return undefined;
 };
 
-const parseJSONField = (value: any): Record<string, any> | undefined => {
+/**
+ * Fixes common JSON escaping issues that can occur when JSON is sent via form data
+ * - Removes invalid escape sequences like \$ (dollar sign doesn't need escaping in JSON)
+ * - Handles cases where backslash+dollar appears in the string
+ */
+const fixJSONEscaping = (jsonString: string): string => {
+  // Fix invalid escape sequences: \$ should be just $ (dollar doesn't need escaping in JSON)
+  // Handle patterns like \\$ (escaped backslash + dollar) or \$ (invalid escape)
+  // We need to be careful to only fix invalid escapes, not break valid ones
+  let fixed = jsonString;
+  
+  // Replace \\$ (literal backslash + dollar) with just $ 
+  // This handles cases where curl sends \\\$ which becomes \\$ in the JSON string
+  fixed = fixed.replace(/\\\\\$/g, '$');
+  
+  // Replace \$ (invalid escape sequence) with $ 
+  // This handles direct invalid escapes
+  fixed = fixed.replace(/\\\$/g, '$');
+  
+  return fixed;
+};
+
+const parseJSONField = (value: any, fieldName: string): Record<string, any> | undefined => {
+  // Skip if undefined or null
+  if (value === undefined || value === null) return undefined;
+  
+  // If already an object, return as is
   if (typeof value === "object" && value !== null) return value as Record<string, any>;
-  if (typeof value === "string" && value.length) {
+  
+  // Handle string values
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    
+    // Skip empty strings
+    if (!trimmed || trimmed === "" || trimmed === "null" || trimmed === "undefined") {
+      return undefined;
+    }
+    
     try {
-      return JSON.parse(value);
-    } catch {
-      throw new AppError("Invalid JSON format in multipart payload", 400);
+      // Try parsing as-is first
+      return JSON.parse(trimmed);
+    } catch (error) {
+      // If parsing fails, try fixing common escaping issues
+      try {
+        const fixed = fixJSONEscaping(trimmed);
+        return JSON.parse(fixed);
+      } catch (fixError) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        throw new AppError(
+          `Invalid JSON format in multipart payload for field '${fieldName}': ${errorMessage}. Value preview: ${trimmed.substring(0, 200)}`,
+          400
+        );
+      }
     }
   }
+  
   return undefined;
 };
 
@@ -73,9 +120,15 @@ export const parseProductFormData = (
     });
 
     JSON_FIELDS.forEach((field) => {
-      const parsed = parseJSONField(req.body[field]);
-      if (parsed !== undefined) {
-        req.body[field] = parsed;
+      // Only process if field exists in request body
+      if (req.body[field] !== undefined) {
+        const parsed = parseJSONField(req.body[field], field);
+        if (parsed !== undefined) {
+          req.body[field] = parsed;
+        } else {
+          // Remove empty/null values for optional JSON fields
+          delete req.body[field];
+        }
       }
     });
 

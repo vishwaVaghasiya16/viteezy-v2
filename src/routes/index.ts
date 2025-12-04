@@ -30,8 +30,10 @@ import adminProductTestimonialRoutes from "./adminProductTestimonialRoutes";
 import adminUserRoutes from "./adminUserRoutes";
 import adminGeneralSettingsRoutes from "./adminGeneralSettingsRoutes";
 import adminProductCategoryRoutes from "./adminProductCategoryRoutes";
+import adminLandingPageRoutes from "./adminLandingPageRoutes";
 import memberRoutes from "./memberRoutes";
 import dashboardRoutes from "./dashboardRoutes";
+import landingPageRoutes from "./landingPageRoutes";
 
 const router = Router();
 
@@ -51,12 +53,14 @@ router.use("/admin/product-testimonials", adminProductTestimonialRoutes);
 router.use("/admin/users", adminUserRoutes);
 router.use("/admin/general-settings", adminGeneralSettingsRoutes);
 router.use("/admin/product-categories", adminProductCategoryRoutes);
+router.use("/admin/landing-pages", adminLandingPageRoutes);
 
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
 router.use("/faqs", faqRoutes);
+router.use("/landing-page", landingPageRoutes);
 router.use("/wishlist", wishlistRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/products", productRoutes);
