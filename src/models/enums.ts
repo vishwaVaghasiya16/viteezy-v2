@@ -53,6 +53,12 @@ export enum PageType {
   LANDING = "Landing",
 }
 
+// Static Page Status
+export enum StaticPageStatus {
+  PUBLISHED = "Published",
+  UNPUBLISHED = "Unpublished",
+}
+
 // Order Status
 export enum OrderStatus {
   PENDING = "Pending",
@@ -310,6 +316,7 @@ export const BLOG_STATUS_VALUES = Object.values(BlogStatus);
 export const FAQ_STATUS_VALUES = Object.values(FAQStatus);
 export const PAGE_STATUS_VALUES = Object.values(PageStatus);
 export const PAGE_TYPE_VALUES = Object.values(PageType);
+export const STATIC_PAGE_STATUS_VALUES = Object.values(StaticPageStatus);
 export const ORDER_STATUS_VALUES = Object.values(OrderStatus);
 export const PAYMENT_STATUS_VALUES = Object.values(PaymentStatus);
 export const PAYMENT_METHOD_VALUES = Object.values(PaymentMethod);
