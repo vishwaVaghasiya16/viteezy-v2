@@ -10,6 +10,7 @@ export { Orders } from "./orders.model";
 export { Payments } from "./payments.model";
 export { Products } from "./products.model";
 export { ProductVariants } from "./productVariants.model";
+export { ProductFAQs } from "./productFaqs.model";
 export { SavedCards } from "./savedCards.model";
 export { Shipments } from "./shipments.model";
 export { MembershipPlans } from "./membershipPlans.model";

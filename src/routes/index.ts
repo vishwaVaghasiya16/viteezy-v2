@@ -32,6 +32,8 @@ import adminGeneralSettingsRoutes from "./adminGeneralSettingsRoutes";
 import adminProductCategoryRoutes from "./adminProductCategoryRoutes";
 import adminLandingPageRoutes from "./adminLandingPageRoutes";
 import adminStaticPageRoutes from "./adminStaticPageRoutes";
+import adminIngredientRoutes from "./adminIngredientRoutes";
+import adminProductFaqRoutes from "./adminProductFaqRoutes";
 import memberRoutes from "./memberRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import landingPageRoutes from "./landingPageRoutes";
@@ -56,6 +58,8 @@ router.use("/admin/general-settings", adminGeneralSettingsRoutes);
 router.use("/admin/product-categories", adminProductCategoryRoutes);
 router.use("/admin/landing-pages", adminLandingPageRoutes);
 router.use("/admin/static-pages", adminStaticPageRoutes);
+router.use("/admin/ingredients", adminIngredientRoutes);
+router.use("/admin/product-faqs", adminProductFaqRoutes);
 
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);

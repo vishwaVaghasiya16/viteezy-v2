@@ -8,6 +8,7 @@ import {
   I18nStringType,
   I18nTextType,
   MediaType,
+  AuditType,
 } from "../common.model";
 import {
   IngredientType,
@@ -16,7 +17,7 @@ import {
   FREQUENCY_TYPE_VALUES,
 } from "../enums";
 
-export interface IIngredient extends Document {
+export interface IIngredient extends Document, AuditType {
   name: I18nStringType;
   scientificName?: string;
   description: I18nTextType;
@@ -34,6 +35,8 @@ export interface IIngredient extends Document {
   interactions: string[];
   image?: MediaType;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -108,7 +111,7 @@ const IngredientSchema = new Schema<IIngredient>(
       default: true,
     },
     ...SoftDelete,
-    ...AuditSchema.obj,
+    ...(AuditSchema.obj as Record<string, unknown>),
   },
   {
     timestamps: true,

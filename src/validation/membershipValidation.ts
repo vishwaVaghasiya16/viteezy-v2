@@ -26,3 +26,21 @@ export const buyMembershipSchema = Joi.object(
     metadata: Joi.object().unknown(true).optional(),
   })
 ).label("BuyMembershipPayload");
+
+/**
+ * Get Membership Plans Query Validation Schema
+ */
+export const getMembershipPlansSchema = Joi.object(
+  withFieldLabels({
+    interval: Joi.string()
+      .valid("Monthly", "Quarterly", "Yearly")
+      .optional()
+      .label("Billing interval"),
+    lang: Joi.string()
+      .valid("en", "nl", "de", "fr", "es")
+      .optional()
+      .label("Language"),
+  })
+)
+  .unknown(false)
+  .label("MembershipPlansQuery");

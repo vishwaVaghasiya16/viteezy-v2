@@ -18,6 +18,60 @@ interface AuthenticatedRequest extends Request {
 
 class MembershipController {
   /**
+   * Get all active membership plans
+   * @route GET /api/memberships/plans
+   * @access Public
+   */
+  getMembershipPlans = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { interval, lang = "en" } = req.query as {
+        interval?: string;
+        lang?: string;
+      };
+
+      const filter: Record<string, any> = {
+        isActive: true,
+        isDeleted: false,
+      };
+
+      // Filter by interval if provided
+      if (interval) {
+        filter.interval = interval;
+      }
+
+      const membershipPlans = await MembershipPlans.find(filter)
+        .sort({ durationDays: 1, createdAt: -1 })
+        .select(
+          "name slug shortDescription description price interval durationDays benefits isAutoRenew"
+        )
+        .lean();
+
+      // Format response with language-specific content
+      const formattedPlans = membershipPlans.map((plan) => ({
+        id: plan._id,
+        name: plan.name,
+        slug: plan.slug,
+        shortDescription:
+          plan.shortDescription?.[lang as "en" | "nl"] ||
+          plan.shortDescription?.en ||
+          "",
+        description:
+          plan.description?.[lang as "en" | "nl"] || plan.description?.en || "",
+        price: plan.price,
+        interval: plan.interval,
+        durationDays: plan.durationDays,
+        benefits: plan.benefits || [],
+        isAutoRenew: plan.isAutoRenew,
+      }));
+
+      res.apiSuccess(
+        { plans: formattedPlans },
+        "Membership plans retrieved successfully"
+      );
+    }
+  );
+
+  /**
    * Buy membership plan
    * @route POST /api/memberships/buy
    * @access Private

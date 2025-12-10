@@ -1,22 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import {
-  productService,
-  ProductSortOption,
-} from "../services/productService";
-import { AppError } from "../utils/AppError";
-import { logger } from "../utils/logger";
+import { productService, ProductSortOption } from "../services/productService";
 import { getPaginationOptions, getPaginationMeta } from "../utils/pagination";
-import { calculateMemberPrice, calculateMemberPrices, ProductPriceSource } from "../utils/membershipPrice";
+import {
+  calculateMemberPrice,
+  ProductPriceSource,
+} from "../utils/membershipPrice";
+import { ProductCategory } from "../models/commerce";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
 
-const parseArrayQuery = (
-  value?: string | string[]
-): string[] | undefined => {
+const parseArrayQuery = (value?: string | string[]): string[] | undefined => {
   if (!value) return undefined;
   const values = Array.isArray(value) ? value : value.split(",");
   const sanitized = values.map((item) => item.trim()).filter(Boolean);
@@ -67,7 +64,11 @@ export class ProductController {
    * Get all products with pagination
    * Includes member pricing if user is authenticated and a member
    */
-  static async getAllProducts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async getAllProducts(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const {
@@ -95,21 +96,27 @@ export class ProductController {
         ingredients as string | string[] | undefined
       );
 
-      const sortByValue = isValidSortOption(sortBy)
-        ? sortBy
-        : undefined;
+      const sortByValue = isValidSortOption(sortBy) ? sortBy : undefined;
 
-      const result = await productService.getAllProducts(page, limit, skip, sort, {
-        search: searchTerm,
-        status: status as any,
-        variant: variant as any,
-        hasStandupPouch:
-          hasStandupPouch !== undefined ? hasStandupPouch === "true" : undefined,
-        categories: parsedCategories,
-        healthGoals: parsedHealthGoals,
-        ingredients: parsedIngredients,
-        sortBy: sortByValue,
-      });
+      const result = await productService.getAllProducts(
+        page,
+        limit,
+        skip,
+        sort,
+        {
+          search: searchTerm,
+          status: status as any,
+          variant: variant as any,
+          hasStandupPouch:
+            hasStandupPouch !== undefined
+              ? hasStandupPouch === "true"
+              : undefined,
+          categories: parsedCategories,
+          healthGoals: parsedHealthGoals,
+          ingredients: parsedIngredients,
+          sortBy: sortByValue,
+        }
+      );
 
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
@@ -124,7 +131,10 @@ export class ProductController {
             memberDiscountOverride: product.metadata?.memberDiscountOverride,
           };
 
-          const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+          const memberPriceResult = await calculateMemberPrice(
+            productPriceSource,
+            userId || ""
+          );
 
           // Keep original product structure intact, only add member pricing fields at product level
           const enrichedProduct: any = {
@@ -167,7 +177,11 @@ export class ProductController {
   /**
    * Get available filter values
    */
-  static async getFilterOptions(req: Request, res: Response, next: NextFunction) {
+  static async getFilterOptions(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const filters = await productService.getFilterOptions();
       res.status(200).json({
@@ -184,7 +198,11 @@ export class ProductController {
    * Get product by ID
    * Includes member pricing if user is authenticated and a member
    */
-  static async getProductById(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async getProductById(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const { id } = req.params;
       const result = await productService.getProductById(id);
@@ -199,7 +217,10 @@ export class ProductController {
         memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
       };
 
-      const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+      const memberPriceResult = await calculateMemberPrice(
+        productPriceSource,
+        userId || ""
+      );
 
       // Include variants with member pricing if they exist
       let variantsWithMemberPrices = result.product.variants;
@@ -212,7 +233,10 @@ export class ProductController {
               memberDiscountOverride: variant.metadata?.memberDiscountOverride,
             };
 
-            const variantMemberPrice = await calculateMemberPrice(variantPriceSource, userId || "");
+            const variantMemberPrice = await calculateMemberPrice(
+              variantPriceSource,
+              userId || ""
+            );
 
             const enrichedVariant: any = {
               ...variant,
@@ -238,7 +262,7 @@ export class ProductController {
           })
         );
       }
-      
+
       // Keep original product structure intact
       const enrichedProduct: any = {
         ...result.product,
@@ -277,7 +301,11 @@ export class ProductController {
    * Get product by slug
    * Includes member pricing if user is authenticated and a member
    */
-  static async getProductBySlug(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async getProductBySlug(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const { slug } = req.params;
       const result = await productService.getProductBySlug(slug);
@@ -292,7 +320,10 @@ export class ProductController {
         memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
       };
 
-      const memberPriceResult = await calculateMemberPrice(productPriceSource, userId || "");
+      const memberPriceResult = await calculateMemberPrice(
+        productPriceSource,
+        userId || ""
+      );
 
       // Include variants with member pricing if they exist
       let variantsWithMemberPrices = result.product.variants;
@@ -305,7 +336,10 @@ export class ProductController {
               memberDiscountOverride: variant.metadata?.memberDiscountOverride,
             };
 
-            const variantMemberPrice = await calculateMemberPrice(variantPriceSource, userId || "");
+            const variantMemberPrice = await calculateMemberPrice(
+              variantPriceSource,
+              userId || ""
+            );
 
             const enrichedVariant: any = {
               ...variant,
@@ -443,7 +477,11 @@ export class ProductController {
   /**
    * Get product statistics
    */
-  static async getProductStats(req: Request, res: Response, next: NextFunction) {
+  static async getProductStats(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const stats = await productService.getProductStats();
 
@@ -458,5 +496,53 @@ export class ProductController {
       next(error);
     }
   }
-}
 
+  /**
+   * Get list of active product categories
+   * @route GET /api/products/categories
+   * @access Public
+   */
+  static async getProductCategories(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const { lang = "en" } = req.query as {
+        lang?: "en" | "nl";
+      };
+
+      const filter: any = {
+        isActive: true,
+        isDeleted: { $ne: true },
+      };
+
+      const categories = await ProductCategory.find(filter)
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .select("slug name description sortOrder icon image productCount")
+        .lean();
+
+      const transformedCategories = categories.map((category: any) => ({
+        _id: category._id,
+        slug: category.slug,
+        name: category.name?.[lang] || category.name?.en || "",
+        description:
+          category.description?.[lang] || category.description?.en || "",
+        sortOrder: category.sortOrder || 0,
+        icon: category.icon || null,
+        image: category.image || null,
+        productCount: category.productCount || 0,
+      }));
+
+      res.status(200).json({
+        success: true,
+        message: "Product categories retrieved successfully",
+        data: {
+          categories: transformedCategories,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}

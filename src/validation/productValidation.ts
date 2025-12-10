@@ -1,6 +1,12 @@
 import Joi from "joi";
 import mongoose from "mongoose";
-import { ProductStatus, ProductVariant, PRODUCT_STATUS_VALUES, PRODUCT_VARIANT_VALUES, CURRENCY_VALUES } from "../models/enums";
+import {
+  ProductStatus,
+  ProductVariant,
+  PRODUCT_STATUS_VALUES,
+  PRODUCT_VARIANT_VALUES,
+  CURRENCY_VALUES,
+} from "../models/enums";
 import { AppError } from "../utils/AppError";
 
 // Common validation patterns
@@ -44,9 +50,12 @@ const galleryImagesSchema = Joi.array()
     "array.base": "Gallery images must be an array of image URLs",
   });
 
-const benefitsSchema = Joi.array().items(Joi.string().trim()).optional().messages({
-  "array.base": "Benefits must be an array of strings",
-});
+const benefitsSchema = Joi.array()
+  .items(Joi.string().trim())
+  .optional()
+  .messages({
+    "array.base": "Benefits must be an array of strings",
+  });
 
 // ObjectId validation helper
 const objectIdSchema = Joi.string()
@@ -277,11 +286,14 @@ const legacySubscriptionPriceSchema = Joi.object({
   oneEightyDays: priceSchema,
 });
 
-const standupPouchPricesSchema = legacySubscriptionPriceSchema.when("hasStandupPouch", {
-  is: true,
-  then: Joi.optional(), // Legacy field, optional now
-  otherwise: Joi.optional(),
-});
+const standupPouchPricesSchema = legacySubscriptionPriceSchema.when(
+  "hasStandupPouch",
+  {
+    is: true,
+    then: Joi.optional(), // Legacy field, optional now
+    otherwise: Joi.optional(),
+  }
+);
 
 const isFeaturedSchema = Joi.boolean().optional().default(false);
 
@@ -421,6 +433,15 @@ export const updateProductStatusSchema = Joi.object({
   .messages({
     "object.base": "Request body must be an object",
   });
+
+// Get product categories query schema
+export const getProductCategoriesSchema = Joi.object({
+  lang: Joi.string().valid("en", "nl").optional().default("en").messages({
+    "any.only": "Language must be either 'en' or 'nl'",
+  }),
+})
+  .unknown(false)
+  .label("ProductCategoriesQuery");
 
 // Validation middleware
 export const validateProduct = (schema: Joi.ObjectSchema) => {

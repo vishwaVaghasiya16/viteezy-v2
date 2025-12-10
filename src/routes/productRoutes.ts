@@ -1,10 +1,17 @@
 import { Router } from "express";
 import { ProductController } from "../controllers/productController";
-import { validateProduct, createProductSchema, updateProductSchema, updateProductStatusSchema } from "../validation/productValidation";
+import {
+  validateProduct,
+  createProductSchema,
+  updateProductSchema,
+  updateProductStatusSchema,
+  getProductCategoriesSchema,
+} from "../validation/productValidation";
 import { authMiddleware, optionalAuth } from "../middleware/auth";
 import { upload } from "../middleware/upload";
 import { parseProductFormData } from "../middleware/parseProductFormData";
 import { handleProductImageUpload } from "../middleware/productImageUpload";
+import { validateQuery } from "../middleware/joiValidation";
 
 const router = Router();
 
@@ -12,6 +19,11 @@ const router = Router();
 router.get("/", optionalAuth, ProductController.getAllProducts);
 router.get("/filters", ProductController.getFilterOptions);
 router.get("/stats", ProductController.getProductStats);
+router.get(
+  "/categories",
+  validateQuery(getProductCategoriesSchema),
+  ProductController.getProductCategories
+);
 router.get("/slug/:slug", optionalAuth, ProductController.getProductBySlug);
 router.get("/:id", optionalAuth, ProductController.getProductById);
 
@@ -53,4 +65,3 @@ router.put(
 router.delete("/:id", ProductController.deleteProduct);
 
 export default router;
-
