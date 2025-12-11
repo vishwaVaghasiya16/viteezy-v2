@@ -15,8 +15,8 @@ dotenv.config();
  * @constant {object} DEFAULT_VALUES - Default configuration values
  */
 const DEFAULT_VALUES = {
-  PORT: 3000,
-  HOST: "localhost",
+  PORT: 8050,
+  HOST: "0.0.0.0",
   NODE_ENV: "development",
   MONGODB_URI: "mongodb://localhost:27017/viteezy-phase-2",
   MONGODB_TEST_URI: "mongodb://localhost:27017/viteezy-phase-2-test",
@@ -57,7 +57,14 @@ export const config = {
    * @property {string} nodeEnv - Node.js environment (development, production, test)
    */
   server: {
-    port: parseInt(process.env.PORT || String(DEFAULT_VALUES.PORT), 10),
+    port: (() => {
+      const envPort = process.env.PORT;
+      if (!envPort || envPort.trim() === "") {
+        return DEFAULT_VALUES.PORT;
+      }
+      const parsedPort = parseInt(envPort, 10);
+      return isNaN(parsedPort) ? DEFAULT_VALUES.PORT : parsedPort;
+    })(),
     host: process.env.HOST || DEFAULT_VALUES.HOST,
     nodeEnv: process.env.NODE_ENV || DEFAULT_VALUES.NODE_ENV,
   },

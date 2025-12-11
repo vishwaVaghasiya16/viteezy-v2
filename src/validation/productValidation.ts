@@ -393,7 +393,7 @@ export const updateProductSchema = Joi.object({
     !value.standupPouchPrices
   ) {
     return helpers.error("any.custom", {
-      message: "standupPouchPrice is required when hasStandupPouch is true",
+      message: "standupPocuhPrice is required when hasStandupPouch is true",
     });
   }
   // If price is not provided and sachetPrices is being updated, derive price from sachetPrices.thirtyDays

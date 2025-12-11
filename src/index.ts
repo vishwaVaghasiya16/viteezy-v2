@@ -5,7 +5,9 @@
  * @author Viteezy Development Team
  * @version 2.0.0
  */
-
+// Note: Module aliases are handled by:
+// - Development: tsconfig-paths/register (via nodemon exec)
+// - Production: module-alias/register (via npm start script)
 import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -422,14 +424,15 @@ const startServer = async (): Promise<void> => {
     await connectDatabase();
 
     // Start HTTP server and listen on configured port and host
-    server = app.listen(PORT, HOST, () => {
-      logger.info(`🚀 Server running on http://${HOST}:${PORT}`);
+    // Use 0.0.0.0 to accept connections from any IP address (public access)
+    server = app.listen(PORT, "0.0.0.0", () => {
+      logger.info(`🚀 Server running on http://0.0.0.0:${PORT}`);
       logger.info(`📊 Environment: ${NODE_ENV}`);
       logger.info(
-        `📚 API Documentation: http://${HOST}:${PORT}${API_DOCS_PATH}`
+        `📚 API Documentation: http://0.0.0.0:${PORT}${API_DOCS_PATH}`
       );
       logger.info(
-        `=> Health Check: http://${HOST}:${PORT}${HEALTH_CHECK_PATH}`
+        `=> Health Check: http://0.0.0.0:${PORT}${HEALTH_CHECK_PATH}`
       );
     });
   } catch (error) {
