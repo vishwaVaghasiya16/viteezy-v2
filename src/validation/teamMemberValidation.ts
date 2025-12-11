@@ -114,7 +114,8 @@ export const getTeamMembersQuerySchema = Joi.object(
   .label("TeamMembersQuery");
 
 /**
- * Public API validation schemas
+ * Authenticated User API validation schemas
+ * Language is automatically detected from user profile, so lang parameter is removed
  */
 export const getPublicTeamMembersQuerySchema = Joi.object(
   withFieldLabels({
@@ -122,14 +123,10 @@ export const getPublicTeamMembersQuerySchema = Joi.object(
     limit: Joi.number().integer().min(1).max(100).optional(),
     sort: Joi.string().optional(),
     order: Joi.string().valid("asc", "desc").optional(),
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
   })
 )
   .unknown(false)
-  .label("PublicTeamMembersQuery");
+  .label("TeamMembersQuery");
 
 export const getPublicTeamMemberParamsSchema = Joi.object(
   withFieldLabels({
@@ -140,13 +137,6 @@ export const getPublicTeamMemberParamsSchema = Joi.object(
   })
 );
 
-export const getPublicTeamMemberQuerySchema = Joi.object(
-  withFieldLabels({
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
-  })
-)
+export const getPublicTeamMemberQuerySchema = Joi.object(withFieldLabels({}))
   .unknown(false)
-  .label("PublicTeamMemberQuery");
+  .label("TeamMemberQuery");
