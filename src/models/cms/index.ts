@@ -9,3 +9,4 @@ export { Reviews } from "./reviews.model";
 export { ProductTestimonials } from "./productTestimonials.model";
 export { GeneralSettings } from "./generalSettings.model";
 export { LandingPages } from "./landingPage.model";
+export { TeamMembers } from "./teamMembers.model";
