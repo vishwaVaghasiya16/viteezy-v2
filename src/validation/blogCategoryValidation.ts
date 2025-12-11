@@ -10,6 +10,9 @@ const i18nStringSchema = Joi.object({
     "string.min": "English title must be at least 2 characters",
   }),
   nl: Joi.string().trim().allow("", null),
+  de: Joi.string().trim().allow("", null),
+  fr: Joi.string().trim().allow("", null),
+  es: Joi.string().trim().allow("", null),
 }).required();
 
 export const createBlogCategorySchema = Joi.object(
@@ -24,7 +27,6 @@ export const createBlogCategorySchema = Joi.object(
         "string.pattern.base":
           "Slug must contain only lowercase letters, numbers, and hyphens",
       }),
-    sortOrder: Joi.number().integer().min(0).optional().label("Sort order"),
     isActive: Joi.boolean().optional().label("Is active"),
   })
 ).label("CreateBlogCategoryPayload");
@@ -41,7 +43,6 @@ export const updateBlogCategorySchema = Joi.object(
         "string.pattern.base":
           "Slug must contain only lowercase letters, numbers, and hyphens",
       }),
-    sortOrder: Joi.number().integer().min(0).optional().label("Sort order"),
     isActive: Joi.boolean().optional().label("Is active"),
   })
 )

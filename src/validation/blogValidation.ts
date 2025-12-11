@@ -226,7 +226,6 @@ export const getBlogDetailsQuerySchema = Joi.object(
 export const getBlogCategoriesQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string().valid("active", "all").default("active"),
-    lang: Joi.string().valid("en", "nl").default("en"),
   })
 )
   .unknown(false)

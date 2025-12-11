@@ -19,7 +19,7 @@ class AdminBlogCategoryController {
    */
   createCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const { title, slug, sortOrder, isActive } = req.body;
+      const { title, slug, isActive } = req.body;
       const requesterId = req.user?._id
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
@@ -44,7 +44,6 @@ class AdminBlogCategoryController {
       const category = await BlogCategories.create({
         title,
         slug: finalSlug,
-        sortOrder: sortOrder ?? 0,
         isActive: isActive !== undefined ? isActive : true,
         createdBy: requesterId,
       });
@@ -83,7 +82,6 @@ class AdminBlogCategoryController {
       }
 
       const sortOptions = {
-        sortOrder: 1 as 1 | -1,
         createdAt: -1 as 1 | -1,
         ...((sort as Record<string, 1 | -1>) || {}),
       };
@@ -133,7 +131,7 @@ class AdminBlogCategoryController {
   updateCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { title, slug, sortOrder, isActive } = req.body;
+      const { title, slug, isActive } = req.body;
       const requesterId = req.user?._id
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
@@ -171,7 +169,6 @@ class AdminBlogCategoryController {
 
       category.title = title ?? category.title;
       category.slug = finalSlug;
-      if (sortOrder !== undefined) category.sortOrder = sortOrder;
       if (isActive !== undefined) category.isActive = isActive;
       if (requesterId) category.set("updatedBy", requesterId);
 

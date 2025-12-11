@@ -5,6 +5,7 @@
  */
 
 import { Router } from "express";
+import { authMiddleware } from "@/middleware/auth";
 import { BlogController } from "@/controllers/blogController";
 import { validateQuery, validateParams } from "@/middleware/joiValidation";
 import {
@@ -18,13 +19,15 @@ import {
 const router = Router();
 
 /**
- * Public Routes (No Authentication Required)
- * These routes are accessible without authentication token
+ * Protected Routes (Authentication Required)
+ * User must be logged in to access blog categories
+ * Language is automatically detected from user's profile preference
  */
 
-// Get list of blog categories
+// Get list of blog categories (authenticated users only)
 router.get(
   "/categories/list",
+  authMiddleware,
   validateQuery(getBlogCategoriesQuerySchema),
   BlogController.getBlogCategories
 );

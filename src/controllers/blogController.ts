@@ -10,6 +10,7 @@ import { AppError } from "@/utils/AppError";
 import { Blogs, IBlog } from "@/models/cms/blogs.model";
 import { BlogCategories } from "@/models/cms/blogCategories.model";
 import { BlogStatus } from "@/models/enums";
+import { User } from "@/models/index.model";
 import mongoose from "mongoose";
 
 // Type for populated category
@@ -222,12 +223,41 @@ class BlogController {
   );
 
   /**
-   * Get list of blog categories
+   * Get list of blog categories (authenticated users only)
+   * Language is automatically detected from user's profile preference
+   * Only shows data in user's selected language
    */
   getBlogCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { lang = "en", status = "active" } = req.query as {
-        lang?: "en" | "nl";
+      const authenticatedReq = req as any;
+
+      if (!authenticatedReq.user || !authenticatedReq.user._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      // Get user's language preference from database
+      const user = await User.findById(authenticatedReq.user._id)
+        .select("language")
+        .lean();
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Map user's language preference to language code
+      const languageMap: Record<string, "en" | "nl" | "de" | "fr" | "es"> = {
+        English: "en",
+        Dutch: "nl",
+        German: "de",
+        French: "fr",
+        Spanish: "es",
+        Italian: "en", // Fallback to English
+        Portuguese: "en", // Fallback to English
+      };
+
+      const userLang = languageMap[user.language || "English"] || "en";
+
+      const { status = "active" } = req.query as {
         status?: "active" | "all";
       };
 
@@ -240,15 +270,15 @@ class BlogController {
       }
 
       const categories = await BlogCategories.find(filter)
-        .sort({ sortOrder: 1, createdAt: 1 })
-        .select("slug title sortOrder isActive")
+        .sort({ createdAt: -1 })
+        .select("slug title isActive")
         .lean();
 
-      const transformedCategories = categories.map((category) => ({
+      // Transform categories to show only user's language content
+      const transformedCategories = categories.map((category: any) => ({
         _id: category._id,
         slug: category.slug,
-        title: category.title[lang as "en" | "nl"] || category.title.en || "",
-        sortOrder: category.sortOrder || 0,
+        title: category.title?.[userLang] || category.title?.en || "",
         isActive: category.isActive !== false,
       }));
 
