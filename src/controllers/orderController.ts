@@ -541,7 +541,7 @@ class OrderController {
         )
         .populate(
           "items.productId",
-          "title slug description media categories tags status"
+          "title slug description media categories tags status galleryImages productImage"
         )
         .sort(sortOptions)
         .skip(skip)
@@ -664,7 +664,9 @@ class OrderController {
         _id: { $in: productIds },
         isDeleted: false,
       })
-        .select("title slug description media categories tags status")
+        .select(
+          "title slug description media categories tags status galleryImages productImage"
+        )
         .lean();
 
       // Create a map for quick lookup
@@ -695,6 +697,8 @@ class OrderController {
                 categories: product.categories,
                 tags: product.tags,
                 status: product.status,
+                galleryImages: product.galleryImages,
+                productImage: product.productImage,
               }
             : null,
         };
