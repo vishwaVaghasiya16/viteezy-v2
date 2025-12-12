@@ -7,7 +7,7 @@ import {
   updateProductStatusSchema,
   getProductCategoriesSchema,
 } from "../validation/productValidation";
-import { authMiddleware, optionalAuth } from "../middleware/auth";
+import { authMiddleware, optionalAuth, authorize } from "../middleware/auth";
 import { upload } from "../middleware/upload";
 import { parseProductFormData } from "../middleware/parseProductFormData";
 import { handleProductImageUpload } from "../middleware/productImageUpload";
@@ -27,9 +27,16 @@ router.get(
 router.get("/slug/:slug", optionalAuth, ProductController.getProductBySlug);
 router.get("/:id", optionalAuth, ProductController.getProductById);
 
-// Protected routes (authentication required)
-router.use(authMiddleware); // Apply auth middleware to all routes below
+// Admin-only routes (authentication + admin authorization required)
+// These routes require Admin role - regular users cannot create/update/delete products
+router.use(authMiddleware); // Apply auth middleware first
+router.use(authorize("Admin")); // Then check for Admin role
 
+/**
+ * @route   POST /api/v1/products
+ * @desc    Create a new product
+ * @access  Admin Only
+ */
 router.post(
   "/",
   upload.fields([
@@ -43,12 +50,23 @@ router.post(
   validateProduct(createProductSchema),
   ProductController.createProduct
 );
-// Status update route should be before /:id route to ensure proper matching
+
+/**
+ * @route   PATCH /api/v1/products/:id/status
+ * @desc    Update product status
+ * @access  Admin Only
+ */
 router.patch(
   "/:id/status",
   validateProduct(updateProductStatusSchema),
   ProductController.updateProductStatus
 );
+
+/**
+ * @route   PUT /api/v1/products/:id
+ * @desc    Update product
+ * @access  Admin Only
+ */
 router.put(
   "/:id",
   upload.fields([
@@ -62,6 +80,12 @@ router.put(
   validateProduct(updateProductSchema),
   ProductController.updateProduct
 );
+
+/**
+ * @route   DELETE /api/v1/products/:id
+ * @desc    Delete product
+ * @access  Admin Only
+ */
 router.delete("/:id", ProductController.deleteProduct);
 
 export default router;
