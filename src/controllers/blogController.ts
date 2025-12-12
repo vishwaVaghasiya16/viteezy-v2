@@ -13,6 +13,39 @@ import { BlogStatus } from "@/models/enums";
 import { User } from "@/models/index.model";
 import mongoose from "mongoose";
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    _id: string;
+    language?: string;
+  };
+}
+
+/**
+ * Map user language preference to language code
+ * User table stores: "English", "Dutch", "German", "French", "Spanish", "Italian", "Portuguese"
+ * API uses: "en", "nl", "de", "fr", "es" (only supported languages in I18n types)
+ * Italian and Portuguese fallback to English
+ */
+const mapLanguageToCode = (
+  language?: string
+): "en" | "nl" | "de" | "fr" | "es" => {
+  const languageMap: Record<string, "en" | "nl" | "de" | "fr" | "es"> = {
+    English: "en",
+    Dutch: "nl",
+    German: "de",
+    French: "fr",
+    Spanish: "es",
+    Italian: "en", // Fallback to English
+    Portuguese: "en", // Fallback to English
+  };
+
+  if (!language) {
+    return "en"; // Default to English
+  }
+
+  return languageMap[language] || "en";
+};
+
 // Type for populated category
 interface PopulatedCategory {
   _id: mongoose.Types.ObjectId;
@@ -35,13 +68,32 @@ interface BlogWithPopulated extends Omit<IBlog, "categoryId" | "authorId"> {
 
 class BlogController {
   /**
-   * Get paginated list of blogs with filters
+   * Get paginated list of blogs with filters (authenticated users only)
    * Supports: category, tag, search by title, sort by latest
+   * Language is automatically detected from user's profile preference
    */
   getBlogs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const authenticatedReq = req as AuthenticatedRequest;
+
+      if (!authenticatedReq.user || !authenticatedReq.user._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      // Get user's language preference from database
+      const user = await User.findById(authenticatedReq.user._id)
+        .select("language")
+        .lean();
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Map user's language preference to language code
+      const userLang = mapLanguageToCode(user.language);
+
       const { page, limit, skip, sort } = getPaginationOptions(req);
-      const { category, tag, search, lang = "en" } = req.query;
+      const { category, tag, search } = req.query;
 
       // Build filter object - only published blogs, not deleted
       const filter: any = {
@@ -73,11 +125,14 @@ class BlogController {
         filter.tags = { $in: [tag] };
       }
 
-      // Search by title (supports both en and nl)
+      // Search by title (supports all languages)
       if (search) {
         filter.$or = [
           { "title.en": { $regex: search, $options: "i" } },
           { "title.nl": { $regex: search, $options: "i" } },
+          { "title.de": { $regex: search, $options: "i" } },
+          { "title.fr": { $regex: search, $options: "i" } },
+          { "title.es": { $regex: search, $options: "i" } },
         ];
       }
 
@@ -112,7 +167,7 @@ class BlogController {
                 _id: blog.categoryId._id,
                 slug: blog.categoryId.slug,
                 title:
-                  blog.categoryId.title?.[lang as "en" | "nl"] ||
+                  blog.categoryId.title?.[userLang] ||
                   blog.categoryId.title?.en ||
                   "",
               }
@@ -120,9 +175,8 @@ class BlogController {
 
         return {
           slug: blog.slug,
-          title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
-          content:
-            blog.excerpt?.[lang as "en" | "nl"] || blog.excerpt?.en || "",
+          title: blog.title?.[userLang] || blog.title?.en || "",
+          content: blog.excerpt?.[userLang] || blog.excerpt?.en || "",
           coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],
@@ -147,12 +201,30 @@ class BlogController {
   );
 
   /**
-   * Get blog details by slug or ID
+   * Get blog details by slug or ID (authenticated users only)
+   * Language is automatically detected from user's profile preference
    */
   getBlogDetails = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const authenticatedReq = req as AuthenticatedRequest;
+
+      if (!authenticatedReq.user || !authenticatedReq.user._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
       const { slugOrId } = req.params;
-      const { lang = "en" } = req.query;
+
+      // Get user's language preference from database
+      const user = await User.findById(authenticatedReq.user._id)
+        .select("language")
+        .lean();
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Map user's language preference to language code
+      const userLang = mapLanguageToCode(user.language);
 
       // Build query - can be slug or ID
       const query: any = {
@@ -175,7 +247,7 @@ class BlogController {
         throw new AppError("Blog not found", 404);
       }
 
-      // Transform blog to include required fields
+      // Transform blog to show only user's language content
       const category =
         blog.categoryId &&
         typeof blog.categoryId === "object" &&
@@ -184,7 +256,7 @@ class BlogController {
               _id: (blog.categoryId as any)._id,
               slug: (blog.categoryId as any).slug,
               title:
-                (blog.categoryId as any).title?.[lang as "en" | "nl"] ||
+                (blog.categoryId as any).title?.[userLang] ||
                 (blog.categoryId as any).title?.en ||
                 "",
             }
@@ -203,8 +275,8 @@ class BlogController {
 
       const transformedBlog = {
         slug: blog.slug,
-        title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
-        content: blog.content?.[lang as "en" | "nl"] || blog.content?.en || "",
+        title: blog.title?.[userLang] || blog.title?.en || "",
+        content: blog.content?.[userLang] || blog.content?.en || "",
         coverImage: blog.coverImage || null,
         category,
         tags: blog.tags || [],
@@ -290,12 +362,31 @@ class BlogController {
   );
 
   /**
-   * Get popular or latest blogs
+   * Get popular or latest blogs (authenticated users only)
    * Returns top 3-5 blogs based on views/reads
+   * Language is automatically detected from user's profile preference
    */
   getPopularBlogs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { limit = 5, type = "popular", lang = "en" } = req.query;
+      const authenticatedReq = req as AuthenticatedRequest;
+
+      if (!authenticatedReq.user || !authenticatedReq.user._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      // Get user's language preference from database
+      const user = await User.findById(authenticatedReq.user._id)
+        .select("language")
+        .lean();
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Map user's language preference to language code
+      const userLang = mapLanguageToCode(user.language);
+
+      const { limit = 5, type = "popular" } = req.query;
       const blogLimit = Math.min(
         Math.max(parseInt(limit as string, 10) || 5, 3),
         5
@@ -325,7 +416,7 @@ class BlogController {
         .limit(blogLimit)
         .lean();
 
-      // Transform blogs to include required fields
+      // Transform blogs to show only user's language content
       const transformedBlogs = blogs.map((blog: any) => {
         const category =
           blog.categoryId &&
@@ -335,7 +426,7 @@ class BlogController {
                 _id: blog.categoryId._id,
                 slug: blog.categoryId.slug,
                 title:
-                  blog.categoryId.title?.[lang as "en" | "nl"] ||
+                  blog.categoryId.title?.[userLang] ||
                   blog.categoryId.title?.en ||
                   "",
               }
@@ -343,9 +434,8 @@ class BlogController {
 
         return {
           slug: blog.slug,
-          title: blog.title?.[lang as "en" | "nl"] || blog.title?.en || "",
-          content:
-            blog.excerpt?.[lang as "en" | "nl"] || blog.excerpt?.en || "",
+          title: blog.title?.[userLang] || blog.title?.en || "",
+          content: blog.excerpt?.[userLang] || blog.excerpt?.en || "",
           coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],

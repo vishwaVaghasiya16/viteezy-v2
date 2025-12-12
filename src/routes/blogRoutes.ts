@@ -20,7 +20,7 @@ const router = Router();
 
 /**
  * Protected Routes (Authentication Required)
- * User must be logged in to access blog categories
+ * User must be logged in to access blogs
  * Language is automatically detected from user's profile preference
  */
 
@@ -32,26 +32,34 @@ router.get(
   BlogController.getBlogCategories
 );
 
-// Get popular or latest blogs (top 3-5)
+// Get popular or latest blogs (top 3-5) - authenticated users only
 router.get(
   "/popular/list",
+  authMiddleware,
   validateQuery(getPopularBlogsSchema),
   BlogController.getPopularBlogs
 );
 
-// Get paginated list of blogs with filters
-router.get("/", validateQuery(getBlogsSchema), BlogController.getBlogs);
+// Get paginated list of blogs with filters - authenticated users only
+router.get(
+  "/",
+  authMiddleware,
+  validateQuery(getBlogsSchema),
+  BlogController.getBlogs
+);
 
-// Get blog details by slug or ID
+// Get blog details by slug or ID - authenticated users only
 router.get(
   "/:slugOrId",
+  authMiddleware,
   validateParams(getBlogDetailsSchema),
   BlogController.getBlogDetails
 );
 
-// Increment blog view count
+// Increment blog view count - authenticated users only
 router.post(
   "/:slugOrId/increment-views",
+  authMiddleware,
   validateParams(incrementBlogViewsSchema),
   BlogController.incrementBlogViews
 );

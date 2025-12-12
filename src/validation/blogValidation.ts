@@ -48,6 +48,9 @@ const baseI18nStringSchema = Joi.object({
     "string.min": "English content must be at least 3 characters",
   }),
   nl: Joi.string().trim().allow("", null),
+  de: Joi.string().trim().allow("", null),
+  fr: Joi.string().trim().allow("", null),
+  es: Joi.string().trim().allow("", null),
 });
 
 const baseI18nTextSchema = Joi.object({
@@ -199,7 +202,7 @@ export const getBlogsSchema = Joi.object(
     category: Joi.string().optional(),
     tag: Joi.string().optional(),
     search: Joi.string().optional(),
-    lang: Joi.string().valid("en", "nl").optional(),
+    // lang parameter removed - language is auto-detected from user profile
   })
 )
   .unknown(false)
@@ -217,7 +220,7 @@ export const getBlogDetailsSchema = Joi.object(
 
 export const getBlogDetailsQuerySchema = Joi.object(
   withFieldLabels({
-    lang: Joi.string().valid("en", "nl").optional(),
+    // lang parameter removed - language is auto-detected from user profile
   })
 )
   .unknown(false)
@@ -235,7 +238,7 @@ export const getPopularBlogsSchema = Joi.object(
   withFieldLabels({
     limit: Joi.number().integer().min(3).max(5).optional(),
     type: Joi.string().valid("popular", "latest").optional(),
-    lang: Joi.string().valid("en", "nl").optional(),
+    // lang parameter removed - language is auto-detected from user profile
   })
 )
   .unknown(false)
