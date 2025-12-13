@@ -12,6 +12,10 @@ import {
   faqCategoryIdParamsSchema,
 } from "@/validation/adminFaqCategoryValidation";
 import { paginationQuerySchema } from "../validation/commonValidation";
+import {
+  categoryImageUpload,
+  handleCategoryImageUploadError,
+} from "@/middleware/categoryImageUpload";
 
 const router = Router();
 
@@ -22,9 +26,16 @@ router.use(authorize("Admin"));
  * @route POST /api/v1/admin/faq-categories
  * @desc Create a new FAQ category
  * @access Admin
+ * @body {Object} title - I18n object with en (required) and nl (optional)
+ * @body {String} [slug] - Optional slug (auto-generated from title if not provided)
+ * @body {File} [icon] - Optional icon file (multipart/form-data)
+ * @body {Boolean} [isActive] - Optional active status (default: true)
  */
 router.post(
   "/",
+  handleCategoryImageUploadError(
+    categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
+  ),
   validateJoi(createFaqCategorySchema),
   adminFaqCategoryController.createCategory
 );
@@ -55,10 +66,18 @@ router.get(
  * @route PUT /api/v1/admin/faq-categories/:id
  * @desc Update FAQ category
  * @access Admin
+ * @param {String} id - Category ID (MongoDB ObjectId)
+ * @body {Object} [title] - I18n object with en and nl fields
+ * @body {String} [slug] - Optional slug (auto-regenerated if title changes)
+ * @body {File} [icon] - Optional icon file (multipart/form-data)
+ * @body {Boolean} [isActive] - Optional active status
  */
 router.put(
   "/:id",
   validateParams(faqCategoryIdParamsSchema),
+  handleCategoryImageUploadError(
+    categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
+  ),
   validateJoi(updateFaqCategorySchema),
   adminFaqCategoryController.updateCategory
 );

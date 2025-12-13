@@ -9,6 +9,9 @@ const i18nStringSchema = Joi.object({
     "string.min": "English text must be at least 2 characters",
   }),
   nl: Joi.string().trim().allow("", null),
+  de: Joi.string().trim().allow("", null),
+  fr: Joi.string().trim().allow("", null),
+  es: Joi.string().trim().allow("", null),
 }).required();
 
 const i18nTextSchema = Joi.object({

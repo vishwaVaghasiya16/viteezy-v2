@@ -10,8 +10,8 @@ import {
 export interface IFaqCategory extends Document, AuditType {
   title: I18nStringType;
   slug?: string;
+  icon?: string;
   isActive: boolean;
-  sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,13 +29,14 @@ const FaqCategorySchema = new Schema<IFaqCategory>(
       lowercase: true,
       // Note: sparse and unique are handled in schema.index() below
     },
+    icon: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,
-    },
-    sortOrder: {
-      type: Number,
-      default: 0,
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),
@@ -46,7 +47,7 @@ const FaqCategorySchema = new Schema<IFaqCategory>(
 );
 
 FaqCategorySchema.index({ slug: 1 }, { unique: true, sparse: true });
-FaqCategorySchema.index({ isActive: 1, sortOrder: 1 });
+FaqCategorySchema.index({ isActive: 1 });
 
 export const FaqCategories = mongoose.model<IFaqCategory>(
   "faq_categories",
