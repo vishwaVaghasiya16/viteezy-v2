@@ -6,7 +6,10 @@ const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
 const i18nStringSchema = Joi.object({
   en: Joi.string().trim().min(2).optional(),
-  nl: Joi.string().trim().allow("", null).optional(),
+  nl: Joi.string().trim().allow("", null),
+  de: Joi.string().trim().allow("", null),
+  fr: Joi.string().trim().allow("", null),
+  es: Joi.string().trim().allow("", null),
 }).optional();
 
 const objectIdSchema = Joi.string()

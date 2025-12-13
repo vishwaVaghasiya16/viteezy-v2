@@ -111,8 +111,8 @@ class FaqService {
       _id: category._id.toString(),
       title: this.resolveI18nField(category.title, lang),
       isActive: category.isActive,
-      sortOrder: category.sortOrder ?? 0,
       slug: category.slug || null,
+      icon: category.icon || null,
     }));
   }
 
@@ -127,7 +127,7 @@ class FaqService {
     }
 
     return (await FaqCategories.find(filter)
-      .sort({ sortOrder: 1, createdAt: 1 })
+      .sort({ createdAt: 1 })
       .lean()) as unknown as LeanFaqCategory[];
   }
 

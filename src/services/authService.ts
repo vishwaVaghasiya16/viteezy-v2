@@ -542,11 +542,16 @@ class AuthService {
     }
 
     // Check if email is verified
+    // If credentials are correct but user is not verified, return Unverified errorType
     if (!user.isEmailVerified) {
-      logger.error(`Login failed: Email not verified for email: ${email}`);
+      logger.warn(
+        `Login attempt with correct credentials but unverified email: ${email}`
+      );
       throw new AppError(
         "Please verify your email before logging in. Check your email for verification OTP.",
-        401
+        401,
+        true,
+        "Unverified"
       );
     }
 
