@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { FAQController } from "@/controllers/faqController";
 import { validateQuery } from "@/middleware/joiValidation";
+import { optionalAuth } from "@/middleware/auth";
 import {
   getFaqCategoriesQuerySchema,
   getFaqsQuerySchema,
@@ -10,10 +11,16 @@ const router = Router();
 
 router.get(
   "/categories/list",
+  optionalAuth,
   validateQuery(getFaqCategoriesQuerySchema),
   FAQController.getFaqCategories
 );
 
-router.get("/", validateQuery(getFaqsQuerySchema), FAQController.getFaqs);
+router.get(
+  "/",
+  optionalAuth,
+  validateQuery(getFaqsQuerySchema),
+  FAQController.getFaqs
+);
 
 export default router;

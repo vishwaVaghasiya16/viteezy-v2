@@ -22,21 +22,18 @@ interface AuthenticatedRequest extends Request {
 
 /**
  * Map user language preference to language code
- * User table stores: "English", "Dutch", "German", "French", "Spanish", "Italian", "Portuguese"
+ * User table stores: "English", "Dutch", "German", "French", "Spanish"
  * API uses: "en", "nl", "de", "fr", "es" (only supported languages in I18n types)
- * Italian and Portuguese fallback to English
  */
 const mapLanguageToCode = (
   language?: string
 ): "en" | "nl" | "de" | "fr" | "es" => {
   const languageMap: Record<string, "en" | "nl" | "de" | "fr" | "es"> = {
     English: "en",
+    Spanish: "es",
+    French: "fr",
     Dutch: "nl",
     German: "de",
-    French: "fr",
-    Spanish: "es",
-    Italian: "en", // Fallback to English
-    Portuguese: "en", // Fallback to English
   };
 
   if (!language) {
@@ -150,7 +147,7 @@ class BlogController {
         .populate("categoryId", "slug title")
         .populate("authorId", "name email")
         .select(
-          "slug title excerpt coverImage categoryId tags seo viewCount likeCount commentCount publishedAt createdAt"
+          "slug title excerpt content coverImage categoryId tags seo viewCount likeCount commentCount publishedAt createdAt"
         )
         .sort(sortOptions)
         .skip(skip)
@@ -176,7 +173,7 @@ class BlogController {
         return {
           slug: blog.slug,
           title: blog.title?.[userLang] || blog.title?.en || "",
-          content: blog.excerpt?.[userLang] || blog.excerpt?.en || "",
+          content: blog.content?.[userLang] || blog.content?.en || "",
           coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],
@@ -410,7 +407,7 @@ class BlogController {
       const blogs = await Blogs.find(filter)
         .populate("categoryId", "slug title")
         .select(
-          "slug title excerpt coverImage categoryId tags seo viewCount likeCount commentCount publishedAt"
+          "slug title excerpt content coverImage categoryId tags seo viewCount likeCount commentCount publishedAt"
         )
         .sort(sortOptions)
         .limit(blogLimit)
@@ -435,7 +432,7 @@ class BlogController {
         return {
           slug: blog.slug,
           title: blog.title?.[userLang] || blog.title?.en || "",
-          content: blog.excerpt?.[userLang] || blog.excerpt?.en || "",
+          content: blog.content?.[userLang] || blog.content?.en || "",
           coverImage: blog.coverImage || null,
           category,
           tags: blog.tags || [],

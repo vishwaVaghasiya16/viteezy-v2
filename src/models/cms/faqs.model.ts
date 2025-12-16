@@ -19,9 +19,6 @@ export interface IFAQ extends Document, AuditType {
   sortOrder: number;
   status: FAQStatus;
   isActive?: boolean;
-  viewCount: number;
-  helpfulCount: number;
-  notHelpfulCount: number;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -64,21 +61,6 @@ const FAQSchema = new Schema<IFAQ>(
     isActive: {
       type: Boolean,
       default: true,
-    },
-    viewCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    helpfulCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    notHelpfulCount: {
-      type: Number,
-      default: 0,
-      min: 0,
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),

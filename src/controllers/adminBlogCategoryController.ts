@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { BlogCategories, Blogs } from "@/models/cms";
-import { generateSlug, generateUniqueSlug } from "@/utils/slug";
+import { generateSlug } from "@/utils/slug";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,22 +24,23 @@ class AdminBlogCategoryController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const baseSlug = slug || generateSlug(title?.en || "");
-      if (!baseSlug) {
+      const finalSlug = slug || generateSlug(title?.en || "");
+      if (!finalSlug) {
         throw new AppError(
           "Unable to generate slug. Please provide a valid title or slug.",
           400
         );
       }
 
-      const finalSlug = await generateUniqueSlug(
-        baseSlug,
-        async (slugToCheck) =>
-          BlogCategories.exists({
-            slug: slugToCheck,
-            isDeleted: false,
-          }).then((existing) => Boolean(existing))
-      );
+      // Check if slug already exists
+      const existingCategory = await BlogCategories.findOne({
+        slug: finalSlug,
+        isDeleted: false,
+      });
+
+      if (existingCategory) {
+        throw new AppError("This title is already exist", 400);
+      }
 
       const category = await BlogCategories.create({
         title,
@@ -147,24 +148,22 @@ class AdminBlogCategoryController {
 
       let finalSlug = category.slug;
       if (slug && slug !== category.slug) {
-        const baseSlug =
-          slug || generateSlug(title?.en || category.title?.en || "");
-        finalSlug = await generateUniqueSlug(baseSlug, async (slugToCheck) =>
-          BlogCategories.exists({
-            slug: slugToCheck,
-            _id: { $ne: category._id },
-            isDeleted: false,
-          }).then((existing) => Boolean(existing))
-        );
+        finalSlug = slug;
       } else if (!slug && title?.en && title.en !== category.title?.en) {
-        const baseSlug = generateSlug(title.en);
-        finalSlug = await generateUniqueSlug(baseSlug, async (slugToCheck) =>
-          BlogCategories.exists({
-            slug: slugToCheck,
-            _id: { $ne: category._id },
-            isDeleted: false,
-          }).then((existing) => Boolean(existing))
-        );
+        finalSlug = generateSlug(title.en) || category.slug;
+      }
+
+      // Check if slug already exists (excluding current category)
+      if (finalSlug !== category.slug) {
+        const existingCategory = await BlogCategories.findOne({
+          slug: finalSlug,
+          _id: { $ne: category._id },
+          isDeleted: false,
+        });
+
+        if (existingCategory) {
+          throw new AppError("This title is already exist", 400);
+        }
       }
 
       category.title = title ?? category.title;

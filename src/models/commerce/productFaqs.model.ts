@@ -17,8 +17,6 @@ export interface IProductFAQ extends Document, AuditType {
   sortOrder: number;
   status: FAQStatus;
   isActive: boolean;
-  helpfulCount: number;
-  notHelpfulCount: number;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -56,16 +54,6 @@ const ProductFAQSchema = new Schema<IProductFAQ>(
     isActive: {
       type: Boolean,
       default: true,
-    },
-    helpfulCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    notHelpfulCount: {
-      type: Number,
-      default: 0,
-      min: 0,
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),

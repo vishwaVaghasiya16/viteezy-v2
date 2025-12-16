@@ -60,6 +60,7 @@ const extractUserData = (user: any): object => {
     profileImage: user.profileImage,
     gender: user.gender,
     age: user.age,
+    language: user.language,
     lastLogin: user.lastLogin,
     createdAt: user.createdAt,
   };

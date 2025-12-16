@@ -18,8 +18,6 @@ interface GroupedFaqItem {
   _id: string;
   question: string;
   answer: string;
-  categoryId: string | null;
-  categoryTitle: string | null;
 }
 
 export interface GroupedFaqResponse {
@@ -161,8 +159,6 @@ class FaqService {
         _id: faq._id.toString(),
         question: this.resolveI18nField(faq.question, lang),
         answer: this.resolveI18nField(faq.answer, lang),
-        categoryId: faq.categoryId ? faq.categoryId.toString() : null,
-        categoryTitle: faq.category || null,
       };
 
       if (faq.categoryId) {
