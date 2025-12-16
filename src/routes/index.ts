@@ -35,9 +35,11 @@ import adminStaticPageRoutes from "./adminStaticPageRoutes";
 import adminIngredientRoutes from "./adminIngredientRoutes";
 import adminProductFaqRoutes from "./adminProductFaqRoutes";
 import adminTeamMemberRoutes from "./adminTeamMemberRoutes";
+import adminAboutUsRoutes from "./adminAboutUsRoutes";
 import memberRoutes from "./memberRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import landingPageRoutes from "./landingPageRoutes";
+import aboutUsRoutes from "./aboutUsRoutes";
 import teamMemberRoutes from "./teamMemberRoutes";
 
 const router = Router();
@@ -63,6 +65,7 @@ router.use("/admin/static-pages", adminStaticPageRoutes);
 router.use("/admin/ingredients", adminIngredientRoutes);
 router.use("/admin/product-faqs", adminProductFaqRoutes);
 router.use("/admin/team-members", adminTeamMemberRoutes);
+router.use("/admin/about-us", adminAboutUsRoutes);
 
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
@@ -70,6 +73,7 @@ router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
 router.use("/faqs", faqRoutes);
 router.use("/landing-page", landingPageRoutes);
+router.use("/about-us", aboutUsRoutes);
 router.use("/team-members", teamMemberRoutes);
 router.use("/wishlist", wishlistRoutes);
 router.use("/addresses", addressRoutes);
