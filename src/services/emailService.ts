@@ -559,10 +559,13 @@ class EmailService {
   private getOTPSubject(type: string): string {
     switch (type) {
       case "email_verification":
+      case "Email Verification":
         return "Verify Your Email - Viteezy";
       case "password_reset":
+      case "Password Reset":
         return "Password Reset - Viteezy";
       case "login_verification":
+      case "Login Verification":
         return "Login Verification - Viteezy";
       default:
         return "Verification Code - Viteezy";
@@ -573,12 +576,21 @@ class EmailService {
    * Get OTP email HTML template
    */
   private getOTPEmailTemplate(otp: string, type: string): string {
-    const title =
-      type === "email_verification" ? "Verify Your Email" : "Verification Code";
-    const message =
-      type === "email_verification"
-        ? "Please verify your email address to complete your registration."
-        : "Please use this verification code to complete your request.";
+    let title = "Verification Code";
+    let message = "Please use this verification code to complete your request.";
+
+    if (type === "email_verification" || type === "Email Verification") {
+      title = "Verify Your Email";
+      message =
+        "Please verify your email address to complete your registration.";
+    } else if (type === "password_reset" || type === "Password Reset") {
+      title = "Password Reset";
+      message =
+        "You requested to reset your password. Please use the verification code below to reset your password.";
+    } else if (type === "login_verification" || type === "Login Verification") {
+      title = "Login Verification";
+      message = "Please use this verification code to complete your login.";
+    }
 
     return `
       <!DOCTYPE html>
@@ -680,10 +692,17 @@ class EmailService {
    * Get OTP text template
    */
   private getOTPTextTemplate(otp: string, type: string): string {
-    const message =
-      type === "email_verification"
-        ? "Please verify your email address to complete your registration."
-        : "Please use this verification code to complete your request.";
+    let message = "Please use this verification code to complete your request.";
+
+    if (type === "email_verification" || type === "Email Verification") {
+      message =
+        "Please verify your email address to complete your registration.";
+    } else if (type === "password_reset" || type === "Password Reset") {
+      message =
+        "You requested to reset your password. Please use the verification code below to reset your password.";
+    } else if (type === "login_verification" || type === "Login Verification") {
+      message = "Please use this verification code to complete your login.";
+    }
 
     return `
 Viteezy - Verification Code

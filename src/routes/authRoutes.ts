@@ -62,7 +62,7 @@ router.post(
   authController.forgotPassword
 );
 
-// Reset password endpoint
+// Reset password endpoint (unified for Web and App)
 router.post(
   "/reset-password",
   validateJoi(resetPasswordSchema),

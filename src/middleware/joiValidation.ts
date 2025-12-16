@@ -47,12 +47,36 @@ const cleanErrorMessage = (message: string): string => {
  */
 const createValidationError = (error: JoiValidationError): AppError => {
   const firstError = error.details[0];
-  const rawMessage = firstError?.message || "Validation error";
 
-  // Check if error is about unknown field
-  const isUnknownField = rawMessage.includes("is not allowed");
+  // Try multiple ways to extract the error message
+  // 1. Check context.message (for custom validation errors)
+  // 2. Check message directly (which may contain the custom message)
+  // 3. Fallback to default
+  const contextMessage = (firstError?.context as any)?.message;
+  const errorMessage = firstError?.message || "Validation error";
 
-  // Format error message for unknown fields
+  // For custom validation errors, the message might be in the errorMessage itself
+  // Check if errorMessage contains our custom messages
+  let rawMessage = contextMessage || errorMessage;
+
+  // If the message contains custom validation text, use it directly
+  if (
+    errorMessage.includes("Token is not allowed") ||
+    errorMessage.includes("OTP is not allowed") ||
+    errorMessage.includes("OTP is required") ||
+    errorMessage.includes("Reset token is required") ||
+    errorMessage.includes("deviceInfo must be")
+  ) {
+    rawMessage = errorMessage;
+  }
+
+  // Check if error is about unknown field (but not our custom validation)
+  const isUnknownField =
+    rawMessage.includes("is not allowed") &&
+    !rawMessage.includes("Token is not allowed") &&
+    !rawMessage.includes("OTP is not allowed");
+
+  // Format error message
   let cleanedMessage = cleanErrorMessage(rawMessage);
   if (isUnknownField) {
     const fieldName = firstError?.path?.join(".") || "field";
@@ -60,7 +84,7 @@ const createValidationError = (error: JoiValidationError): AppError => {
   }
 
   const appErr = new AppError(
-    "Validation error",
+    cleanedMessage, // Use the cleaned message as the main error message
     HTTP_STATUS.BAD_REQUEST,
     true,
     "Validation Error"
@@ -68,13 +92,36 @@ const createValidationError = (error: JoiValidationError): AppError => {
 
   (appErr as any).error = cleanedMessage;
   (appErr as any).errors = error.details.map((detail) => {
-    const isUnknown = detail.message.includes("is not allowed");
-    const fieldName = detail.path.join(".");
+    const detailContextMessage = (detail.context as any)?.message;
+    const detailMessage = detail.message || "Validation error";
+
+    // Check if this is a custom validation message
+    const isCustomMessage =
+      detailMessage.includes("Token is not allowed") ||
+      detailMessage.includes("OTP is not allowed") ||
+      detailMessage.includes("OTP is required") ||
+      detailMessage.includes("Reset token is required") ||
+      detailMessage.includes("deviceInfo must be");
+
+    const isUnknown =
+      detailMessage.includes("is not allowed") && !isCustomMessage;
+    const fieldName = detail.path.join(".") || "validation";
+
+    // Prioritize custom message from context, then custom message in detailMessage, then default
+    let message: string;
+    if (detailContextMessage) {
+      message = cleanErrorMessage(detailContextMessage);
+    } else if (isCustomMessage) {
+      message = cleanErrorMessage(detailMessage);
+    } else if (isUnknown) {
+      message = `${fieldName} is not allowed`;
+    } else {
+      message = cleanErrorMessage(detailMessage);
+    }
+
     return {
       field: fieldName,
-      message: isUnknown
-        ? `${fieldName} is not allowed`
-        : cleanErrorMessage(detail.message),
+      message: message,
       value: detail.context?.value,
     };
   });

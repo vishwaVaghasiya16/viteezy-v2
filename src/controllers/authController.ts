@@ -101,27 +101,38 @@ class AuthController {
 
   /**
    * Forgot password
+   * Supports both Web (reset link) and App (OTP) flows based on deviceInfo
    */
   forgotPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email } = req.body;
+      const { email, deviceInfo } = req.body;
 
-      const result = await authService.forgotPassword(email);
+      if (!deviceInfo) {
+        throw new AppError("deviceInfo is required", 400);
+      }
+
+      const result = await authService.forgotPassword(email, deviceInfo);
 
       res.apiSuccess(null, result.message);
     }
   );
 
   /**
-   * Reset password using reset token from email link
+   * Reset password - Unified endpoint for Web (token) and App (OTP) flows
    */
   resetPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, token, newPassword } = req.body;
+      const { email, deviceInfo, token, otp, newPassword } = req.body;
+
+      if (!deviceInfo) {
+        throw new AppError("deviceInfo is required", 400);
+      }
 
       const result = await authService.resetPassword({
         email,
+        deviceInfo,
         token,
+        otp,
         newPassword,
       });
 

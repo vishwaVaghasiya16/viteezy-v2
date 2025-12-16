@@ -38,8 +38,9 @@ interface LoginResult {
 
 interface PasswordResetData {
   email: string;
+  deviceInfo: string;
   token?: string;
-  otp?: string; // Keep for backward compatibility if needed
+  otp?: string;
   newPassword: string;
 }
 
@@ -620,116 +621,306 @@ class AuthService {
   }
 
   /**
-   * Forgot password - Send reset link via email
+   * Forgot password - Send OTP (for App) or reset link (for Web) based on deviceInfo
    */
-  async forgotPassword(email: string): Promise<{ message: string }> {
+  async forgotPassword(
+    email: string,
+    deviceInfo: string
+  ): Promise<{ message: string }> {
     const user = await User.findOne({ email });
     if (!user) {
       // Don't reveal if user exists or not for security
       return {
         message:
-          "If an account exists with this email, a password reset link has been sent.",
+          "If an account exists with this email, a password reset instruction has been sent.",
       };
     }
 
-    // Generate secure reset token
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    // Determine if request is from Web or App based on deviceInfo
+    const isWeb = deviceInfo?.toLowerCase().includes("web");
+    const isApp = deviceInfo?.toLowerCase().includes("app");
 
-    // Save reset token to user (need to select password field to update)
-    await User.findByIdAndUpdate(user._id, {
-      passwordResetToken: resetToken,
-      passwordResetTokenExpires: resetTokenExpires,
-    });
+    // If neither Web nor App is detected, default to Web for backward compatibility
+    const requestType = isApp ? "App" : "Web";
 
-    // Generate reset URL
-    const frontendUrl =
-      process.env.FRONTEND_URL ||
-      process.env.CLIENT_URL ||
-      "http://localhost:3000";
-    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
-      email
-    )}`;
+    logger.info(
+      `Password reset request for ${email} from ${requestType} (deviceInfo: ${deviceInfo})`
+    );
 
-    // Send reset link via email
-    try {
-      const emailSent = await emailService.sendPasswordResetLinkEmail(
-        email,
-        user.name,
-        resetUrl
-      );
+    if (isApp) {
+      // App flow: Send OTP for mobile app password reset
+      try {
+        // Expire any pending password reset OTPs before issuing a new one
+        await OTP.updateMany(
+          {
+            userId: user._id,
+            type: OTPType.PASSWORD_RESET,
+            status: OTPStatus.PENDING,
+          },
+          { status: OTPStatus.EXPIRED }
+        );
 
-      if (emailSent) {
-        logger.info(`Password reset link sent successfully to ${email}`);
-      } else {
-        logger.error(`Failed to send password reset link to ${email}`);
+        // Generate and send OTP for password reset
+        await this.sendOTPForVerification(
+          user._id.toString(),
+          email,
+          OTPType.PASSWORD_RESET
+        );
+
+        logger.info(
+          `Password reset OTP sent successfully to ${email} (App request)`
+        );
+
+        return {
+          message:
+            "If an account exists with this email, a password reset OTP has been sent. Please verify the OTP to reset your password.",
+        };
+      } catch (error) {
+        logger.error("Error sending password reset OTP:", error);
+        throw new AppError(
+          "Failed to send password reset OTP. Please try again later.",
+          502
+        );
+      }
+    } else {
+      // Web flow: Send reset link via email
+      try {
+        // Generate secure reset token for link-based reset
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        // Save reset token to user
+        await User.findByIdAndUpdate(user._id, {
+          passwordResetToken: resetToken,
+          passwordResetTokenExpires: resetTokenExpires,
+        });
+
+        // Generate reset URL for web/link-based reset
+        const frontendUrl =
+          process.env.FRONTEND_URL ||
+          process.env.CLIENT_URL ||
+          "http://localhost:3000";
+        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
+          email
+        )}`;
+
+        // Send reset link via email
+        const emailSent = await emailService.sendPasswordResetLinkEmail(
+          email,
+          user.name,
+          resetUrl
+        );
+
+        if (emailSent) {
+          logger.info(
+            `Password reset link sent successfully to ${email} (Web request)`
+          );
+        } else {
+          logger.error(`Failed to send password reset link to ${email}`);
+          throw new AppError(
+            "Failed to send password reset email. Please try again later.",
+            502
+          );
+        }
+
+        return {
+          message:
+            "If an account exists with this email, a password reset link has been sent. Please check your email to reset your password.",
+        };
+      } catch (error) {
+        logger.error("Error sending password reset link email:", error);
         throw new AppError(
           "Failed to send password reset email. Please try again later.",
           502
         );
       }
-    } catch (error) {
-      logger.error("Error sending password reset email:", error);
-      throw new AppError(
-        "Failed to send password reset email. Please try again later.",
-        502
-      );
     }
-
-    return {
-      message:
-        "If an account exists with this email, a password reset link has been sent.",
-    };
   }
 
   /**
-   * Reset password using reset token
+   * Reset password - Unified method for Web (token) and App (OTP) flows
    */
   async resetPassword(data: PasswordResetData): Promise<{ message: string }> {
-    const { email, token, newPassword } = data;
+    const { email, deviceInfo, token, otp, newPassword } = data;
 
-    if (!token) {
-      throw new AppError("Reset token is required", 400);
+    // Determine if request is from Web or App based on deviceInfo
+    const isWeb = deviceInfo?.toLowerCase().includes("web");
+    const isApp = deviceInfo?.toLowerCase().includes("app");
+
+    if (!isWeb && !isApp) {
+      throw new AppError("Invalid deviceInfo. Must be 'Web' or 'App'", 400);
     }
 
-    // Find user with reset token
-    const user = await User.findOne({
-      email: email.toLowerCase(),
-      passwordResetToken: token,
-      passwordResetTokenExpires: { $gt: new Date() },
-    }).select("+passwordResetToken +passwordResetTokenExpires");
-
+    // Find user
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
-      throw new AppError("Invalid or expired reset token", 400);
+      throw new AppError("User not found", 404);
     }
 
-    // Update password (will be hashed by pre-save hook)
-    user.password = newPassword;
-    // Clear reset token
-    user.passwordResetToken = undefined;
-    user.passwordResetTokenExpires = undefined;
-    await user.save(); // This will trigger the pre-save hook
+    if (isWeb) {
+      // Web flow: Verify token and reset password
+      if (!token) {
+        throw new AppError("Reset token is required for Web", 400);
+      }
 
-    // Invalidate all existing sessions
-    await AuthSessions.updateMany(
-      { userId: user._id },
-      { isRevoked: true, revokedAt: new Date() }
-    );
+      // Find user with reset token
+      const userWithToken = await User.findOne({
+        email: email.toLowerCase(),
+        passwordResetToken: token,
+        passwordResetTokenExpires: { $gt: new Date() },
+      }).select("+passwordResetToken +passwordResetTokenExpires");
 
-    // Mark all user's stored sessionIds as revoked
-    await User.findByIdAndUpdate(user._id, {
-      $set: {
-        "sessionIds.$[].status": "Revoked",
-        "sessionIds.$[].revoked": true,
-      },
-    });
+      if (!userWithToken) {
+        throw new AppError("Invalid or expired reset token", 400);
+      }
 
-    logger.info(`Password reset successfully for user: ${user.email}`);
+      // Update password (will be hashed by pre-save hook)
+      userWithToken.password = newPassword;
+      // Clear reset token
+      userWithToken.passwordResetToken = undefined;
+      userWithToken.passwordResetTokenExpires = undefined;
+      await userWithToken.save(); // This will trigger the pre-save hook
 
-    return {
-      message:
-        "Password reset successfully. Please login with your new password.",
-    };
+      // Expire any pending password reset OTPs
+      await OTP.updateMany(
+        {
+          userId: userWithToken._id,
+          type: OTPType.PASSWORD_RESET,
+          status: OTPStatus.PENDING,
+        },
+        { status: OTPStatus.EXPIRED }
+      );
+
+      // Invalidate all existing sessions
+      await AuthSessions.updateMany(
+        { userId: userWithToken._id },
+        { isRevoked: true, revokedAt: new Date() }
+      );
+
+      // Mark all user's stored sessionIds as revoked
+      await User.findByIdAndUpdate(userWithToken._id, {
+        $set: {
+          "sessionIds.$[].status": "Revoked",
+          "sessionIds.$[].revoked": true,
+        },
+      });
+
+      logger.info(
+        `Password reset via token successfully for user: ${userWithToken.email} (Web)`
+      );
+
+      return {
+        message:
+          "Password reset successfully. Please login with your new password.",
+      };
+    } else {
+      // App flow: Verify OTP and reset password
+      if (!otp) {
+        throw new AppError("OTP is required for App", 400);
+      }
+
+      // Find valid password reset OTP
+      const otpRecord = await OTP.findOne({
+        userId: user._id,
+        email,
+        type: OTPType.PASSWORD_RESET,
+        status: OTPStatus.PENDING,
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (!otpRecord) {
+        // Try to find any pending OTP for this user/email/type to increment attempts
+        const anyPendingOTP = await OTP.findOne({
+          userId: user._id,
+          email,
+          type: OTPType.PASSWORD_RESET,
+          status: OTPStatus.PENDING,
+        });
+
+        if (anyPendingOTP) {
+          // Increment attempts for failed verification
+          await OTP.findByIdAndUpdate(anyPendingOTP._id, {
+            $inc: { attempts: 1 },
+          });
+        }
+
+        throw new AppError("Invalid or expired OTP", 400);
+      }
+
+      // Check if OTP can attempt
+      if (!otpRecord.canAttempt()) {
+        await OTP.findByIdAndUpdate(otpRecord._id, {
+          status: OTPStatus.EXPIRED,
+        });
+        throw new AppError(
+          "Maximum OTP attempts exceeded. Please request a new OTP.",
+          400
+        );
+      }
+
+      // Check if OTP is expired
+      if (otpRecord.isExpired()) {
+        await OTP.findByIdAndUpdate(otpRecord._id, {
+          status: OTPStatus.EXPIRED,
+        });
+        throw new AppError("OTP has expired. Please request a new OTP.", 400);
+      }
+
+      // Verify OTP using secure comparison
+      const isOTPValid = await otpRecord.compareOTP(otp);
+      if (!isOTPValid) {
+        // Increment attempts for failed verification
+        await OTP.findByIdAndUpdate(otpRecord._id, { $inc: { attempts: 1 } });
+        throw new AppError("Invalid OTP", 400);
+      }
+
+      // Mark OTP as verified
+      await OTP.findByIdAndUpdate(otpRecord._id, {
+        status: OTPStatus.VERIFIED,
+        verifiedAt: new Date(),
+      });
+
+      // Update password (will be hashed by pre-save hook)
+      user.password = newPassword;
+      // Clear reset token if exists
+      user.passwordResetToken = undefined;
+      user.passwordResetTokenExpires = undefined;
+      await user.save(); // This will trigger the pre-save hook
+
+      // Expire any other pending password reset OTPs
+      await OTP.updateMany(
+        {
+          userId: user._id,
+          type: OTPType.PASSWORD_RESET,
+          status: OTPStatus.PENDING,
+          _id: { $ne: otpRecord._id },
+        },
+        { status: OTPStatus.EXPIRED }
+      );
+
+      // Invalidate all existing sessions
+      await AuthSessions.updateMany(
+        { userId: user._id },
+        { isRevoked: true, revokedAt: new Date() }
+      );
+
+      // Mark all user's stored sessionIds as revoked
+      await User.findByIdAndUpdate(user._id, {
+        $set: {
+          "sessionIds.$[].status": "Revoked",
+          "sessionIds.$[].revoked": true,
+        },
+      });
+
+      logger.info(
+        `Password reset via OTP successfully for user: ${user.email} (App)`
+      );
+
+      return {
+        message:
+          "Password reset successfully. Please login with your new password.",
+      };
+    }
   }
 
   /**
