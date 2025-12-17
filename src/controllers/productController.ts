@@ -7,11 +7,109 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import { ProductCategory } from "../models/commerce";
+import {
+  I18nStringType,
+  I18nTextType,
+  DEFAULT_LANGUAGE,
+  SupportedLanguage,
+} from "../models/common.model";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
+
+/**
+ * Map user language name to language code
+ */
+const mapLanguageToCode = (language?: string): SupportedLanguage => {
+  const languageMap: Record<string, SupportedLanguage> = {
+    English: "en",
+    Spanish: "es",
+    French: "fr",
+    Dutch: "nl",
+    German: "de",
+  };
+
+  if (!language) {
+    return DEFAULT_LANGUAGE; // Default to English
+  }
+
+  return languageMap[language] || DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get user language from request (from token if authenticated, otherwise default to English)
+ */
+const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
+  // Check if user is authenticated and has language preference
+  if (req.user?.language) {
+    return mapLanguageToCode(req.user.language);
+  }
+
+  // Default to English if not authenticated or no language preference
+  return DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get translated string from I18nStringType
+ */
+const getTranslatedString = (
+  i18nString: I18nStringType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nString) return "";
+
+  // If it's already a plain string, return it
+  if (typeof i18nString === "string") {
+    return i18nString;
+  }
+
+  // Return translated string or fallback to English
+  return i18nString[lang] || i18nString.en || "";
+};
+
+/**
+ * Get translated text from I18nTextType
+ */
+const getTranslatedText = (
+  i18nText: I18nTextType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nText) return "";
+
+  // If it's already a plain string, return it
+  if (typeof i18nText === "string") {
+    return i18nText;
+  }
+
+  // Return translated text or fallback to English
+  return i18nText[lang] || i18nText.en || "";
+};
+
+/**
+ * Transform product to use user's language
+ */
+const transformProductForLanguage = (
+  product: any,
+  lang: SupportedLanguage
+): any => {
+  return {
+    ...product,
+    title: getTranslatedString(product.title, lang),
+    description: getTranslatedText(product.description, lang),
+    nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
+    howToUse: getTranslatedText(product.howToUse, lang),
+    // Transform variants if they exist
+    variants:
+      product.variants?.map((variant: any) => ({
+        ...variant,
+        name: getTranslatedString(variant.name, lang),
+      })) ||
+      product.variants ||
+      [],
+  };
+};
 
 const parseArrayQuery = (value?: string | string[]): string[] | undefined => {
   if (!value) return undefined;
@@ -121,14 +219,23 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Calculate member prices for all products
+      // Get user language (defaults to English if not authenticated)
+      const userLang = getUserLanguage(req);
+
+      // Calculate member prices for all products and transform for language
       const productsWithMemberPrices = await Promise.all(
         result.products.map(async (product: any) => {
+          // First transform product for user's language
+          const transformedProduct = transformProductForLanguage(
+            product,
+            userLang
+          );
           const productPriceSource: ProductPriceSource = {
-            price: product.price,
+            price: transformedProduct.price,
             // Check for product-specific member price overrides in metadata
-            memberPrice: product.metadata?.memberPrice,
-            memberDiscountOverride: product.metadata?.memberDiscountOverride,
+            memberPrice: transformedProduct.metadata?.memberPrice,
+            memberDiscountOverride:
+              transformedProduct.metadata?.memberDiscountOverride,
           };
 
           const memberPriceResult = await calculateMemberPrice(
@@ -136,11 +243,11 @@ export class ProductController {
             userId || ""
           );
 
-          // Keep original product structure intact, only add member pricing fields at product level
+          // Keep transformed product structure intact, only add member pricing fields at product level
           const enrichedProduct: any = {
-            ...product,
+            ...transformedProduct,
             // Keep price object exactly as it was - don't modify it
-            price: product.price,
+            price: transformedProduct.price,
           };
 
           // Only add member pricing fields if user is a member
@@ -210,11 +317,21 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
+      // Get user language (defaults to English if not authenticated)
+      const userLang = getUserLanguage(req);
+
+      // Transform product for user's language first
+      const transformedProduct = transformProductForLanguage(
+        result.product,
+        userLang
+      );
+
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {
-        price: result.product.price,
-        memberPrice: result.product.metadata?.memberPrice,
-        memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
+        price: transformedProduct.price,
+        memberPrice: transformedProduct.metadata?.memberPrice,
+        memberDiscountOverride:
+          transformedProduct.metadata?.memberDiscountOverride,
       };
 
       const memberPriceResult = await calculateMemberPrice(
@@ -222,8 +339,8 @@ export class ProductController {
         userId || ""
       );
 
-      // Include variants with member pricing if they exist
-      let variantsWithMemberPrices = result.product.variants;
+      // Variants are already transformed in transformProductForLanguage
+      let variantsWithMemberPrices = transformedProduct.variants;
       if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
         variantsWithMemberPrices = await Promise.all(
           variantsWithMemberPrices.map(async (variant: any) => {
@@ -263,12 +380,12 @@ export class ProductController {
         );
       }
 
-      // Keep original product structure intact
+      // Keep transformed product structure intact
       const enrichedProduct: any = {
-        ...result.product,
+        ...transformedProduct,
         // Keep price object exactly as it was - don't modify it
-        price: result.product.price,
-        variants: variantsWithMemberPrices || result.product.variants || [],
+        price: transformedProduct.price,
+        variants: variantsWithMemberPrices || transformedProduct.variants || [],
       };
 
       // Add member pricing fields at product level
@@ -313,11 +430,21 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
+      // Get user language (defaults to English if not authenticated)
+      const userLang = getUserLanguage(req);
+
+      // Transform product for user's language first
+      const transformedProduct = transformProductForLanguage(
+        result.product,
+        userLang
+      );
+
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {
-        price: result.product.price,
-        memberPrice: result.product.metadata?.memberPrice,
-        memberDiscountOverride: result.product.metadata?.memberDiscountOverride,
+        price: transformedProduct.price,
+        memberPrice: transformedProduct.metadata?.memberPrice,
+        memberDiscountOverride:
+          transformedProduct.metadata?.memberDiscountOverride,
       };
 
       const memberPriceResult = await calculateMemberPrice(
@@ -325,8 +452,8 @@ export class ProductController {
         userId || ""
       );
 
-      // Include variants with member pricing if they exist
-      let variantsWithMemberPrices = result.product.variants;
+      // Variants are already transformed in transformProductForLanguage
+      let variantsWithMemberPrices = transformedProduct.variants;
       if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
         variantsWithMemberPrices = await Promise.all(
           variantsWithMemberPrices.map(async (variant: any) => {
@@ -366,12 +493,12 @@ export class ProductController {
         );
       }
 
-      // Keep original product structure intact
+      // Keep transformed product structure intact
       const enrichedProduct: any = {
-        ...result.product,
+        ...transformedProduct,
         // Keep price object exactly as it was - don't modify it
-        price: result.product.price,
-        variants: variantsWithMemberPrices || result.product.variants || [],
+        price: transformedProduct.price,
+        variants: variantsWithMemberPrices || transformedProduct.variants || [],
       };
 
       // Add member pricing fields at product level
@@ -503,14 +630,16 @@ export class ProductController {
    * @access Public
    */
   static async getProductCategories(
-    req: Request,
+    req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
   ) {
     try {
-      const { lang = "en" } = req.query as {
-        lang?: "en" | "nl";
-      };
+      // Get user language (defaults to English if not authenticated)
+      const userLang = getUserLanguage(req);
+
+      // Use language code (e.g., "en", "nl") instead of query parameter
+      const lang = userLang as "en" | "nl";
 
       const filter: any = {
         isActive: true,
