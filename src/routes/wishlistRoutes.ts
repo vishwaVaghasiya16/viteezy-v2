@@ -7,10 +7,10 @@ import {
   validateQuery,
 } from "@/middleware/joiValidation";
 import {
-  addWishlistItemSchema,
   updateWishlistItemBodySchema,
   wishlistItemParamsSchema,
   wishlistPaginationQuerySchema,
+  toggleWishlistItemSchema,
 } from "@/validation/wishlistValidation";
 
 const router = Router();
@@ -23,12 +23,13 @@ router.use(authenticate);
 router.get("/count", wishlistController.getCount);
 
 /**
- * Add a product to the current user's wishlist
+ * Toggle wishlist item - Add if not exists, Remove if exists
+ * Single endpoint to manage add/remove operations
  */
-router.post(
-  "/",
-  validateJoi(addWishlistItemSchema),
-  wishlistController.addItem
+router.put(
+  "/toggle",
+  validateJoi(toggleWishlistItemSchema),
+  wishlistController.toggleItem
 );
 
 /**
@@ -48,15 +49,6 @@ router.put(
   validateParams(wishlistItemParamsSchema),
   validateJoi(updateWishlistItemBodySchema),
   wishlistController.updateItem
-);
-
-/**
- * Remove a product from the current user's wishlist
- */
-router.delete(
-  "/:id",
-  validateParams(wishlistItemParamsSchema),
-  wishlistController.removeItem
 );
 
 export default router;
