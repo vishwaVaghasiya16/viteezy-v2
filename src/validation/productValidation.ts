@@ -76,12 +76,7 @@ const ingredientsSchema = Joi.array()
     "array.base": "Ingredients must be an array of ingredient IDs",
   });
 
-const productIngredientIdsSchema = Joi.array()
-  .items(objectIdSchema)
-  .optional()
-  .messages({
-    "array.base": "Product ingredients must be an array of ingredient IDs",
-  });
+// productIngredientIdsSchema removed - relationship is reversed (productIngredients have products array)
 
 const categoriesSchema = Joi.array()
   .items(Joi.string().trim())
@@ -377,7 +372,6 @@ export const updateProductSchema = Joi.object({
   galleryImages: galleryImagesSchema.optional(),
   benefits: benefitsSchema.optional(),
   ingredients: ingredientsSchema.optional(),
-  productIngredients: productIngredientIdsSchema.optional(),
   categories: categoriesSchema.optional(),
   healthGoals: healthGoalsSchema.optional(),
   nutritionInfo: nutritionInfoSchema.optional(),

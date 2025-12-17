@@ -1,6 +1,5 @@
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
-import { Ingredients } from "../models/commerce/ingredients.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
@@ -22,7 +21,6 @@ interface CreateProductData {
   productImage: string;
   benefits: string[];
   ingredients: string[];
-  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -171,7 +169,6 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
-  productIngredients?: mongoose.Types.ObjectId[] | string[];
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
@@ -317,8 +314,19 @@ class ProductService {
   /**
    * Create new product
    */
-  async createProduct(data: CreateProductData): Promise<{ product: any; message: string }> {
-    const { title, slug, hasStandupPouch, standupPouchPrice, standupPouchPrices, price, sachetPrices, variant } = data;
+  async createProduct(
+    data: CreateProductData
+  ): Promise<{ product: any; message: string }> {
+    const {
+      title,
+      slug,
+      hasStandupPouch,
+      standupPouchPrice,
+      standupPouchPrices,
+      price,
+      sachetPrices,
+      variant,
+    } = data;
 
     // Generate slug from title if not provided
     let finalSlug = slug;
@@ -347,7 +355,10 @@ class ProductService {
 
     // Validate standupPouchPrice if hasStandupPouch is true (standupPouchPrices is legacy field)
     if (hasStandupPouch && !standupPouchPrice && !standupPouchPrices) {
-      throw new AppError("standupPouchPrice is required when hasStandupPouch is true", 400);
+      throw new AppError(
+        "standupPouchPrice is required when hasStandupPouch is true",
+        400
+      );
     }
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
@@ -554,48 +565,6 @@ class ProductService {
         $project: {
           ratingSummary: 0,
         },
-      },
-      // Lookup ingredients by ObjectId
-      {
-        $lookup: {
-          from: "ingredients",
-          let: { ingredientIds: "$ingredients" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    {
-                      $in: [
-                        { $toString: "$_id" },
-                        "$$ingredientIds",
-                      ],
-                    },
-                    { $ne: ["$isDeleted", true] },
-                    { $ne: ["$isActive", false] },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "ingredientDetails",
-        },
-      },
-      {
-        $addFields: {
-          ingredients: {
-            $cond: {
-              if: { $gt: [{ $size: "$ingredientDetails" }, 0] },
-              then: "$ingredientDetails",
-              else: "$ingredients", // Keep original IDs if no ingredients found
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          ingredientDetails: 0,
-        },
       }
     );
 
@@ -644,36 +613,15 @@ class ProductService {
       .sort({ sortOrder: 1 })
       .lean();
 
-    // Fetch detailed ingredient information
-    // Match ingredients by name (case-insensitive) or scientific name
-    let detailedIngredients: any[] = [];
-    if (product.ingredients && product.ingredients.length > 0) {
-      const ingredientQueries = product.ingredients.map((ingredientName) => ({
-        $or: [
-          { "name.en": { $regex: ingredientName.trim(), $options: "i" } },
-          { "name.nl": { $regex: ingredientName.trim(), $options: "i" } },
-          { scientificName: { $regex: ingredientName.trim(), $options: "i" } },
-        ],
-      }));
-
-      detailedIngredients = await Ingredients.find({
-        $or: ingredientQueries,
-        isDeleted: { $ne: true },
-        isActive: true,
-      }).lean();
-    }
-
-    // Fetch linked product ingredient entities (admin curated)
+    // Fetch product ingredients linked to this product (relationship is reversed)
     let linkedProductIngredients: any[] = [];
-    if (product.productIngredients && product.productIngredients.length > 0) {
-      linkedProductIngredients = await ProductIngredients.find({
-        _id: { $in: product.productIngredients },
-        isDeleted: { $ne: true },
-        isActive: true,
-      })
-        .sort({ name: 1 })
-        .lean();
-    }
+    linkedProductIngredients = await ProductIngredients.find({
+      products: new mongoose.Types.ObjectId(productId),
+      isDeleted: { $ne: true },
+      isActive: true,
+    })
+      .sort({ name: 1 })
+      .lean();
 
     // Build meta data if not present
     const meta = product.meta || {
@@ -691,7 +639,6 @@ class ProductService {
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
       variants: variants || [],
-      detailedIngredients: detailedIngredients || [],
       productIngredientDetails: linkedProductIngredients || [],
       meta,
       // Ensure nutritionTable exists (can be empty array)

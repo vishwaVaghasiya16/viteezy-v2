@@ -32,6 +32,8 @@ class AdminProductTestimonialController {
       const products: string[] = req.body.products || [];
       const isVisibleOnHomepage: boolean =
         req.body.isVisibleOnHomepage || false;
+      const isFeatured: boolean = req.body.isFeatured || false;
+      const isVisibleInLP: boolean = req.body.isVisibleInLP || false;
       const displayOrder: number = req.body.displayOrder || 0;
       const metadata: any = req.body.metadata || {};
 
@@ -95,6 +97,8 @@ class AdminProductTestimonialController {
         videoThumbnail,
         products: productIds,
         isVisibleOnHomepage,
+        isFeatured,
+        isVisibleInLP,
         isActive: true,
         displayOrder,
         metadata,
@@ -233,8 +237,14 @@ class AdminProductTestimonialController {
   updateTestimonial = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
       const { id } = req.params;
-      const { products, isVisibleOnHomepage, displayOrder, metadata } =
-        req.body;
+      const {
+        products,
+        isVisibleOnHomepage,
+        isFeatured,
+        isVisibleInLP,
+        displayOrder,
+        metadata,
+      } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
         throw new AppError("Invalid testimonial ID", 400);
@@ -327,6 +337,14 @@ class AdminProductTestimonialController {
       // Update other fields
       if (isVisibleOnHomepage !== undefined) {
         testimonial.isVisibleOnHomepage = isVisibleOnHomepage;
+      }
+
+      if (isFeatured !== undefined) {
+        testimonial.isFeatured = isFeatured;
+      }
+
+      if (isVisibleInLP !== undefined) {
+        testimonial.isVisibleInLP = isVisibleInLP;
       }
 
       if (displayOrder !== undefined) {

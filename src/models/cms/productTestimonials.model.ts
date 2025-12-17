@@ -6,6 +6,8 @@ export interface IProductTestimonial extends Document, AuditType {
   videoThumbnail?: string; // Optional thumbnail image
   products: mongoose.Types.ObjectId[]; // Array of product IDs
   isVisibleOnHomepage: boolean; // Show on homepage or not
+  isFeatured: boolean; // Featured testimonial flag
+  isVisibleInLP: boolean; // Visible on landing page flag
   isActive: boolean;
   displayOrder?: number; // For ordering testimonials
   metadata?: Record<string, any>;
@@ -38,6 +40,14 @@ const ProductTestimonialSchema = new Schema<IProductTestimonial>(
       type: Boolean,
       default: false,
     },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+    },
+    isVisibleInLP: {
+      type: Boolean,
+      default: false,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -62,9 +72,12 @@ const ProductTestimonialSchema = new Schema<IProductTestimonial>(
 
 // Indexes
 ProductTestimonialSchema.index({ isActive: 1, isVisibleOnHomepage: 1 });
+ProductTestimonialSchema.index({ isActive: 1, isFeatured: 1 });
+ProductTestimonialSchema.index({ isActive: 1, isVisibleInLP: 1 });
 ProductTestimonialSchema.index({ products: 1 });
 ProductTestimonialSchema.index({ displayOrder: 1 });
 ProductTestimonialSchema.index({ isDeleted: 1 });
+ProductTestimonialSchema.index({ createdAt: -1 });
 
 export const ProductTestimonials = mongoose.model<IProductTestimonial>(
   "product_testimonials",

@@ -152,7 +152,6 @@ export interface IProduct extends Document {
   productImage: string;
   benefits: string[]; // Array of strings (can be translated individually)
   ingredients: string[]; // Array of strings
-  productIngredients?: mongoose.Types.ObjectId[];
   categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
   nutritionInfo: I18nTextType | string;
@@ -221,12 +220,6 @@ const ProductSchema = new Schema<IProduct>(
       type: [String],
       default: [],
     },
-    productIngredients: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "product_ingredients",
-      },
-    ],
     categories: [
       {
         type: Schema.Types.ObjectId,
@@ -375,7 +368,6 @@ ProductSchema.index({ hasStandupPouch: 1 });
 ProductSchema.index({ isDeleted: 1 });
 ProductSchema.index({ categories: 1 });
 ProductSchema.index({ healthGoals: 1 });
-ProductSchema.index({ productIngredients: 1 });
 
 // Text search index
 ProductSchema.index({ title: "text", description: "text" });

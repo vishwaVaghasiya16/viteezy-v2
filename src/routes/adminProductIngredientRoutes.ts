@@ -6,6 +6,7 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { upload, handleMulterError } from "@/middleware/upload";
 import {
   createProductIngredientSchema,
   updateProductIngredientSchema,
@@ -21,10 +22,11 @@ router.use(authorize("Admin"));
 
 /**
  * POST /api/v1/admin/product-ingredients
- * Create a new ingredient entry with description/benefits/precautions text.
+ * Create a new ingredient entry with products, name, description (HTML), and image.
  */
 router.post(
   "/",
+  handleMulterError(upload.single("image"), "image"),
   validateJoi(createProductIngredientSchema),
   adminProductIngredientController.createIngredient
 );
@@ -51,10 +53,11 @@ router.get(
 
 /**
  * PUT /api/v1/admin/product-ingredients/:id
- * Update ingredient fields (name, slug, texts, status).
+ * Update ingredient fields (name, description, products, image, status).
  */
 router.put(
   "/:id",
+  handleMulterError(upload.single("image"), "image"),
   validateParams(productIngredientIdParamsSchema),
   validateJoi(updateProductIngredientSchema),
   adminProductIngredientController.updateIngredient

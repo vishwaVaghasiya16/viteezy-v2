@@ -1,46 +1,51 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { AuditSchema, SoftDelete } from "../common.model";
+import {
+  AuditSchema,
+  SoftDelete,
+  MediaSchema,
+  MediaType,
+  I18nString,
+  I18nText,
+  I18nStringType,
+  I18nTextType,
+} from "../common.model";
 
 export interface IProductIngredient extends Document {
-  name: string;
-  slug: string;
-  description?: string;
-  benefits?: string;
-  precautions?: string;
+  products: mongoose.Types.ObjectId[];
+  name: I18nStringType;
+  description?: I18nTextType; // HTML content
+  image?: MediaType;
   isActive: boolean;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
   updatedBy?: mongoose.Types.ObjectId;
+  deletedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const ProductIngredientSchema = new Schema<IProductIngredient>(
   {
+    products: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "products",
+        required: true,
+      },
+    ],
     name: {
-      type: String,
+      type: I18nString,
+      default: () => ({}),
       required: true,
-      trim: true,
-    },
-    slug: {
-      type: String,
-      required: true,
-      lowercase: true,
-      trim: true,
-      // Note: unique constraint is handled in schema.index() below with partialFilterExpression
     },
     description: {
-      type: String,
-      trim: true,
+      type: I18nText,
+      default: () => ({}),
     },
-    benefits: {
-      type: String,
-      trim: true,
-    },
-    precautions: {
-      type: String,
-      trim: true,
+    image: {
+      type: MediaSchema,
+      default: null,
     },
     isActive: {
       type: Boolean,
@@ -48,6 +53,10 @@ const ProductIngredientSchema = new Schema<IProductIngredient>(
     },
     ...(SoftDelete as Record<string, any>),
     ...(AuditSchema.obj as Record<string, any>),
+    deletedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   {
     timestamps: true,
@@ -56,12 +65,23 @@ const ProductIngredientSchema = new Schema<IProductIngredient>(
   }
 );
 
+ProductIngredientSchema.index({ products: 1 });
+// Text search index for name and description across all languages
+ProductIngredientSchema.index({
+  "name.en": "text",
+  "name.nl": "text",
+  "name.de": "text",
+  "name.fr": "text",
+  "name.es": "text",
+  "description.en": "text",
+  "description.nl": "text",
+  "description.de": "text",
+  "description.fr": "text",
+  "description.es": "text",
+});
+ProductIngredientSchema.index({ "name.en": 1 });
 ProductIngredientSchema.index(
-  { name: 1 },
-  { unique: true, partialFilterExpression: { isDeleted: { $ne: true } } }
-);
-ProductIngredientSchema.index(
-  { slug: 1 },
+  { "name.en": 1 },
   { unique: true, partialFilterExpression: { isDeleted: { $ne: true } } }
 );
 ProductIngredientSchema.index({ isActive: 1, isDeleted: 1 });

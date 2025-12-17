@@ -12,6 +12,11 @@ export const createProductTestimonialSchema = Joi.object(
       .optional()
       .default(false)
       .label("Visible on Homepage"),
+    isFeatured: Joi.boolean().optional().default(false).label("Featured"),
+    isVisibleInLP: Joi.boolean()
+      .optional()
+      .default(false)
+      .label("Visible in Landing Page"),
     displayOrder: Joi.number()
       .integer()
       .min(0)
@@ -30,6 +35,8 @@ export const updateProductTestimonialSchema = Joi.object(
       .optional()
       .label("Products"),
     isVisibleOnHomepage: Joi.boolean().optional().label("Visible on Homepage"),
+    isFeatured: Joi.boolean().optional().label("Featured"),
+    isVisibleInLP: Joi.boolean().optional().label("Visible in Landing Page"),
     displayOrder: Joi.number()
       .integer()
       .min(0)
@@ -57,6 +64,8 @@ export const listProductTestimonialsQuerySchema = Joi.object(
       .label("Limit"),
     search: Joi.string().optional().label("Search"),
     isVisibleOnHomepage: Joi.boolean().optional().label("Visible on Homepage"),
+    isFeatured: Joi.boolean().optional().label("Featured"),
+    isVisibleInLP: Joi.boolean().optional().label("Visible in Landing Page"),
     isActive: Joi.boolean().optional().label("Active Status"),
   })
 ).label("ListProductTestimonialsQuery");
