@@ -240,75 +240,34 @@ const resetTokenSchema = Joi.string().min(32).label("Reset Token").messages({
 });
 
 /**
+ * Confirm Password validation schema
+ * @constant {Joi.StringSchema} confirmPasswordSchema
+ */
+const confirmPasswordSchema = Joi.string()
+  .valid(Joi.ref("password"))
+  .required()
+  .label("Confirm Password")
+  .messages({
+    "any.only": "Password and Confirm Password must match",
+    "any.required": "Confirm Password is required",
+  });
+
+/**
  * Reset Password Validation Schema
  * @constant {Joi.ObjectSchema} resetPasswordSchema
- * @description Validates reset password request data (unified for Web and App)
- * - Web: requires token, OTP not allowed
- * - App: requires otp, token not allowed
+ * @description Validates reset password request data
+ * - Always requires: email, password, confirmPassword
+ * - Web flow: requires token (OTP verification happens separately via verify-otp API for App)
+ * - App flow: OTP verification happens separately via verify-otp API, then this API is called
  */
 export const resetPasswordSchema = Joi.object(
   withFieldLabels({
     email: emailSchema,
-    deviceInfo: deviceInfoSchema,
+    password: passwordSchema,
+    confirmPassword: confirmPasswordSchema,
     token: resetTokenSchema.optional(),
-    otp: otpSchema.optional(),
-    newPassword: passwordSchema,
   })
-)
-  .custom((value, helpers) => {
-    const { deviceInfo, token, otp } = value;
-    const isWeb =
-      deviceInfo?.toLowerCase() === "web" ||
-      deviceInfo?.toLowerCase().includes("web");
-    const isApp =
-      deviceInfo?.toLowerCase() === "app" ||
-      deviceInfo?.toLowerCase().includes("app");
-
-    // Validate deviceInfo
-    if (!isWeb && !isApp) {
-      return helpers.error("any.custom", {
-        message: "deviceInfo must be 'Web' or 'App'",
-      });
-    }
-
-    // Web flow validation
-    if (isWeb) {
-      // Check for disallowed fields first
-      if (otp) {
-        return helpers.error("any.custom", {
-          message: "OTP is not allowed for Web flow. Use token instead.",
-        });
-      }
-      // Then check for required fields
-      if (!token) {
-        return helpers.error("any.custom", {
-          message: "Reset token is required for Web",
-        });
-      }
-    }
-
-    // App flow validation
-    if (isApp) {
-      // Check for disallowed fields first
-      if (token) {
-        return helpers.error("any.custom", {
-          message: "Token is not allowed for App flow. Use OTP instead.",
-        });
-      }
-      // Then check for required fields
-      if (!otp) {
-        return helpers.error("any.custom", {
-          message: "OTP is required for App",
-        });
-      }
-    }
-
-    return value;
-  })
-  .messages({
-    "any.custom": "{{#error.message}}",
-  })
-  .label("ResetPasswordPayload");
+).label("ResetPasswordPayload");
 
 /**
  * Change Password Validation Schema

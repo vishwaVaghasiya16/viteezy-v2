@@ -38,10 +38,9 @@ interface LoginResult {
 
 interface PasswordResetData {
   email: string;
-  deviceInfo: string;
-  token?: string;
-  otp?: string;
-  newPassword: string;
+  password: string;
+  confirmPassword: string;
+  token?: string; // Required for Web flow, not needed for App flow
 }
 
 interface ChangePasswordData {
@@ -469,7 +468,28 @@ class AuthService {
       logger.info(`Email verified successfully for user: ${user.email}`);
     }
 
-    // Generate session and tokens
+    // For password reset OTP, just verify it without logging the user in
+    // User will then call reset-password API with password and confirmPassword
+    if (type === OTPType.PASSWORD_RESET) {
+      logger.info(
+        `Password reset OTP verified successfully for user: ${user.email}. User can now reset password.`
+      );
+      return {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          isEmailVerified: user.isEmailVerified,
+        },
+        accessToken: undefined as any, // No tokens for password reset flow
+        refreshToken: undefined as any, // No tokens for password reset flow
+        message:
+          "OTP verified successfully. Please proceed to reset your password.",
+      };
+    }
+
+    // For other OTP types (email verification, etc.), generate session and tokens
     const sessionId = crypto.randomUUID();
     await AuthSessions.create({
       userId: user._id,
@@ -738,17 +758,16 @@ class AuthService {
   }
 
   /**
-   * Reset password - Unified method for Web (token) and App (OTP) flows
+   * Reset password - Unified method for Web (token) and App (verified OTP) flows
+   * - Web flow: token must be provided (from reset link)
+   * - App flow: token not provided, checks for verified OTP (OTP verified via verify-otp API)
    */
   async resetPassword(data: PasswordResetData): Promise<{ message: string }> {
-    const { email, deviceInfo, token, otp, newPassword } = data;
+    const { email, password, confirmPassword, token } = data;
 
-    // Determine if request is from Web or App based on deviceInfo
-    const isWeb = deviceInfo?.toLowerCase().includes("web");
-    const isApp = deviceInfo?.toLowerCase().includes("app");
-
-    if (!isWeb && !isApp) {
-      throw new AppError("Invalid deviceInfo. Must be 'Web' or 'App'", 400);
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      throw new AppError("Password and Confirm Password must match", 400);
     }
 
     // Find user
@@ -757,12 +776,8 @@ class AuthService {
       throw new AppError("User not found", 404);
     }
 
-    if (isWeb) {
+    if (token) {
       // Web flow: Verify token and reset password
-      if (!token) {
-        throw new AppError("Reset token is required for Web", 400);
-      }
-
       // Find user with reset token
       const userWithToken = await User.findOne({
         email: email.toLowerCase(),
@@ -775,7 +790,7 @@ class AuthService {
       }
 
       // Update password (will be hashed by pre-save hook)
-      userWithToken.password = newPassword;
+      userWithToken.password = password;
       // Clear reset token
       userWithToken.passwordResetToken = undefined;
       userWithToken.passwordResetTokenExpires = undefined;
@@ -814,86 +829,42 @@ class AuthService {
           "Password reset successfully. Please login with your new password.",
       };
     } else {
-      // App flow: Verify OTP and reset password
-      if (!otp) {
-        throw new AppError("OTP is required for App", 400);
-      }
-
-      // Find valid password reset OTP
-      const otpRecord = await OTP.findOne({
+      // App flow: Check for verified OTP (OTP should be verified via verify-otp API first)
+      // Find verified password reset OTP (recently verified)
+      const verifiedOTP = await OTP.findOne({
         userId: user._id,
-        email,
+        email: email.toLowerCase(),
         type: OTPType.PASSWORD_RESET,
-        status: OTPStatus.PENDING,
-        expiresAt: { $gt: new Date() },
+        status: OTPStatus.VERIFIED,
+        verifiedAt: { $gte: new Date(Date.now() - 60 * 60 * 1000) }, // Verified within last hour
       });
 
-      if (!otpRecord) {
-        // Try to find any pending OTP for this user/email/type to increment attempts
-        const anyPendingOTP = await OTP.findOne({
-          userId: user._id,
-          email,
-          type: OTPType.PASSWORD_RESET,
-          status: OTPStatus.PENDING,
-        });
-
-        if (anyPendingOTP) {
-          // Increment attempts for failed verification
-          await OTP.findByIdAndUpdate(anyPendingOTP._id, {
-            $inc: { attempts: 1 },
-          });
-        }
-
-        throw new AppError("Invalid or expired OTP", 400);
-      }
-
-      // Check if OTP can attempt
-      if (!otpRecord.canAttempt()) {
-        await OTP.findByIdAndUpdate(otpRecord._id, {
-          status: OTPStatus.EXPIRED,
-        });
+      if (!verifiedOTP) {
         throw new AppError(
-          "Maximum OTP attempts exceeded. Please request a new OTP.",
+          "No verified OTP found. Please verify OTP first via verify-otp API.",
           400
         );
       }
 
-      // Check if OTP is expired
-      if (otpRecord.isExpired()) {
-        await OTP.findByIdAndUpdate(otpRecord._id, {
-          status: OTPStatus.EXPIRED,
-        });
-        throw new AppError("OTP has expired. Please request a new OTP.", 400);
-      }
-
-      // Verify OTP using secure comparison
-      const isOTPValid = await otpRecord.compareOTP(otp);
-      if (!isOTPValid) {
-        // Increment attempts for failed verification
-        await OTP.findByIdAndUpdate(otpRecord._id, { $inc: { attempts: 1 } });
-        throw new AppError("Invalid OTP", 400);
-      }
-
-      // Mark OTP as verified
-      await OTP.findByIdAndUpdate(otpRecord._id, {
-        status: OTPStatus.VERIFIED,
-        verifiedAt: new Date(),
-      });
-
       // Update password (will be hashed by pre-save hook)
-      user.password = newPassword;
+      user.password = password;
       // Clear reset token if exists
       user.passwordResetToken = undefined;
       user.passwordResetTokenExpires = undefined;
       await user.save(); // This will trigger the pre-save hook
+
+      // Mark the verified OTP as used
+      await OTP.findByIdAndUpdate(verifiedOTP._id, {
+        status: OTPStatus.USED,
+      });
 
       // Expire any other pending password reset OTPs
       await OTP.updateMany(
         {
           userId: user._id,
           type: OTPType.PASSWORD_RESET,
-          status: OTPStatus.PENDING,
-          _id: { $ne: otpRecord._id },
+          status: { $in: [OTPStatus.PENDING, OTPStatus.VERIFIED] },
+          _id: { $ne: verifiedOTP._id },
         },
         { status: OTPStatus.EXPIRED }
       );
@@ -913,7 +884,7 @@ class AuthService {
       });
 
       logger.info(
-        `Password reset via OTP successfully for user: ${user.email} (App)`
+        `Password reset via verified OTP successfully for user: ${user.email} (App)`
       );
 
       return {
@@ -941,14 +912,12 @@ class AuthService {
       throw new AppError("Current password is incorrect", 400);
     }
 
-    // Update password (will be hashed by pre-save hook)
-    const userToUpdate = await User.findById(userId);
-    if (!userToUpdate) {
-      throw new AppError("User not found", 404);
-    }
+    // Hash the new password (same way as pre-save hook)
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    userToUpdate.password = newPassword;
-    await userToUpdate.save(); // This will trigger the pre-save hook
+    // Update only the password field using updateOne to avoid validating other fields like sessionIds
+    await User.updateOne({ _id: userId }, { password: hashedPassword });
 
     return {
       message: "Password changed successfully",

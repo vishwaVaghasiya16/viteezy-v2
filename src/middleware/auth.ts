@@ -48,8 +48,10 @@ interface AuthenticatedRequest extends Request {
  * @returns {object} User data object
  */
 const extractUserData = (user: any): object => {
+  const userId = user._id.toString();
   return {
-    _id: user._id.toString(),
+    _id: userId,
+    id: userId, // Add id field for consistency with controllers
     name: user.name,
     email: user.email,
     phone: user.phone,

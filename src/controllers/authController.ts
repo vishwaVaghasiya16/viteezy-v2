@@ -49,14 +49,18 @@ class AuthController {
         deviceInfo,
       });
 
-      res.apiSuccess(
-        {
-          user: result.user,
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        },
-        result.message
-      );
+      // For password reset OTP, tokens will be undefined
+      const responseData: any = {
+        user: result.user,
+      };
+
+      // Only include tokens if they exist (not password reset flow)
+      if (result.accessToken && result.refreshToken) {
+        responseData.accessToken = result.accessToken;
+        responseData.refreshToken = result.refreshToken;
+      }
+
+      res.apiSuccess(responseData, result.message);
     }
   );
 
@@ -118,22 +122,20 @@ class AuthController {
   );
 
   /**
-   * Reset password - Unified endpoint for Web (token) and App (OTP) flows
+   * Reset password - Unified endpoint for Web (token) and App (verified OTP) flows
+   * Always requires: email, password, confirmPassword
+   * Web flow: also requires token
+   * App flow: OTP must be verified separately via verify-otp API first
    */
   resetPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, deviceInfo, token, otp, newPassword } = req.body;
-
-      if (!deviceInfo) {
-        throw new AppError("deviceInfo is required", 400);
-      }
+      const { email, password, confirmPassword, token } = req.body;
 
       const result = await authService.resetPassword({
         email,
-        deviceInfo,
+        password,
+        confirmPassword,
         token,
-        otp,
-        newPassword,
       });
 
       res.apiSuccess(null, result.message);
@@ -146,7 +148,7 @@ class AuthController {
   changePassword = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { currentPassword, newPassword } = req.body;
-      const userId = req.user?.id;
+      const userId = req.userId || req.user?._id || req.user?.id;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -184,7 +186,7 @@ class AuthController {
    */
   logoutAllDevices = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const userId = req.user?.id;
+      const userId = req.userId || req.user?._id || req.user?.id;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -244,7 +246,7 @@ class AuthController {
    */
   updateProfile = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const userId = req.user?.id;
+      const userId = req.userId || req.user?._id || req.user?.id;
       const { name, phone, countryCode, profileImage, gender, age, language } =
         req.body;
 
