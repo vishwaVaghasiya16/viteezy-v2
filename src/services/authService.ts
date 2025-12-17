@@ -789,12 +789,19 @@ class AuthService {
         throw new AppError("Invalid or expired reset token", 400);
       }
 
-      // Update password (will be hashed by pre-save hook)
-      userWithToken.password = password;
-      // Clear reset token
-      userWithToken.passwordResetToken = undefined;
-      userWithToken.passwordResetTokenExpires = undefined;
-      await userWithToken.save(); // This will trigger the pre-save hook
+      // Hash the new password (same way as pre-save hook)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Update only password and reset token fields using updateOne to avoid validating other fields like sessionIds
+      await User.updateOne(
+        { _id: userWithToken._id },
+        {
+          password: hashedPassword,
+          passwordResetToken: undefined,
+          passwordResetTokenExpires: undefined,
+        }
+      );
 
       // Expire any pending password reset OTPs
       await OTP.updateMany(
@@ -846,12 +853,19 @@ class AuthService {
         );
       }
 
-      // Update password (will be hashed by pre-save hook)
-      user.password = password;
-      // Clear reset token if exists
-      user.passwordResetToken = undefined;
-      user.passwordResetTokenExpires = undefined;
-      await user.save(); // This will trigger the pre-save hook
+      // Hash the new password (same way as pre-save hook)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Update only password and reset token fields using updateOne to avoid validating other fields like sessionIds
+      await User.updateOne(
+        { _id: user._id },
+        {
+          password: hashedPassword,
+          passwordResetToken: undefined,
+          passwordResetTokenExpires: undefined,
+        }
+      );
 
       // Mark the verified OTP as used
       await OTP.findByIdAndUpdate(verifiedOTP._id, {
