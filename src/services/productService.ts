@@ -368,12 +368,12 @@ class ProductService {
     };
 
     // If status filter is provided, use it (admin can filter by status)
-    // Otherwise, exclude hidden products (users should not see hidden products)
-    if (status) {
+    // Otherwise, show only active products (status = true)
+    if (status !== undefined) {
       matchStage.status = status;
     } else {
-      // Exclude hidden products for regular users
-      matchStage.status = { $ne: ProductStatus.HIDDEN };
+      // Show only active products for regular users
+      matchStage.status = true;
     }
 
     if (variant) {
@@ -414,11 +414,11 @@ class ProductService {
       };
 
       // Add other filters that can be combined with $text in same stage
-      if (status) {
+      if (status !== undefined) {
         textSearchMatch.status = status;
       } else {
-        // Exclude hidden products for regular users
-        textSearchMatch.status = { $ne: ProductStatus.HIDDEN };
+        // Show only active products for regular users
+        textSearchMatch.status = true;
       }
       if (variant) textSearchMatch.variant = variant;
       if (hasStandupPouch !== undefined)
@@ -857,14 +857,11 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
-    // Set status based on enabled flag
-    const status = enabled ? ProductStatus.ACTIVE : ProductStatus.HIDDEN;
-
-    // Update only status
+    // Update only status (true = Active, false = Inactive)
     const updatedProduct = await Products.findByIdAndUpdate(
       productId,
       {
-        status,
+        status: enabled,
         updatedAt: new Date(),
       },
       { new: true, runValidators: true }
@@ -983,24 +980,19 @@ class ProductService {
   async getProductStats(): Promise<{
     total: number;
     active: number;
-    draft: number;
-    hidden: number;
+    inactive: number;
     sachets: number;
     standupPouch: number;
   }> {
-    const [total, active, draft, hidden, sachets, standupPouch] =
+    const [total, active, inactive, sachets, standupPouch] =
       await Promise.all([
         Products.countDocuments({ isDeleted: false }),
         Products.countDocuments({
-          status: ProductStatus.ACTIVE,
+          status: true,
           isDeleted: false,
         }),
         Products.countDocuments({
-          status: ProductStatus.DRAFT,
-          isDeleted: false,
-        }),
-        Products.countDocuments({
-          status: ProductStatus.HIDDEN,
+          status: false,
           isDeleted: false,
         }),
         Products.countDocuments({
@@ -1016,8 +1008,7 @@ class ProductService {
     return {
       total,
       active,
-      draft,
-      hidden,
+      inactive,
       sachets,
       standupPouch,
     };

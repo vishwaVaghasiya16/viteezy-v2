@@ -153,7 +153,7 @@ export interface IProduct extends Document {
   healthGoals?: string[];
   nutritionInfo: I18nTextType | string;
   howToUse: I18nTextType | string;
-  status: ProductStatus;
+  status: boolean; // true = Active, false = Inactive
   price: PriceType; // Base price (for Sachets - default)
   variant: ProductVariant;
   hasStandupPouch: boolean;
@@ -237,9 +237,8 @@ const ProductSchema = new Schema<IProduct>(
       default: null,
     },
     status: {
-      type: String,
-      enum: PRODUCT_STATUS_VALUES,
-      default: ProductStatus.DRAFT,
+      type: Boolean,
+      default: true, // true = Active, false = Inactive
     },
     price: {
       type: PriceSchema,

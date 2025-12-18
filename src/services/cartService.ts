@@ -573,7 +573,7 @@ class CartService {
       if (
         !product ||
         product.isDeleted ||
-        product.status !== ProductStatus.ACTIVE
+        product.status !== true
       ) {
         errors.push(`Product ${item.productId} is not available`);
         continue;

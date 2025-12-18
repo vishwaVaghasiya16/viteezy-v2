@@ -115,11 +115,10 @@ const howToUseSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "How to use must be a string",
 });
 
-const statusSchema = Joi.string()
-  .valid(...PRODUCT_STATUS_VALUES)
+const statusSchema = Joi.boolean()
   .optional()
   .messages({
-    "any.only": `Status must be one of: ${PRODUCT_STATUS_VALUES.join(", ")}`,
+    "boolean.base": "Status must be true or false",
   });
 
 const priceSchema = Joi.object({
@@ -178,10 +177,10 @@ const subscriptionPriceSchema = priceSchema
 
 const variantSchema = Joi.string()
   .valid(...PRODUCT_VARIANT_VALUES)
-  .required()
+  .optional()
+  .default("SACHETS")
   .messages({
     "any.only": `Variant must be one of: ${PRODUCT_VARIANT_VALUES.join(", ")}`,
-    "any.required": "Variant is required",
   });
 
 const hasStandupPouchSchema = Joi.boolean().optional().default(false);
@@ -318,7 +317,7 @@ export const createProductSchema = Joi.object({
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
   howToUse: howToUseSchema,
-  status: statusSchema.default(ProductStatus.DRAFT),
+  status: statusSchema.default(true),
   price: priceSchema.optional(), // Optional - can be derived from sachetPrices
   variant: variantSchema,
   hasStandupPouch: hasStandupPouchSchema,
