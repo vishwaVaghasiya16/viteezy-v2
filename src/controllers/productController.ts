@@ -6,7 +6,7 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
-import { ProductCategory } from "../models/commerce";
+import { ProductCategory, Wishlists } from "../models/commerce";
 import {
   I18nStringType,
   I18nTextType,
@@ -222,6 +222,13 @@ export class ProductController {
       // Get user language (defaults to English if not authenticated)
       const userLang = getUserLanguage(req);
 
+      // Get user's wishlist items if authenticated
+      let userWishlistProductIds: Set<string> = new Set();
+      if (userId) {
+        const wishlistItems = await Wishlists.find({ userId: new mongoose.Types.ObjectId(userId) }).select("productId").lean();
+        userWishlistProductIds = new Set(wishlistItems.map((item: any) => item.productId.toString()));
+      }
+
       // Calculate member prices for all products and transform for language
       const productsWithMemberPrices = await Promise.all(
         result.products.map(async (product: any) => {
@@ -262,6 +269,11 @@ export class ProductController {
             enrichedProduct.isMember = true;
           } else {
             enrichedProduct.isMember = false;
+          }
+
+          // Add is_liked field if user is authenticated
+          if (userId) {
+            enrichedProduct.is_liked = userWishlistProductIds.has(transformedProduct._id.toString());
           }
 
           return enrichedProduct;
