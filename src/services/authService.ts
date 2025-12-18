@@ -256,7 +256,7 @@ class AuthService {
         OTPType.EMAIL_VERIFICATION
       );
 
-      this.sendWelcomeEmailAsync(email, existingUser.name);
+      // this.sendWelcomeEmailAsync(email, existingUser.name);
 
       // Generate member ID if user doesn't have one
       if (!existingUser.memberId) {

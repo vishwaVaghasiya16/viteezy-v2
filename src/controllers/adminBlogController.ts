@@ -4,8 +4,6 @@ import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Blogs, BlogCategories } from "@/models/cms";
 import { User } from "@/models/index.model";
-import { BlogStatus } from "@/models/enums";
-import { generateSlug, generateUniqueSlug } from "@/utils/slug";
 import { fileStorageService } from "@/services/fileStorageService";
 import { logger } from "@/utils/logger";
 
@@ -20,13 +18,6 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
     throw new AppError(`Invalid ${label}`, 400);
   }
   return new mongoose.Types.ObjectId(id);
-};
-
-const sanitizeTags = (tags?: string[]): string[] => {
-  if (!Array.isArray(tags)) return [];
-  return Array.from(
-    new Set(tags.map((tag) => tag?.trim()).filter((tag) => !!tag))
-  );
 };
 
 class AdminBlogController {
@@ -66,11 +57,8 @@ class AdminBlogController {
         fileName: file.originalname,
         stack: error.stack,
       });
-
-      // If bucket doesn't exist or upload fails, log warning but don't throw
-      // Allow blog creation to proceed without cover image
       logger.warn(
-        "Blog will be created without cover image due to upload failure. Please check DigitalOcean Spaces configuration."
+        "Blog will be created without cover image due to upload failure."
       );
       return null;
     }
@@ -93,101 +81,56 @@ class AdminBlogController {
    */
   createBlog = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const requesterId = req.user?._id
-        ? new mongoose.Types.ObjectId(req.user._id)
-        : undefined;
       const {
         title,
-        slug,
-        excerpt,
-        content,
+        description,
+        seo,
+        coverImage,
+        isActive = true,
         authorId,
         categoryId,
-        tags,
-        coverImage,
-        gallery,
-        seo,
-        status = BlogStatus.DRAFT,
-        publishedAt,
       } = req.body;
 
-      const authorObjectId = ensureObjectId(authorId, "author");
       const categoryObjectId = ensureObjectId(categoryId, "category");
 
-      const [authorExists, categoryExists] = await Promise.all([
-        User.exists({ _id: authorObjectId, isDeleted: { $ne: true } }),
-        BlogCategories.exists({
-          _id: categoryObjectId,
-          isDeleted: false,
-          isActive: true,
-        }),
-      ]);
-
-      if (!authorExists) {
-        throw new AppError("Author not found", 404);
-      }
+      const categoryExists = await BlogCategories.exists({
+        _id: categoryObjectId,
+        isDeleted: false,
+        isActive: true,
+      });
 
       if (!categoryExists) {
         throw new AppError("Category not found or inactive", 404);
       }
 
-      const baseSlug = slug || generateSlug(title?.en || "");
-      if (!baseSlug) {
-        throw new AppError(
-          "Unable to generate slug. Please provide a valid title or slug.",
-          400
-        );
+      let authorObjectId: mongoose.Types.ObjectId | null = null;
+      if (authorId) {
+        authorObjectId = ensureObjectId(authorId, "author");
+        const authorExists = await User.exists({
+          _id: authorObjectId,
+          isDeleted: { $ne: true },
+        });
+        if (!authorExists) {
+          throw new AppError("Author not found", 404);
+        }
       }
-
-      const finalSlug = await generateUniqueSlug(
-        baseSlug,
-        async (slugToCheck) =>
-          Blogs.exists({
-            slug: slugToCheck,
-            isDeleted: false,
-          }).then((existing) => Boolean(existing))
-      );
-
-      const normalizedStatus = status as BlogStatus;
-      const finalPublishedAt =
-        normalizedStatus === BlogStatus.PUBLISHED
-          ? publishedAt || new Date()
-          : undefined;
 
       let coverImageUrl = this.normalizeCoverImageInput(coverImage);
       if (req.file) {
-        try {
-          const uploadedUrl = await this.uploadCoverImage(req.file);
-          if (uploadedUrl) {
-            coverImageUrl = uploadedUrl;
-          } else {
-            logger.warn(
-              "Cover image upload failed, creating blog without cover image"
-            );
-          }
-        } catch (error: any) {
-          logger.error("Error uploading cover image", {
-            error: error.message,
-            fileName: req.file.originalname,
-          });
-          // Continue without cover image
+        const uploadedUrl = await this.uploadCoverImage(req.file);
+        if (uploadedUrl) {
+          coverImageUrl = uploadedUrl;
         }
       }
 
       const blog = await Blogs.create({
-        slug: finalSlug,
         title,
-        excerpt,
-        content,
+        description: description || {},
+        seo: seo || {},
+        coverImage: coverImageUrl ?? null,
+        isActive,
         authorId: authorObjectId,
         categoryId: categoryObjectId,
-        tags: sanitizeTags(tags),
-        coverImage: coverImageUrl ?? null,
-        gallery,
-        seo,
-        status: normalizedStatus,
-        publishedAt: finalPublishedAt,
-        createdBy: requesterId,
       });
 
       res.apiCreated({ blog }, "Blog created successfully");
@@ -200,8 +143,8 @@ class AdminBlogController {
   getBlogs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
-      const { status, search, categoryId } = req.query as {
-        status?: BlogStatus;
+      const { isActive, search, categoryId } = req.query as {
+        isActive?: string;
         search?: string;
         categoryId?: string;
       };
@@ -210,8 +153,8 @@ class AdminBlogController {
         isDeleted: false,
       };
 
-      if (status) {
-        filter.status = status;
+      if (isActive !== undefined) {
+        filter.isActive = isActive === "true";
       }
 
       if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
@@ -222,8 +165,7 @@ class AdminBlogController {
         filter.$or = [
           { "title.en": { $regex: search, $options: "i" } },
           { "title.nl": { $regex: search, $options: "i" } },
-          { slug: { $regex: search, $options: "i" } },
-          { tags: { $regex: search, $options: "i" } },
+          { "seo.metaSlug": { $regex: search, $options: "i" } },
         ];
       }
 
@@ -280,22 +222,13 @@ class AdminBlogController {
       const { id } = req.params;
       const {
         title,
-        slug,
-        excerpt,
-        content,
+        description,
+        seo,
+        coverImage,
+        isActive,
         authorId,
         categoryId,
-        tags,
-        coverImage,
-        gallery,
-        seo,
-        status,
-        publishedAt,
       } = req.body;
-
-      const requesterId = req.user?._id
-        ? new mongoose.Types.ObjectId(req.user._id)
-        : undefined;
 
       const blog = await Blogs.findOne({
         _id: id,
@@ -306,14 +239,18 @@ class AdminBlogController {
         throw new AppError("Blog not found", 404);
       }
 
-      if (authorId) {
-        const authorObjectId = ensureObjectId(authorId, "author");
-        const authorExists = await User.exists({
-          _id: authorObjectId,
-          isDeleted: { $ne: true },
-        });
-        if (!authorExists) throw new AppError("Author not found", 404);
-        blog.authorId = authorObjectId;
+      if (authorId !== undefined) {
+        if (authorId === null) {
+          blog.authorId = null;
+        } else {
+          const authorObjectId = ensureObjectId(authorId, "author");
+          const authorExists = await User.exists({
+            _id: authorObjectId,
+            isDeleted: { $ne: true },
+          });
+          if (!authorExists) throw new AppError("Author not found", 404);
+          blog.authorId = authorObjectId;
+        }
       }
 
       if (categoryId) {
@@ -327,33 +264,16 @@ class AdminBlogController {
       }
 
       if (title) blog.title = title;
-      if (excerpt) blog.excerpt = excerpt;
-      if (content) blog.content = content;
-
-      if (typeof gallery !== "undefined") {
-        blog.gallery = gallery;
-      }
+      if (description) blog.description = description;
       if (seo) blog.seo = seo;
-      if (tags) blog.tags = sanitizeTags(tags);
+      if (isActive !== undefined) blog.isActive = isActive;
 
       let nextCoverImage = blog.coverImage ?? null;
       if (req.file) {
-        try {
-          const uploaded = await this.uploadCoverImage(req.file);
-          if (uploaded) {
-            await this.deleteCoverImage(nextCoverImage);
-            nextCoverImage = uploaded;
-          } else {
-            logger.warn(
-              "Cover image upload failed during update, keeping existing image"
-            );
-          }
-        } catch (error: any) {
-          logger.error("Error uploading cover image during update", {
-            error: error.message,
-            fileName: req.file.originalname,
-          });
-          // Keep existing image if upload fails
+        const uploaded = await this.uploadCoverImage(req.file);
+        if (uploaded) {
+          await this.deleteCoverImage(nextCoverImage);
+          nextCoverImage = uploaded;
         }
       } else if (Object.prototype.hasOwnProperty.call(req.body, "coverImage")) {
         const normalized = this.normalizeCoverImageInput(coverImage);
@@ -364,42 +284,6 @@ class AdminBlogController {
       }
       blog.coverImage = nextCoverImage ?? null;
 
-      if (slug && slug !== blog.slug) {
-        const finalSlug = await generateUniqueSlug(slug, async (slugToCheck) =>
-          Blogs.exists({
-            slug: slugToCheck,
-            _id: { $ne: blog._id },
-            isDeleted: false,
-          }).then((existing) => Boolean(existing))
-        );
-        blog.slug = finalSlug;
-      } else if (!slug && title?.en && title.en !== blog.title?.en) {
-        const baseSlug = generateSlug(title.en);
-        const finalSlug = await generateUniqueSlug(
-          baseSlug,
-          async (slugToCheck) =>
-            Blogs.exists({
-              slug: slugToCheck,
-              _id: { $ne: blog._id },
-              isDeleted: false,
-            }).then((existing) => Boolean(existing))
-        );
-        blog.slug = finalSlug;
-      }
-
-      if (status) {
-        blog.status = status as BlogStatus;
-        if (status === BlogStatus.PUBLISHED) {
-          blog.publishedAt = publishedAt || blog.publishedAt || new Date();
-        } else if (status === BlogStatus.DRAFT) {
-          blog.publishedAt = publishedAt ?? blog.publishedAt;
-        }
-      } else if (publishedAt !== undefined) {
-        blog.publishedAt = publishedAt;
-      }
-
-      if (requesterId) blog.updatedBy = requesterId;
-
       await blog.save();
 
       res.apiSuccess({ blog }, "Blog updated successfully");
@@ -407,15 +291,12 @@ class AdminBlogController {
   );
 
   /**
-   * Update blog status (publish/unpublish)
+   * Update blog status (activate/deactivate)
    */
   updateBlogStatus = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { status, publishedAt } = req.body as {
-        status: BlogStatus;
-        publishedAt?: Date;
-      };
+      const { isActive } = req.body as { isActive: boolean };
 
       const blog = await Blogs.findOne({
         _id: id,
@@ -426,24 +307,12 @@ class AdminBlogController {
         throw new AppError("Blog not found", 404);
       }
 
-      blog.status = status;
-      if (status === BlogStatus.PUBLISHED) {
-        blog.publishedAt = publishedAt || new Date();
-      } else {
-        blog.publishedAt = publishedAt ?? blog.publishedAt;
-      }
-
-      if (req.user?._id) {
-        blog.updatedBy = new mongoose.Types.ObjectId(req.user._id);
-      }
-
+      blog.isActive = isActive;
       await blog.save();
 
       res.apiSuccess(
         { blog },
-        `Blog ${
-          status === BlogStatus.PUBLISHED ? "published" : "updated"
-        } successfully`
+        `Blog ${isActive ? "activated" : "deactivated"} successfully`
       );
     }
   );

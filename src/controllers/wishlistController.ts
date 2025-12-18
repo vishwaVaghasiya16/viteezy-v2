@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Wishlists, Products } from "@/models/commerce";
+import { Reviews } from "@/models/cms";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -11,121 +12,77 @@ interface AuthenticatedRequest extends Request {
 }
 
 class WishlistController {
-  addItem = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const { productId, notes } = req.body;
-
-      if (!mongoose.Types.ObjectId.isValid(productId)) {
-        throw new AppError("Invalid product ID", 400);
-      }
-
-      const product = await Products.findOne({
-        _id: productId,
-        isDeleted: false,
-      }).select("_id");
-
-      if (!product) {
-        throw new AppError("Product not found", 404);
-      }
-
-      const existing = await Wishlists.findOne({
-        userId: req.user._id,
-        productId,
-      });
-
-      if (existing) {
-        throw new AppError("Product already in wishlist", 409);
-      }
-
-      const item = await Wishlists.create({
-        userId: req.user._id,
-        productId,
-        notes,
-      });
-
-      res.apiCreated({ item }, "Product added to wishlist");
-    }
-  );
-
   getItems = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { includeProduct } = req.query;
       const { page, limit, skip } = getPaginationOptions(req);
 
       const filter = { userId: req.user._id };
 
-      let query = Wishlists.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
-
-      if (includeProduct === "true") {
-        query = query.populate({
-          path: "productId",
-          select: "title slug status media categories tags labels isDeleted",
-        });
-      }
-
       const [items, total] = await Promise.all([
-        query,
+        Wishlists.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .populate({
+            path: "productId",
+            select:
+              "title slug productImage price media tags labels isDeleted pricing",
+          }),
         Wishlists.countDocuments(filter),
       ]);
 
-      const pagination = getPaginationMeta(page, limit, total);
+      // Get review stats for all products
+      const productIds = items
+        .map((item: any) => item.productId?._id)
+        .filter(Boolean);
 
-      res.apiPaginated(items, pagination, "Wishlist retrieved successfully");
-    }
-  );
+      const reviewStats = await Reviews.aggregate([
+        {
+          $match: {
+            productId: { $in: productIds },
+            status: "approved",
+            isPublic: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$productId",
+            totalReviews: { $sum: 1 },
+            averageRating: { $avg: "$rating" },
+          },
+        },
+      ]);
 
-  updateItem = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const { id } = req.params;
-      const { notes } = req.body;
-
-      const item = await Wishlists.findOneAndUpdate(
-        { _id: id, userId: req.user._id },
-        { notes },
-        { new: true }
+      const reviewStatsMap = new Map(
+        reviewStats.map((stat) => [stat._id.toString(), stat])
       );
 
-      if (!item) {
-        throw new AppError("Wishlist item not found", 404);
-      }
-
-      res.apiSuccess({ item }, "Wishlist item updated successfully");
-    }
-  );
-
-  removeItem = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user?._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const { id } = req.params;
-
-      const result = await Wishlists.findOneAndDelete({
-        _id: id,
-        userId: req.user._id,
+      // Add review stats to each item
+      const itemsWithReviews = items.map((item: any) => {
+        const itemObj = item.toObject();
+        if (itemObj.productId?._id) {
+          const stats = reviewStatsMap.get(itemObj.productId._id.toString());
+          itemObj.productId.reviewStats = {
+            totalReviews: stats?.totalReviews || 0,
+            averageRating: stats?.averageRating
+              ? Math.round(stats.averageRating * 10) / 10
+              : 0,
+          };
+        }
+        return itemObj;
       });
 
-      if (!result) {
-        throw new AppError("Wishlist item not found", 404);
-      }
+      const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(null, "Wishlist item removed successfully");
+      res.apiPaginated(
+        itemsWithReviews,
+        pagination,
+        "Wishlist retrieved successfully"
+      );
     }
   );
 
@@ -152,7 +109,7 @@ class WishlistController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { productId, notes, status } = req.body;
+      const { productId, status } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(productId)) {
         throw new AppError("Invalid product ID", 400);
@@ -186,13 +143,9 @@ class WishlistController {
         const item = await Wishlists.create({
           userId: req.user._id,
           productId,
-          notes,
         });
 
-        res.apiSuccess(
-          { action: "added", item },
-          "Product added to wishlist"
-        );
+        res.apiSuccess({ action: "added", item }, "Product added to wishlist");
       } else {
         // Remove from wishlist (status === 1)
         const existing = await Wishlists.findOne({

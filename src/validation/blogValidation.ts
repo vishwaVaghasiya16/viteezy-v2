@@ -1,5 +1,4 @@
 import Joi from "joi";
-import { BLOG_STATUS_VALUES, MEDIA_TYPE_VALUES } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
@@ -53,45 +52,37 @@ const baseI18nStringSchema = Joi.object({
   es: Joi.string().trim().allow("", null),
 });
 
-const baseI18nTextSchema = Joi.object({
-  en: Joi.string().trim().allow("", null),
-  nl: Joi.string().trim().allow("", null),
+// Description schema - allows markdown/HTML content
+const baseI18nDescriptionSchema = Joi.object({
+  en: Joi.string().allow("", null),
+  nl: Joi.string().allow("", null),
+  de: Joi.string().allow("", null),
+  fr: Joi.string().allow("", null),
+  es: Joi.string().allow("", null),
 });
-
-const mediaSchema = Joi.object({
-  type: Joi.string()
-    .valid(...MEDIA_TYPE_VALUES)
-    .default(MEDIA_TYPE_VALUES[0]),
-  url: Joi.string().uri().required().messages({
-    "string.uri": "Media URL must be valid",
-    "any.required": "Media URL is required",
-  }),
-  alt: baseI18nStringSchema.optional(),
-  sortOrder: Joi.number().integer().min(0).optional(),
-}).optional();
 
 const baseSeoSchema = Joi.object({
-  title: Joi.string().trim().allow("", null),
-  description: Joi.string().trim().allow("", null),
-  keywords: Joi.string().trim().allow("", null),
+  metaTitle: Joi.string().trim().allow("", null),
+  metaSlug: Joi.string()
+    .trim()
+    .lowercase()
+    .pattern(slugRegex)
+    .allow("", null)
+    .messages({
+      "string.pattern.base":
+        "Meta slug must contain only lowercase letters, numbers, and hyphens",
+    }),
+  metaDescription: Joi.string().trim().allow("", null),
 });
 
-const baseGallerySchema = Joi.array().items(mediaSchema);
-const baseTagsSchema = Joi.array().items(Joi.string().trim().min(1));
-
 const i18nStringSchema = withJsonSupport(baseI18nStringSchema).required();
-const i18nTextSchema = withJsonSupport(baseI18nTextSchema, {
+const i18nDescriptionSchema = withJsonSupport(baseI18nDescriptionSchema, {
   allowEmpty: true,
 }).optional();
 const seoSchema = withJsonSupport(baseSeoSchema, {
   allowEmpty: true,
 }).optional();
-const gallerySchema = withJsonSupport(baseGallerySchema, {
-  allowEmpty: true,
-}).optional();
-const tagsSchema = withJsonSupport(baseTagsSchema, {
-  allowEmpty: true,
-}).optional();
+
 const coverImageSchema = Joi.string()
   .uri()
   .allow("", null)
@@ -102,20 +93,14 @@ const coverImageSchema = Joi.string()
 export const createBlogSchema = Joi.object(
   withFieldLabels({
     title: i18nStringSchema.label("Blog title"),
-    slug: Joi.string()
-      .trim()
-      .lowercase()
-      .pattern(slugRegex)
-      .optional()
-      .messages({
-        "string.pattern.base":
-          "Slug must contain only lowercase letters, numbers, and hyphens",
-      }),
-    excerpt: i18nTextSchema.label("Blog excerpt"),
-    content: i18nStringSchema.label("Blog content"),
+    description: i18nDescriptionSchema.label("Blog description"),
+    seo: seoSchema.label("SEO"),
+    coverImage: coverImageSchema.optional(),
+    isActive: Joi.boolean().optional().default(true).label("Is Active"),
     authorId: Joi.string()
       .pattern(objectIdRegex)
-      .required()
+      .optional()
+      .allow(null)
       .label("Author ID")
       .messages({ "string.pattern.base": "Invalid author ID" }),
     categoryId: Joi.string()
@@ -123,35 +108,22 @@ export const createBlogSchema = Joi.object(
       .required()
       .label("Category ID")
       .messages({ "string.pattern.base": "Invalid category ID" }),
-    tags: tagsSchema.label("Tags"),
-    coverImage: coverImageSchema.optional(),
-    gallery: gallerySchema.label("Gallery"),
-    seo: seoSchema,
-    status: Joi.string()
-      .valid(...BLOG_STATUS_VALUES)
-      .optional()
-      .label("Blog status"),
-    publishedAt: Joi.date().optional().allow(null).label("Published at"),
   })
 ).label("CreateBlogPayload");
 
 export const updateBlogSchema = Joi.object(
   withFieldLabels({
-    title: i18nStringSchema.label("Blog title"),
-    slug: Joi.string()
-      .trim()
-      .lowercase()
-      .pattern(slugRegex)
+    title: withJsonSupport(baseI18nStringSchema, { allowEmpty: true })
       .optional()
-      .messages({
-        "string.pattern.base":
-          "Slug must contain only lowercase letters, numbers, and hyphens",
-      }),
-    excerpt: i18nTextSchema.label("Blog excerpt"),
-    content: i18nStringSchema.label("Blog content"),
+      .label("Blog title"),
+    description: i18nDescriptionSchema.label("Blog description"),
+    seo: seoSchema.label("SEO"),
+    coverImage: coverImageSchema.optional(),
+    isActive: Joi.boolean().optional().label("Is Active"),
     authorId: Joi.string()
       .pattern(objectIdRegex)
       .optional()
+      .allow(null)
       .label("Author ID")
       .messages({ "string.pattern.base": "Invalid author ID" }),
     categoryId: Joi.string()
@@ -159,15 +131,6 @@ export const updateBlogSchema = Joi.object(
       .optional()
       .label("Category ID")
       .messages({ "string.pattern.base": "Invalid category ID" }),
-    tags: tagsSchema.label("Tags"),
-    coverImage: coverImageSchema.optional(),
-    gallery: gallerySchema.label("Gallery"),
-    seo: seoSchema,
-    status: Joi.string()
-      .valid(...BLOG_STATUS_VALUES)
-      .optional()
-      .label("Blog status"),
-    publishedAt: Joi.date().optional().allow(null).label("Published at"),
   })
 )
   .label("UpdateBlogPayload")
@@ -184,11 +147,7 @@ export const blogIdParamsSchema = Joi.object(
 
 export const updateBlogStatusSchema = Joi.object(
   withFieldLabels({
-    status: Joi.string()
-      .valid(...BLOG_STATUS_VALUES)
-      .required()
-      .label("Status"),
-    publishedAt: Joi.date().optional().allow(null).label("Published at"),
+    isActive: Joi.boolean().required().label("Is Active"),
   })
 ).label("UpdateBlogStatusPayload");
 
@@ -202,9 +161,8 @@ export const getBlogsSchema = Joi.object(
     sort: Joi.string().optional(),
     order: Joi.string().valid("asc", "desc").optional(),
     category: Joi.string().optional(),
-    tag: Joi.string().optional(),
     search: Joi.string().optional(),
-    // lang parameter removed - language is auto-detected from user profile
+    isActive: Joi.boolean().optional(),
   })
 )
   .unknown(false)
@@ -220,11 +178,7 @@ export const getBlogDetailsSchema = Joi.object(
   .unknown(false)
   .label("BlogDetailsParams");
 
-export const getBlogDetailsQuerySchema = Joi.object(
-  withFieldLabels({
-    // lang parameter removed - language is auto-detected from user profile
-  })
-)
+export const getBlogDetailsQuerySchema = Joi.object(withFieldLabels({}))
   .unknown(false)
   .label("BlogDetailsQuery");
 
@@ -240,7 +194,6 @@ export const getPopularBlogsSchema = Joi.object(
   withFieldLabels({
     limit: Joi.number().integer().min(3).max(5).optional(),
     type: Joi.string().valid("popular", "latest").optional(),
-    // lang parameter removed - language is auto-detected from user profile
   })
 )
   .unknown(false)
