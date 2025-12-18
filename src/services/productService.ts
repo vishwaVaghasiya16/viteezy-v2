@@ -310,7 +310,10 @@ class ProductService {
 
     // Populate categories for response
     const populatedProduct = await Products.findById(product._id)
-      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .populate(
+        "categories",
+        "sId slug name description sortOrder icon image productCount"
+      )
       .lean();
 
     // Get ingredient details and replace ingredients array with populated data
@@ -386,8 +389,8 @@ class ProductService {
 
     if (categories?.length) {
       // Convert string IDs to ObjectIds for categories filter
-      matchStage.categories = { 
-        $in: categories.map(id => new mongoose.Types.ObjectId(id)) 
+      matchStage.categories = {
+        $in: categories.map((id) => new mongoose.Types.ObjectId(id)),
       };
     }
 
@@ -437,8 +440,8 @@ class ProductService {
       // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
       const arrayFilters: Record<string, any> = {};
       if (categories?.length) {
-        arrayFilters.categories = { 
-          $in: categories.map(id => new mongoose.Types.ObjectId(id)) 
+        arrayFilters.categories = {
+          $in: categories.map((id) => new mongoose.Types.ObjectId(id)),
         };
       }
       if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
@@ -460,7 +463,18 @@ class ProductService {
           localField: "categories",
           foreignField: "_id",
           pipeline: [
-            { $project: { sId: 1, slug: 1, name: 1, description: 1, sortOrder: 1, icon: 1, image: 1, productCount: 1 } }
+            {
+              $project: {
+                sId: 1,
+                slug: 1,
+                name: 1,
+                description: 1,
+                sortOrder: 1,
+                icon: 1,
+                image: 1,
+                productCount: 1,
+              },
+            },
           ],
           as: "categories",
         },
@@ -472,10 +486,10 @@ class ProductService {
             $map: {
               input: { $ifNull: ["$ingredients", []] },
               as: "id",
-              in: { $toObjectId: "$$id" }
-            }
-          }
-        }
+              in: { $toObjectId: "$$id" },
+            },
+          },
+        },
       },
       {
         $lookup: {
@@ -483,15 +497,25 @@ class ProductService {
           localField: "ingredientObjectIds",
           foreignField: "_id",
           pipeline: [
-            { $project: { sId: 1, slug: 1, name: 1, description: 1, sortOrder: 1, icon: 1, image: 1 } }
+            {
+              $project: {
+                sId: 1,
+                slug: 1,
+                name: 1,
+                description: 1,
+                sortOrder: 1,
+                icon: 1,
+                image: 1,
+              },
+            },
           ],
           as: "ingredients",
         },
       },
       {
         $project: {
-          ingredientObjectIds: 0
-        }
+          ingredientObjectIds: 0,
+        },
       },
       {
         $lookup: {
@@ -575,7 +599,10 @@ class ProductService {
       _id: productId,
       isDeleted: false,
     })
-      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .populate(
+        "categories",
+        "sId slug name description sortOrder icon image productCount"
+      )
       .lean();
 
     if (!product) {
@@ -627,7 +654,10 @@ class ProductService {
       slug,
       isDeleted: false,
     })
-      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .populate(
+        "categories",
+        "sId slug name description sortOrder icon image productCount"
+      )
       .lean();
 
     if (!product) {
@@ -657,13 +687,8 @@ class ProductService {
     productId: string,
     data: UpdateProductData
   ): Promise<{ product: any; message: string }> {
-    const {
-      slug,
-      hasStandupPouch,
-      standupPouchPrice,
-      price,
-      sachetPrices,
-    } = data;
+    const { slug, hasStandupPouch, standupPouchPrice, price, sachetPrices } =
+      data;
 
     // Check if product exists
     const existingProduct = await Products.findOne({
@@ -793,11 +818,10 @@ class ProductService {
     }
 
     // Update product with only provided fields
-    await Products.findByIdAndUpdate(
-      productId,
-      updateData,
-      { new: true, runValidators: true }
-    );
+    await Products.findByIdAndUpdate(productId, updateData, {
+      new: true,
+      runValidators: true,
+    });
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
@@ -810,7 +834,10 @@ class ProductService {
 
     // Fetch updated product with populated categories
     const updatedProduct = await Products.findById(productId)
-      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .populate(
+        "categories",
+        "sId slug name description sortOrder icon image productCount"
+      )
       .lean();
 
     if (!updatedProduct) {
@@ -920,9 +947,9 @@ class ProductService {
    * Get available filter values
    */
   async getFilterOptions(): Promise<{
-    categories: string[];
+    categories: any[];
     healthGoals: string[];
-    ingredients: string[];
+    ingredients: any[];
   }> {
     const [result] = await Products.aggregate([
       {
@@ -943,8 +970,18 @@ class ProductService {
             { $unwind: "$categories" },
             { $match: { categories: { $nin: [null, ""] } } },
             { $group: { _id: "$categories" } },
-            { $sort: { _id: 1 } },
-            { $project: { value: "$_id", _id: 0 } },
+            {
+              $lookup: {
+                from: "product_categories",
+                localField: "_id",
+                foreignField: "_id",
+                pipeline: [{ $project: { _id: 1, slug: 1, name: 1, icon: 1 } }],
+                as: "category",
+              },
+            },
+            { $unwind: "$category" },
+            { $replaceRoot: { newRoot: "$category" } },
+            { $sort: { name: 1 } },
           ],
           healthGoals: [
             { $unwind: "$healthGoals" },
@@ -957,20 +994,35 @@ class ProductService {
             { $unwind: "$ingredients" },
             { $match: { ingredients: { $nin: [null, ""] } } },
             { $group: { _id: "$ingredients" } },
-            { $sort: { _id: 1 } },
-            { $project: { value: "$_id", _id: 0 } },
+            {
+              $addFields: {
+                ingredientObjectId: { $toObjectId: "$_id" },
+              },
+            },
+            {
+              $lookup: {
+                from: "product_ingredients",
+                localField: "ingredientObjectId",
+                foreignField: "_id",
+                pipeline: [{ $project: { _id: 1, slug: 1, name: 1, icon: 1 } }],
+                as: "ingredient",
+              },
+            },
+            { $unwind: "$ingredient" },
+            { $replaceRoot: { newRoot: "$ingredient" } },
+            { $sort: { name: 1 } },
           ],
         },
       },
     ]);
 
-    const mapValues = (items?: Array<{ value: string }>) =>
+    const mapHealthGoals = (items?: Array<{ value: string }>) =>
       (items ?? []).map((item) => item.value);
 
     return {
-      categories: mapValues(result?.categories),
-      healthGoals: mapValues(result?.healthGoals),
-      ingredients: mapValues(result?.ingredients),
+      categories: result?.categories || [],
+      healthGoals: mapHealthGoals(result?.healthGoals),
+      ingredients: result?.ingredients || [],
     };
   }
 
@@ -984,26 +1036,25 @@ class ProductService {
     sachets: number;
     standupPouch: number;
   }> {
-    const [total, active, inactive, sachets, standupPouch] =
-      await Promise.all([
-        Products.countDocuments({ isDeleted: false }),
-        Products.countDocuments({
-          status: true,
-          isDeleted: false,
-        }),
-        Products.countDocuments({
-          status: false,
-          isDeleted: false,
-        }),
-        Products.countDocuments({
-          variant: ProductVariant.SACHETS,
-          isDeleted: false,
-        }),
-        Products.countDocuments({
-          variant: ProductVariant.STAND_UP_POUCH,
-          isDeleted: false,
-        }),
-      ]);
+    const [total, active, inactive, sachets, standupPouch] = await Promise.all([
+      Products.countDocuments({ isDeleted: false }),
+      Products.countDocuments({
+        status: true,
+        isDeleted: false,
+      }),
+      Products.countDocuments({
+        status: false,
+        isDeleted: false,
+      }),
+      Products.countDocuments({
+        variant: ProductVariant.SACHETS,
+        isDeleted: false,
+      }),
+      Products.countDocuments({
+        variant: ProductVariant.STAND_UP_POUCH,
+        isDeleted: false,
+      }),
+    ]);
 
     return {
       total,
