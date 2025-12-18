@@ -310,14 +310,14 @@ class ProductService {
 
     // Populate categories for response
     const populatedProduct = await Products.findById(product._id)
-      .populate("categories", "name slug icon image")
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
       .lean();
 
     // Get ingredient details and replace ingredients array with populated data
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: product.ingredients || [] },
     })
-      .select("name slug icon image")
+      .select("sId slug name description sortOrder icon image")
       .lean();
 
     // Calculate monthly amounts for subscription prices in response
@@ -460,7 +460,7 @@ class ProductService {
           localField: "categories",
           foreignField: "_id",
           pipeline: [
-            { $project: { name: 1, slug: 1, icon: 1, image: 1 } }
+            { $project: { sId: 1, slug: 1, name: 1, description: 1, sortOrder: 1, icon: 1, image: 1, productCount: 1 } }
           ],
           as: "categories",
         },
@@ -483,7 +483,7 @@ class ProductService {
           localField: "ingredientObjectIds",
           foreignField: "_id",
           pipeline: [
-            { $project: { name: 1, slug: 1, icon: 1, image: 1 } }
+            { $project: { sId: 1, slug: 1, name: 1, description: 1, sortOrder: 1, icon: 1, image: 1 } }
           ],
           as: "ingredients",
         },
@@ -575,7 +575,7 @@ class ProductService {
       _id: productId,
       isDeleted: false,
     })
-      .populate("categories", "name slug icon image")
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
       .lean();
 
     if (!product) {
@@ -595,7 +595,7 @@ class ProductService {
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: product.ingredients || [] },
     })
-      .select("name slug icon image")
+      .select("sId slug name description sortOrder icon image")
       .lean();
 
     // Fetch product ingredients linked to this product (relationship is reversed)
@@ -627,7 +627,7 @@ class ProductService {
       slug,
       isDeleted: false,
     })
-      .populate("categories", "name slug icon image")
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
       .lean();
 
     if (!product) {
@@ -638,7 +638,7 @@ class ProductService {
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: product.ingredients || [] },
     })
-      .select("name slug icon image")
+      .select("sId slug name description sortOrder icon image")
       .lean();
 
     // Calculate monthly amount for subscription prices if totalAmount is provided
@@ -810,7 +810,7 @@ class ProductService {
 
     // Fetch updated product with populated categories
     const updatedProduct = await Products.findById(productId)
-      .populate("categories", "name slug icon image")
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
       .lean();
 
     if (!updatedProduct) {
@@ -821,7 +821,7 @@ class ProductService {
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: updatedProduct.ingredients || [] },
     })
-      .select("name slug icon image")
+      .select("sId slug name description sortOrder icon image")
       .lean();
 
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
