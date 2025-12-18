@@ -1,5 +1,6 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
+import { FAQ_STATUS_VALUES } from "@/models/enums";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
@@ -37,7 +38,10 @@ export const createFaqSchema = Joi.object(
       .messages({ "string.pattern.base": "Invalid category ID" }),
     tags: Joi.array().items(Joi.string().trim()).optional().label("Tags"),
     sortOrder: Joi.number().integer().min(0).optional().label("Sort order"),
-    status: Joi.string().valid("Active", "Inactive").optional().label("Status"),
+    status: Joi.string()
+      .valid(...FAQ_STATUS_VALUES)
+      .optional()
+      .label("Status"),
     isActive: Joi.boolean().optional().label("Is active"),
   })
 ).label("CreateFaqPayload");
@@ -54,7 +58,10 @@ export const updateFaqSchema = Joi.object(
       .messages({ "string.pattern.base": "Invalid category ID" }),
     tags: Joi.array().items(Joi.string().trim()).optional().label("Tags"),
     sortOrder: Joi.number().integer().min(0).optional().label("Sort order"),
-    status: Joi.string().valid("Active", "Inactive").optional().label("Status"),
+    status: Joi.string()
+      .valid(...FAQ_STATUS_VALUES)
+      .optional()
+      .label("Status"),
     isActive: Joi.boolean().optional().label("Is active"),
   })
 )

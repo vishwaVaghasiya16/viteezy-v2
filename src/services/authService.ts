@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 import { User, OTP, AuthSessions } from "../models/index.model";
-import { OTPType, OTPStatus } from "../models/enums";
+import { OTPType, OTPStatus, SessionStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { emailService } from "./emailService";
@@ -507,7 +507,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "Active",
+          status: SessionStatus.ACTIVE,
           revoked: false,
           deviceInfo: deviceInfo || "Web",
         },
@@ -595,7 +595,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "Active",
+          status: SessionStatus.ACTIVE,
           revoked: false,
           deviceInfo: deviceInfo,
         },
@@ -1116,7 +1116,7 @@ class AuthService {
         $push: {
           sessionIds: {
             sessionId: newSessionId,
-            status: "Active",
+            status: SessionStatus.ACTIVE,
             revoked: false,
             deviceInfo,
           },

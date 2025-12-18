@@ -147,7 +147,7 @@ class BlogController {
         .populate("categoryId", "slug title")
         .populate("authorId", "name email")
         .select(
-          "slug title excerpt content coverImage categoryId tags seo viewCount likeCount commentCount publishedAt createdAt"
+          "slug title excerpt content coverImage categoryId tags seo viewCount publishedAt createdAt"
         )
         .sort(sortOptions)
         .skip(skip)
@@ -181,8 +181,6 @@ class BlogController {
           metaDescription: blog.seo?.description || "",
           metaKeywords: blog.seo?.keywords || "",
           viewCount: blog.viewCount || 0,
-          likeCount: blog.likeCount || 0,
-          commentCount: blog.commentCount || 0,
           publishedAt: blog.publishedAt || blog.createdAt,
         };
       });
@@ -281,8 +279,6 @@ class BlogController {
         metaDescription: blog.seo?.description || "",
         metaKeywords: blog.seo?.keywords || "",
         viewCount: blog.viewCount || 0,
-        likeCount: blog.likeCount || 0,
-        commentCount: blog.commentCount || 0,
         publishedAt: blog.publishedAt || blog.createdAt,
         author,
       };
@@ -407,7 +403,7 @@ class BlogController {
       const blogs = await Blogs.find(filter)
         .populate("categoryId", "slug title")
         .select(
-          "slug title excerpt content coverImage categoryId tags seo viewCount likeCount commentCount publishedAt"
+          "slug title excerpt content coverImage categoryId tags seo viewCount publishedAt"
         )
         .sort(sortOptions)
         .limit(blogLimit)
@@ -440,8 +436,6 @@ class BlogController {
           metaDescription: blog.seo?.description || "",
           metaKeywords: blog.seo?.keywords || "",
           viewCount: blog.viewCount || 0,
-          likeCount: blog.likeCount || 0,
-          commentCount: blog.commentCount || 0,
           publishedAt: blog.publishedAt || blog.createdAt,
         };
       });

@@ -1,6 +1,9 @@
 import Joi from "joi";
 import mongoose from "mongoose";
-import { PAYMENT_METHOD_VALUES } from "@/models/enums";
+import {
+  PAYMENT_METHOD_VALUES,
+  MEMBERSHIP_INTERVAL_VALUES,
+} from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
 const objectIdSchema = Joi.string()
@@ -33,7 +36,7 @@ export const buyMembershipSchema = Joi.object(
 export const getMembershipPlansSchema = Joi.object(
   withFieldLabels({
     interval: Joi.string()
-      .valid("Monthly", "Quarterly", "Yearly")
+      .valid(...MEMBERSHIP_INTERVAL_VALUES)
       .optional()
       .label("Billing interval"),
     lang: Joi.string()

@@ -84,7 +84,7 @@ class ExampleController {
           res.apiUnauthorized("Access denied");
           break;
         case "forbidden":
-          res.apiForbidden("Insufficient permissions");
+          res.apiForbidden("You are not authorized to perform this action.");
           break;
         case "validation":
           res.apiValidationError("Validation failed", [

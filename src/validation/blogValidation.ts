@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { BLOG_STATUS_VALUES } from "@/models/enums";
+import { BLOG_STATUS_VALUES, MEDIA_TYPE_VALUES } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
@@ -59,7 +59,9 @@ const baseI18nTextSchema = Joi.object({
 });
 
 const mediaSchema = Joi.object({
-  type: Joi.string().valid("Image", "Video").default("Image"),
+  type: Joi.string()
+    .valid(...MEDIA_TYPE_VALUES)
+    .default(MEDIA_TYPE_VALUES[0]),
   url: Joi.string().uri().required().messages({
     "string.uri": "Media URL must be valid",
     "any.required": "Media URL is required",

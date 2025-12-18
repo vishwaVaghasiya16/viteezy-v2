@@ -1,6 +1,7 @@
 import Joi from "joi";
 import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
+import { POSTPONEMENT_STATUS_VALUES } from "@/models/enums";
 
 // Joi Schemas
 const objectIdSchema = Joi.string()
@@ -42,7 +43,7 @@ export const getPostponementDetailsParamsSchema = Joi.object(
 export const getPostponementHistoryQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string()
-      .valid("Pending", "Approved", "Rejected", "Cancelled")
+      .valid(...POSTPONEMENT_STATUS_VALUES)
       .optional(),
     orderId: objectIdSchema.optional(),
     page: Joi.number().integer().min(1).optional(),

@@ -28,8 +28,6 @@ export interface IBlog extends Document, AuditType {
   publishedAt?: Date;
   seo: SeoType;
   viewCount: number;
-  likeCount: number;
-  commentCount: number;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -91,16 +89,6 @@ const BlogSchema = new Schema<IBlog>(
       default: () => ({}),
     },
     viewCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    likeCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    commentCount: {
       type: Number,
       default: 0,
       min: 0,

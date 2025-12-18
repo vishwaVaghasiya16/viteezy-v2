@@ -10,7 +10,11 @@ import {
   Payments,
   Products,
 } from "@/models/commerce";
-import { PaymentStatus } from "@/models/enums";
+import {
+  PaymentStatus,
+  SubscriptionStatus,
+  MembershipStatus,
+} from "@/models/enums";
 import { emailService } from "@/services/emailService";
 import { logger } from "@/utils/logger";
 
@@ -212,7 +216,7 @@ class AdminUserController {
         // Active subscriptions
         Subscriptions.find({
           userId,
-          status: "Active",
+          status: SubscriptionStatus.ACTIVE,
           isDeleted: { $ne: true },
         })
           .select(
@@ -224,7 +228,7 @@ class AdminUserController {
         // Active membership
         Memberships.findOne({
           userId,
-          status: "Active",
+          status: MembershipStatus.ACTIVE,
           isDeleted: { $ne: true },
           expiresAt: { $gt: new Date() },
         })

@@ -7,11 +7,13 @@ import {
   GENDER_VALUES,
   MembershipStatus,
   MEMBERSHIP_STATUS_VALUES,
+  SessionStatus,
+  SESSION_STATUS_VALUES,
 } from "../enums";
 
 export interface IUserSessionInfo {
   sessionId: string;
-  status: "Active" | "Revoked";
+  status: SessionStatus;
   revoked: boolean;
   deviceInfo?: string;
 }
@@ -171,8 +173,8 @@ const userSchema = new Schema<IUser>(
         sessionId: { type: String, required: true },
         status: {
           type: String,
-          enum: ["Active", "Revoked"],
-          default: "Active",
+          enum: SESSION_STATUS_VALUES,
+          default: SessionStatus.ACTIVE,
         },
         revoked: { type: Boolean, default: false },
         deviceInfo: { type: String, trim: true },

@@ -4,6 +4,7 @@ import { withFieldLabels } from "./helpers";
 import {
   PAYMENT_METHOD_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
+  SUBSCRIPTION_STATUS_VALUES,
 } from "@/models/enums";
 
 // Joi Schemas
@@ -69,7 +70,7 @@ export const createSubscriptionSchema = Joi.object(
 export const updateSubscriptionSchema = Joi.object(
   withFieldLabels({
     status: Joi.string()
-      .valid("Active", "Paused", "Cancelled", "Expired", "Suspended")
+      .valid(...SUBSCRIPTION_STATUS_VALUES)
       .optional(),
     nextDeliveryDate: Joi.date().iso().optional(),
     nextBillingDate: Joi.date().iso().optional(),
@@ -94,7 +95,7 @@ export const getSubscriptionDetailsParamsSchema = Joi.object(
 export const getSubscriptionsQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string()
-      .valid("Active", "Paused", "Cancelled", "Expired", "Suspended")
+      .valid(...SUBSCRIPTION_STATUS_VALUES)
       .optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),

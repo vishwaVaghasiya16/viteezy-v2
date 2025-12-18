@@ -42,6 +42,7 @@ export {
   MembershipInterval,
   SubscriptionStatus,
   SubscriptionCycle,
+  SessionStatus,
   // Export enum values
   PRODUCT_STATUS_VALUES,
   USER_ROLE_VALUES,
@@ -82,6 +83,7 @@ export {
   MEMBERSHIP_INTERVAL_VALUES,
   SUBSCRIPTION_STATUS_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
+  SESSION_STATUS_VALUES,
 } from "./enums";
 
 // AI Models
