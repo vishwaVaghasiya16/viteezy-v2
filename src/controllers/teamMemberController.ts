@@ -7,61 +7,35 @@ import {
 } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { TeamMembers } from "@/models/cms/teamMembers.model";
-import { User } from "@/models/index.model";
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    _id: string;
-    language?: string;
-  };
-}
+type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
 /**
- * Map user language preference to language code
- * User table stores: "English", "Dutch", "German", "French", "Spanish", "Italian", "Portuguese"
- * API uses: "en", "nl", "de", "fr", "es" (only supported languages in I18n types)
- * Italian and Portuguese fallback to English
+ * Get language from query parameter, default to "en"
  */
-const mapLanguageToCode = (
-  language?: string
-): "en" | "nl" | "de" | "fr" | "es" => {
-  const languageMap: Record<string, "en" | "nl" | "de" | "fr" | "es"> = {
-    English: "en",
-    Dutch: "nl",
-    German: "de",
-    French: "fr",
-    Spanish: "es",
-    Italian: "en", // Fallback to English (not supported in I18n types)
-    Portuguese: "en", // Fallback to English (not supported in I18n types)
-  };
-
-  if (!language) {
-    return "en"; // Default to English
+const getLanguageFromQuery = (lang?: string): SupportedLanguage => {
+  const supportedLanguages: SupportedLanguage[] = [
+    "en",
+    "nl",
+    "de",
+    "fr",
+    "es",
+  ];
+  if (lang && supportedLanguages.includes(lang as SupportedLanguage)) {
+    return lang as SupportedLanguage;
   }
-
-  return languageMap[language] || "en";
+  return "en";
 };
 
 class TeamMemberController {
   /**
-   * Get all team members (authenticated users only)
-   * Language is automatically detected from user's profile preference
-   * Only shows data in user's selected language
+   * Get all team members (Public)
+   * Language is passed via query parameter
    */
   getTeamMembers = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user || !req.user._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      // Get user's language preference from database
-      const user = await User.findById(req.user._id).select("language").lean();
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
-      // Map user's language preference to language code
-      const userLang = mapLanguageToCode(user.language);
+    async (req: Request, res: Response): Promise<void> => {
+      // Get language from query parameter
+      const userLang = getLanguageFromQuery(req.query.lang as string);
 
       const { page, limit, skip, sort } = getPaginationOptions(req);
 
@@ -113,26 +87,15 @@ class TeamMemberController {
   );
 
   /**
-   * Get team member by ID (authenticated users only)
-   * Language is automatically detected from user's profile preference
-   * Only shows data in user's selected language
+   * Get team member by ID (Public)
+   * Language is passed via query parameter
    */
   getTeamMemberById = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      if (!req.user || !req.user._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
+    async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
 
-      // Get user's language preference from database
-      const user = await User.findById(req.user._id).select("language").lean();
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
-      // Map user's language preference to language code
-      const userLang = mapLanguageToCode(user.language);
+      // Get language from query parameter
+      const userLang = getLanguageFromQuery(req.query.lang as string);
 
       const teamMember = await TeamMembers.findOne({
         _id: id,

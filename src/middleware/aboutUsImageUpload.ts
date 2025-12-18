@@ -52,6 +52,41 @@ export const handleAboutUsImageUpload = async (
       }
     }
 
+    // Handle founder_image (single file for founder quote section)
+    if (files?.founder_image && files.founder_image.length > 0) {
+      const imageUrl = await fileStorageService.uploadFile(
+        "about-us",
+        files.founder_image[0]
+      );
+      if (!req.body.founderQuote) {
+        req.body.founderQuote = {};
+      }
+      if (!req.body.founderQuote.founder_image) {
+        req.body.founderQuote.founder_image = {};
+      }
+      req.body.founderQuote.founder_image.url = imageUrl;
+      if (!req.body.founderQuote.founder_image.type) {
+        req.body.founderQuote.founder_image.type = "Image";
+      }
+    }
+
+    // Handle people_images (multiple files for people section)
+    if (files?.people_images && files.people_images.length > 0) {
+      const uploadedImages = await Promise.all(
+        files.people_images.map(async (file) => {
+          const imageUrl = await fileStorageService.uploadFile(
+            "about-us",
+            file
+          );
+          return { url: imageUrl, type: "Image" };
+        })
+      );
+      if (!req.body.people) {
+        req.body.people = {};
+      }
+      req.body.people.images = uploadedImages;
+    }
+
     next();
   } catch (error) {
     next(error);
