@@ -793,15 +793,11 @@ class ProductService {
     }
 
     // Update product with only provided fields
-    const updatedProduct = await Products.findByIdAndUpdate(
+    await Products.findByIdAndUpdate(
       productId,
       updateData,
       { new: true, runValidators: true }
-    ).lean();
-
-    if (!updatedProduct) {
-      throw new AppError("Product not found", 404);
-    }
+    );
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
@@ -812,11 +808,29 @@ class ProductService {
       });
     }
 
+    // Fetch updated product with populated categories
+    const updatedProduct = await Products.findById(productId)
+      .populate("categories", "name slug icon image")
+      .lean();
+
+    if (!updatedProduct) {
+      throw new AppError("Product not found", 404);
+    }
+
+    // Get ingredient details and replace ingredients array with populated data
+    const ingredientDetails = await ProductIngredients.find({
+      _id: { $in: updatedProduct.ingredients || [] },
+    })
+      .select("name slug icon image")
+      .lean();
+
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts =
-      this.calculateMonthlyAmounts(updatedProduct);
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+      ...updatedProduct,
+      ingredients: ingredientDetails, // Replace IDs with populated data
+    });
 
     return {
       product: productWithMonthlyAmounts,
