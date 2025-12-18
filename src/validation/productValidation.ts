@@ -96,20 +96,6 @@ const nutritionInfoSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "Nutrition info must be a string",
 });
 
-const nutritionTableSchema = Joi.array()
-  .items(
-    Joi.object({
-      nutrient: Joi.string().trim().required(),
-      amount: Joi.string().trim().required(),
-      unit: Joi.string().trim().optional(),
-      dailyValue: Joi.string().trim().optional(),
-    })
-  )
-  .optional()
-  .messages({
-    "array.base": "Nutrition table must be an array",
-  });
-
 const metaSchema = Joi.object({
   title: Joi.string().trim().optional(),
   description: Joi.string().trim().optional(),
@@ -123,14 +109,6 @@ const metaSchema = Joi.object({
       })
     )
     .optional(),
-}).optional();
-
-const sourceInfoSchema = Joi.object({
-  manufacturer: Joi.string().trim().optional(),
-  countryOfOrigin: Joi.string().trim().optional(),
-  certification: Joi.array().items(Joi.string().trim()).optional(),
-  batchNumber: Joi.string().trim().optional(),
-  expiryDate: Joi.date().optional(),
 }).optional();
 
 const howToUseSchema = Joi.string().trim().optional().allow("").messages({
@@ -215,6 +193,7 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
+      features: Joi.array().items(Joi.string().trim()).optional(),
     })
     .required(),
   count60: priceSchema
@@ -222,6 +201,7 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
+      features: Joi.array().items(Joi.string().trim()).optional(),
     })
     .required(),
 });
@@ -234,14 +214,6 @@ const sachetPricesSchema = Joi.object({
   oneEightyDays: subscriptionPriceSchema.required(),
   oneTime: sachetOneTimeCapsuleOptionsSchema.required(),
 }).optional();
-
-// Sachet images schema
-const sachetImagesSchema = Joi.array()
-  .items(Joi.string().trim().uri())
-  .optional()
-  .messages({
-    "array.base": "Sachet images must be an array of image URLs",
-  });
 
 // Stand-up pouch: can be simple price, oneTime structure with count30/count60, or wrapped in oneTime
 const standupPouchPriceWithOneTimeSchema = Joi.object({
@@ -307,6 +279,31 @@ const comparisonSectionSchema = Joi.object({
     "object.base": "Comparison section must be an object",
   });
 
+const specificationItemSchema = Joi.object({
+  title: Joi.string().trim().required(),
+  descr: Joi.string().trim().required(),
+  image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
+});
+
+const specificationSchema = Joi.object({
+  main_title: Joi.string().trim().required(),
+  bg_image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
+  items: Joi.array().items(specificationItemSchema).min(1).max(4).optional(),
+  // Individual item fields (title1, descr1, etc.) - will be converted to items array
+  title1: Joi.string().trim().optional(),
+  descr1: Joi.string().trim().optional(),
+  title2: Joi.string().trim().optional(),
+  descr2: Joi.string().trim().optional(),
+  title3: Joi.string().trim().optional(),
+  descr3: Joi.string().trim().optional(),
+  title4: Joi.string().trim().optional(),
+  descr4: Joi.string().trim().optional(),
+})
+  .optional()
+  .messages({
+    "object.base": "Specification must be an object",
+  });
+
 // Create product schema
 export const createProductSchema = Joi.object({
   title: titleSchema,
@@ -320,21 +317,17 @@ export const createProductSchema = Joi.object({
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
-  nutritionTable: nutritionTableSchema,
   howToUse: howToUseSchema,
   status: statusSchema.default(ProductStatus.DRAFT),
-  meta: metaSchema,
-  sourceInfo: sourceInfoSchema,
   price: priceSchema.optional(), // Optional - can be derived from sachetPrices
   variant: variantSchema,
   hasStandupPouch: hasStandupPouchSchema,
   sachetPrices: sachetPricesSchema,
-  sachetImages: sachetImagesSchema,
   standupPouchPrice: standupPouchPriceSchema,
   standupPouchImages: standupPouchImagesSchema,
-  standupPouchPrices: standupPouchPricesSchema, // Legacy field
   isFeatured: isFeaturedSchema,
   comparisonSection: comparisonSectionSchema,
+  specification: specificationSchema,
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is true, standupPouchPrice must be provided
   if (value.hasStandupPouch === true && !value.standupPouchPrice) {
@@ -375,31 +368,26 @@ export const updateProductSchema = Joi.object({
   categories: categoriesSchema.optional(),
   healthGoals: healthGoalsSchema.optional(),
   nutritionInfo: nutritionInfoSchema.optional(),
-  nutritionTable: nutritionTableSchema.optional(),
   howToUse: howToUseSchema.optional(),
   status: statusSchema.optional(),
-  meta: metaSchema.optional(),
-  sourceInfo: sourceInfoSchema.optional(),
   price: priceSchema.optional(),
   variant: variantSchema.optional(),
   hasStandupPouch: hasStandupPouchSchema.optional(),
   sachetPrices: sachetPricesSchema.optional(),
-  sachetImages: sachetImagesSchema.optional(),
   standupPouchPrice: standupPouchPriceSchema.optional(),
   standupPouchImages: standupPouchImagesSchema.optional(),
-  standupPouchPrices: standupPouchPricesSchema.optional(), // Legacy field
   isFeatured: isFeaturedSchema.optional(),
   comparisonSection: comparisonSectionSchema.optional(),
+  specification: specificationSchema.optional(),
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is being set to true, standupPouchPrice must be provided
   // Only validate if hasStandupPouch is explicitly being updated to true
   if (
     value.hasStandupPouch === true &&
-    value.standupPouchPrice === undefined &&
-    !value.standupPouchPrices
+    value.standupPouchPrice === undefined
   ) {
     return helpers.error("any.custom", {
-      message: "standupPocuhPrice is required when hasStandupPouch is true",
+      message: "standupPouchPrice is required when hasStandupPouch is true",
     });
   }
   // If price is not provided and sachetPrices is being updated, derive price from sachetPrices.thirtyDays

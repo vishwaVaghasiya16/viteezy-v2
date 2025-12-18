@@ -119,19 +119,16 @@ const SubscriptionPriceSchema = new Schema<SubscriptionPriceType>(
   { _id: false }
 );
 
-export interface NutritionTableItem {
-  nutrient: string;
-  amount: string;
-  unit?: string;
-  dailyValue?: string;
+export interface SpecificationItem {
+  title: string;
+  descr: string;
+  image: string;
 }
 
-export interface SourceInfo {
-  manufacturer?: string;
-  countryOfOrigin?: string;
-  certification?: string[];
-  batchNumber?: string;
-  expiryDate?: Date;
+export interface Specification {
+  main_title: string;
+  bg_image: string;
+  items: SpecificationItem[]; // 4 items
 }
 
 export interface ComparisonRow {
@@ -155,7 +152,6 @@ export interface IProduct extends Document {
   categories?: mongoose.Types.ObjectId[];
   healthGoals?: string[];
   nutritionInfo: I18nTextType | string;
-  nutritionTable?: NutritionTableItem[];
   howToUse: I18nTextType | string;
   status: ProductStatus;
   price: PriceType; // Base price (for Sachets - default)
@@ -163,19 +159,15 @@ export interface IProduct extends Document {
   hasStandupPouch: boolean;
   // Sachet prices (subscription + one-time with capsule options)
   sachetPrices?: SachetPricesType;
-  sachetImages?: string[]; // Separate images for sachet variant
   // Stand-up pouch: only one-time purchase (no subscription)
   standupPouchPrice?: PriceType | SachetOneTimeCapsuleOptions; // Single one-time price or oneTime structure with count30/count60
   standupPouchImages?: string[]; // Separate images for stand-up pouch variant
-  // Legacy field (kept for backward compatibility)
-  standupPouchPrices?: SubscriptionPriceType;
-  meta?: SeoType;
-  sourceInfo?: SourceInfo;
   // New fields for admin Add Product screen
   shortDescription?: string;
   galleryImages?: string[]; // Additional product images
   isFeatured?: boolean; // Featured product checkbox
   comparisonSection?: ComparisonSection; // Comparison section data
+  specification?: Specification; // Product specification section
   isDeleted: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
@@ -239,18 +231,6 @@ const ProductSchema = new Schema<IProduct>(
       type: [String],
       default: [],
     },
-    nutritionTable: {
-      type: [
-        {
-          nutrient: { type: String, trim: true, default: null },
-          amount: { type: String, trim: true, default: null },
-          unit: { type: String, trim: true, default: null },
-          dailyValue: { type: String, trim: true, default: null },
-          _id: false,
-        },
-      ],
-      default: [],
-    },
     howToUse: {
       type: Schema.Types.Mixed, // Support both I18nText and String
       trim: true,
@@ -278,10 +258,6 @@ const ProductSchema = new Schema<IProduct>(
       type: SachetPricesSchema,
       default: null,
     },
-    sachetImages: {
-      type: [String],
-      default: [],
-    },
     standupPouchPrice: {
       type: Schema.Types.Mixed, // Can be PriceSchema or SachetOneTimeCapsuleOptionsSchema
       default: null,
@@ -289,25 +265,6 @@ const ProductSchema = new Schema<IProduct>(
     standupPouchImages: {
       type: [String],
       default: [],
-    },
-    standupPouchPrices: {
-      type: SubscriptionPriceSchema,
-      default: null,
-    },
-    meta: {
-      type: SeoSchema,
-      default: null,
-    },
-    sourceInfo: {
-      type: {
-        manufacturer: { type: String, trim: true, default: null },
-        countryOfOrigin: { type: String, trim: true, default: null },
-        certification: { type: [String], default: [] },
-        batchNumber: { type: String, trim: true, default: null },
-        expiryDate: { type: Date, default: null },
-      },
-      _id: false,
-      default: null,
     },
     comparisonSection: {
       type: {
@@ -323,6 +280,22 @@ const ProductSchema = new Schema<IProduct>(
               type: [Boolean],
               default: [],
             },
+            _id: false,
+          },
+        ],
+      },
+      _id: false,
+      default: null,
+    },
+    specification: {
+      type: {
+        main_title: { type: String, trim: true, default: null },
+        bg_image: { type: String, trim: true, default: null },
+        items: [
+          {
+            title: { type: String, trim: true, default: null },
+            descr: { type: String, trim: true, default: null },
+            image: { type: String, trim: true, default: null },
             _id: false,
           },
         ],

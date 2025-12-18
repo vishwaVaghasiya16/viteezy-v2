@@ -7,18 +7,14 @@ const ARRAY_FIELDS = [
   "categories",
   "healthGoals",
   "galleryImages",
-  "sachetImages",
   "standupPouchImages",
 ];
 const JSON_FIELDS = [
   "price",
   "sachetPrices",
   "standupPouchPrice",
-  "standupPouchPrices", // Legacy field
-  "nutritionTable",
-  "meta",
-  "sourceInfo",
   "comparisonSection",
+  "specification",
 ];
 
 const toBoolean = (value: any): boolean | undefined => {
@@ -137,6 +133,51 @@ export const parseProductFormData = (
       if (boolValue !== undefined) {
         req.body.hasStandupPouch = boolValue;
       }
+    }
+
+    // Handle specification with individual fields (title1, descr1, etc.)
+    const hasSpecificationFields = req.body.specificationMainTitle || 
+      req.body.specificationTitle1 || req.body.specificationTitle2 || 
+      req.body.specificationTitle3 || req.body.specificationTitle4;
+    
+    if (hasSpecificationFields) {
+      if (!req.body.specification) {
+        req.body.specification = {};
+      }
+      
+      if (req.body.specificationMainTitle) {
+        req.body.specification.main_title = req.body.specificationMainTitle;
+        delete req.body.specificationMainTitle;
+      }
+      
+      if (!req.body.specification.items) {
+        req.body.specification.items = [];
+      }
+      
+      // Build items array from individual fields
+      for (let i = 1; i <= 4; i++) {
+        const titleKey = `specificationTitle${i}`;
+        const descrKey = `specificationDescr${i}`;
+        
+        if (req.body[titleKey] || req.body[descrKey]) {
+          if (!req.body.specification.items[i - 1]) {
+            req.body.specification.items[i - 1] = {};
+          }
+          if (req.body[titleKey]) {
+            req.body.specification.items[i - 1].title = req.body[titleKey];
+            delete req.body[titleKey];
+          }
+          if (req.body[descrKey]) {
+            req.body.specification.items[i - 1].descr = req.body[descrKey];
+            delete req.body[descrKey];
+          }
+        }
+      }
+      
+      // Filter out empty items
+      req.body.specification.items = req.body.specification.items.filter(
+        (item: any) => item && (item.title || item.descr || item.image)
+      );
     }
 
     next();

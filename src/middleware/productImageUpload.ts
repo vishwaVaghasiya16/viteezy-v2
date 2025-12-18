@@ -47,6 +47,33 @@ export const handleProductImageUpload = async (
       req.body.standupPouchImages = [...existingStandupPouch, ...standupPouchUrls];
     }
 
+    // Handle specification images
+    if (files?.specificationBgImage && files.specificationBgImage.length > 0) {
+      const bgImageUrl = await fileStorageService.uploadFile("products", files.specificationBgImage[0]);
+      if (!req.body.specification) {
+        req.body.specification = {};
+      }
+      req.body.specification.bg_image = bgImageUrl;
+    }
+
+    // Handle specification item images (1-4)
+    for (let i = 1; i <= 4; i++) {
+      const fieldName = `specificationItemImage${i}` as keyof typeof files;
+      if (files?.[fieldName] && files[fieldName].length > 0) {
+        const imageUrl = await fileStorageService.uploadFile("products", files[fieldName][0]);
+        if (!req.body.specification) {
+          req.body.specification = {};
+        }
+        if (!req.body.specification.items) {
+          req.body.specification.items = [];
+        }
+        if (!req.body.specification.items[i - 1]) {
+          req.body.specification.items[i - 1] = {};
+        }
+        req.body.specification.items[i - 1].image = imageUrl;
+      }
+    }
+
     next();
   } catch (error) {
     next(error);

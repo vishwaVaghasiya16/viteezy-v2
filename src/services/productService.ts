@@ -104,49 +104,7 @@ interface CreateProductData {
     amount: number;
     taxRate: number;
   };
-  sachetImages?: string[];
   standupPouchImages?: string[];
-  standupPouchPrices?: {
-    oneTime: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    thirtyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    sixtyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    ninetyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    oneEightyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-  };
-  meta?: {
-    title?: string;
-    description?: string;
-    keywords?: string;
-    ogImage?: string;
-    hreflang?: Array<{ lang: string; url: string }>;
-  };
-  sourceInfo?: {
-    manufacturer?: string;
-    countryOfOrigin?: string;
-    certification?: string[];
-    batchNumber?: string;
-    expiryDate?: Date;
-  };
   // New fields for admin Add Product screen
   shortDescription?: string;
   galleryImages?: string[];
@@ -252,49 +210,7 @@ interface UpdateProductData {
     amount: number;
     taxRate: number;
   };
-  sachetImages?: string[];
   standupPouchImages?: string[];
-  standupPouchPrices?: {
-    oneTime: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    thirtyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    sixtyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    ninetyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-    oneEightyDays: {
-      currency: string;
-      amount: number;
-      taxRate: number;
-    };
-  };
-  meta?: {
-    title?: string;
-    description?: string;
-    keywords?: string;
-    ogImage?: string;
-    hreflang?: Array<{ lang: string; url: string }>;
-  };
-  sourceInfo?: {
-    manufacturer?: string;
-    countryOfOrigin?: string;
-    certification?: string[];
-    batchNumber?: string;
-    expiryDate?: Date;
-  };
   // New fields for admin Edit Product screen
   shortDescription?: string;
   galleryImages?: string[];
@@ -322,7 +238,6 @@ class ProductService {
       slug,
       hasStandupPouch,
       standupPouchPrice,
-      standupPouchPrices,
       price,
       sachetPrices,
       variant,
@@ -353,8 +268,8 @@ class ProductService {
       }
     }
 
-    // Validate standupPouchPrice if hasStandupPouch is true (standupPouchPrices is legacy field)
-    if (hasStandupPouch && !standupPouchPrice && !standupPouchPrices) {
+    // Validate standupPouchPrice if hasStandupPouch is true
+    if (hasStandupPouch && !standupPouchPrice) {
       throw new AppError(
         "standupPouchPrice is required when hasStandupPouch is true",
         400
@@ -393,10 +308,23 @@ class ProductService {
 
     logger.info(`Product created successfully: ${product.slug}`);
 
+    // Populate categories for response
+    const populatedProduct = await Products.findById(product._id)
+      .populate("categories", "name slug icon image")
+      .lean();
+
+    // Get ingredient details and replace ingredients array with populated data
+    const ingredientDetails = await ProductIngredients.find({
+      _id: { $in: product.ingredients || [] },
+    })
+      .select("name slug icon image")
+      .lean();
+
     // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts(
-      product.toObject()
-    );
+    const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+      ...populatedProduct,
+      ingredients: ingredientDetails, // Replace IDs with populated data
+    });
 
     return {
       product: productWithMonthlyAmounts,
@@ -457,7 +385,10 @@ class ProductService {
     }
 
     if (categories?.length) {
-      matchStage.categories = { $in: categories };
+      // Convert string IDs to ObjectIds for categories filter
+      matchStage.categories = { 
+        $in: categories.map(id => new mongoose.Types.ObjectId(id)) 
+      };
     }
 
     if (healthGoals?.length) {
@@ -465,6 +396,7 @@ class ProductService {
     }
 
     if (ingredients?.length) {
+      // Ingredients are stored as string IDs
       matchStage.ingredients = { $all: ingredients };
     }
 
@@ -504,7 +436,11 @@ class ProductService {
 
       // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
       const arrayFilters: Record<string, any> = {};
-      if (categories?.length) arrayFilters.categories = { $in: categories };
+      if (categories?.length) {
+        arrayFilters.categories = { 
+          $in: categories.map(id => new mongoose.Types.ObjectId(id)) 
+        };
+      }
       if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
       if (ingredients?.length) arrayFilters.ingredients = { $all: ingredients };
 
@@ -517,6 +453,46 @@ class ProductService {
     }
 
     pipeline.push(
+      // Lookup categories
+      {
+        $lookup: {
+          from: "product_categories",
+          localField: "categories",
+          foreignField: "_id",
+          pipeline: [
+            { $project: { name: 1, slug: 1, icon: 1, image: 1 } }
+          ],
+          as: "categories",
+        },
+      },
+      // Convert string ingredient IDs to ObjectIds and lookup
+      {
+        $addFields: {
+          ingredientObjectIds: {
+            $map: {
+              input: { $ifNull: ["$ingredients", []] },
+              as: "id",
+              in: { $toObjectId: "$$id" }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: "product_ingredients",
+          localField: "ingredientObjectIds",
+          foreignField: "_id",
+          pipeline: [
+            { $project: { name: 1, slug: 1, icon: 1, image: 1 } }
+          ],
+          as: "ingredients",
+        },
+      },
+      {
+        $project: {
+          ingredientObjectIds: 0
+        }
+      },
       {
         $lookup: {
           from: "reviews",
@@ -598,7 +574,9 @@ class ProductService {
     const product = await Products.findOne({
       _id: productId,
       isDeleted: false,
-    }).lean();
+    })
+      .populate("categories", "name slug icon image")
+      .lean();
 
     if (!product) {
       throw new AppError("Product not found", 404);
@@ -613,6 +591,13 @@ class ProductService {
       .sort({ sortOrder: 1 })
       .lean();
 
+    // Get ingredient details and replace ingredients array with populated data
+    const ingredientDetails = await ProductIngredients.find({
+      _id: { $in: product.ingredients || [] },
+    })
+      .select("name slug icon image")
+      .lean();
+
     // Fetch product ingredients linked to this product (relationship is reversed)
     let linkedProductIngredients: any[] = [];
     linkedProductIngredients = await ProductIngredients.find({
@@ -623,28 +608,12 @@ class ProductService {
       .sort({ name: 1 })
       .lean();
 
-    // Build meta data if not present
-    const meta = product.meta || {
-      title: product.title,
-      description: product.description,
-      keywords: [
-        ...(product.categories || []),
-        ...(product.healthGoals || []),
-        ...product.ingredients,
-      ].join(", "),
-      ogImage: product.productImage,
-    };
-
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
+      ingredients: ingredientDetails, // Replace IDs with populated data
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
-      meta,
-      // Ensure nutritionTable exists (can be empty array)
-      nutritionTable: product.nutritionTable || [],
-      // Ensure sourceInfo exists
-      sourceInfo: product.sourceInfo || {},
     });
 
     return { product: enrichedProduct };
@@ -657,14 +626,26 @@ class ProductService {
     const product = await Products.findOne({
       slug,
       isDeleted: false,
-    }).lean();
+    })
+      .populate("categories", "name slug icon image")
+      .lean();
 
     if (!product) {
       throw new AppError("Product not found", 404);
     }
 
+    // Get ingredient details and replace ingredients array with populated data
+    const ingredientDetails = await ProductIngredients.find({
+      _id: { $in: product.ingredients || [] },
+    })
+      .select("name slug icon image")
+      .lean();
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
-    const enrichedProduct = this.calculateMonthlyAmounts(product);
+    const enrichedProduct = this.calculateMonthlyAmounts({
+      ...product,
+      ingredients: ingredientDetails, // Replace IDs with populated data
+    });
 
     return { product: enrichedProduct };
   }
@@ -680,7 +661,6 @@ class ProductService {
       slug,
       hasStandupPouch,
       standupPouchPrice,
-      standupPouchPrices,
       price,
       sachetPrices,
     } = data;
@@ -710,12 +690,9 @@ class ProductService {
 
     // Validate standupPouchPrice only if hasStandupPouch is being set to true
     // If hasStandupPouch is undefined, it means it's not being updated, so skip validation
-    if (hasStandupPouch === true && !standupPouchPrice && !standupPouchPrices) {
-      // Check if existing product already has standupPouchPrice (for backward compatibility)
-      if (
-        !existingProduct.standupPouchPrice &&
-        !existingProduct.standupPouchPrices
-      ) {
+    if (hasStandupPouch === true && !standupPouchPrice) {
+      // Check if existing product already has standupPouchPrice
+      if (!existingProduct.standupPouchPrice) {
         throw new AppError(
           "standupPouchPrice is required when hasStandupPouch is true",
           400
@@ -768,23 +745,6 @@ class ProductService {
         : [];
       const imagesToKeep = new Set(data.galleryImages);
       oldGalleryImages.forEach((oldUrl: string) => {
-        if (!imagesToKeep.has(oldUrl)) {
-          imagesToDelete.push(oldUrl);
-        }
-      });
-    }
-
-    // Check sachetImages - delete old ones that are not in new list
-    if (
-      data.sachetImages &&
-      Array.isArray(data.sachetImages) &&
-      existingProduct.sachetImages
-    ) {
-      const oldSachetImages = Array.isArray(existingProduct.sachetImages)
-        ? existingProduct.sachetImages
-        : [];
-      const imagesToKeep = new Set(data.sachetImages);
-      oldSachetImages.forEach((oldUrl: string) => {
         if (!imagesToKeep.has(oldUrl)) {
           imagesToDelete.push(oldUrl);
         }

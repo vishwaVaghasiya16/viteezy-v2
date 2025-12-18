@@ -414,6 +414,15 @@ export class ProductController {
         enrichedProduct.isMember = false;
       }
 
+      // Add is_liked field if user is authenticated
+      if (userId) {
+        const isInWishlist = await Wishlists.exists({
+          userId: new mongoose.Types.ObjectId(userId),
+          productId: new mongoose.Types.ObjectId(id),
+        });
+        enrichedProduct.is_liked = !!isInWishlist;
+      }
+
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
@@ -525,6 +534,15 @@ export class ProductController {
         enrichedProduct.isMember = true;
       } else {
         enrichedProduct.isMember = false;
+      }
+
+      // Add is_liked field if user is authenticated
+      if (userId) {
+        const isInWishlist = await Wishlists.exists({
+          userId: new mongoose.Types.ObjectId(userId),
+          productId: transformedProduct._id,
+        });
+        enrichedProduct.is_liked = !!isInWishlist;
       }
 
       res.status(200).json({
