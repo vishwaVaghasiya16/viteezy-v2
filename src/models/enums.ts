@@ -307,6 +307,12 @@ export enum SubscriptionCycle {
   DAYS_180 = 180,
 }
 
+// Session Status
+export enum SessionStatus {
+  ACTIVE = "Active",
+  REVOKED = "Revoked",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -353,3 +359,4 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
   SubscriptionCycle.DAYS_90,
   SubscriptionCycle.DAYS_180,
 ];
+export const SESSION_STATUS_VALUES = Object.values(SessionStatus);

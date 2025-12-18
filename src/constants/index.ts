@@ -20,7 +20,7 @@ export const HTTP_STATUS = {
   BAD_REQUEST: 400,
   /** 401 Unauthorized - Authentication required */
   UNAUTHORIZED: 401,
-  /** 403 Forbidden - Insufficient permissions */
+  /** 403 Forbidden - You are not authorized to perform this action. */
   FORBIDDEN: 403,
   /** 404 Not Found - Resource not found */
   NOT_FOUND: 404,
@@ -75,7 +75,7 @@ export const MESSAGES = {
     USER_ALREADY_EXISTS: "User with this email already exists",
     INVALID_TOKEN: "Invalid token",
     TOKEN_EXPIRED: "Token expired",
-    INSUFFICIENT_PERMISSIONS: "Insufficient permissions",
+    INSUFFICIENT_PERMISSIONS: "You are not authorized to perform this action.",
     ACCOUNT_DEACTIVATED: "Account is deactivated",
     VALIDATION_FAILED: "Validation failed",
     INTERNAL_SERVER_ERROR: "Internal Server Error",

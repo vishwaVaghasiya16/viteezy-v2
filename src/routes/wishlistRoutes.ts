@@ -1,14 +1,8 @@
 import { Router } from "express";
 import { wishlistController } from "@/controllers/wishlistController";
 import { authenticate } from "@/middleware/auth";
+import { validateJoi, validateQuery } from "@/middleware/joiValidation";
 import {
-  validateJoi,
-  validateParams,
-  validateQuery,
-} from "@/middleware/joiValidation";
-import {
-  updateWishlistItemBodySchema,
-  wishlistItemParamsSchema,
   wishlistPaginationQuerySchema,
   toggleWishlistItemSchema,
 } from "@/validation/wishlistValidation";
@@ -39,16 +33,6 @@ router.get(
   "/",
   validateQuery(wishlistPaginationQuerySchema),
   wishlistController.getItems
-);
-
-/**
- * Update wishlist item notes for current user
- */
-router.put(
-  "/:id",
-  validateParams(wishlistItemParamsSchema),
-  validateJoi(updateWishlistItemBodySchema),
-  wishlistController.updateItem
 );
 
 export default router;

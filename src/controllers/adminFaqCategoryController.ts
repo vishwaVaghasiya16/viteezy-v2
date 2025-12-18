@@ -42,10 +42,7 @@ class AdminFaqCategoryController {
       });
 
       if (existingSlug) {
-        throw new AppError(
-          "This slug is already in use. Please use a different slug.",
-          400
-        );
+        throw new AppError("This title is already in use.", 400);
       }
 
       // Check if category with same title.en and slug already exists
@@ -202,10 +199,7 @@ class AdminFaqCategoryController {
         });
 
         if (existingSlug) {
-          throw new AppError(
-            "This slug is already in use. Please use a different slug.",
-            400
-          );
+          throw new AppError("This title is already in use.", 400);
         }
 
         finalSlug = baseSlug;
@@ -220,10 +214,7 @@ class AdminFaqCategoryController {
         });
 
         if (existingSlug) {
-          throw new AppError(
-            "This slug is already in use. Please use a different slug.",
-            400
-          );
+          throw new AppError("This title is already in use.", 400);
         }
 
         finalSlug = baseSlug;

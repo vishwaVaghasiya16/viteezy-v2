@@ -3,7 +3,6 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IWishlistItem extends Document {
   userId: mongoose.Types.ObjectId;
   productId: mongoose.Types.ObjectId;
-  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,12 +19,6 @@ const WishlistSchema = new Schema<IWishlistItem>(
       type: Schema.Types.ObjectId,
       ref: "products",
       required: true,
-    },
-    notes: {
-      type: String,
-      trim: true,
-      default: null,
-      maxLength: 500,
     },
   },
   {
