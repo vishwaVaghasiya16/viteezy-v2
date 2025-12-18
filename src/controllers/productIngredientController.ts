@@ -5,6 +5,7 @@ import { AppError } from "@/utils/AppError";
 import { ProductIngredients, Products } from "@/models/commerce";
 import { IProductIngredient } from "@/models/commerce/productIngredients.model";
 import { User } from "@/models/index.model";
+import { ProductStatus } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -245,7 +246,7 @@ class ProductIngredientController {
       const product = await Products.findOne({
         _id: productId,
         isDeleted: false,
-        status: { $ne: "Hidden" },
+        status: { $ne: ProductStatus.HIDDEN },
       }).lean();
 
       if (!product) {

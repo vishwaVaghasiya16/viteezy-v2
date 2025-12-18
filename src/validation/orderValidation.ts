@@ -5,6 +5,7 @@ import {
   PAYMENT_STATUS_VALUES,
   PAYMENT_METHOD_VALUES,
   ORDER_PLAN_TYPE_VALUES,
+  DISCOUNT_TYPE_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
@@ -85,7 +86,7 @@ const membershipSchema = Joi.object(
     level: Joi.string().trim().optional(),
     label: Joi.string().trim().optional(),
     discountType: Joi.string()
-      .valid("Percentage", "Fixed")
+      .valid(...DISCOUNT_TYPE_VALUES)
       .when("isMember", {
         is: true,
         then: Joi.required(),

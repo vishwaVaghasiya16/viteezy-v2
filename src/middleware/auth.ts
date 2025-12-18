@@ -270,7 +270,7 @@ export const authorize = (...roles: string[]) => {
     if (!roles.includes(req.user.role)) {
       next(
         new AppError(
-          "Insufficient permissions",
+          "You are not authorized to perform this action.",
           HTTP_STATUS.FORBIDDEN,
           true,
           "AuthorizationError"

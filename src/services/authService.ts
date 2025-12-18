@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 import { User, OTP, AuthSessions } from "../models/index.model";
-import { OTPType, OTPStatus } from "../models/enums";
+import { OTPType, OTPStatus, SessionStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { emailService } from "./emailService";
@@ -256,7 +256,7 @@ class AuthService {
         OTPType.EMAIL_VERIFICATION
       );
 
-      this.sendWelcomeEmailAsync(email, existingUser.name);
+      // this.sendWelcomeEmailAsync(email, existingUser.name);
 
       // Generate member ID if user doesn't have one
       if (!existingUser.memberId) {
@@ -507,7 +507,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "Active",
+          status: SessionStatus.ACTIVE,
           revoked: false,
           deviceInfo: deviceInfo || "Web",
         },
@@ -595,7 +595,7 @@ class AuthService {
       $push: {
         sessionIds: {
           sessionId: sessionId,
-          status: "Active",
+          status: SessionStatus.ACTIVE,
           revoked: false,
           deviceInfo: deviceInfo,
         },
@@ -789,12 +789,19 @@ class AuthService {
         throw new AppError("Invalid or expired reset token", 400);
       }
 
-      // Update password (will be hashed by pre-save hook)
-      userWithToken.password = password;
-      // Clear reset token
-      userWithToken.passwordResetToken = undefined;
-      userWithToken.passwordResetTokenExpires = undefined;
-      await userWithToken.save(); // This will trigger the pre-save hook
+      // Hash the new password (same way as pre-save hook)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Update only password and reset token fields using updateOne to avoid validating other fields like sessionIds
+      await User.updateOne(
+        { _id: userWithToken._id },
+        {
+          password: hashedPassword,
+          passwordResetToken: undefined,
+          passwordResetTokenExpires: undefined,
+        }
+      );
 
       // Expire any pending password reset OTPs
       await OTP.updateMany(
@@ -846,12 +853,19 @@ class AuthService {
         );
       }
 
-      // Update password (will be hashed by pre-save hook)
-      user.password = password;
-      // Clear reset token if exists
-      user.passwordResetToken = undefined;
-      user.passwordResetTokenExpires = undefined;
-      await user.save(); // This will trigger the pre-save hook
+      // Hash the new password (same way as pre-save hook)
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Update only password and reset token fields using updateOne to avoid validating other fields like sessionIds
+      await User.updateOne(
+        { _id: user._id },
+        {
+          password: hashedPassword,
+          passwordResetToken: undefined,
+          passwordResetTokenExpires: undefined,
+        }
+      );
 
       // Mark the verified OTP as used
       await OTP.findByIdAndUpdate(verifiedOTP._id, {
@@ -1102,7 +1116,7 @@ class AuthService {
         $push: {
           sessionIds: {
             sessionId: newSessionId,
-            status: "Active",
+            status: SessionStatus.ACTIVE,
             revoked: false,
             deviceInfo,
           },

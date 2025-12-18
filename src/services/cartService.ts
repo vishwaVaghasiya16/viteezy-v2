@@ -3,8 +3,12 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
-import { calculateMemberPrice, ProductPriceSource } from "../utils/membershipPrice";
+import {
+  calculateMemberPrice,
+  ProductPriceSource,
+} from "../utils/membershipPrice";
 import mongoose from "mongoose";
+import { ProductStatus } from "../models/enums";
 
 interface AddCartItemData {
   productId: string;
@@ -68,7 +72,11 @@ class CartService {
     const totalAmount = subtotalAmount + taxAmount;
 
     return {
-      subtotal: { currency, amount: Math.round(subtotalAmount * 100) / 100, taxRate },
+      subtotal: {
+        currency,
+        amount: Math.round(subtotalAmount * 100) / 100,
+        taxRate,
+      },
       tax: { currency, amount: Math.round(taxAmount * 100) / 100, taxRate },
       total: { currency, amount: Math.round(totalAmount * 100) / 100, taxRate },
     };
@@ -121,7 +129,7 @@ class CartService {
     const product = await Products.findOne({
       _id: new mongoose.Types.ObjectId(productId),
       isDeleted: false,
-      status: "Active",
+      status: ProductStatus.ACTIVE,
     }).lean();
 
     if (!product) {
@@ -151,10 +159,14 @@ class CartService {
 
       // Check stock if tracking is enabled
       if (variant.inventory.trackQuantity) {
-        availableQuantity = variant.inventory.quantity - variant.inventory.reserved;
+        availableQuantity =
+          variant.inventory.quantity - variant.inventory.reserved;
 
         // Validate quantity doesn't exceed available stock
-        if (!variant.inventory.allowBackorder && requestedQuantity > availableQuantity) {
+        if (
+          !variant.inventory.allowBackorder &&
+          requestedQuantity > availableQuantity
+        ) {
           throw new AppError(
             `Insufficient stock. Available: ${availableQuantity}, Requested: ${requestedQuantity}`,
             400
@@ -172,7 +184,10 @@ class CartService {
                 ? "This item is out of stock"
                 : `Only ${availableQuantity} items available in stock`,
           };
-        } else if (requestedQuantity > availableQuantity - this.LOW_STOCK_THRESHOLD) {
+        } else if (
+          requestedQuantity >
+          availableQuantity - this.LOW_STOCK_THRESHOLD
+        ) {
           stockWarning = {
             available: availableQuantity,
             requested: requestedQuantity,
@@ -208,7 +223,8 @@ class CartService {
 
         let stockWarning: any = undefined;
         if (variant && variant.inventory.trackQuantity) {
-          const available = variant.inventory.quantity - variant.inventory.reserved;
+          const available =
+            variant.inventory.quantity - variant.inventory.reserved;
           if (available <= this.LOW_STOCK_THRESHOLD) {
             stockWarning = {
               available,
@@ -262,15 +278,14 @@ class CartService {
     const { productId, variantId, quantity } = data;
 
     // Validate and get pricing
-    const { product, variant, price, stockWarning } = await this.validateAndGetPricing(
-      productId,
-      variantId,
-      quantity
-    );
+    const { product, variant, price, stockWarning } =
+      await this.validateAndGetPricing(productId, variantId, quantity);
 
     const cart = await this.getOrCreateCart(userId);
     const productObjectId = new mongoose.Types.ObjectId(productId);
-    const variantObjectId = variantId ? new mongoose.Types.ObjectId(variantId) : null;
+    const variantObjectId = variantId
+      ? new mongoose.Types.ObjectId(variantId)
+      : null;
 
     // Check if item already exists in cart
     const existingItemIndex = cart.items.findIndex(
@@ -289,7 +304,8 @@ class CartService {
 
       // Re-validate stock with new total quantity
       if (variant && variant.inventory.trackQuantity) {
-        const available = variant.inventory.quantity - variant.inventory.reserved;
+        const available =
+          variant.inventory.quantity - variant.inventory.reserved;
         if (!variant.inventory.allowBackorder && newQuantity > available) {
           throw new AppError(
             `Cannot add more items. Available: ${available}, Current in cart: ${existingItem.quantity}, Requested additional: ${quantity}`,
@@ -342,7 +358,10 @@ class CartService {
     return {
       cart: updatedCart,
       warnings,
-      message: existingItemIndex >= 0 ? "Cart item quantity updated" : "Item added to cart",
+      message:
+        existingItemIndex >= 0
+          ? "Cart item quantity updated"
+          : "Item added to cart",
     };
   }
 
@@ -367,7 +386,8 @@ class CartService {
     if (item.variantId) {
       const variant = await ProductVariants.findById(item.variantId).lean();
       if (variant && variant.inventory.trackQuantity) {
-        const available = variant.inventory.quantity - variant.inventory.reserved;
+        const available =
+          variant.inventory.quantity - variant.inventory.reserved;
         if (!variant.inventory.allowBackorder && quantity > available) {
           throw new AppError(
             `Insufficient stock. Available: ${available}, Requested: ${quantity}`,
@@ -404,7 +424,8 @@ class CartService {
     if (item.variantId) {
       const variant = await ProductVariants.findById(item.variantId).lean();
       if (variant && variant.inventory.trackQuantity) {
-        const available = variant.inventory.quantity - variant.inventory.reserved;
+        const available =
+          variant.inventory.quantity - variant.inventory.reserved;
         if (available <= this.LOW_STOCK_THRESHOLD) {
           warnings.push({
             productId: item.productId.toString(),
@@ -431,7 +452,10 @@ class CartService {
   /**
    * Remove item from cart
    */
-  async removeItem(userId: string, itemIndex: number): Promise<{ cart: any; message: string }> {
+  async removeItem(
+    userId: string,
+    itemIndex: number
+  ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
 
     if (itemIndex < 0 || itemIndex >= (cart.items || []).length) {
@@ -546,7 +570,11 @@ class CartService {
     // Validate each cart item
     for (const item of cart.items) {
       const product = await Products.findById(item.productId).lean();
-      if (!product || product.isDeleted || product.status !== "Active") {
+      if (
+        !product ||
+        product.isDeleted ||
+        product.status !== ProductStatus.ACTIVE
+      ) {
         errors.push(`Product ${item.productId} is not available`);
         continue;
       }
@@ -562,12 +590,15 @@ class CartService {
 
       // Get price source (variant price takes precedence)
       const productMetadata = (product as any).metadata || {};
-      const variantMetadata = variant ? ((variant as any).metadata || {}) : {};
-      
+      const variantMetadata = variant ? (variant as any).metadata || {} : {};
+
       const priceSource: ProductPriceSource = {
         price: variant?.price || product.price,
-        memberPrice: variantMetadata?.memberPrice || productMetadata?.memberPrice,
-        memberDiscountOverride: variantMetadata?.memberDiscountOverride || productMetadata?.memberDiscountOverride,
+        memberPrice:
+          variantMetadata?.memberPrice || productMetadata?.memberPrice,
+        memberDiscountOverride:
+          variantMetadata?.memberDiscountOverride ||
+          productMetadata?.memberDiscountOverride,
       };
 
       // Calculate member price
@@ -586,11 +617,16 @@ class CartService {
         variantId: item.variantId?.toString(),
         quantity: item.quantity,
         originalPrice: { ...priceSource.price },
-        memberPrice: memberPriceResult.isMember ? memberPriceResult.memberPrice : undefined,
-        discount: memberPriceResult.isMember && memberPriceResult.discountAmount > 0 ? {
-          amount: memberPriceResult.discountAmount,
-          percentage: memberPriceResult.discountPercentage,
-        } : undefined,
+        memberPrice: memberPriceResult.isMember
+          ? memberPriceResult.memberPrice
+          : undefined,
+        discount:
+          memberPriceResult.isMember && memberPriceResult.discountAmount > 0
+            ? {
+                amount: memberPriceResult.discountAmount,
+                percentage: memberPriceResult.discountPercentage,
+              }
+            : undefined,
         isAvailable: true,
         isValid: true,
         isMember: memberPriceResult.isMember,
@@ -598,7 +634,10 @@ class CartService {
     }
 
     // Calculate membership discount
-    const membershipDiscountAmount = Math.max(0, originalSubtotal - memberSubtotal);
+    const membershipDiscountAmount = Math.max(
+      0,
+      originalSubtotal - memberSubtotal
+    );
     const finalSubtotal = memberSubtotal;
 
     // Use existing cart tax and shipping (or calculate if needed)
@@ -624,7 +663,8 @@ class CartService {
         },
         membershipDiscount: {
           currency,
-          amount: Math.round((membershipDiscountAmount + Number.EPSILON) * 100) / 100,
+          amount:
+            Math.round((membershipDiscountAmount + Number.EPSILON) * 100) / 100,
           taxRate: 0,
         },
         tax: {
@@ -649,4 +689,3 @@ class CartService {
 }
 
 export const cartService = new CartService();
-

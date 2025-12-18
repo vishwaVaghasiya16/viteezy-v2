@@ -1,6 +1,7 @@
 import Joi from "joi";
 import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
+import { DISCOUNT_TYPE_VALUES } from "@/models/enums";
 
 // Joi Schemas
 const objectIdSchema = Joi.string()
@@ -39,7 +40,7 @@ const membershipSchema = Joi.object(
     level: Joi.string().trim().optional(),
     label: Joi.string().trim().optional(),
     discountType: Joi.string()
-      .valid("Percentage", "Fixed")
+      .valid(...DISCOUNT_TYPE_VALUES)
       .when("isMember", {
         is: true,
         then: Joi.required(),
