@@ -49,13 +49,15 @@ router.post(
     upload.fields([
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
+      { name: "founder_image", maxCount: 1 },
+      { name: "people_images", maxCount: 20 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, founder_image, people_images`,
                 400
               )
             );
@@ -84,6 +86,8 @@ router.post(
  * @body {Object} [people] - People section data
  * @body {File} [banner_image] - Banner image file
  * @body {File} [meet_brains_main_image] - Meet brains main image file
+ * @body {File} [founder_image] - Founder image file
+ * @body {File[]} [people_images] - People section images
  */
 router.put(
   "/",
@@ -91,13 +95,15 @@ router.put(
     upload.fields([
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
+      { name: "founder_image", maxCount: 1 },
+      { name: "people_images", maxCount: 20 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, founder_image, people_images`,
                 400
               )
             );

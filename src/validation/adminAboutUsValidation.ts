@@ -90,6 +90,7 @@ const bannerSectionSchema = Joi.object({
 
 // Founder Quote Section Schema
 const founderQuoteSectionSchema = Joi.object({
+  founder_image: mediaSchema.label("Founder image"),
   founder_quote_text: i18nTextSchema.label("Founder quote text"),
   founder_name: i18nStringSchema.label("Founder name"),
   founder_designation: i18nStringSchema.label("Founder designation"),
@@ -127,6 +128,7 @@ const timelineSectionSchema = Joi.object({
 const peopleSectionSchema = Joi.object({
   title: i18nStringSchema.label("People section title"),
   subtitle: i18nTextSchema.label("People section subtitle"),
+  images: Joi.array().items(mediaSchema).optional().label("People images"),
 });
 
 // Upsert About Us Schema

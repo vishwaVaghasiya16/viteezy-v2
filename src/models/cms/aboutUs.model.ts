@@ -47,6 +47,7 @@ const BannerSectionSchema = new Schema<BannerSection>(
 
 // Founder Quote Section
 export interface FounderQuoteSection {
+  founder_image: MediaType;
   founder_quote_text: I18nTextType;
   founder_name: I18nStringType;
   founder_designation: I18nStringType;
@@ -55,6 +56,9 @@ export interface FounderQuoteSection {
 
 const FounderQuoteSectionSchema = new Schema<FounderQuoteSection>(
   {
+    founder_image: {
+      type: MediaSchema,
+    },
     founder_quote_text: {
       type: I18nText,
       default: () => ({}),
@@ -158,6 +162,7 @@ const TimelineSectionSchema = new Schema<TimelineSection>(
 export interface PeopleSection {
   title: I18nStringType;
   subtitle: I18nTextType;
+  images: MediaType[];
 }
 
 const PeopleSectionSchema = new Schema<PeopleSection>(
@@ -169,6 +174,10 @@ const PeopleSectionSchema = new Schema<PeopleSection>(
     subtitle: {
       type: I18nText,
       default: () => ({}),
+    },
+    images: {
+      type: [MediaSchema],
+      default: [],
     },
   },
   { _id: false }
