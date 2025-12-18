@@ -1,4 +1,4 @@
-import MarkdownIt from "markdown-it";
+import MarkdownIt = require("markdown-it");
 
 /**
  * MarkdownIt instance with default options
