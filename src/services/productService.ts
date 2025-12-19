@@ -228,6 +228,100 @@ interface UpdateProductData {
 
 class ProductService {
   /**
+   * Process price object: calculate savingsPercentage and totalAmount
+   */
+  private processPriceObject(priceObj: any): any {
+    if (!priceObj || typeof priceObj !== "object") {
+      return priceObj;
+    }
+
+    const amount = priceObj.amount || 0;
+    const discountedPrice = priceObj.discountedPrice;
+    const taxRate = priceObj.taxRate || 0;
+
+    // Calculate savingsPercentage if discountedPrice is provided
+    let savingsPercentage = priceObj.savingsPercentage;
+    if (discountedPrice !== undefined && amount > 0) {
+      savingsPercentage = Math.round(
+        ((amount - discountedPrice) / amount) * 100 * 100
+      ) / 100; // Round to 2 decimal places
+    }
+
+    // Calculate totalAmount
+    // If totalAmount is already provided, use it
+    // Otherwise, calculate from discountedPrice (if provided) or amount, then add tax
+    let totalAmount = priceObj.totalAmount;
+    if (totalAmount === undefined) {
+      const baseAmount = discountedPrice !== undefined ? discountedPrice : amount;
+      totalAmount = Math.round((baseAmount * (1 + taxRate)) * 100) / 100;
+    }
+
+    const result: any = {
+      ...priceObj,
+      amount,
+      taxRate,
+      savingsPercentage: savingsPercentage !== undefined ? savingsPercentage : 0,
+      totalAmount,
+    };
+
+    // Only include discountedPrice if it's provided (not undefined)
+    if (discountedPrice !== undefined && discountedPrice !== null) {
+      result.discountedPrice = discountedPrice;
+    }
+
+    return result;
+  }
+
+  /**
+   * Process sachetPrices: calculate savingsPercentage and totalAmount for all periods
+   */
+  private processSachetPrices(sachetPrices: any): any {
+    if (!sachetPrices || typeof sachetPrices !== "object") {
+      return sachetPrices;
+    }
+
+    const processed: any = {};
+
+    // Process subscription periods
+    const periods = ["thirtyDays", "sixtyDays", "ninetyDays", "oneEightyDays"];
+    for (const period of periods) {
+      if (sachetPrices[period]) {
+        processed[period] = this.processPriceObject(sachetPrices[period]);
+      }
+    }
+
+    // Process oneTime
+    if (sachetPrices.oneTime) {
+      processed.oneTime = {
+        count30: this.processPriceObject(sachetPrices.oneTime.count30),
+        count60: this.processPriceObject(sachetPrices.oneTime.count60),
+      };
+    }
+
+    return processed;
+  }
+
+  /**
+   * Process standupPouchPrice: calculate savingsPercentage and totalAmount
+   */
+  private processStandupPouchPrice(standupPouchPrice: any): any {
+    if (!standupPouchPrice || typeof standupPouchPrice !== "object") {
+      return standupPouchPrice;
+    }
+
+    // If it has count30 and count60 structure
+    if (standupPouchPrice.count30 || standupPouchPrice.count60) {
+      return {
+        count30: this.processPriceObject(standupPouchPrice.count30),
+        count60: this.processPriceObject(standupPouchPrice.count60),
+      };
+    }
+
+    // If it's a simple price object
+    return this.processPriceObject(standupPouchPrice);
+  }
+
+  /**
    * Create new product
    */
   async createProduct(
@@ -276,13 +370,21 @@ class ProductService {
       );
     }
 
+    // Process sachetPrices: calculate savingsPercentage and totalAmount
+    const processedSachetPrices = sachetPrices
+      ? this.processSachetPrices(sachetPrices)
+      : sachetPrices;
+
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
-    if (!finalPrice && sachetPrices && sachetPrices.thirtyDays) {
-      const thirtyDaysPrice = sachetPrices.thirtyDays;
+    if (!finalPrice && processedSachetPrices && processedSachetPrices.thirtyDays) {
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      const baseAmount = thirtyDaysPrice.discountedPrice !== undefined
+        ? thirtyDaysPrice.discountedPrice
+        : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
         currency: thirtyDaysPrice.currency || "EUR",
-        amount: thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0,
+        amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
     }
@@ -298,11 +400,17 @@ class ProductService {
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
 
+    // Process standupPouchPrice: calculate savingsPercentage and totalAmount
+    const processedStandupPouchPrice = normalizedStandupPouchPrice
+      ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
+      : normalizedStandupPouchPrice;
+
     // Create product with generated slug and derived price
     const product = await Products.create({
       ...data,
       price: finalPrice,
-      standupPouchPrice: normalizedStandupPouchPrice,
+      sachetPrices: processedSachetPrices,
+      standupPouchPrice: processedStandupPouchPrice,
       slug: finalSlug,
     });
 
@@ -700,6 +808,11 @@ class ProductService {
       }
     }
 
+    // Process sachetPrices: calculate savingsPercentage and totalAmount (if being updated)
+    const processedSachetPrices = sachetPrices !== undefined
+      ? this.processSachetPrices(sachetPrices)
+      : sachetPrices;
+
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
     if (
@@ -711,13 +824,21 @@ class ProductService {
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
 
+    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (if being updated)
+    const processedStandupPouchPrice = normalizedStandupPouchPrice !== undefined
+      ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
+      : normalizedStandupPouchPrice;
+
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
-    if (!finalPrice && sachetPrices && sachetPrices.thirtyDays) {
-      const thirtyDaysPrice = sachetPrices.thirtyDays;
+    if (!finalPrice && processedSachetPrices && processedSachetPrices.thirtyDays) {
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      const baseAmount = thirtyDaysPrice.discountedPrice !== undefined
+        ? thirtyDaysPrice.discountedPrice
+        : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
         currency: thirtyDaysPrice.currency || "EUR",
-        amount: thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0,
+        amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
     }
@@ -782,9 +903,14 @@ class ProductService {
       }
     });
 
-    // Handle normalized standupPouchPrice if provided
+    // Handle processed sachetPrices if provided
+    if (sachetPrices !== undefined) {
+      updateData.sachetPrices = processedSachetPrices;
+    }
+
+    // Handle processed standupPouchPrice if provided
     if (standupPouchPrice !== undefined) {
-      updateData.standupPouchPrice = normalizedStandupPouchPrice;
+      updateData.standupPouchPrice = processedStandupPouchPrice;
     }
 
     // Handle derived price if sachetPrices is being updated
@@ -1033,41 +1159,62 @@ class ProductService {
    * Calculate monthly amounts for all subscription prices in a product
    */
   private calculateMonthlyAmounts(product: any): any {
-    if (!product.sachetPrices) {
-      return product;
+    // Preserve all fields including discountedPrice
+    const result = { ...product };
+
+    if (product.sachetPrices) {
+      const sachetPrices = { ...product.sachetPrices };
+
+      // Calculate monthly amount for each subscription period
+      const periods = [
+        "thirtyDays",
+        "sixtyDays",
+        "ninetyDays",
+        "oneEightyDays",
+      ] as const;
+
+      periods.forEach((period) => {
+        if (sachetPrices[period]) {
+          const periodData = { ...sachetPrices[period] }; // Preserve discountedPrice
+          // Only calculate if amount is not already set and totalAmount exists
+          if (
+            !periodData.amount &&
+            periodData.totalAmount &&
+            periodData.durationDays
+          ) {
+            periodData.amount = this.calculateMonthlyAmount(
+              periodData.totalAmount,
+              periodData.durationDays
+            );
+          }
+          sachetPrices[period] = periodData;
+        }
+      });
+
+      // Process oneTime if exists
+      if (sachetPrices.oneTime) {
+        sachetPrices.oneTime = {
+          count30: { ...sachetPrices.oneTime.count30 }, // Preserve discountedPrice
+          count60: { ...sachetPrices.oneTime.count60 }, // Preserve discountedPrice
+        };
+      }
+
+      result.sachetPrices = sachetPrices;
     }
 
-    const sachetPrices = { ...product.sachetPrices };
-
-    // Calculate monthly amount for each subscription period
-    const periods = [
-      "thirtyDays",
-      "sixtyDays",
-      "ninetyDays",
-      "oneEightyDays",
-    ] as const;
-
-    periods.forEach((period) => {
-      if (sachetPrices[period]) {
-        const periodData = sachetPrices[period];
-        // Only calculate if amount is not already set and totalAmount exists
-        if (
-          !periodData.amount &&
-          periodData.totalAmount &&
-          periodData.durationDays
-        ) {
-          periodData.amount = this.calculateMonthlyAmount(
-            periodData.totalAmount,
-            periodData.durationDays
-          );
-        }
+    // Preserve standupPouchPrice with discountedPrice
+    if (product.standupPouchPrice) {
+      if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+        result.standupPouchPrice = {
+          count30: { ...product.standupPouchPrice.count30 }, // Preserve discountedPrice
+          count60: { ...product.standupPouchPrice.count60 }, // Preserve discountedPrice
+        };
+      } else {
+        result.standupPouchPrice = { ...product.standupPouchPrice }; // Preserve discountedPrice
       }
-    });
+    }
 
-    return {
-      ...product,
-      sachetPrices,
-    };
+    return result;
   }
 
   private buildSortStage(

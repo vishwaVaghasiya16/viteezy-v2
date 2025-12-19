@@ -34,6 +34,7 @@ const SubscriptionPriceWithMetadataSchema =
     {
       currency: { type: String, default: "EUR" },
       amount: { type: Number, optional: true }, // Optional - will be calculated from totalAmount
+      discountedPrice: { type: Number, min: 0, optional: true },
       taxRate: { type: Number, default: 0 },
       totalAmount: { type: Number, optional: true },
       durationDays: { type: Number, optional: true },
@@ -59,6 +60,7 @@ const SachetOneTimeCapsuleOptionsSchema =
           {
             currency: { type: String, default: "EUR" },
             amount: { type: Number, required: true },
+            discountedPrice: { type: Number, min: 0, optional: true },
             taxRate: { type: Number, default: 0 },
             capsuleCount: { type: Number, optional: true },
           },
@@ -70,6 +72,7 @@ const SachetOneTimeCapsuleOptionsSchema =
           {
             currency: { type: String, default: "EUR" },
             amount: { type: Number, required: true },
+            discountedPrice: { type: Number, min: 0, optional: true },
             taxRate: { type: Number, default: 0 },
             capsuleCount: { type: Number, optional: true },
           },
@@ -123,6 +126,7 @@ export interface SpecificationItem {
   title: string;
   descr: string;
   image: string;
+  imageMobile?: string;
 }
 
 export interface Specification {
@@ -295,6 +299,7 @@ const ProductSchema = new Schema<IProduct>(
             title: { type: String, trim: true, default: null },
             descr: { type: String, trim: true, default: null },
             image: { type: String, trim: true, default: null },
+            imageMobile: { type: String, trim: true, default: null },
             _id: false,
           },
         ],

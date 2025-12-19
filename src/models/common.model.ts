@@ -58,6 +58,7 @@ export interface AddressSnapshotType {
 export interface PriceType {
   currency: string;
   amount: number;
+  discountedPrice?: number;
   taxRate: number;
 }
 
@@ -138,6 +139,7 @@ export const PriceSchema = new Schema<PriceType>(
       uppercase: true,
     },
     amount: { type: Number, min: 0, default: 0 },
+    discountedPrice: { type: Number, min: 0, optional: true },
     taxRate: { type: Number, min: 0, max: 1, default: 0 },
   },
   { _id: false }

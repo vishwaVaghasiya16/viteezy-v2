@@ -144,11 +144,14 @@ const priceSchema = Joi.object({
   });
 
 // Extended price schema for subscription periods with additional metadata
-// amount is optional if totalAmount is provided
 const subscriptionPriceSchema = priceSchema
   .keys({
-    amount: Joi.number().min(0).optional().messages({
+    amount: Joi.number().min(0).required().messages({
       "number.min": "Amount must be greater than or equal to 0",
+      "any.required": "Amount is required",
+    }),
+    discountedPrice: Joi.number().min(0).optional().messages({
+      "number.min": "Discounted price must be greater than or equal to 0",
     }),
     totalAmount: Joi.number().min(0).optional().messages({
       "number.min": "Total amount must be greater than or equal to 0",
@@ -169,10 +172,6 @@ const subscriptionPriceSchema = priceSchema
     icon: Joi.string().trim().uri().optional().messages({
       "string.uri": "Icon must be a valid URL",
     }),
-  })
-  .or("amount", "totalAmount")
-  .messages({
-    "object.missing": "Either amount or totalAmount must be provided",
   });
 
 const variantSchema = Joi.string()
@@ -189,6 +188,9 @@ const hasStandupPouchSchema = Joi.boolean().optional().default(false);
 const sachetOneTimeCapsuleOptionsSchema = Joi.object({
   count30: priceSchema
     .keys({
+      discountedPrice: Joi.number().min(0).optional().messages({
+        "number.min": "Discounted price must be greater than or equal to 0",
+      }),
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
@@ -197,6 +199,9 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
     .required(),
   count60: priceSchema
     .keys({
+      discountedPrice: Joi.number().min(0).optional().messages({
+        "number.min": "Discounted price must be greater than or equal to 0",
+      }),
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
@@ -282,6 +287,7 @@ const specificationItemSchema = Joi.object({
   title: Joi.string().trim().required(),
   descr: Joi.string().trim().required(),
   image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
+  imageMobile: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
 });
 
 const specificationSchema = Joi.object({
@@ -342,13 +348,14 @@ export const createProductSchema = Joi.object({
   }
   // If price is not provided and sachetPrices exists, set price from sachetPrices.thirtyDays
   if (!value.price && value.sachetPrices && value.sachetPrices.thirtyDays) {
+    const thirtyDays = value.sachetPrices.thirtyDays;
+    const baseAmount = thirtyDays.discountedPrice !== undefined
+      ? thirtyDays.discountedPrice
+      : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: value.sachetPrices.thirtyDays.currency || "EUR",
-      amount:
-        value.sachetPrices.thirtyDays.amount ||
-        value.sachetPrices.thirtyDays.totalAmount ||
-        0,
-      taxRate: value.sachetPrices.thirtyDays.taxRate || 0,
+      currency: thirtyDays.currency || "EUR",
+      amount: baseAmount,
+      taxRate: thirtyDays.taxRate || 0,
     };
   }
   return value;
@@ -391,13 +398,14 @@ export const updateProductSchema = Joi.object({
   }
   // If price is not provided and sachetPrices is being updated, derive price from sachetPrices.thirtyDays
   if (!value.price && value.sachetPrices && value.sachetPrices.thirtyDays) {
+    const thirtyDays = value.sachetPrices.thirtyDays;
+    const baseAmount = thirtyDays.discountedPrice !== undefined
+      ? thirtyDays.discountedPrice
+      : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: value.sachetPrices.thirtyDays.currency || "EUR",
-      amount:
-        value.sachetPrices.thirtyDays.amount ||
-        value.sachetPrices.thirtyDays.totalAmount ||
-        0,
-      taxRate: value.sachetPrices.thirtyDays.taxRate || 0,
+      currency: thirtyDays.currency || "EUR",
+      amount: baseAmount,
+      taxRate: thirtyDays.taxRate || 0,
     };
   }
   return value;

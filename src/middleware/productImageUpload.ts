@@ -72,6 +72,22 @@ export const handleProductImageUpload = async (
         }
         req.body.specification.items[i - 1].image = imageUrl;
       }
+
+      // Handle specification item mobile images (1-4)
+      const mobileFieldName = `specificationItemImagemobile${i}` as keyof typeof files;
+      if (files?.[mobileFieldName] && files[mobileFieldName].length > 0) {
+        const mobileImageUrl = await fileStorageService.uploadFile("products", files[mobileFieldName][0]);
+        if (!req.body.specification) {
+          req.body.specification = {};
+        }
+        if (!req.body.specification.items) {
+          req.body.specification.items = [];
+        }
+        if (!req.body.specification.items[i - 1]) {
+          req.body.specification.items[i - 1] = {};
+        }
+        req.body.specification.items[i - 1].imageMobile = mobileImageUrl;
+      }
     }
 
     next();

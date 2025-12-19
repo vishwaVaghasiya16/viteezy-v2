@@ -100,6 +100,22 @@ const transformProductForLanguage = (
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
+    // Transform ingredients if they exist
+    ingredients: product.ingredients?.map((ingredient: any) => ({
+      ...ingredient,
+      name: getTranslatedString(ingredient.name, lang),
+      description: getTranslatedText(ingredient.description, lang),
+    })) || product.ingredients || [],
+    // Transform categories if they exist
+    categories: product.categories?.map((category: any) => ({
+      ...category,
+      name: getTranslatedString(category.name, lang),
+      description: getTranslatedString(category.description, lang),
+      image: category.image ? {
+        ...category.image,
+        alt: getTranslatedString(category.image.alt, lang),
+      } : category.image,
+    })) || product.categories || [],
     // Transform variants if they exist
     variants:
       product.variants?.map((variant: any) => ({

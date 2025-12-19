@@ -176,7 +176,7 @@ export const parseProductFormData = (
       
       // Filter out empty items
       req.body.specification.items = req.body.specification.items.filter(
-        (item: any) => item && (item.title || item.descr || item.image)
+        (item: any) => item && (item.title || item.descr || item.image || item.imageMobile)
       );
     }
 
