@@ -11,3 +11,4 @@ export { GeneralSettings } from "./generalSettings.model";
 export { LandingPages } from "./landingPage.model";
 export { TeamMembers } from "./teamMembers.model";
 export { AboutUs } from "./aboutUs.model";
+export { OurTeamPage } from "./ourTeamPage.model";
