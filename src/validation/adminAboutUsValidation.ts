@@ -60,7 +60,6 @@ const baseMediaSchema = Joi.object({
     .valid(...MEDIA_TYPE_VALUES)
     .optional(),
   url: Joi.string().uri().trim().allow("", null),
-  alt: baseI18nStringSchema.optional(),
   sortOrder: Joi.number().integer().min(0).optional(),
 });
 

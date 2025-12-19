@@ -71,10 +71,10 @@ const i18nTextSchema = withJsonSupport(baseI18nTextSchema, {
 // Helper to support array as JSON string in multipart/form-data
 const productsArraySchema = Joi.alternatives()
   .try(
-    Joi.array().items(Joi.string().pattern(objectIdPattern)).min(1).required(),
+    Joi.array().items(Joi.string().pattern(objectIdPattern)).default([]),
     Joi.string().custom((value, helpers) => {
       if (!value || value.trim() === "") {
-        return helpers.error("any.required");
+        return []; // Return empty array if empty string
       }
       try {
         const parsed = JSON.parse(value.trim());
@@ -83,17 +83,15 @@ const productsArraySchema = Joi.alternatives()
             message: "Products must be an array",
           });
         }
-        if (parsed.length === 0) {
-          return helpers.error("any.invalid", {
-            message: "At least one product is required",
-          });
-        }
-        // Validate each item is a valid ObjectId
-        for (const item of parsed) {
-          if (!objectIdPattern.test(item)) {
-            return helpers.error("any.invalid", {
-              message: `Invalid product ID: ${item}`,
-            });
+        // Allow empty array, just validate ObjectIds if present
+        if (parsed.length > 0) {
+          // Validate each item is a valid ObjectId
+          for (const item of parsed) {
+            if (!objectIdPattern.test(item)) {
+              return helpers.error("any.invalid", {
+                message: `Invalid product ID: ${item}`,
+              });
+            }
           }
         }
         return parsed;
@@ -104,13 +102,14 @@ const productsArraySchema = Joi.alternatives()
       }
     })
   )
-  .required();
+  .optional()
+  .default([]);
 
 export const createProductIngredientSchema = Joi.object(
   withFieldLabels({
     name: i18nStringSchema.label("Ingredient name"),
     description: i18nTextSchema.label("Description"),
-    products: productsArraySchema.label("Products"),
+    products: productsArraySchema.label("Products").default([]),
     isActive: Joi.alternatives()
       .try(
         Joi.boolean(),

@@ -90,10 +90,6 @@ class AdminProductCategoryController {
           imageData = {
             type: MediaType.IMAGE,
             url: imageUrl,
-            alt: parsedImage?.alt || {
-              en: name?.en || "",
-              nl: name?.nl || "",
-            },
             sortOrder: parsedImage?.sortOrder || 0,
           };
         } catch (error: any) {
@@ -351,11 +347,6 @@ class AdminProductCategoryController {
           updateData.image = {
             type: MediaType.IMAGE,
             url: imageUrl,
-            alt: parsedImage?.alt ||
-              category.image?.alt || {
-                en: name?.en || category.name?.en || "",
-                nl: name?.nl || category.name?.nl || "",
-              },
             sortOrder: parsedImage?.sortOrder || category.image?.sortOrder || 0,
           };
         } catch (error: any) {
@@ -388,7 +379,7 @@ class AdminProductCategoryController {
             parsedImage = image;
           }
 
-          // If only updating image metadata (alt, sortOrder), keep existing URL
+          // If only updating image metadata (sortOrder), keep existing URL
           if (parsedImage && !parsedImage.url && category.image?.url) {
             updateData.image = {
               ...category.image,
