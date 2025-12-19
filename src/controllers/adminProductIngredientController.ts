@@ -75,26 +75,28 @@ class AdminProductIngredientController {
         throw new AppError("Name (English) is required", 400);
       }
 
-      if (!products || !Array.isArray(products) || products.length === 0) {
-        throw new AppError("At least one product must be selected", 400);
-      }
+      // Products is optional, default to empty array
+      const productsArray = products && Array.isArray(products) ? products : [];
 
-      // Validate product IDs
-      const productIds = products.map((id: string) => {
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          throw new AppError(`Invalid product ID: ${id}`, 400);
+      // Validate product IDs if products are provided
+      const productIds: mongoose.Types.ObjectId[] = [];
+      if (productsArray.length > 0) {
+        for (const id of productsArray) {
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            throw new AppError(`Invalid product ID: ${id}`, 400);
+          }
+          productIds.push(new mongoose.Types.ObjectId(id));
         }
-        return new mongoose.Types.ObjectId(id);
-      });
 
-      // Verify products exist
-      const existingProducts = await Products.find({
-        _id: { $in: productIds },
-        isDeleted: false,
-      });
+        // Verify products exist
+        const existingProducts = await Products.find({
+          _id: { $in: productIds },
+          isDeleted: false,
+        });
 
-      if (existingProducts.length !== productIds.length) {
-        throw new AppError("One or more products not found", 404);
+        if (existingProducts.length !== productIds.length) {
+          throw new AppError("One or more products not found", 404);
+        }
       }
 
       await this.assertNameUnique(name.en);
@@ -118,7 +120,7 @@ class AdminProductIngredientController {
       const ingredient = await ProductIngredients.create({
         name: name || {},
         description: description || {},
-        products: productIds,
+        products: productIds, // Will be empty array if no products provided
         image: transformedImage,
         isActive: isActive !== undefined ? isActive : true,
         createdBy: requesterId

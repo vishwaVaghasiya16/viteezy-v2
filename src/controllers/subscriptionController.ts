@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Subscriptions, Orders } from "@/models/commerce";
+import { Subscriptions, Orders, Products } from "@/models/commerce";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
@@ -14,6 +14,7 @@ import {
   calculateNextBillingDate,
   computeSubscriptionMetrics,
 } from "@/services/subscriptionService";
+import { calculateRecurringBillingAmount } from "@/utils/productSubscriptionPrice";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -115,6 +116,90 @@ class SubscriptionController {
         }
       }
 
+      // Get subscription plan discount from order if it's a 90-day plan
+      let subscriptionPlanDiscount = null;
+      if (cycleDays === 90 && order.subscriptionPlanDiscount) {
+        subscriptionPlanDiscount = order.subscriptionPlanDiscount;
+      } else if (cycleDays === 90 && order.metadata?.subscriptionPlanDiscount) {
+        // Fallback: calculate from order metadata if discount field not set
+        const discountMetadata = order.metadata.subscriptionPlanDiscount;
+        if (discountMetadata && discountMetadata.discountPercentage === 15) {
+          // Calculate discount amount from order subtotal
+          const discountAmount = (order.subtotal.amount * 15) / 100;
+          subscriptionPlanDiscount = {
+            currency: order.subtotal.currency,
+            amount: Math.round((discountAmount + Number.EPSILON) * 100) / 100,
+            taxRate: 0,
+          };
+        }
+      }
+
+      // If amount is not provided or needs recalculation, calculate from product's sachetPrices
+      let recurringAmount = amount;
+      if (!recurringAmount || recurringAmount.amount === 0) {
+        try {
+          // Fetch products to get sachetPrices
+          const productIds = items.map(
+            (item: any) => new mongoose.Types.ObjectId(item.productId)
+          );
+          const products = await Products.find({
+            _id: { $in: productIds },
+            isDeleted: false,
+          })
+            .select("sachetPrices price")
+            .lean();
+
+          const productMap = new Map(
+            products.map((p: any) => [p._id.toString(), p])
+          );
+
+          // Calculate total recurring amount from all items
+          let totalRecurringAmount = 0;
+          let currency = "EUR";
+          let taxRate = 0;
+
+          for (const item of items) {
+            const product = productMap.get(item.productId);
+            if (product && product.sachetPrices) {
+              const itemAmount = calculateRecurringBillingAmount(
+                product,
+                cycleDays as SubscriptionCycle,
+                item.quantity
+              );
+              totalRecurringAmount += itemAmount.amount;
+              currency = itemAmount.currency;
+              taxRate = itemAmount.taxRate;
+            } else if (product && product.price) {
+              // Fallback to base price if sachetPrices not available
+              totalRecurringAmount += product.price.amount * item.quantity;
+              currency = product.price.currency || currency;
+              taxRate = product.price.taxRate || taxRate;
+            }
+          }
+
+          if (totalRecurringAmount > 0) {
+            recurringAmount = {
+              currency,
+              amount:
+                Math.round((totalRecurringAmount + Number.EPSILON) * 100) / 100,
+              taxRate,
+            };
+          }
+        } catch (error: any) {
+          logger.warn(
+            `Failed to calculate recurring amount from product prices: ${error.message}`
+          );
+          // Use provided amount or order total as fallback
+          if (!recurringAmount) {
+            recurringAmount = {
+              currency: order.subtotal.currency,
+              amount: order.subtotal.amount,
+              taxRate: order.subtotal.taxRate,
+            };
+          }
+        }
+      }
+
       // Create subscription
       const subscription = await Subscriptions.create({
         userId,
@@ -130,7 +215,8 @@ class SubscriptionController {
           name: item.name,
           sku: item.sku,
         })),
-        amount,
+        amount: recurringAmount,
+        subscriptionPlanDiscount,
         paymentMethod,
         gatewaySubscriptionId: gatewaySubscriptionId?.trim(),
         gatewayCustomerId: gatewayCustomerId?.trim(),
@@ -139,7 +225,17 @@ class SubscriptionController {
         nextDeliveryDate: nextDelDate,
         nextBillingDate: nextBillDate,
         status: SubscriptionStatus.ACTIVE,
-        metadata: metadata || {},
+        metadata: {
+          ...(metadata || {}),
+          // Store discount info in metadata for reference
+          ...(subscriptionPlanDiscount
+            ? {
+                has90DayDiscount: true,
+                discountPercentage: 15,
+                discountAppliedTo: "subtotal",
+              }
+            : {}),
+        },
       });
 
       logger.info(

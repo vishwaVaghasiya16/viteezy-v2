@@ -147,7 +147,10 @@ class ProductIngredientController {
 
       const [ingredients, total] = await Promise.all([
         ProductIngredients.find(filters)
-          .populate("products", "title slug productImage description price")
+          .populate(
+            "products",
+            "title slug productImage description price sachetPrices"
+          )
           .sort(sortOptions)
           .skip(skip)
           .limit(limit)
@@ -200,7 +203,10 @@ class ProductIngredientController {
         isDeleted: { $ne: true },
         isActive: true,
       })
-        .populate("products", "title slug productImage description price")
+        .populate(
+          "products",
+          "title slug productImage description price sachetPrices"
+        )
         .lean();
 
       if (!ingredient) {
@@ -258,7 +264,10 @@ class ProductIngredientController {
         isDeleted: { $ne: true },
         isActive: true,
       })
-        .populate("products", "title slug productImage description price")
+        .populate(
+          "products",
+          "title slug productImage description price sachetPrices"
+        )
         .sort({ [`name.${userLang}`]: 1, "name.en": 1 })
         .lean();
 

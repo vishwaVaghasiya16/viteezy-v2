@@ -10,11 +10,7 @@ const i18nStringSchema = Joi.object({
 }).optional();
 
 // Banner image schema
-const bannerImageSchema = Joi.object({
-  alt: i18nStringSchema,
-})
-  .allow(null)
-  .optional();
+const bannerImageSchema = Joi.object({}).allow(null).optional();
 
 // Banner section schema
 const bannerSchema = Joi.object({

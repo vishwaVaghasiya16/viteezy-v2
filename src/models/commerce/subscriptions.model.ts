@@ -29,6 +29,7 @@ export interface ISubscription extends Document {
     sku?: string;
   }>;
   amount: PriceType; // Recurring billing amount
+  subscriptionPlanDiscount?: PriceType; // 90-day plan discount (15% of subtotal)
   // Payment Gateway Information
   paymentMethod: PaymentMethod;
   gatewaySubscriptionId?: string; // Stripe subscription ID or Mollie subscription ID
@@ -129,6 +130,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
     amount: {
       type: PriceSchema,
       required: true,
+    },
+    subscriptionPlanDiscount: {
+      type: PriceSchema,
+      default: null,
     },
     paymentMethod: {
       type: String,

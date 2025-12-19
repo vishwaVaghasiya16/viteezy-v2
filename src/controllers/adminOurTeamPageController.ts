@@ -125,15 +125,13 @@ class AdminOurTeamPageController {
             updateData.banner.banner_image = {
               type: "Image",
               url: uploadedUrl,
-              alt: banner.banner_image?.alt || {},
             };
           }
         } else if (banner.banner_image !== undefined) {
-          // Update image metadata (alt text) without changing the URL
+          // Update image metadata without changing the URL
           if (pageSettings?.banner?.banner_image) {
             updateData.banner.banner_image = {
               ...pageSettings.banner.banner_image,
-              alt: banner.banner_image?.alt || {},
             };
           } else if (banner.banner_image === null) {
             // Remove image

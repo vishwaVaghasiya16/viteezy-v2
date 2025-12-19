@@ -114,15 +114,7 @@ const transformProductForLanguage = (
         ...ingredient,
         name: getTranslatedString(ingredient.name, lang),
         description: getTranslatedText(ingredient.description, lang),
-        // Transform image alt if present
-        image: ingredient.image
-          ? {
-              ...ingredient.image,
-              alt: ingredient.image.alt
-                ? getTranslatedString(ingredient.image.alt, lang)
-                : undefined,
-            }
-          : undefined,
+        image: ingredient.image || undefined,
       })) || [],
     // Transform populated categories for language
     categories:
@@ -130,15 +122,7 @@ const transformProductForLanguage = (
         ...category,
         name: getTranslatedString(category.name, lang),
         description: getTranslatedText(category.description, lang),
-        // Transform image alt if present
-        image: category.image
-          ? {
-              ...category.image,
-              alt: category.image.alt
-                ? getTranslatedString(category.image.alt, lang)
-                : undefined,
-            }
-          : undefined,
+        image: category.image || undefined,
       })) || [],
   };
 };
@@ -748,12 +732,7 @@ export class ProductController {
           category.description?.[lang] || category.description?.en || "",
         sortOrder: category.sortOrder || 0,
         icon: category.icon || null,
-        image: category.image
-          ? {
-              ...category.image,
-              alt: category.image.alt?.[lang] || category.image.alt?.en || "",
-            }
-          : null,
+        image: category.image || null,
         productCount: category.productCount || 0,
       }));
 

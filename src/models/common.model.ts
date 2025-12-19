@@ -32,7 +32,6 @@ export interface I18nTextType {
 export interface MediaType {
   type: "image" | "video";
   url: string;
-  alt?: I18nStringType;
   sortOrder?: number;
 }
 
@@ -92,7 +91,6 @@ export const MediaSchema = new Schema<MediaType>(
   {
     type: { type: String, enum: MEDIA_TYPE_VALUES },
     url: { type: String, trim: true },
-    alt: { type: I18nString, default: () => ({}) },
     sortOrder: { type: Number, default: 0 },
   },
   { _id: false }

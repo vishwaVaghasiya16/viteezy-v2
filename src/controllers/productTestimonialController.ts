@@ -144,7 +144,7 @@ class ProductTestimonialController {
       if (isLPFilter) {
         // First try to get testimonials marked as visible in LP
         const lpTestimonials = await ProductTestimonials.find(filters)
-          .populate("products", "title slug productImage")
+          .populate("products", "title slug productImage sachetPrices")
           .sort(sortOptions)
           .lean();
 
@@ -180,7 +180,7 @@ class ProductTestimonialController {
           const latestTestimonials = await ProductTestimonials.find(
             fallbackFilters
           )
-            .populate("products", "title slug productImage")
+            .populate("products", "title slug productImage sachetPrices")
             .sort({ createdAt: -1 })
             .limit(6)
             .lean();
@@ -192,7 +192,7 @@ class ProductTestimonialController {
         // Normal pagination for other filters
         const [results, count] = await Promise.all([
           ProductTestimonials.find(filters)
-            .populate("products", "title slug productImage")
+            .populate("products", "title slug productImage sachetPrices")
             .sort(sortOptions)
             .skip(skip)
             .limit(limit)
