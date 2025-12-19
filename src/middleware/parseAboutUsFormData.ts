@@ -76,7 +76,12 @@ const buildNestedStructure = (body: any): any => {
     if (value === undefined || value === null || value === "") continue;
 
     // Skip file upload fields (handled by image upload middleware)
-    if (key === "banner_image" || key === "meet_brains_main_image") {
+    if (
+      key === "banner_image" ||
+      key === "meet_brains_main_image" ||
+      key === "founder_image" ||
+      key === "people_images"
+    ) {
       continue;
     }
 
