@@ -10,6 +10,7 @@ import {
   updateSubscriptionSchema,
   getSubscriptionDetailsParamsSchema,
   getSubscriptionsQuerySchema,
+  pauseSubscriptionSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
 
@@ -66,6 +67,19 @@ router.put(
   validateParams(getSubscriptionDetailsParamsSchema),
   validateJoi(updateSubscriptionSchema),
   subscriptionController.updateSubscription
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/pause
+ * @desc    Pause subscription
+ * @access  Private
+ * @params  subscriptionId
+ */
+router.post(
+  "/:subscriptionId/pause",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(pauseSubscriptionSchema),
+  subscriptionController.pauseSubscription
 );
 
 /**

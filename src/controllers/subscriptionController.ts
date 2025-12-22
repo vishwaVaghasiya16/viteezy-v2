@@ -530,6 +530,72 @@ class SubscriptionController {
   );
 
   /**
+   * Pause subscription
+   * @route POST /api/subscriptions/:subscriptionId/pause
+   * @access Private
+   */
+  pauseSubscription = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Check if subscription can be paused
+      if (subscription.status === SubscriptionStatus.CANCELLED) {
+        throw new AppError("Cannot pause a cancelled subscription", 400);
+      }
+
+      if (subscription.status === SubscriptionStatus.EXPIRED) {
+        throw new AppError("Cannot pause an expired subscription", 400);
+      }
+
+      if (subscription.status === SubscriptionStatus.PAUSED) {
+        throw new AppError("Subscription is already paused", 400);
+      }
+
+      // Pause subscription
+      subscription.status = SubscriptionStatus.PAUSED;
+      subscription.pausedAt = new Date();
+
+      await subscription.save();
+
+      logger.info(`Subscription paused: ${subscriptionId} by user: ${userId}`);
+
+      const derivedMetrics = computeSubscriptionMetrics(subscription);
+
+      res.status(200).json({
+        success: true,
+        message: "Subscription paused successfully",
+        data: {
+          subscription: {
+            id: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            status: subscription.status,
+            pausedAt: subscription.pausedAt,
+            nextDeliveryDate: subscription.nextDeliveryDate,
+            nextBillingDate: subscription.nextBillingDate,
+            daysUntilNextDelivery: derivedMetrics.daysUntilNextDelivery,
+            daysUntilNextBilling: derivedMetrics.daysUntilNextBilling,
+          },
+        },
+      });
+    }
+  );
+
+  /**
    * Cancel subscription
    * @route POST /api/subscriptions/:subscriptionId/cancel
    * @access Private
