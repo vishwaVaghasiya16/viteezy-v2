@@ -1,6 +1,7 @@
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
+import { ProductCategory } from "../models/commerce/categories.model";
 import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
@@ -444,6 +445,99 @@ class ProductService {
   }
 
   /**
+   * Resolve category identifiers (slug or name) to ObjectIds
+   * Supports both ObjectId format and slug/name lookup (case-insensitive)
+   */
+  private async resolveCategoryIds(
+    identifiers: string[]
+  ): Promise<mongoose.Types.ObjectId[]> {
+    const objectIds: mongoose.Types.ObjectId[] = [];
+    const slugsOrNames: string[] = [];
+
+    // Separate ObjectIds from slugs/names
+    for (const identifier of identifiers) {
+      if (mongoose.Types.ObjectId.isValid(identifier)) {
+        objectIds.push(new mongoose.Types.ObjectId(identifier));
+      } else {
+        slugsOrNames.push(identifier.trim());
+      }
+    }
+
+    // If we have slugs/names, look them up (try both slug and name)
+    if (slugsOrNames.length > 0) {
+      // Create case-insensitive regex for names
+      const nameRegex = slugsOrNames.map((val) => new RegExp(`^${val}$`, "i"));
+      // Lowercase for slug matching
+      const slugValues = slugsOrNames.map((val) => val.toLowerCase());
+
+      const categories = await ProductCategory.find({
+        $or: [
+          { slug: { $in: slugValues } }, // Try slug match
+          { "name.en": { $in: nameRegex } }, // Try name match (case-insensitive)
+          { "name.nl": { $in: nameRegex } },
+          { "name.de": { $in: nameRegex } },
+          { "name.fr": { $in: nameRegex } },
+          { "name.es": { $in: nameRegex } },
+        ],
+        isDeleted: { $ne: true },
+        isActive: true,
+      })
+        .select("_id")
+        .lean();
+
+      const foundIds = categories.map((cat: any) => cat._id);
+      objectIds.push(...foundIds);
+    }
+
+    return objectIds;
+  }
+
+  /**
+   * Resolve ingredient identifiers (name) to string IDs
+   * Supports both ObjectId format and name lookup (case-insensitive)
+   */
+  private async resolveIngredientIds(
+    identifiers: string[]
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    const names: string[] = [];
+
+    // Separate ObjectIds from names
+    for (const identifier of identifiers) {
+      if (mongoose.Types.ObjectId.isValid(identifier)) {
+        ids.push(identifier);
+      } else {
+        names.push(identifier.trim());
+      }
+    }
+
+    // If we have names, look them up (case-insensitive)
+    if (names.length > 0) {
+      const caseInsensitiveRegex = names.map(
+        (name) => new RegExp(`^${name}$`, "i")
+      );
+      const ingredients = await ProductIngredients.find({
+        $or: [
+          { "name.en": { $in: caseInsensitiveRegex } },
+          { "name.nl": { $in: caseInsensitiveRegex } },
+          { "name.de": { $in: caseInsensitiveRegex } },
+          { "name.fr": { $in: caseInsensitiveRegex } },
+          { "name.es": { $in: caseInsensitiveRegex } },
+        ],
+        isDeleted: { $ne: true },
+        isActive: true,
+      })
+        .select("_id")
+        .lean();
+
+      const foundIds = ingredients.map((ing: any) => ing._id.toString());
+      ids.push(...foundIds);
+    }
+
+    return ids;
+  }
+
+  /**
    * Get all products with pagination and filters
    */
   async getAllProducts(
@@ -495,20 +589,34 @@ class ProductService {
       matchStage.hasStandupPouch = hasStandupPouch;
     }
 
+    // Resolve categories from slugs/names to ObjectIds
+    let categoryObjectIds: mongoose.Types.ObjectId[] = [];
     if (categories?.length) {
-      // Convert string IDs to ObjectIds for categories filter
-      matchStage.categories = {
-        $in: categories.map((id) => new mongoose.Types.ObjectId(id)),
-      };
+      categoryObjectIds = await this.resolveCategoryIds(categories);
+      if (categoryObjectIds.length > 0) {
+        matchStage.categories = {
+          $in: categoryObjectIds,
+        };
+      } else {
+        // If no categories found, return empty result
+        return { products: [], total: 0 };
+      }
     }
 
     if (healthGoals?.length) {
       matchStage.healthGoals = { $in: healthGoals };
     }
 
+    // Resolve ingredients from names to string IDs
+    let ingredientIds: string[] = [];
     if (ingredients?.length) {
-      // Ingredients are stored as string IDs
-      matchStage.ingredients = { $all: ingredients };
+      ingredientIds = await this.resolveIngredientIds(ingredients);
+      if (ingredientIds.length > 0) {
+        matchStage.ingredients = { $all: ingredientIds };
+      } else {
+        // If no ingredients found, return empty result
+        return { products: [], total: 0 };
+      }
     }
 
     const pipeline: PipelineStage[] = [];
@@ -547,13 +655,15 @@ class ProductService {
 
       // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
       const arrayFilters: Record<string, any> = {};
-      if (categories?.length) {
+      if (categoryObjectIds.length > 0) {
         arrayFilters.categories = {
-          $in: categories.map((id) => new mongoose.Types.ObjectId(id)),
+          $in: categoryObjectIds,
         };
       }
       if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
-      if (ingredients?.length) arrayFilters.ingredients = { $all: ingredients };
+      if (ingredientIds.length > 0) {
+        arrayFilters.ingredients = { $all: ingredientIds };
+      }
 
       if (Object.keys(arrayFilters).length > 0) {
         pipeline.push({ $match: arrayFilters });
