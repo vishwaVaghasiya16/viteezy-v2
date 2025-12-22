@@ -100,22 +100,6 @@ const transformProductForLanguage = (
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
-    // Transform ingredients if they exist
-    ingredients: product.ingredients?.map((ingredient: any) => ({
-      ...ingredient,
-      name: getTranslatedString(ingredient.name, lang),
-      description: getTranslatedText(ingredient.description, lang),
-    })) || product.ingredients || [],
-    // Transform categories if they exist
-    categories: product.categories?.map((category: any) => ({
-      ...category,
-      name: getTranslatedString(category.name, lang),
-      description: getTranslatedString(category.description, lang),
-      image: category.image ? {
-        ...category.image,
-        alt: getTranslatedString(category.image.alt, lang),
-      } : category.image,
-    })) || product.categories || [],
     // Transform variants if they exist
     variants:
       product.variants?.map((variant: any) => ({
@@ -124,6 +108,22 @@ const transformProductForLanguage = (
       })) ||
       product.variants ||
       [],
+    // Transform populated ingredients for language
+    ingredients:
+      product.ingredients?.map((ingredient: any) => ({
+        ...ingredient,
+        name: getTranslatedString(ingredient.name, lang),
+        description: getTranslatedText(ingredient.description, lang),
+        image: ingredient.image || undefined,
+      })) || [],
+    // Transform populated categories for language
+    categories:
+      product.categories?.map((category: any) => ({
+        ...category,
+        name: getTranslatedString(category.name, lang),
+        description: getTranslatedText(category.description, lang),
+        image: category.image || undefined,
+      })) || [],
   };
 };
 
@@ -241,8 +241,14 @@ export class ProductController {
       // Get user's wishlist items if authenticated
       let userWishlistProductIds: Set<string> = new Set();
       if (userId) {
-        const wishlistItems = await Wishlists.find({ userId: new mongoose.Types.ObjectId(userId) }).select("productId").lean();
-        userWishlistProductIds = new Set(wishlistItems.map((item: any) => item.productId.toString()));
+        const wishlistItems = await Wishlists.find({
+          userId: new mongoose.Types.ObjectId(userId),
+        })
+          .select("productId")
+          .lean();
+        userWishlistProductIds = new Set(
+          wishlistItems.map((item: any) => item.productId.toString())
+        );
       }
 
       // Calculate member prices for all products and transform for language
@@ -289,7 +295,9 @@ export class ProductController {
 
           // Add is_liked field if user is authenticated
           if (userId) {
-            enrichedProduct.is_liked = userWishlistProductIds.has(transformedProduct._id.toString());
+            enrichedProduct.is_liked = userWishlistProductIds.has(
+              transformedProduct._id.toString()
+            );
           }
 
           return enrichedProduct;
@@ -405,16 +413,35 @@ export class ProductController {
    * Get available filter values
    */
   static async getFilterOptions(
-    req: Request,
+    req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
   ) {
     try {
+      const userLang = getUserLanguage(req);
       const filters = await productService.getFilterOptions();
+
+      // Transform multilingual fields
+      const transformedFilters = {
+        categories: filters.categories.map((cat: any) => ({
+          _id: cat._id,
+          slug: cat.slug,
+          name: getTranslatedString(cat.name, userLang),
+          icon: cat.icon,
+        })),
+        healthGoals: filters.healthGoals,
+        ingredients: filters.ingredients.map((ing: any) => ({
+          _id: ing._id,
+          slug: ing.slug,
+          name: getTranslatedString(ing.name, userLang),
+          icon: ing.icon,
+        })),
+      };
+
       res.status(200).json({
         success: true,
         message: "Product filter values retrieved successfully",
-        data: filters,
+        data: transformedFilters,
       });
     } catch (error) {
       next(error);

@@ -35,6 +35,7 @@ export interface IOrder extends Document {
   discount: PriceType;
   couponDiscount: PriceType;
   membershipDiscount: PriceType;
+  subscriptionPlanDiscount: PriceType;
   total: PriceType;
   shippingAddress: AddressSnapshotType;
   billingAddress: AddressSnapshotType;
@@ -124,6 +125,10 @@ const OrderSchema = new Schema<IOrder>(
       default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
     },
     membershipDiscount: {
+      type: PriceSchema,
+      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    },
+    subscriptionPlanDiscount: {
       type: PriceSchema,
       default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
     },

@@ -37,10 +37,6 @@ const mediaSchema = Joi.alternatives()
     Joi.object({
       type: Joi.string().optional().allow(null),
       url: Joi.string().uri().optional().allow(null, ""),
-      alt: Joi.object({
-        en: Joi.string().trim().optional().allow(null, ""),
-        nl: Joi.string().trim().optional().allow(null, ""),
-      }).optional(),
       sortOrder: Joi.number().integer().min(0).optional(),
     }),
     Joi.string().allow(null, ""), // Allow JSON string in form-data

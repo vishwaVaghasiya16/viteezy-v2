@@ -3,8 +3,12 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Orders, Payments, Products, Coupons } from "@/models/commerce";
-import { CouponType, OrderPlanType } from "@/models/enums";
+import { CouponType, OrderPlanType, SubscriptionCycle } from "@/models/enums";
 import { PriceType } from "@/models/common.model";
+import {
+  getSubscriptionPriceFromProduct,
+  getBaseSubtotalForSubscription,
+} from "@/utils/productSubscriptionPrice";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -82,6 +86,35 @@ const calculateMembershipDiscount = (
       discountType: membership.discountType,
       discountValue: membership.discountValue,
       ...membership.metadata,
+    },
+  };
+};
+
+/**
+ * Calculate 15% discount for 90-day subscription plans
+ * This discount applies to the base subtotal amount
+ */
+const calculate90DaySubscriptionDiscount = (
+  subtotal: number,
+  planType: OrderPlanType,
+  cycleDays?: number
+): { amount: number; metadata?: Record<string, any> } => {
+  // Only apply discount for subscription plans with 90-day cycle
+  if (planType !== OrderPlanType.SUBSCRIPTION || cycleDays !== 90) {
+    return { amount: 0 };
+  }
+
+  // Apply 15% discount to subtotal
+  const discountAmount = (subtotal * 15) / 100;
+  const finalDiscountAmount = Math.min(discountAmount, subtotal);
+
+  return {
+    amount: roundAmount(finalDiscountAmount),
+    metadata: {
+      discountType: "90-Day Subscription Discount",
+      discountPercentage: 15,
+      cycleDays: 90,
+      appliedTo: "subtotal",
     },
   };
 };
@@ -246,11 +279,22 @@ class OrderController {
         (item: any) => new mongoose.Types.ObjectId(item.productId)
       );
 
+      // Determine plan type and cycle days early
+      const planType: OrderPlanType = plan?.type || OrderPlanType.ONE_TIME;
+      const cycleDays =
+        plan?.interval || plan?.cycleDays || plan?.metadata?.cycleDays;
+
+      // For subscription orders, we need sachetPrices to get the correct subscription price
+      const selectFields =
+        planType === OrderPlanType.SUBSCRIPTION
+          ? "title slug skuRoot categories sachetPrices price variant"
+          : "title slug skuRoot categories price variant";
+
       const products = await Products.find({
         _id: { $in: productObjectIds },
         isDeleted: false,
       })
-        .select("title slug skuRoot categories")
+        .select(selectFields)
         .lean();
 
       if (products.length !== productObjectIds.length) {
@@ -284,7 +328,50 @@ class OrderController {
           throw new AppError("Invalid product in order items", 400);
         }
 
-        const itemCurrency = (item.price.currency || currency).toUpperCase();
+        let itemPrice: PriceType;
+
+        // For subscription orders, use price from sachetPrices based on cycleDays
+        if (
+          planType === OrderPlanType.SUBSCRIPTION &&
+          cycleDays &&
+          product.sachetPrices
+        ) {
+          try {
+            // Validate cycleDays is a valid SubscriptionCycle
+            const validCycleDays = cycleDays as SubscriptionCycle;
+            if (![60, 90, 180].includes(validCycleDays)) {
+              throw new AppError(
+                `Invalid cycle days: ${cycleDays}. Must be 60, 90, or 180`,
+                400
+              );
+            }
+
+            // Get subscription price from product's sachetPrices
+            itemPrice = getSubscriptionPriceFromProduct(
+              product,
+              validCycleDays
+            );
+          } catch (error: any) {
+            // If subscription price not found, fall back to provided price
+            if (error instanceof AppError) {
+              throw error;
+            }
+            itemPrice = createPrice(
+              item.price.amount,
+              item.price.currency || currency,
+              item.price.taxRate ?? 0
+            );
+          }
+        } else {
+          // For one-time orders or if price is explicitly provided, use provided price
+          itemPrice = createPrice(
+            item.price.amount,
+            item.price.currency || currency,
+            item.price.taxRate ?? 0
+          );
+        }
+
+        const itemCurrency = itemPrice.currency.toUpperCase();
         if (itemCurrency !== currency) {
           throw new AppError("All item prices must use the same currency", 400);
         }
@@ -297,11 +384,7 @@ class OrderController {
           productId: new mongoose.Types.ObjectId(item.productId),
           variantId,
           quantity: item.quantity,
-          price: createPrice(
-            item.price.amount,
-            itemCurrency,
-            item.price.taxRate ?? 0
-          ),
+          price: itemPrice,
           name:
             item.name ||
             product.title?.en ||
@@ -347,8 +430,21 @@ class OrderController {
       const taxAmountValue = taxInput.amount || 0;
       const taxRateValue = taxInput.taxRate ?? 0;
 
-      const membershipResult = calculateMembershipDiscount(
+      // Calculate 90-day subscription discount (applied to base subtotal)
+      // For subscription orders, the subtotalAmount already uses prices from sachetPrices
+      const subscriptionPlanDiscountResult = calculate90DaySubscriptionDiscount(
         subtotalAmount,
+        planType,
+        cycleDays
+      );
+
+      // Calculate membership discount (applied to subtotal after subscription discount)
+      const subtotalAfterSubscriptionDiscount = Math.max(
+        subtotalAmount - subscriptionPlanDiscountResult.amount,
+        0
+      );
+      const membershipResult = calculateMembershipDiscount(
+        subtotalAfterSubscriptionDiscount,
         membership
       );
 
@@ -359,11 +455,17 @@ class OrderController {
       let couponDiscountAmount = 0;
       let couponMetadata: Record<string, any> | undefined;
 
+      // Calculate coupon discount on subtotal after subscription and membership discounts
+      const subtotalAfterAllDiscounts = Math.max(
+        subtotalAfterSubscriptionDiscount - membershipResult.amount,
+        0
+      );
+
       if (normalizedCouponCode) {
         const couponResult = await validateCouponForOrder({
           couponCode: normalizedCouponCode,
           userId: req.user._id,
-          orderAmount: Math.max(subtotalAmount - membershipResult.amount, 0),
+          orderAmount: subtotalAfterAllDiscounts,
           shippingAmount: shippingAmountValue,
           productIds: productObjectIds.map((id: mongoose.Types.ObjectId) =>
             id.toString()
@@ -382,7 +484,9 @@ class OrderController {
       }
 
       const totalDiscountAmount =
-        membershipResult.amount + couponDiscountAmount;
+        subscriptionPlanDiscountResult.amount +
+        membershipResult.amount +
+        couponDiscountAmount;
 
       const subtotalPrice = createPrice(subtotalAmount, currency);
       const shippingPrice = createPrice(
@@ -397,6 +501,10 @@ class OrderController {
         membershipResult.amount,
         currency
       );
+      const subscriptionPlanDiscountPrice = createPrice(
+        subscriptionPlanDiscountResult.amount,
+        currency
+      );
 
       const totalAmount = Math.max(
         subtotalAmount -
@@ -406,8 +514,6 @@ class OrderController {
         0
       );
       const totalPrice = createPrice(totalAmount, currency);
-
-      const planType: OrderPlanType = plan?.type || OrderPlanType.ONE_TIME;
 
       const orderMetadata: Record<string, any> = {
         ...(metadata || {}),
@@ -434,6 +540,12 @@ class OrderController {
         orderMetadata.planDetails = sanitizedPlanDetails;
       }
 
+      // Store subscription plan discount metadata in order metadata
+      if (subscriptionPlanDiscountResult.amount > 0) {
+        orderMetadata.subscriptionPlanDiscount =
+          subscriptionPlanDiscountResult.metadata;
+      }
+
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
@@ -445,6 +557,7 @@ class OrderController {
         discount: discountPrice,
         couponDiscount: couponDiscountPrice,
         membershipDiscount: membershipDiscountPrice,
+        subscriptionPlanDiscount: subscriptionPlanDiscountPrice,
         total: totalPrice,
         shippingAddress,
         billingAddress: billingAddress || shippingAddress,
@@ -472,6 +585,7 @@ class OrderController {
               discount: orderData.discount,
               couponDiscount: orderData.couponDiscount,
               membershipDiscount: orderData.membershipDiscount,
+              subscriptionPlanDiscount: orderData.subscriptionPlanDiscount,
               total: orderData.total,
             },
             metadata: orderData.metadata,
@@ -537,7 +651,7 @@ class OrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType status items subtotal tax shipping discount couponDiscount membershipDiscount total paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
+          "orderNumber planType status items subtotal tax shipping discount couponDiscount membershipDiscount subscriptionPlanDiscount total paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
         )
         .populate(
           "items.productId",
@@ -570,6 +684,7 @@ class OrderController {
           discount: order.discount,
           couponDiscount: order.couponDiscount,
           membershipDiscount: order.membershipDiscount,
+          subscriptionPlanDiscount: order.subscriptionPlanDiscount,
           total: order.total,
         },
         couponCode: order.couponCode,
@@ -719,6 +834,7 @@ class OrderController {
           discount: order.discount,
           couponDiscount: order.couponDiscount,
           membershipDiscount: order.membershipDiscount,
+          subscriptionPlanDiscount: order.subscriptionPlanDiscount,
           total: order.total,
         },
         shippingAddress: order.shippingAddress,
