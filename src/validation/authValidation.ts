@@ -358,6 +358,8 @@ export const appleLoginSchema = Joi.object(
     deviceInfo: deviceInfoSchema,
   })
 ).label("AppleLoginPayload");
+
+/**
  * Google Login Validation Schema
  * @constant {Joi.ObjectSchema} googleLoginSchema
  * @description Validates Google OAuth login request data

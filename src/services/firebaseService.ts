@@ -161,12 +161,12 @@ class FirebaseService {
       const emailParts = email.split("@")[0];
       const nameParts = emailParts
         .split(/[._-]/)
-        .filter((part) => part.length > 0);
+        .filter((part: string) => part.length > 0);
 
       if (nameParts.length > 0) {
         name = nameParts
           .map(
-            (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+            (part: string) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
           )
           .join(" ");
       }

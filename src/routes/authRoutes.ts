@@ -41,6 +41,8 @@ router.post(
   "/apple-login",
   validateJoi(appleLoginSchema),
   authController.appleLogin
+);
+
 // Google OAuth login endpoint
 router.post(
   "/google/login",
