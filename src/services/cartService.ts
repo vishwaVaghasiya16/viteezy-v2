@@ -1,6 +1,7 @@
 import { type ICart, Carts } from "../models/commerce/carts.model";
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import {
@@ -644,6 +645,510 @@ class CartService {
       },
       items: validatedItems,
     };
+  }
+
+  /**
+   * Get checkout products with all pricing details
+   * Returns products in cart with complete pricing information
+   */
+  async getCheckoutProducts(userId: string): Promise<{
+    products: any[];
+    pricing: {
+      subtotal: { currency: string; amount: number; taxRate: number };
+      originalSubtotal: { currency: string; amount: number; taxRate: number };
+      membershipDiscount: { currency: string; amount: number; taxRate: number };
+      tax: { currency: string; amount: number; taxRate: number };
+      shipping: { currency: string; amount: number; taxRate: number };
+      total: { currency: string; amount: number; taxRate: number };
+    };
+  }> {
+    const cart = await this.getOrCreateCart(userId);
+
+    if (!cart.items || cart.items.length === 0) {
+      return {
+        products: [],
+        pricing: {
+          subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
+          originalSubtotal: { currency: "EUR", amount: 0, taxRate: 0 },
+          membershipDiscount: { currency: "EUR", amount: 0, taxRate: 0 },
+          tax: { currency: "EUR", amount: 0, taxRate: 0 },
+          shipping: { currency: "EUR", amount: 0, taxRate: 0 },
+          total: { currency: "EUR", amount: 0, taxRate: 0 },
+        },
+      };
+    }
+
+    // Get product IDs and variant IDs
+    const productIds = cart.items.map((item: any) => item.productId);
+    const variantIds = cart.items
+      .map((item: any) => item.variantId)
+      .filter((id: any) => id);
+
+    // Fetch products and variants with full details
+    const [products, variants] = await Promise.all([
+      Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      })
+        .populate("categories", "name slug description image")
+        .lean(),
+      variantIds.length > 0
+        ? ProductVariants.find({
+            _id: { $in: variantIds },
+            isDeleted: { $ne: true },
+            isActive: true,
+          }).lean()
+        : Promise.resolve([]),
+    ]);
+
+    // Manually populate ingredients for all products (since ingredients is String array, not ObjectId ref)
+    const allIngredientIds: string[] = [];
+    products.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients.forEach((ingredientId: any) => {
+          // Handle both string IDs and ObjectId objects
+          const id = typeof ingredientId === "string" 
+            ? ingredientId 
+            : ingredientId?.toString();
+          if (id && mongoose.Types.ObjectId.isValid(id) && !allIngredientIds.includes(id)) {
+            allIngredientIds.push(id);
+          }
+        });
+      }
+    });
+
+    // Fetch all ingredient details
+    const ingredientDetailsMap = new Map();
+    if (allIngredientIds.length > 0) {
+      const ingredientDetails = await ProductIngredients.find({
+        _id: { $in: allIngredientIds.map((id: string) => new mongoose.Types.ObjectId(id)) },
+      })
+        .select("_id name description image")
+        .lean();
+
+      ingredientDetails.forEach((ingredient: any) => {
+        ingredientDetailsMap.set(ingredient._id.toString(), ingredient);
+      });
+    }
+
+    // Replace ingredient IDs with populated ingredient objects
+    products.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients = product.ingredients
+          .map((ingredientId: any) => {
+            const id = typeof ingredientId === "string" 
+              ? ingredientId 
+              : ingredientId?.toString();
+            return ingredientDetailsMap.get(id);
+          })
+          .filter((ingredient: any) => ingredient !== undefined);
+      }
+    });
+
+    // Create maps for quick lookup
+    const productMap = new Map(
+      products.map((p: any) => [p._id.toString(), p])
+    );
+    const variantMap = new Map(
+      variants.map((v: any) => [v._id.toString(), v])
+    );
+
+    // Build products array with all pricing details
+    const checkoutProductsPromises = cart.items.map(async (item: any) => {
+      const product = productMap.get(item.productId.toString());
+      const variant = item.variantId
+        ? variantMap.get(item.variantId.toString())
+        : null;
+
+      if (!product) {
+        return null;
+      }
+
+      // Get pricing information
+      const cartPrice = item.price;
+      const productPrice = product.price || { currency: "EUR", amount: 0, taxRate: 0 };
+      const variantPrice = variant?.price || null;
+
+      // Identify which subscription plan was selected based on cart price
+      let selectedPlan: {
+        type: "subscription" | "oneTime" | "default";
+        plan?: "thirtyDays" | "sixtyDays" | "ninetyDays" | "oneEightyDays" | "count30" | "count60";
+        price?: any;
+      } = { type: "default" };
+
+      // Check if product has sachetPrices and match cart price with subscription plans
+      if (product.sachetPrices) {
+        const sachetPrices = product.sachetPrices;
+        const cartAmount = cartPrice.amount;
+
+        // Check subscription plans (thirtyDays, sixtyDays, ninetyDays, oneEightyDays)
+        const subscriptionPlans = [
+          { key: "thirtyDays", price: sachetPrices.thirtyDays },
+          { key: "sixtyDays", price: sachetPrices.sixtyDays },
+          { key: "ninetyDays", price: sachetPrices.ninetyDays },
+          { key: "oneEightyDays", price: sachetPrices.oneEightyDays },
+        ];
+
+        for (const plan of subscriptionPlans) {
+          if (plan.price) {
+            // Check if cart price matches this plan's discountedPrice or amount
+            const planPrice = plan.price.discountedPrice || plan.price.amount;
+            if (Math.abs(cartAmount - planPrice) < 0.01) {
+              selectedPlan = {
+                type: "subscription",
+                plan: plan.key as any,
+                price: plan.price,
+              };
+              break;
+            }
+          }
+        }
+
+        // If not found in subscription, check oneTime options
+        if (selectedPlan.type === "default" && sachetPrices.oneTime) {
+          if (sachetPrices.oneTime.count30) {
+            const count30Price = sachetPrices.oneTime.count30.discountedPrice || sachetPrices.oneTime.count30.amount;
+            if (Math.abs(cartAmount - count30Price) < 0.01) {
+              selectedPlan = {
+                type: "oneTime",
+                plan: "count30",
+                price: sachetPrices.oneTime.count30,
+              };
+            }
+          }
+          if (selectedPlan.type === "default" && sachetPrices.oneTime.count60) {
+            const count60Price = sachetPrices.oneTime.count60.discountedPrice || sachetPrices.oneTime.count60.amount;
+            if (Math.abs(cartAmount - count60Price) < 0.01) {
+              selectedPlan = {
+                type: "oneTime",
+                plan: "count60",
+                price: sachetPrices.oneTime.count60,
+              };
+            }
+          }
+        }
+      }
+
+      // Check standupPouchPrice if hasStandupPouch
+      if (selectedPlan.type === "default" && product.hasStandupPouch && product.standupPouchPrice) {
+        if (product.standupPouchPrice.count30) {
+          const count30Price = product.standupPouchPrice.count30.discountedPrice || product.standupPouchPrice.count30.amount;
+          if (Math.abs(cartPrice.amount - count30Price) < 0.01) {
+            selectedPlan = {
+              type: "oneTime",
+              plan: "count30",
+              price: product.standupPouchPrice.count30,
+            };
+          }
+        }
+        if (selectedPlan.type === "default" && product.standupPouchPrice.count60) {
+          const count60Price = product.standupPouchPrice.count60.discountedPrice || product.standupPouchPrice.count60.amount;
+          if (Math.abs(cartPrice.amount - count60Price) < 0.01) {
+            selectedPlan = {
+              type: "oneTime",
+              plan: "count60",
+              price: product.standupPouchPrice.count60,
+            };
+          }
+        }
+      }
+
+      // Use selected plan price for member pricing calculation if found
+      const priceForMemberCalculation = selectedPlan.price 
+        ? { 
+            currency: selectedPlan.price.currency || cartPrice.currency, 
+            amount: selectedPlan.price.discountedPrice || selectedPlan.price.amount || cartPrice.amount,
+            taxRate: selectedPlan.price.taxRate || cartPrice.taxRate 
+          }
+        : (variantPrice || productPrice);
+
+      // Calculate member pricing if applicable
+      const priceSource: ProductPriceSource = {
+        price: priceForMemberCalculation,
+        memberPrice: product.memberPrice,
+        memberDiscountOverride: product.memberDiscountOverride,
+      };
+
+      const memberPriceResult = await calculateMemberPrice(
+        priceSource,
+        userId
+      );
+
+      const originalPrice = selectedPlan.price 
+        ? {
+            currency: selectedPlan.price.currency || cartPrice.currency,
+            amount: selectedPlan.price.amount || selectedPlan.price.discountedPrice || cartPrice.amount,
+            taxRate: selectedPlan.price.taxRate || cartPrice.taxRate,
+          }
+        : (variantPrice || productPrice);
+      
+      // Only use member price if user is actually a member
+      const memberPrice = memberPriceResult.isMember ? memberPriceResult.memberPrice : null;
+      const discountAmount = memberPriceResult.isMember
+        ? originalPrice.amount - (memberPrice?.amount || originalPrice.amount)
+        : 0;
+      const discountPercentage = memberPriceResult.isMember && originalPrice.amount > 0
+        ? (discountAmount / originalPrice.amount) * 100
+        : 0;
+
+      return {
+        _id: product._id,
+        title: product.title,
+        slug: product.slug,
+        productImage: product.productImage,
+        shortDescription: product.shortDescription,
+        productVariant: product.variant,
+        hasStandupPouch: product.hasStandupPouch,
+        quantity: item.quantity,
+        // Pricing details
+        pricing: {
+          // Cart price (current price in cart - selected plan price)
+          cartPrice: {
+            currency: cartPrice.currency,
+            amount: cartPrice.amount,
+            taxRate: cartPrice.taxRate,
+            totalAmount: Math.round(
+              cartPrice.amount * (1 + cartPrice.taxRate) * 100
+            ) / 100,
+            // Include selected plan information
+            selectedPlan: selectedPlan.type !== "default" ? {
+              type: selectedPlan.type,
+              plan: selectedPlan.plan,
+            } : null,
+          },
+          // Original price (before any discounts) - from selected plan
+          originalPrice: {
+            currency: originalPrice.currency,
+            amount: originalPrice.amount,
+            taxRate: originalPrice.taxRate,
+            totalAmount: Math.round(
+              originalPrice.amount * (1 + originalPrice.taxRate) * 100
+            ) / 100,
+          },
+          // Member price (only if user is a member)
+          memberPrice: memberPrice
+            ? {
+                currency: memberPrice.currency,
+                amount: memberPrice.amount,
+                taxRate: memberPrice.taxRate,
+                totalAmount: Math.round(
+                  memberPrice.amount * (1 + memberPrice.taxRate) * 100
+                ) / 100,
+              }
+            : null,
+          // Discount information (only if user is a member)
+          discount: {
+            amount: Math.round(discountAmount * 100) / 100,
+            percentage: Math.round(discountPercentage * 100) / 100,
+          },
+          // All product pricing options
+          productPricing: {
+            price: product.price,
+            sachetPrices: product.sachetPrices,
+            standupPouchPrice: product.standupPouchPrice,
+          },
+          // Variant pricing (if applicable)
+          variantPricing: variant
+            ? {
+                price: variant.price,
+                compareAtPrice: variant.compareAtPrice,
+                costPrice: variant.costPrice,
+              }
+            : null,
+        },
+        // Product details
+        categories: product.categories || [],
+        ingredients: product.ingredients || [],
+        variant: variant
+          ? {
+              _id: variant._id,
+              name: variant.name,
+              sku: variant.sku,
+              attributes: variant.attributes,
+            }
+          : null,
+        addedAt: item.addedAt,
+      };
+    });
+
+    // Wait for all product calculations to complete
+    const checkoutProducts = await Promise.all(checkoutProductsPromises);
+
+    // Filter out null products
+    const validProducts = checkoutProducts.filter((p: any) => p !== null);
+
+    // Calculate totals
+    const currency = cart.items[0]?.price?.currency || "EUR";
+    const taxRate = cart.items[0]?.price?.taxRate || 0;
+
+    let originalSubtotal = 0;
+    let memberSubtotal = 0;
+    let membershipDiscountAmount = 0;
+
+    validProducts.forEach((product: any) => {
+      const originalItemTotal =
+        product.pricing.originalPrice.amount * product.quantity;
+      originalSubtotal += originalItemTotal;
+
+      // Only apply member pricing if user is actually a member
+      // Check if memberPrice exists AND discount amount > 0 (indicating member discount was applied)
+      const hasMemberDiscount = product.pricing.memberPrice && 
+        product.pricing.discount && 
+        product.pricing.discount.amount > 0;
+
+      const memberItemTotal = hasMemberDiscount
+        ? product.pricing.memberPrice.amount * product.quantity
+        : originalItemTotal;
+      memberSubtotal += memberItemTotal;
+
+      if (hasMemberDiscount) {
+        membershipDiscountAmount +=
+          (product.pricing.originalPrice.amount -
+            product.pricing.memberPrice.amount) *
+          product.quantity;
+      }
+    });
+
+    const taxAmount = memberSubtotal * taxRate;
+    const shippingAmount = cart.shipping?.amount || 0;
+    const totalAmount = memberSubtotal + taxAmount + shippingAmount;
+
+    return {
+      products: validProducts,
+      pricing: {
+        subtotal: {
+          currency,
+          amount: Math.round((memberSubtotal + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        originalSubtotal: {
+          currency,
+          amount: Math.round((originalSubtotal + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        membershipDiscount: {
+          currency,
+          amount:
+            Math.round((membershipDiscountAmount + Number.EPSILON) * 100) / 100,
+          taxRate: 0,
+        },
+        tax: {
+          currency,
+          amount: Math.round((taxAmount + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+        shipping: {
+          currency,
+          amount: Math.round((shippingAmount + Number.EPSILON) * 100) / 100,
+          taxRate: 0,
+        },
+        total: {
+          currency,
+          amount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
+          taxRate,
+        },
+      },
+    };
+  }
+
+  /**
+   * Get featured products excluding cart items
+   * Returns 3-5 featured products
+   */
+  async getFeaturedProducts(
+    userId: string,
+    minCount: number = 3,
+    maxCount: number = 5
+  ): Promise<any[]> {
+    const cart = await this.getOrCreateCart(userId);
+
+    // Get product IDs already in cart
+    const cartProductIds = (cart.items || []).map((item: any) =>
+      item.productId.toString()
+    );
+
+    // Fetch featured products excluding cart items
+    const featuredProducts = await Products.find({
+      _id: {
+        $nin: cartProductIds.map(
+          (id: string) => new mongoose.Types.ObjectId(id)
+        ),
+      },
+      isDeleted: false,
+      status: true, // Active products
+      isFeatured: true,
+    })
+      .populate("categories", "name slug description image")
+      .limit(maxCount)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // If we don't have enough featured products, fill with regular active products
+    if (featuredProducts.length < minCount) {
+      const additionalProducts = await Products.find({
+        _id: {
+          $nin: [
+            ...cartProductIds.map((id: string) => new mongoose.Types.ObjectId(id)),
+            ...featuredProducts.map((p: any) => p._id),
+          ],
+        },
+        isDeleted: false,
+        status: true,
+      })
+        .populate("categories", "name slug description image")
+        .limit(minCount - featuredProducts.length)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      featuredProducts.push(...additionalProducts);
+    }
+
+    // Manually populate ingredients for featured products
+    const featuredIngredientIds: string[] = [];
+    featuredProducts.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients.forEach((ingredientId: any) => {
+          const id = typeof ingredientId === "string" 
+            ? ingredientId 
+            : ingredientId?.toString();
+          if (id && mongoose.Types.ObjectId.isValid(id) && !featuredIngredientIds.includes(id)) {
+            featuredIngredientIds.push(id);
+          }
+        });
+      }
+    });
+
+    // Fetch all ingredient details for featured products
+    const featuredIngredientDetailsMap = new Map();
+    if (featuredIngredientIds.length > 0) {
+      const ingredientDetails = await ProductIngredients.find({
+        _id: { $in: featuredIngredientIds.map((id: string) => new mongoose.Types.ObjectId(id)) },
+      })
+        .select("_id name description image")
+        .lean();
+
+      ingredientDetails.forEach((ingredient: any) => {
+        featuredIngredientDetailsMap.set(ingredient._id.toString(), ingredient);
+      });
+    }
+
+    // Replace ingredient IDs with populated ingredient objects for featured products
+    featuredProducts.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients = product.ingredients
+          .map((ingredientId: any) => {
+            const id = typeof ingredientId === "string" 
+              ? ingredientId 
+              : ingredientId?.toString();
+            return featuredIngredientDetailsMap.get(id);
+          })
+          .filter((ingredient: any) => ingredient !== undefined);
+      }
+    });
+
+    // Limit to maxCount and return full product objects
+    return featuredProducts.slice(0, maxCount);
   }
 
   /**

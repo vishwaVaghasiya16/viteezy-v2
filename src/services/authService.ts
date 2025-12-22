@@ -1274,6 +1274,17 @@ class AuthService {
     const { idToken, deviceInfo } = data;
 
     try {
+      // Validate token format before verification
+      if (!idToken || typeof idToken !== "string" || idToken.trim().length === 0) {
+        throw new AppError("Invalid Google ID token format", 400);
+      }
+
+      // Basic JWT format validation (should have 3 parts separated by dots)
+      const tokenParts = idToken.split(".");
+      if (tokenParts.length !== 3) {
+        throw new AppError("Invalid Google ID token format", 400);
+      }
+
       // Verify the Google ID token
       const ticket = await this.googleOAuthClient.verifyIdToken({
         idToken,
@@ -1282,7 +1293,7 @@ class AuthService {
 
       const payload = ticket.getPayload();
       if (!payload) {
-        throw new AppError("Invalid Google token", 401);
+        throw new AppError("Invalid Google ID token format", 400);
       }
 
       const { sub: googleId, email, name, picture } = payload;
@@ -1384,9 +1395,27 @@ class AuthService {
       };
     } catch (error: any) {
       logger.error("Google OAuth error:", error);
+      
+      // Handle specific Google OAuth errors
       if (error instanceof AppError) {
         throw error;
       }
+
+      // Handle Google Auth Library errors - check for invalid token format
+      if (
+        error.code === "auth/argument-error" ||
+        error.message?.includes("Invalid token") ||
+        error.message?.includes("malformed") ||
+        error.message?.includes("Invalid idToken")
+      ) {
+        throw new AppError("Invalid Google ID token format", 400);
+      }
+
+      // Handle expired token
+      if (error.code === "auth/id-token-expired" || error.message?.includes("expired")) {
+        throw new AppError("Google ID token has expired", 401);
+      }
+
       throw new AppError(
         error.message || "Google authentication failed",
         401
