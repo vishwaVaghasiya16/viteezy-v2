@@ -12,21 +12,28 @@ export class CartController {
   /**
    * Get user's cart
    */
-  static async getCart(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async getCart(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
         throw new AppError("User authentication required", 401);
       }
 
-      const result = await cartService.getCart(userId);
+      const includeSuggested = req.query.includeSuggested !== "false"; // Default true
+      const result = await cartService.getCart(userId, includeSuggested);
 
       res.status(200).json({
         success: true,
         message: "Cart retrieved successfully",
         data: {
           cart: result.cart,
-          warnings: result.warnings,
+          ...(result.suggestedProducts && {
+            suggestedProducts: result.suggestedProducts,
+          }),
         },
       });
     } catch (error) {
@@ -37,7 +44,11 @@ export class CartController {
   /**
    * Add item to cart
    */
-  static async addItem(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async addItem(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
@@ -51,7 +62,6 @@ export class CartController {
         message: result.message,
         data: {
           cart: result.cart,
-          warnings: result.warnings,
         },
       });
     } catch (error) {
@@ -62,7 +72,11 @@ export class CartController {
   /**
    * Update cart item quantity
    */
-  static async updateItem(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async updateItem(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
@@ -81,7 +95,6 @@ export class CartController {
         message: result.message,
         data: {
           cart: result.cart,
-          warnings: result.warnings,
         },
       });
     } catch (error) {
@@ -92,7 +105,11 @@ export class CartController {
   /**
    * Remove item from cart
    */
-  static async removeItem(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async removeItem(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
@@ -121,7 +138,11 @@ export class CartController {
   /**
    * Clear cart
    */
-  static async clearCart(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async clearCart(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
@@ -142,7 +163,11 @@ export class CartController {
   /**
    * Validate cart and calculate member pricing
    */
-  static async validateCart(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  static async validateCart(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
       const userId = req.user?.id || req.userId;
       if (!userId) {
@@ -159,7 +184,6 @@ export class CartController {
         data: {
           isValid: result.isValid,
           errors: result.errors,
-          warnings: result.warnings,
           cart: result.cart,
           pricing: result.pricing,
           items: result.items,
@@ -169,5 +193,37 @@ export class CartController {
       next(error);
     }
   }
-}
 
+  /**
+   * Get suggested products (non-included products) for cart
+   */
+  static async getSuggestedProducts(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = req.user?.id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const limit = parseInt(req.query.limit as string, 10) || 10;
+      const suggestedProducts = await cartService.getSuggestedProducts(
+        userId,
+        limit
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Suggested products retrieved successfully",
+        data: {
+          products: suggestedProducts,
+          count: suggestedProducts.length,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}

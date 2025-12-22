@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { CartController } from "../controllers/cartController";
-import { validateCart, addCartItemSchema, updateCartItemSchema } from "../validation/cartValidation";
+import {
+  validateCart,
+  addCartItemSchema,
+  updateCartItemSchema,
+} from "../validation/cartValidation";
 import { authMiddleware } from "../middleware/auth";
 
 const router = Router();
@@ -15,7 +19,11 @@ router.get("/", CartController.getCart);
 router.post("/items", validateCart(addCartItemSchema), CartController.addItem);
 
 // Update cart item quantity
-router.put("/items/:index", validateCart(updateCartItemSchema), CartController.updateItem);
+router.put(
+  "/items/:index",
+  validateCart(updateCartItemSchema),
+  CartController.updateItem
+);
 
 // Remove item from cart
 router.delete("/items/:index", CartController.removeItem);
@@ -26,5 +34,7 @@ router.delete("/", CartController.clearCart);
 // Validate cart (includes membership discount calculation)
 router.post("/validate", CartController.validateCart);
 
-export default router;
+// Get suggested products (non-included products) for cart
+router.get("/suggested-products", CartController.getSuggestedProducts);
 
+export default router;

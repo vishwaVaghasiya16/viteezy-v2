@@ -8,7 +8,7 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
-import { ProductStatus } from "../models/enums";
+import { ProductStatus, ProductVariant } from "../models/enums";
 
 interface AddCartItemData {
   productId: string;
@@ -32,12 +32,6 @@ interface CartItemWithDetails {
   addedAt: Date;
   product?: any;
   variant?: any;
-  stockWarning?: {
-    available: number;
-    requested: number;
-    isLowStock: boolean;
-    message: string;
-  };
 }
 
 class CartService {
@@ -138,8 +132,6 @@ class CartService {
 
     let variant: any = null;
     let price = product.price;
-    let availableQuantity = Infinity; // Products without variants have unlimited stock
-    let stockWarning: any = undefined;
 
     // If variant is provided, validate it
     if (variantId) {
@@ -159,7 +151,7 @@ class CartService {
 
       // Check stock if tracking is enabled
       if (variant.inventory.trackQuantity) {
-        availableQuantity =
+        const availableQuantity =
           variant.inventory.quantity - variant.inventory.reserved;
 
         // Validate quantity doesn't exceed available stock
@@ -172,29 +164,6 @@ class CartService {
             400
           );
         }
-
-        // Generate stock warning if low stock
-        if (availableQuantity <= this.LOW_STOCK_THRESHOLD) {
-          stockWarning = {
-            available: availableQuantity,
-            requested: requestedQuantity,
-            isLowStock: true,
-            message:
-              availableQuantity === 0
-                ? "This item is out of stock"
-                : `Only ${availableQuantity} items available in stock`,
-          };
-        } else if (
-          requestedQuantity >
-          availableQuantity - this.LOW_STOCK_THRESHOLD
-        ) {
-          stockWarning = {
-            available: availableQuantity,
-            requested: requestedQuantity,
-            isLowStock: false,
-            message: `Low stock warning: Only ${availableQuantity} items remaining`,
-          };
-        }
       }
     }
 
@@ -202,14 +171,16 @@ class CartService {
       product,
       variant: variant || undefined,
       price,
-      stockWarning,
     };
   }
 
   /**
    * Get user's cart
    */
-  async getCart(userId: string): Promise<{ cart: any; warnings: any[] }> {
+  async getCart(
+    userId: string,
+    includeSuggested: boolean = true
+  ): Promise<{ cart: any; suggestedProducts?: any[] }> {
     const cart = await this.getOrCreateCart(userId);
 
     // Populate product and variant details
@@ -221,51 +192,31 @@ class CartService {
           variant = await ProductVariants.findById(item.variantId).lean();
         }
 
-        let stockWarning: any = undefined;
-        if (variant && variant.inventory.trackQuantity) {
-          const available =
-            variant.inventory.quantity - variant.inventory.reserved;
-          if (available <= this.LOW_STOCK_THRESHOLD) {
-            stockWarning = {
-              available,
-              requested: item.quantity,
-              isLowStock: available === 0,
-              message:
-                available === 0
-                  ? "This item is out of stock"
-                  : `Only ${available} items available in stock`,
-            };
-          }
-        }
-
         return {
           ...item,
           product,
           variant: variant || undefined,
-          stockWarning,
         };
       })
     );
 
-    const warnings = itemsWithDetails
-      .filter((item) => item.stockWarning)
-      .map((item) => ({
-        productId: item.productId.toString(),
-        variantId: item.variantId?.toString(),
-        message: item.stockWarning?.message,
-        available: item.stockWarning?.available,
-      }));
-
     const totals = this.calculateCartTotals(itemsWithDetails);
 
-    return {
+    const result: { cart: any; suggestedProducts?: any[] } = {
       cart: {
         ...cart,
         items: itemsWithDetails,
         ...totals,
       },
-      warnings,
     };
+
+    // Include suggested products if requested
+    if (includeSuggested) {
+      const suggestedProducts = await this.getSuggestedProducts(userId, 10);
+      result.suggestedProducts = suggestedProducts;
+    }
+
+    return result;
   }
 
   /**
@@ -274,12 +225,15 @@ class CartService {
   async addItem(
     userId: string,
     data: AddCartItemData
-  ): Promise<{ cart: any; warnings: any[]; message: string }> {
+  ): Promise<{ cart: any; message: string }> {
     const { productId, variantId, quantity } = data;
 
     // Validate and get pricing
-    const { product, variant, price, stockWarning } =
-      await this.validateAndGetPricing(productId, variantId, quantity);
+    const { product, variant, price } = await this.validateAndGetPricing(
+      productId,
+      variantId,
+      quantity
+    );
 
     const cart = await this.getOrCreateCart(userId);
     const productObjectId = new mongoose.Types.ObjectId(productId);
@@ -295,7 +249,6 @@ class CartService {
     );
 
     let updatedItems = [...(cart.items || [])];
-    const warnings: any[] = [];
 
     if (existingItemIndex >= 0) {
       // Update existing item quantity
@@ -344,20 +297,10 @@ class CartService {
       { new: true }
     ).lean();
 
-    if (stockWarning) {
-      warnings.push({
-        productId,
-        variantId: variantId || null,
-        message: stockWarning.message,
-        available: stockWarning.available,
-      });
-    }
-
     logger.info(`Item added to cart for user ${userId}`);
 
     return {
       cart: updatedCart,
-      warnings,
       message:
         existingItemIndex >= 0
           ? "Cart item quantity updated"
@@ -372,7 +315,7 @@ class CartService {
     userId: string,
     itemIndex: number,
     data: UpdateCartItemData
-  ): Promise<{ cart: any; warnings: any[]; message: string }> {
+  ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
 
     if (itemIndex < 0 || itemIndex >= (cart.items || []).length) {
@@ -419,32 +362,10 @@ class CartService {
       { new: true }
     ).lean();
 
-    // Check for stock warnings
-    const warnings: any[] = [];
-    if (item.variantId) {
-      const variant = await ProductVariants.findById(item.variantId).lean();
-      if (variant && variant.inventory.trackQuantity) {
-        const available =
-          variant.inventory.quantity - variant.inventory.reserved;
-        if (available <= this.LOW_STOCK_THRESHOLD) {
-          warnings.push({
-            productId: item.productId.toString(),
-            variantId: item.variantId.toString(),
-            message:
-              available === 0
-                ? "This item is out of stock"
-                : `Only ${available} items available in stock`,
-            available,
-          });
-        }
-      }
-    }
-
     logger.info(`Cart item updated for user ${userId}`);
 
     return {
       cart: updatedCart,
-      warnings,
       message: "Cart item updated successfully",
     };
   }
@@ -517,7 +438,6 @@ class CartService {
   async validateCart(userId: string): Promise<{
     isValid: boolean;
     errors: string[];
-    warnings: string[];
     cart: any;
     pricing: {
       subtotal: { currency: string; amount: number; taxRate: number };
@@ -541,14 +461,12 @@ class CartService {
   }> {
     const cart = await this.getOrCreateCart(userId);
     const errors: string[] = [];
-    const warnings: string[] = [];
     const validatedItems: any[] = [];
 
     if (!cart.items || cart.items.length === 0) {
       return {
         isValid: false,
         errors: ["Cart is empty"],
-        warnings: [],
         cart,
         pricing: {
           subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
@@ -567,24 +485,45 @@ class CartService {
     let currency = cart.items[0]?.price?.currency || "EUR";
     let taxRate = cart.items[0]?.price?.taxRate || 0;
 
-    // Validate each cart item
-    for (const item of cart.items) {
-      const product = await Products.findById(item.productId).lean();
-      if (
-        !product ||
-        product.isDeleted ||
-        product.status !== true
-      ) {
+    // Batch fetch all products and variants at once for better performance
+    const productIds = cart.items.map((item: any) => item.productId);
+    const variantIds = cart.items
+      .map((item: any) => item.variantId)
+      .filter((id: any) => id);
+
+    const [products, variants] = await Promise.all([
+      Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      }).lean(),
+      variantIds.length > 0
+        ? ProductVariants.find({
+            _id: { $in: variantIds },
+            isDeleted: { $ne: true },
+            isActive: true,
+          }).lean()
+        : Promise.resolve([]),
+    ]);
+
+    // Create maps for O(1) lookup
+    const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
+    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
+
+    // Process all items and calculate member prices in parallel
+    const itemProcessingPromises = cart.items.map(async (item: any) => {
+      const product = productMap.get(item.productId.toString());
+      if (!product) {
         errors.push(`Product ${item.productId} is not available`);
-        continue;
+        return null;
       }
 
       let variant: any = null;
       if (item.variantId) {
-        variant = await ProductVariants.findById(item.variantId).lean();
-        if (!variant || variant.isDeleted || !variant.isActive) {
+        variant = variantMap.get(item.variantId.toString());
+        if (!variant) {
           errors.push(`Variant ${item.variantId} is not available`);
-          continue;
+          return null;
         }
       }
 
@@ -609,10 +548,7 @@ class CartService {
       const originalItemTotal = originalItemPrice * item.quantity;
       const memberItemTotal = memberItemPrice * item.quantity;
 
-      originalSubtotal += originalItemTotal;
-      memberSubtotal += memberItemTotal;
-
-      validatedItems.push({
+      return {
         productId: item.productId.toString(),
         variantId: item.variantId?.toString(),
         quantity: item.quantity,
@@ -630,7 +566,31 @@ class CartService {
         isAvailable: true,
         isValid: true,
         isMember: memberPriceResult.isMember,
-      });
+        originalItemTotal,
+        memberItemTotal,
+      };
+    });
+
+    // Wait for all item processing to complete
+    const processedItems = await Promise.all(itemProcessingPromises);
+
+    // Filter out null items and calculate totals
+    for (const processedItem of processedItems) {
+      if (processedItem) {
+        originalSubtotal += processedItem.originalItemTotal;
+        memberSubtotal += processedItem.memberItemTotal;
+        validatedItems.push({
+          productId: processedItem.productId,
+          variantId: processedItem.variantId,
+          quantity: processedItem.quantity,
+          originalPrice: processedItem.originalPrice,
+          memberPrice: processedItem.memberPrice,
+          discount: processedItem.discount,
+          isAvailable: processedItem.isAvailable,
+          isValid: processedItem.isValid,
+          isMember: processedItem.isMember,
+        });
+      }
     }
 
     // Calculate membership discount
@@ -648,7 +608,6 @@ class CartService {
     return {
       isValid: errors.length === 0,
       errors,
-      warnings,
       cart,
       pricing: {
         subtotal: {
@@ -685,6 +644,81 @@ class CartService {
       },
       items: validatedItems,
     };
+  }
+
+  /**
+   * Get suggested products (non-included products) for cart
+   * If stand-up pouch is in cart, suggest only stand-up pouch products
+   * If sachets are in cart, suggest only sachet products
+   */
+  async getSuggestedProducts(
+    userId: string,
+    limit: number = 10
+  ): Promise<any[]> {
+    const cart = await this.getOrCreateCart(userId);
+
+    // Get product IDs already in cart
+    const cartProductIds = (cart.items || []).map((item: any) =>
+      item.productId.toString()
+    );
+
+    // Determine variant type from cart items
+    let suggestedVariant: ProductVariant | null = null;
+
+    if (cart.items && cart.items.length > 0) {
+      // Fetch products from cart to check their variant type
+      const cartProducts = await Products.find({
+        _id: { $in: cart.items.map((item: any) => item.productId) },
+        isDeleted: false,
+      })
+        .select("variant")
+        .lean();
+
+      // Check if any product is STAND_UP_POUCH
+      const hasStandUpPouch = cartProducts.some(
+        (product: any) => product.variant === ProductVariant.STAND_UP_POUCH
+      );
+
+      // Check if any product is SACHETS
+      const hasSachets = cartProducts.some(
+        (product: any) => product.variant === ProductVariant.SACHETS
+      );
+
+      // Determine suggested variant based on cart contents
+      if (hasStandUpPouch) {
+        suggestedVariant = ProductVariant.STAND_UP_POUCH;
+      } else if (hasSachets) {
+        suggestedVariant = ProductVariant.SACHETS;
+      }
+    }
+
+    // Build query for suggested products
+    const query: any = {
+      _id: {
+        $nin: cartProductIds.map(
+          (id: string) => new mongoose.Types.ObjectId(id)
+        ),
+      },
+      isDeleted: false,
+      status: true, // true = Active, false = Inactive
+    };
+
+    // Filter by variant type if determined from cart
+    if (suggestedVariant) {
+      query.variant = suggestedVariant;
+    }
+
+    // Fetch suggested products
+    const suggestedProducts = await Products.find(query)
+      .select(
+        "title slug skuRoot productImage price variant sachetPrices standupPouchPrice categories"
+      )
+      .populate("categories", "name slug")
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return suggestedProducts;
   }
 }
 
