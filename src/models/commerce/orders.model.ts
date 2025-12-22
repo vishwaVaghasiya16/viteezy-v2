@@ -1,10 +1,8 @@
 import mongoose, { Schema, Document } from "mongoose";
 import {
-  AddressSnapshotSchema,
   PriceSchema,
   AuditSchema,
   SoftDelete,
-  AddressSnapshotType,
   PriceType,
 } from "../common.model";
 import {
@@ -37,8 +35,8 @@ export interface IOrder extends Document {
   membershipDiscount: PriceType;
   subscriptionPlanDiscount: PriceType;
   total: PriceType;
-  shippingAddress: AddressSnapshotType;
-  billingAddress: AddressSnapshotType;
+  shippingAddressId: mongoose.Types.ObjectId; // Reference to Address model
+  billingAddressId?: mongoose.Types.ObjectId; // Reference to Address model
   paymentMethod: string;
   paymentStatus: PaymentStatus;
   paymentId?: string;
@@ -136,12 +134,14 @@ const OrderSchema = new Schema<IOrder>(
       type: PriceSchema,
       default: null,
     },
-    shippingAddress: {
-      type: AddressSnapshotSchema,
-      default: null,
+    shippingAddressId: {
+      type: Schema.Types.ObjectId,
+      ref: "addresses",
+      required: true,
     },
-    billingAddress: {
-      type: AddressSnapshotSchema,
+    billingAddressId: {
+      type: Schema.Types.ObjectId,
+      ref: "addresses",
       default: null,
     },
     paymentMethod: {
@@ -210,5 +210,7 @@ OrderSchema.index({ orderNumber: 1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ paymentStatus: 1 });
 OrderSchema.index({ trackingNumber: 1 });
+OrderSchema.index({ shippingAddressId: 1 });
+OrderSchema.index({ billingAddressId: 1 });
 
 export const Orders = mongoose.model<IOrder>("orders", OrderSchema);
