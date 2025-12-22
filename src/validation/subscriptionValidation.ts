@@ -103,3 +103,10 @@ export const getSubscriptionsQuerySchema = Joi.object(
 )
   .default({})
   .label("SubscriptionsQuery");
+
+/**
+ * Joi schema for pausing subscription
+ */
+export const pauseSubscriptionSchema = Joi.object(withFieldLabels({})).label(
+  "PauseSubscriptionPayload"
+);

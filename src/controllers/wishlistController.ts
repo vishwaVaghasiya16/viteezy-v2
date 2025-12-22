@@ -30,7 +30,7 @@ class WishlistController {
           .populate({
             path: "productId",
             select:
-              "title slug productImage price media tags labels isDeleted pricing",
+              "title slug productImage price media tags labels isDeleted pricing description",
           }),
         Wishlists.countDocuments(filter),
       ]);
@@ -61,7 +61,7 @@ class WishlistController {
         reviewStats.map((stat) => [stat._id.toString(), stat])
       );
 
-      // Add review stats to each item
+      // Add review stats to each item and remove id field from productId
       const itemsWithReviews = items.map((item: any) => {
         const itemObj = item.toObject();
         if (itemObj.productId?._id) {
@@ -72,6 +72,10 @@ class WishlistController {
               ? Math.round(stats.averageRating * 10) / 10
               : 0,
           };
+          // Remove id field, keep only _id
+          if (itemObj.productId.id) {
+            delete itemObj.productId.id;
+          }
         }
         return itemObj;
       });

@@ -345,6 +345,19 @@ export const refreshTokenSchema = Joi.object(
 ).label("RefreshTokenPayload");
 
 /**
+ * Apple Login Validation Schema
+ * @constant {Joi.ObjectSchema} appleLoginSchema
+ * @description Validates Apple login request data
+ */
+export const appleLoginSchema = Joi.object(
+  withFieldLabels({
+    idToken: Joi.string().required().messages({
+      "any.required": "Apple ID token is required",
+      "string.empty": "Apple ID token cannot be empty",
+    }),
+    deviceInfo: deviceInfoSchema,
+  })
+).label("AppleLoginPayload");
  * Google Login Validation Schema
  * @constant {Joi.ObjectSchema} googleLoginSchema
  * @description Validates Google OAuth login request data

@@ -8,6 +8,7 @@ import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { emailService } from "./emailService";
 import { generateMemberId } from "../utils/memberIdGenerator";
+import { firebaseService } from "./firebaseService";
 import { config } from "../config";
 
 interface RegisterData {
@@ -21,6 +22,11 @@ interface RegisterData {
 interface LoginData {
   email: string;
   password: string;
+  deviceInfo: string;
+}
+
+interface AppleLoginData {
+  idToken: string;
   deviceInfo: string;
 }
 
@@ -625,6 +631,113 @@ class AuthService {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       message: "Login successful",
+    };
+  }
+
+  /**
+   * Apple Login - Verify Apple ID token and login/register user
+   */
+  async appleLogin(data: AppleLoginData): Promise<LoginResult> {
+    const { idToken, deviceInfo } = data;
+
+    // Verify Apple ID token using Firebase
+    const decodedToken = await firebaseService.verifyAppleIdToken(idToken);
+    const firebaseUser = firebaseService.getUserInfoFromToken(decodedToken);
+
+    // Extract user information from token (email and name are guaranteed from getUserInfoFromToken)
+    const email = firebaseUser.email.toLowerCase().trim();
+    const name = firebaseUser.name;
+
+    if (!email) {
+      throw new AppError(
+        "Email not available from Apple account. Please ensure your Apple account has an email.",
+        400
+      );
+    }
+
+    // Check if user exists by email
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Create new user for Apple login (Register)
+      const memberId = await generateMemberId();
+      user = await User.create({
+        name,
+        email,
+        password: crypto.randomBytes(32).toString("hex"), // Random password since Apple handles auth
+        isEmailVerified: firebaseUser.emailVerified, // Apple emails are typically verified
+        memberId,
+      });
+
+      logger.info(`New user registered via Apple login: ${user.email}`);
+    } else {
+      // User exists, login
+      // Check if user is active
+      if (!user.isActive) {
+        throw new AppError(
+          "Account is deactivated. Please contact support.",
+          401
+        );
+      }
+
+      // Update email verification status if Apple says it's verified
+      if (firebaseUser.emailVerified && !user.isEmailVerified) {
+        user.isEmailVerified = true;
+        await user.save();
+      }
+
+      // Update name if it was changed or empty
+      if (!user.name || user.name === "Apple User") {
+        user.name = name;
+        await user.save();
+      }
+
+      logger.info(`Existing user logged in via Apple: ${user.email}`);
+    }
+
+    // Generate session and tokens
+    const sessionId = crypto.randomUUID();
+    await AuthSessions.create({
+      userId: user._id,
+      sessionId: sessionId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      deviceInfo: deviceInfo,
+      lastUsedAt: new Date(),
+      isRevoked: false,
+    });
+
+    const tokens = this.generateTokens(user._id.toString(), sessionId);
+
+    // Update last login
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        lastLogin: new Date(),
+        $push: {
+          sessionIds: {
+            sessionId: sessionId,
+            status: SessionStatus.ACTIVE,
+            revoked: false,
+            deviceInfo: deviceInfo,
+          },
+        },
+      },
+      { new: true }
+    ).select("-password");
+
+    // Return same response format for both login and register
+    return {
+      user: {
+        _id: updatedUser!._id,
+        name: updatedUser!.name,
+        email: updatedUser!.email,
+        phone: updatedUser!.phone || null,
+        isEmailVerified: updatedUser!.isEmailVerified,
+        lastLogin: updatedUser!.lastLogin,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      message: "Login successful", // Always "Login successful" for both login and register
     };
   }
 
