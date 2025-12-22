@@ -643,9 +643,12 @@ class ProductService {
     // If search exists, it must be the first $match stage
     if (search && search.trim().length > 0) {
       hasSearch = true;
+      const searchTerm = search.trim();
+      
+      // Try text search first, but also support regex fallback for better compatibility
       // Build text search match with isDeleted filter
       const textSearchMatch: Record<string, any> = {
-        $text: { $search: search.trim() },
+        $text: { $search: searchTerm },
         isDeleted: false,
       };
 
@@ -661,12 +664,68 @@ class ProductService {
         textSearchMatch.hasStandupPouch = hasStandupPouch;
 
       // Text search must be first stage
-      pipeline.push({ $match: textSearchMatch });
+      // Use $or to support both text search and regex fallback
+      const searchConditions: any[] = [textSearchMatch];
+      
+      // Add regex fallback for better search compatibility
+      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regexSearchMatch: Record<string, any> = {
+        $or: [
+          { title: { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+          { description: { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+          { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+          { slug: { $regex: escapedSearchTerm, $options: "i" } },
+        ],
+        isDeleted: false,
+      };
+      
+      if (status !== undefined) {
+        regexSearchMatch.status = status;
+      } else {
+        regexSearchMatch.status = true;
+      }
+      if (variant) regexSearchMatch.variant = variant;
+      if (hasStandupPouch !== undefined)
+        regexSearchMatch.hasStandupPouch = hasStandupPouch;
+      
+      searchConditions.push(regexSearchMatch);
+      
+      pipeline.push({
+        $match: {
+          $or: searchConditions,
+        },
+      });
 
-      // Add relevance score immediately after text search
+      // Add relevance score - use textScore if available, otherwise use regex match priority
       pipeline.push({
         $addFields: {
-          relevanceScore: { $meta: "textScore" },
+          relevanceScore: {
+            $ifNull: [
+              { $meta: "textScore" },
+              {
+                $cond: [
+                  {
+                    $or: [
+                      { $regexMatch: { input: { $ifNull: ["$title", ""] }, regex: escapedSearchTerm, options: "i" } },
+                      { $regexMatch: { input: { $ifNull: ["$title.en", ""] }, regex: escapedSearchTerm, options: "i" } },
+                    ],
+                  },
+                  10,
+                  5,
+                ],
+              },
+            ],
+          },
         },
       });
 

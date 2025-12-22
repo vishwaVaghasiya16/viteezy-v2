@@ -346,7 +346,22 @@ ProductSchema.index({ isDeleted: 1 });
 ProductSchema.index({ categories: 1 });
 ProductSchema.index({ healthGoals: 1 });
 
-// Text search index
-ProductSchema.index({ title: "text", description: "text" });
+// Text search index - support both multilingual and plain string fields
+ProductSchema.index({
+  title: "text",
+  "title.en": "text",
+  "title.nl": "text",
+  "title.de": "text",
+  "title.fr": "text",
+  "title.es": "text",
+  description: "text",
+  "description.en": "text",
+  "description.nl": "text",
+  "description.de": "text",
+  "description.fr": "text",
+  "description.es": "text",
+  shortDescription: "text",
+  slug: "text",
+});
 
 export const Products = mongoose.model<IProduct>("products", ProductSchema);
