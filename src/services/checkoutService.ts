@@ -30,8 +30,86 @@ interface ProductPurchasePlans {
   plans: PurchasePlan[];
 }
 
+interface MergedSachetPrices {
+  thirtyDays?: {
+    currency: string;
+    amount: number;
+    totalAmount: number;
+    discountedPrice?: number;
+    taxRate: number;
+    durationDays: number;
+    capsuleCount: number;
+    savingsPercentage?: number;
+    features?: string[];
+    icon?: string;
+  };
+  sixtyDays?: {
+    currency: string;
+    amount: number;
+    totalAmount: number;
+    discountedPrice?: number;
+    taxRate: number;
+    durationDays: number;
+    capsuleCount: number;
+    savingsPercentage?: number;
+    features?: string[];
+    icon?: string;
+  };
+  ninetyDays?: {
+    currency: string;
+    amount: number;
+    totalAmount: number;
+    discountedPrice?: number;
+    taxRate: number;
+    durationDays: number;
+    capsuleCount: number;
+    savingsPercentage?: number;
+    features?: string[];
+    icon?: string;
+  };
+  oneEightyDays?: {
+    currency: string;
+    amount: number;
+    totalAmount: number;
+    discountedPrice?: number;
+    taxRate: number;
+    durationDays: number;
+    capsuleCount: number;
+    savingsPercentage?: number;
+    features?: string[];
+    icon?: string;
+  };
+  oneTime?: {
+    count30?: {
+      currency: string;
+      amount: number;
+      discountedPrice?: number;
+      taxRate: number;
+      capsuleCount: number;
+    };
+    count60?: {
+      currency: string;
+      amount: number;
+      discountedPrice?: number;
+      taxRate: number;
+      capsuleCount: number;
+    };
+  };
+}
+
 interface PurchasePlansResponse {
   products: ProductPurchasePlans[];
+  merged: {
+    sachetPrices: MergedSachetPrices;
+    totalCapsules: {
+      oneTime30: number;
+      oneTime60: number;
+      thirtyDays: number;
+      sixtyDays: number;
+      ninetyDays: number;
+      oneEightyDays: number;
+    };
+  };
   totals: {
     subtotal: { currency: string; amount: number; taxRate: number };
     tax: { currency: string; amount: number; taxRate: number };
@@ -367,8 +445,198 @@ class CheckoutService {
     // Calculate final total
     const totalAmount = totalSubtotal + totalTax - totalDiscount;
 
+    // Merge sachetPrices from all products
+    const mergedSachetPrices: MergedSachetPrices = {};
+    const totalCapsules = {
+      oneTime30: 0,
+      oneTime60: 0,
+      thirtyDays: 0,
+      sixtyDays: 0,
+      ninetyDays: 0,
+      oneEightyDays: 0,
+    };
+
+    // Process each product to merge sachetPrices
+    for (const product of products) {
+      const cartItem = cart.items.find(
+        (item: any) => item.productId.toString() === product._id.toString()
+      );
+      if (!cartItem) continue;
+
+      const quantity = cartItem.quantity;
+      const variant = product.variant as ProductVariant;
+
+      if (variant === ProductVariant.SACHETS && product.sachetPrices) {
+        const sachetPrices = product.sachetPrices as any;
+
+        // Merge oneTime prices
+        if (sachetPrices.oneTime) {
+          if (sachetPrices.oneTime.count30) {
+            if (!mergedSachetPrices.oneTime) {
+              mergedSachetPrices.oneTime = {};
+            }
+            if (!mergedSachetPrices.oneTime.count30) {
+              mergedSachetPrices.oneTime.count30 = {
+                currency: sachetPrices.oneTime.count30.currency || currency,
+                amount: 0,
+                discountedPrice: 0,
+                taxRate: sachetPrices.oneTime.count30.taxRate || taxRate,
+                capsuleCount: 0,
+              };
+            }
+            const price =
+              sachetPrices.oneTime.count30.discountedPrice ||
+              sachetPrices.oneTime.count30.amount ||
+              0;
+            mergedSachetPrices.oneTime.count30.amount += price * quantity;
+            if (
+              sachetPrices.oneTime.count30.discountedPrice &&
+              mergedSachetPrices.oneTime.count30.discountedPrice !== undefined
+            ) {
+              mergedSachetPrices.oneTime.count30.discountedPrice =
+                (mergedSachetPrices.oneTime.count30.discountedPrice || 0) +
+                sachetPrices.oneTime.count30.discountedPrice * quantity;
+            }
+            const capsules =
+              (sachetPrices.oneTime.count30.capsuleCount || 30) * quantity;
+            mergedSachetPrices.oneTime.count30.capsuleCount += capsules;
+            totalCapsules.oneTime30 += capsules;
+          }
+
+          if (sachetPrices.oneTime.count60) {
+            if (!mergedSachetPrices.oneTime) {
+              mergedSachetPrices.oneTime = {};
+            }
+            if (!mergedSachetPrices.oneTime.count60) {
+              mergedSachetPrices.oneTime.count60 = {
+                currency: sachetPrices.oneTime.count60.currency || currency,
+                amount: 0,
+                discountedPrice: 0,
+                taxRate: sachetPrices.oneTime.count60.taxRate || taxRate,
+                capsuleCount: 0,
+              };
+            }
+            const price =
+              sachetPrices.oneTime.count60.discountedPrice ||
+              sachetPrices.oneTime.count60.amount ||
+              0;
+            mergedSachetPrices.oneTime.count60.amount += price * quantity;
+            if (
+              sachetPrices.oneTime.count60.discountedPrice &&
+              mergedSachetPrices.oneTime.count60.discountedPrice !== undefined
+            ) {
+              mergedSachetPrices.oneTime.count60.discountedPrice =
+                (mergedSachetPrices.oneTime.count60.discountedPrice || 0) +
+                sachetPrices.oneTime.count60.discountedPrice * quantity;
+            }
+            const capsules =
+              (sachetPrices.oneTime.count60.capsuleCount || 60) * quantity;
+            mergedSachetPrices.oneTime.count60.capsuleCount += capsules;
+            totalCapsules.oneTime60 += capsules;
+          }
+        }
+
+        // Merge subscription plans
+        const subscriptionPlans = [
+          { key: "thirtyDays", totalKey: "thirtyDays" },
+          { key: "sixtyDays", totalKey: "sixtyDays" },
+          { key: "ninetyDays", totalKey: "ninetyDays" },
+          { key: "oneEightyDays", totalKey: "oneEightyDays" },
+        ];
+
+        for (const plan of subscriptionPlans) {
+          if (sachetPrices[plan.key]) {
+            const planData = sachetPrices[plan.key];
+            if (!mergedSachetPrices[plan.key as keyof MergedSachetPrices]) {
+              mergedSachetPrices[plan.key as keyof MergedSachetPrices] = {
+                currency: planData.currency || currency,
+                amount: 0,
+                totalAmount: 0,
+                discountedPrice: 0,
+                taxRate: planData.taxRate || taxRate,
+                durationDays: planData.durationDays || 0,
+                capsuleCount: 0,
+                savingsPercentage: planData.savingsPercentage,
+                features: planData.features,
+                icon: planData.icon,
+              } as any;
+            }
+
+            const mergedPlan = mergedSachetPrices[
+              plan.key as keyof MergedSachetPrices
+            ] as any;
+            const baseAmount = planData.totalAmount || planData.amount || 0;
+            let planPrice = baseAmount;
+
+            // Apply discount for 90-day plan
+            if (plan.key === "ninetyDays") {
+              const discountAmount =
+                baseAmount * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100);
+              planPrice = baseAmount - discountAmount;
+              mergedPlan.discountedPrice =
+                (mergedPlan.discountedPrice || 0) + planPrice * quantity;
+            } else if (planData.discountedPrice) {
+              planPrice = planData.discountedPrice;
+              mergedPlan.discountedPrice =
+                (mergedPlan.discountedPrice || 0) + planPrice * quantity;
+            }
+
+            mergedPlan.amount += baseAmount * quantity;
+            mergedPlan.totalAmount += planPrice * quantity;
+            const capsules = (planData.capsuleCount || 0) * quantity;
+            mergedPlan.capsuleCount += capsules;
+            totalCapsules[plan.totalKey as keyof typeof totalCapsules] +=
+              capsules;
+          }
+        }
+      }
+    }
+
+    // Round merged prices
+    const roundPrice = (price: number) => Math.round(price * 100) / 100;
+
+    if (mergedSachetPrices.oneTime) {
+      if (mergedSachetPrices.oneTime.count30) {
+        mergedSachetPrices.oneTime.count30.amount = roundPrice(
+          mergedSachetPrices.oneTime.count30.amount
+        );
+        if (mergedSachetPrices.oneTime.count30.discountedPrice) {
+          mergedSachetPrices.oneTime.count30.discountedPrice = roundPrice(
+            mergedSachetPrices.oneTime.count30.discountedPrice
+          );
+        }
+      }
+      if (mergedSachetPrices.oneTime.count60) {
+        mergedSachetPrices.oneTime.count60.amount = roundPrice(
+          mergedSachetPrices.oneTime.count60.amount
+        );
+        if (mergedSachetPrices.oneTime.count60.discountedPrice) {
+          mergedSachetPrices.oneTime.count60.discountedPrice = roundPrice(
+            mergedSachetPrices.oneTime.count60.discountedPrice
+          );
+        }
+      }
+    }
+
+    ["thirtyDays", "sixtyDays", "ninetyDays", "oneEightyDays"].forEach(
+      (key) => {
+        const plan = mergedSachetPrices[key as keyof MergedSachetPrices] as any;
+        if (plan) {
+          plan.amount = roundPrice(plan.amount);
+          plan.totalAmount = roundPrice(plan.totalAmount);
+          if (plan.discountedPrice) {
+            plan.discountedPrice = roundPrice(plan.discountedPrice);
+          }
+        }
+      }
+    );
+
     return {
       products: productPurchasePlans,
+      merged: {
+        sachetPrices: mergedSachetPrices,
+        totalCapsules,
+      },
       totals: {
         subtotal: {
           currency,

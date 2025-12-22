@@ -23,6 +23,7 @@ import { AppError } from "../../utils/AppError";
 import mongoose from "mongoose";
 import { membershipService } from "../membershipService";
 import { emailService } from "../emailService";
+import { AddressSnapshotType } from "../../models/common.model";
 
 /**
  * Unified Payment Service
@@ -391,7 +392,9 @@ export class PaymentService {
         console.log(
           "🟢 [PAYMENT SERVICE] Step 8: Payment completed, updating order"
         );
-        const order = await Orders.findById(payment.orderId);
+        const order = await Orders.findById(payment.orderId)
+          .populate("shippingAddressId")
+          .populate("billingAddressId");
         if (order) {
           console.log("✅ [PAYMENT SERVICE] - Order found:", order.orderNumber);
           order.paymentStatus = PaymentStatus.COMPLETED;
@@ -697,8 +700,10 @@ export class PaymentService {
         throw new AppError("Invalid user ID format", 400);
       }
 
-      // Get order details
-      const order = await Orders.findById(data.orderId);
+      // Get order details with populated addresses
+      const order = await Orders.findById(data.orderId)
+        .populate("shippingAddressId")
+        .populate("billingAddressId");
       if (!order) {
         throw new AppError("Order not found", 404);
       }
@@ -745,6 +750,14 @@ export class PaymentService {
       const lineItems = this.buildOrderCheckoutLineItems(order);
       const amountInMinorUnits = this.toMinorUnits(order.total.amount);
 
+      // Convert populated addresses to AddressSnapshotType format
+      const shippingAddress = order.shippingAddressId
+        ? this.convertAddressToSnapshot(order.shippingAddressId as any)
+        : undefined;
+      const billingAddress = order.billingAddressId
+        ? this.convertAddressToSnapshot(order.billingAddressId as any)
+        : shippingAddress;
+
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
@@ -764,8 +777,8 @@ export class PaymentService {
         customerEmail: user.email,
         customerName: user.name,
         shippingCountry: orderCountry,
-        shippingAddress: order.shippingAddress,
-        billingAddress: order.billingAddress,
+        shippingAddress,
+        billingAddress,
         lineItems,
       };
 
@@ -845,10 +858,11 @@ export class PaymentService {
         throw new AppError("Invalid payment ID format", 400);
       }
 
-      // Get payment
-      const payment = await Payments.findById(data.paymentId).populate(
-        "orderId"
-      );
+      // Get payment with populated order and addresses
+      const payment = await Payments.findById(data.paymentId).populate({
+        path: "orderId",
+        populate: [{ path: "shippingAddressId" }, { path: "billingAddressId" }],
+      });
       if (!payment) {
         throw new AppError("Payment not found", 404);
       }
@@ -1070,11 +1084,39 @@ export class PaymentService {
   }
 
   private getOrderCountry(order: any): string | undefined {
+    // Get country from populated address or metadata
+    const shippingAddr = order?.shippingAddressId as any;
+    const billingAddr = order?.billingAddressId as any;
     const country =
-      order?.shippingAddress?.country ||
-      order?.billingAddress?.country ||
+      shippingAddr?.country ||
+      billingAddr?.country ||
       order?.metadata?.shippingCountry;
     return country ? country.toUpperCase() : undefined;
+  }
+
+  /**
+   * Convert populated address document to AddressSnapshotType format
+   */
+  private convertAddressToSnapshot(address: any): AddressSnapshotType {
+    if (!address) {
+      return {};
+    }
+
+    return {
+      name:
+        `${address.firstName || ""} ${address.lastName || ""}`.trim() ||
+        undefined,
+      phone: address.phone || undefined,
+      line1:
+        [address.addressLine1, address.houseNumber, address.houseNumberAddition]
+          .filter(Boolean)
+          .join(" ") || undefined,
+      line2: address.addressLine2 || undefined,
+      city: address.city || undefined,
+      state: address.state || undefined,
+      zip: address.zip || undefined,
+      country: address.country || undefined,
+    };
   }
 
   private ensurePaymentMethodAllowed(
@@ -1159,6 +1201,12 @@ export class PaymentService {
       console.log("📧 [EMAIL] - Total amount:", order.total?.amount);
 
       console.log("📧 [EMAIL] Step 3: Sending order confirmation email");
+
+      // Convert populated address to snapshot format for email
+      const shippingAddressSnapshot = order.shippingAddressId
+        ? this.convertAddressToSnapshot(order.shippingAddressId as any)
+        : undefined;
+
       const emailSent = await emailService.sendOrderConfirmationEmail({
         to: user.email,
         userName: user.name,
@@ -1171,7 +1219,7 @@ export class PaymentService {
         discount: order.discount,
         total: order.total,
         items,
-        shippingAddress: order.shippingAddress,
+        shippingAddress: shippingAddressSnapshot,
       });
 
       if (emailSent) {
