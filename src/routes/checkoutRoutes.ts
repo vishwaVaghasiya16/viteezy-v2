@@ -16,5 +16,12 @@ router.use(authMiddleware);
  */
 router.get("/summary", CheckoutController.getCheckoutSummary);
 
-export default router;
+/**
+ * @route   GET /api/checkout/purchase-plans
+ * @desc    Get purchase plans for products in cart with calculated totals
+ * @access  Private
+ * @query   selectedPlans (optional) - JSON string of selected plans per product
+ */
+router.get("/purchase-plans", CheckoutController.getPurchasePlans);
 
+export default router;

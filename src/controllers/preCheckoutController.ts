@@ -4,7 +4,6 @@ import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Products, ProductVariants, Coupons } from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
-import { ProductStatus } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -144,7 +143,7 @@ class PreCheckoutController {
         }
 
         // Check product availability
-        const isAvailable = product.status === ProductStatus.ACTIVE;
+        const isAvailable = product.status === true; // true = Active, false = Inactive
         if (!isAvailable) {
           errors.push(
             `Product ${product.title?.en || productId} is not available`

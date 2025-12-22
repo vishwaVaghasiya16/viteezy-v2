@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { cartService } from "../services/cartService";
+import { checkoutService } from "../services/checkoutService";
 import { AppError } from "../utils/AppError";
 import { Addresses } from "../models/core/addresses.model";
 import mongoose from "mongoose";
@@ -134,6 +135,53 @@ class CheckoutController {
         success: true,
         message: "Checkout summary retrieved successfully",
         data: summary,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get purchase plans for products in cart
+   * @route GET /api/checkout/purchase-plans
+   * @access Private
+   */
+  static async getPurchasePlans(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?._id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      // Get selected plans from query params (optional)
+      // Format: ?selectedPlans={"productId1":{"planKey":"ninetyDays"},"productId2":{"planKey":"oneTime","capsuleCount":30}}
+      let selectedPlans:
+        | Record<string, { planKey: string; capsuleCount?: number }>
+        | undefined;
+      if (
+        req.query.selectedPlans &&
+        typeof req.query.selectedPlans === "string"
+      ) {
+        try {
+          selectedPlans = JSON.parse(req.query.selectedPlans);
+        } catch (e) {
+          // Invalid JSON, ignore
+        }
+      }
+
+      const result = await checkoutService.getPurchasePlans(
+        userId,
+        selectedPlans
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Purchase plans retrieved successfully",
+        data: result,
       });
     } catch (error) {
       next(error);
