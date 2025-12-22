@@ -26,34 +26,35 @@ class CheckoutController {
         throw new AppError("User authentication required", 401);
       }
 
-      // Validate cart and get pricing with member discounts
-      const cartValidation = await cartService.validateCart(userId);
+      // Parallel execution: Validate cart and fetch addresses simultaneously
+      const [cartValidation, shippingAddress, billingAddress] =
+        await Promise.all([
+          cartService.validateCart(userId),
+          Addresses.findOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            isDefault: true,
+            isDeleted: false,
+          }).lean(),
+          Addresses.findOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            isDefault: true,
+            isDeleted: false,
+          }).lean(),
+        ]);
 
       if (!cartValidation.isValid) {
         res.status(400).json({
           success: false,
           message: "Cart validation failed",
           errors: cartValidation.errors,
-          warnings: cartValidation.warnings,
         });
         return;
       }
 
-      // Get user's default addresses
-      const shippingAddress = await Addresses.findOne({
-        userId: new mongoose.Types.ObjectId(userId),
-        isDefault: true,
-        isDeleted: false,
-      }).lean();
-
-      const billingAddress = await Addresses.findOne({
-        userId: new mongoose.Types.ObjectId(userId),
-        isDefault: true,
-        isDeleted: false,
-      }).lean();
-
       // Check if user is a member (check if any item has member pricing)
-      const isMember = cartValidation.items.some((item) => item.isMember === true);
+      const isMember = cartValidation.items.some(
+        (item) => item.isMember === true
+      );
 
       // Build summary response
       const summary = {
@@ -123,7 +124,6 @@ class CheckoutController {
               }
             : null,
         },
-        warnings: cartValidation.warnings,
       };
 
       res.status(200).json({
@@ -138,4 +138,3 @@ class CheckoutController {
 }
 
 export { CheckoutController };
-
