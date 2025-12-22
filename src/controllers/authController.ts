@@ -91,6 +91,33 @@ class AuthController {
   });
 
   /**
+   * Apple Login
+   */
+  appleLogin = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { idToken, deviceInfo } = req.body;
+
+      if (!deviceInfo) {
+        throw new AppError("deviceInfo is required for Apple login", 400);
+      }
+
+      const result = await authService.appleLogin({
+        idToken,
+        deviceInfo,
+      });
+
+      res.apiSuccess(
+        {
+          user: result.user,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
+        result.message
+      );
+    }
+  );
+
+  /**
    * Resend OTP
    */
   resendOTP = asyncHandler(

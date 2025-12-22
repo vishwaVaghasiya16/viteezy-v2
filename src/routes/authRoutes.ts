@@ -18,6 +18,7 @@ import {
   changePasswordSchema,
   updateProfileSchema,
   refreshTokenSchema,
+  appleLoginSchema,
 } from "@/validation/authValidation";
 import { authMiddleware } from "@/middleware/auth";
 
@@ -33,6 +34,13 @@ router.post("/register", validateJoi(registerSchema), authController.register);
 
 // User login endpoint
 router.post("/login", validateJoi(loginSchema), authController.login);
+
+// Apple login endpoint
+router.post(
+  "/apple-login",
+  validateJoi(appleLoginSchema),
+  authController.appleLogin
+);
 
 // Refresh token endpoint
 router.post(
