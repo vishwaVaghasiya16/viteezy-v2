@@ -434,7 +434,6 @@ class OrderController {
             product.title?.nl ||
             product.slug ||
             "Product",
-          sku: item.sku || product.skuRoot,
         };
       });
 
@@ -719,7 +718,6 @@ class OrderController {
           variantId: item.variantId,
           quantity: item.quantity,
           name: item.name,
-          sku: item.sku,
           price: item.price,
         })),
         pricing: {
@@ -854,7 +852,6 @@ class OrderController {
           variantId: item.variantId,
           quantity: item.quantity,
           name: item.name,
-          sku: item.sku,
           price: item.price,
           product: product
             ? {

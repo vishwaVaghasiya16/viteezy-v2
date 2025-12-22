@@ -25,7 +25,6 @@ export interface IOrder extends Document {
     quantity: number;
     price: PriceType;
     name: string;
-    sku?: string;
   }>;
   subtotal: PriceType;
   tax: PriceType;
@@ -91,11 +90,6 @@ const OrderSchema = new Schema<IOrder>(
           type: PriceSchema,
         },
         name: {
-          type: String,
-          trim: true,
-          default: null,
-        },
-        sku: {
           type: String,
           trim: true,
           default: null,

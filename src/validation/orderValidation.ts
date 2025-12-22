@@ -75,7 +75,6 @@ const orderItemSchema = Joi.object(
     quantity: Joi.number().integer().min(1).required(),
     price: priceSchema.required(),
     name: Joi.string().trim().optional(),
-    sku: Joi.string().trim().optional(),
   })
 );
 
