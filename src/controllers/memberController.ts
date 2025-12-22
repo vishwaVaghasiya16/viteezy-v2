@@ -309,14 +309,17 @@ class MemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(
-        {
+      res.status(200).json({
+        success: true,
+        message: "Child member orders retrieved successfully",
+        data: {
           child: profile,
           orders,
+        },
+        meta: {
           pagination,
         },
-        "Child member orders retrieved successfully"
-      );
+      });
     }
   );
 
@@ -352,14 +355,17 @@ class MemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(
-        {
+      res.status(200).json({
+        success: true,
+        message: "Child member subscription history retrieved successfully",
+        data: {
           child: profile,
           subscriptions: memberships,
+        },
+        meta: {
           pagination,
         },
-        "Child member subscription history retrieved successfully"
-      );
+      });
     }
   );
 
@@ -376,6 +382,10 @@ class MemberController {
         res.status(200).json({
           success: false,
           message: "Invalid member ID format",
+          error: {
+            code: "Validation Error",
+            message: "Invalid member ID format",
+          },
           data: { valid: false },
         });
         return;

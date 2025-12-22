@@ -345,13 +345,16 @@ class UserController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(
-        {
+      res.status(200).json({
+        success: true,
+        message: "Transaction history retrieved successfully",
+        data: {
           transactions: formattedTransactions,
+        },
+        meta: {
           pagination,
         },
-        "Transaction history retrieved successfully"
-      );
+      });
     }
   );
 }

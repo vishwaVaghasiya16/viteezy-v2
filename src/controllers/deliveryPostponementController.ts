@@ -287,9 +287,11 @@ class DeliveryPostponementController {
       res.status(200).json({
         success: true,
         message: "Postponement history retrieved successfully",
-        pagination: paginationMeta,
         data: {
           postponements,
+        },
+        meta: {
+          pagination: paginationMeta,
         },
       });
     }

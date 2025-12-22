@@ -343,3 +343,20 @@ export const refreshTokenSchema = Joi.object(
     }),
   })
 ).label("RefreshTokenPayload");
+
+/**
+ * Google Login Validation Schema
+ * @constant {Joi.ObjectSchema} googleLoginSchema
+ * @description Validates Google OAuth login request data
+ */
+export const googleLoginSchema = Joi.object(
+  withFieldLabels({
+    idToken: Joi.string().required().messages({
+      "any.required": "Google ID token is required",
+      "string.empty": "Google ID token cannot be empty",
+    }),
+    deviceInfo: Joi.string().optional().allow("").messages({
+      "string.base": "Device info must be a string",
+    }),
+  })
+).label("GoogleLoginPayload");

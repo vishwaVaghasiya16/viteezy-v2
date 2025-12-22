@@ -82,7 +82,10 @@ export const validationWrapper = (validationRules: any[]) => {
     });
 
     if (errors.length > 0) {
-      res.apiValidationError('Validation failed', errors);
+      // Get the first error message for the error object
+      const firstError = errors[0];
+      const errorMessage = firstError?.msg || firstError?.message || 'Validation failed';
+      res.apiValidationError('Validation failed', errorMessage);
       return;
     }
 

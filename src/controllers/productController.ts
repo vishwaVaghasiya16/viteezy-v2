@@ -310,7 +310,9 @@ export class ProductController {
         success: true,
         message: "Products retrieved successfully",
         data: productsWithMemberPrices,
-        pagination,
+        meta: {
+          pagination,
+        },
       });
     } catch (error) {
       next(error);

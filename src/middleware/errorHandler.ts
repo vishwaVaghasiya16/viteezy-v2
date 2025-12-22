@@ -270,8 +270,10 @@ export const errorHandler = (
   const response: ApiResponse = {
     success: false,
     message,
-    errorType,
-    error: errorText || message,
+    error: {
+      code: errorType || "Server Error",
+      message: errorText || message,
+    },
     data: null,
   };
 

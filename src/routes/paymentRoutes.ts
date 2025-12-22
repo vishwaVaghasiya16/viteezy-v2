@@ -164,8 +164,11 @@ router.get(
       res.status(404).json({
         success: false,
         message: "Route not found",
-        errorType: "Not Found",
-        error: `The route /api/v1/payments/${req.params.paymentId} does not exist for GET method`,
+        error: {
+          code: "Not Found",
+          message: `The route /api/v1/payments/${req.params.paymentId} does not exist for GET method`,
+        },
+        data: null,
       });
       return;
     }

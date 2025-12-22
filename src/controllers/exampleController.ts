@@ -87,13 +87,7 @@ class ExampleController {
           res.apiForbidden("You are not authorized to perform this action.");
           break;
         case "validation":
-          res.apiValidationError("Validation failed", [
-            { field: "email", message: "Email is required" },
-            {
-              field: "password",
-              message: "Password must be at least 6 characters",
-            },
-          ]);
+          res.apiValidationError("Validation failed", "Email is required");
           break;
         case "conflict":
           res.apiConflict("Resource already exists");
@@ -102,7 +96,7 @@ class ExampleController {
           res.apiBadRequest("Invalid request parameters");
           break;
         default:
-          res.apiError("Internal server error", 500, "Something went wrong");
+          res.apiError("Internal server error", 500, "Server Error", "Something went wrong");
       }
     }
   );

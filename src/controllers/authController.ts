@@ -359,6 +359,29 @@ class AuthController {
       );
     }
   );
+
+  /**
+   * Google OAuth Login
+   */
+  googleLogin = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { idToken, deviceInfo } = req.body;
+
+      const result = await authService.googleLogin({
+        idToken,
+        deviceInfo,
+      });
+
+      res.apiSuccess(
+        {
+          user: result.user,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
+        result.message
+      );
+    }
+  );
 }
 
 export const authController = new AuthController();

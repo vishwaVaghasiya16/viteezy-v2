@@ -357,6 +357,8 @@ class SubscriptionController {
         message: "Subscriptions retrieved successfully",
         data: {
           subscriptions: formattedSubscriptions,
+        },
+        meta: {
           pagination: paginationMeta,
         },
       });

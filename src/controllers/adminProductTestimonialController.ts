@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
+import { getPaginationMeta } from "@/utils/pagination";
 import { ProductTestimonials } from "@/models/cms";
 import { Products } from "@/models/commerce";
 import { fileStorageService } from "@/services/fileStorageService";
@@ -182,18 +183,17 @@ class AdminProductTestimonialController {
         ProductTestimonials.countDocuments(query),
       ]);
 
-      res.apiSuccess(
-        {
+      const paginationMeta = getPaginationMeta(pageNum, limitNum, total);
+      res.status(200).json({
+        success: true,
+        message: "Product testimonials retrieved successfully",
+        data: {
           testimonials,
-          pagination: {
-            page: pageNum,
-            limit: limitNum,
-            total,
-            pages: Math.ceil(total / limitNum),
-          },
         },
-        "Product testimonials retrieved successfully"
-      );
+        meta: {
+          pagination: paginationMeta,
+        },
+      });
     }
   );
 

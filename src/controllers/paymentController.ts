@@ -313,7 +313,11 @@ class PaymentController {
         res.status(200).json({
           success: false,
           message: "Webhook processing failed",
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: {
+            code: "Webhook Error",
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+          data: null,
         });
       }
     }
@@ -491,7 +495,11 @@ class PaymentController {
         res.status(200).json({
           success: false,
           message: "Webhook processing failed",
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: {
+            code: "Webhook Error",
+            message: error instanceof Error ? error.message : "Unknown error",
+          },
+          data: null,
         });
       }
     }

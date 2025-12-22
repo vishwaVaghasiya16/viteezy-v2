@@ -41,6 +41,7 @@ const DEFAULT_VALUES = {
   DO_SPACES_CDN_BASE_URL: "",
   POSTNL_URL: "https://api.postnl.nl/address/national/v1/validate",
   POSTNL_TIMEOUT_MS: 5000,
+  GOOGLE_CLIENT_ID: "137831918294-e52avbjc9i935c7b71tupto5m6jtunj0.apps.googleusercontent.com",
 } as const;
 
 /**
@@ -198,6 +199,14 @@ export const config = {
       process.env.POSTNL_TIMEOUT_MS || String(DEFAULT_VALUES.POSTNL_TIMEOUT_MS),
       10
     ),
+  },
+  /**
+   * Google OAuth Configuration
+   * @property {string} clientId - Google OAuth Client ID
+   */
+  google: {
+    clientId:
+      process.env.GOOGLE_CLIENT_ID || DEFAULT_VALUES.GOOGLE_CLIENT_ID,
   },
 } as const;
 

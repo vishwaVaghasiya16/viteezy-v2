@@ -1,12 +1,14 @@
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { User, OTP, AuthSessions } from "../models/index.model";
 import { OTPType, OTPStatus, SessionStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { emailService } from "./emailService";
 import { generateMemberId } from "../utils/memberIdGenerator";
+import { config } from "../config";
 
 interface RegisterData {
   name: string;
@@ -49,6 +51,11 @@ interface ChangePasswordData {
   newPassword: string;
 }
 
+interface GoogleLoginData {
+  idToken: string;
+  deviceInfo?: string;
+}
+
 class AuthService {
   private readonly JWT_SECRET: string;
   private readonly JWT_REFRESH_SECRET: string;
@@ -56,6 +63,7 @@ class AuthService {
   private readonly JWT_REFRESH_EXPIRES_IN: string;
   private readonly OTP_EXPIRES_IN: number; // in minutes
   private readonly MAX_OTP_ATTEMPTS: number = 3;
+  private readonly googleOAuthClient: OAuth2Client;
 
   constructor() {
     this.JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
@@ -88,6 +96,9 @@ class AuthService {
         "Warning: JWT_REFRESH_SECRET is not set. Using default secret key. This is not secure for production!"
       );
     }
+
+    // Initialize Google OAuth Client
+    this.googleOAuthClient = new OAuth2Client(config.google.clientId);
   }
 
   private isValidExpiresIn(value: string): boolean {
@@ -1139,6 +1150,134 @@ class AuthService {
       } else {
         throw error;
       }
+    }
+  }
+
+  /**
+   * Google OAuth Login
+   * Verifies Google ID token and creates/updates user
+   */
+  async googleLogin(data: GoogleLoginData): Promise<LoginResult> {
+    const { idToken, deviceInfo } = data;
+
+    try {
+      // Verify the Google ID token
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken,
+        audience: config.google.clientId,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload) {
+        throw new AppError("Invalid Google token", 401);
+      }
+
+      const { sub: googleId, email, name, picture } = payload;
+
+      if (!email) {
+        throw new AppError("Email not provided by Google", 400);
+      }
+
+      // Check if user exists with this email
+      let user = await User.findOne({ email: email.toLowerCase() });
+
+      if (!user) {
+        // Create new user
+        const newUserData: any = {
+          name: name || email.split("@")[0],
+          email: email.toLowerCase(),
+          isEmailVerified: true, // Google emails are verified
+          avatar: picture || null,
+          registeredAt: new Date(),
+        };
+
+        // Generate member ID
+        newUserData.memberId = await generateMemberId();
+
+        user = await User.create(newUserData);
+
+        logger.info(`New user created via Google OAuth: ${user._id}`);
+
+        // Send welcome email asynchronously
+        this.sendWelcomeEmailAsync(email, user.name);
+      } else {
+        // Update existing user
+        // Update avatar if provided and user doesn't have one
+        if (picture && !user.avatar) {
+          user.avatar = picture;
+        }
+        // Mark email as verified if not already
+        if (!user.isEmailVerified) {
+          user.isEmailVerified = true;
+        }
+        // Update name if changed
+        if (name && user.name !== name) {
+          user.name = name;
+        }
+        await user.save();
+      }
+
+      // Check if user is active
+      if (!user.isActive) {
+        throw new AppError(
+          "Account is deactivated. Please contact support.",
+          403
+        );
+      }
+
+      // Generate session and tokens (following existing login flow)
+      const sessionId = crypto.randomUUID();
+      const deviceInfoString = deviceInfo || "Web";
+
+      await AuthSessions.create({
+        userId: user._id,
+        sessionId: sessionId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        deviceInfo: deviceInfoString,
+        lastUsedAt: new Date(),
+        isRevoked: false,
+      });
+
+      const tokens = this.generateTokens(user._id.toString(), sessionId);
+
+      // Update last login and track session
+      await User.findByIdAndUpdate(user._id, {
+        lastLogin: new Date(),
+        $push: {
+          sessionIds: {
+            sessionId: sessionId,
+            status: SessionStatus.ACTIVE,
+            revoked: false,
+            deviceInfo: deviceInfoString,
+          },
+        },
+      });
+
+      // Fetch updated user to get latest lastLogin value
+      const updatedUser = await User.findById(user._id);
+
+      return {
+        user: {
+          _id: updatedUser!._id,
+          name: updatedUser!.name,
+          email: updatedUser!.email,
+          phone: updatedUser!.phone,
+          isEmailVerified: updatedUser!.isEmailVerified,
+          lastLogin: updatedUser!.lastLogin,
+        },
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        message: "Google login successful",
+      };
+    } catch (error: any) {
+      logger.error("Google OAuth error:", error);
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(
+        error.message || "Google authentication failed",
+        401
+      );
     }
   }
 }

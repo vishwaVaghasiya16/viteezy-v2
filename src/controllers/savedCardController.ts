@@ -211,6 +211,8 @@ class SavedCardController {
         message: "Saved cards retrieved successfully",
         data: {
           cards: formattedCards,
+        },
+        meta: {
           pagination: paginationMeta,
         },
       });

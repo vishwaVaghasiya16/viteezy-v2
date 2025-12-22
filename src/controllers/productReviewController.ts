@@ -111,10 +111,16 @@ class ProductReviewController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(
-        { reviews, pagination },
-        "Product reviews retrieved successfully"
-      );
+      res.status(200).json({
+        success: true,
+        message: "Product reviews retrieved successfully",
+        data: {
+          reviews,
+        },
+        meta: {
+          pagination,
+        },
+      });
     }
   );
 

@@ -35,9 +35,9 @@ declare global {
         message?: string
       ) => void;
       /** Send error response */
-      apiError: (message?: string, statusCode?: number, error?: string) => void;
+      apiError: (message?: string, statusCode?: number, errorCode?: string, errorMessage?: string) => void;
       /** Send validation error response (422) */
-      apiValidationError: (message?: string, errors?: any[]) => void;
+      apiValidationError: (message?: string, errorMessage?: string) => void;
       /** Send not found response (404) */
       apiNotFound: (message?: string) => void;
       /** Send unauthorized response (401) */
@@ -47,7 +47,7 @@ declare global {
       /** Send conflict response (409) */
       apiConflict: (message?: string) => void;
       /** Send bad request response (400) */
-      apiBadRequest: (message?: string, errors?: any[]) => void;
+      apiBadRequest: (message?: string, errorMessage?: string) => void;
     }
   }
 }
@@ -152,7 +152,9 @@ export const responseMiddleware = (
       success: true,
       message,
       data,
-      pagination: paginationMeta,
+      meta: {
+        pagination: paginationMeta,
+      },
     };
     res.status(HTTP_STATUS.OK).json(response);
   };
@@ -167,13 +169,16 @@ export const responseMiddleware = (
   res.apiError = (
     message: string = "Internal Server Error",
     statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR,
-    error?: string
+    errorCode?: string,
+    errorMessage?: string
   ): void => {
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Server Error",
-      error: error || message,
+      error: {
+        code: errorCode || "Server Error",
+        message: errorMessage || message,
+      },
       data: null,
     };
     res.status(statusCode).json(response);
@@ -187,13 +192,15 @@ export const responseMiddleware = (
    */
   res.apiValidationError = (
     message: string = "Validation failed",
-    errors?: any[]
+    errorMessage?: string
   ): void => {
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Validation Error",
-      error: errors || message,
+      error: {
+        code: "Validation Error",
+        message: errorMessage || message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.UNPROCESSABLE_ENTITY).json(response);
@@ -208,8 +215,10 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Not Found Error",
-      error: message,
+      error: {
+        code: "Not Found Error",
+        message: message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.NOT_FOUND).json(response);
@@ -224,8 +233,10 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Authentication Error",
-      error: message,
+      error: {
+        code: "Authentication Error",
+        message: message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.UNAUTHORIZED).json(response);
@@ -240,8 +251,10 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Authorization Error",
-      error: message,
+      error: {
+        code: "Authorization Error",
+        message: message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.FORBIDDEN).json(response);
@@ -256,8 +269,10 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Conflict Error",
-      error: message,
+      error: {
+        code: "Conflict Error",
+        message: message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.CONFLICT).json(response);
@@ -271,13 +286,15 @@ export const responseMiddleware = (
    */
   res.apiBadRequest = (
     message: string = "Bad request",
-    errors?: any[]
+    errorMessage?: string
   ): void => {
     const response: ApiResponse = {
       success: false,
       message,
-      errorType: "Bad Request Error",
-      error: errors || message,
+      error: {
+        code: "Bad Request",
+        message: errorMessage || message,
+      },
       data: null,
     };
     res.status(HTTP_STATUS.BAD_REQUEST).json(response);

@@ -189,7 +189,9 @@ class AdminProductIngredientController {
         success: true,
         message: "Product ingredients retrieved successfully",
         data: enriched,
-        pagination,
+        meta: {
+          pagination,
+        },
       });
     }
   );

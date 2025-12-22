@@ -45,18 +45,23 @@ export interface ApiResponse<T = any> {
   success: boolean;
   /** Response message */
   message: string;
-  /** Error type/category (only present on errors) */
-  errorType?: string;
+  /** Error object (only present on errors) */
+  error?: {
+    /** Error code/type */
+    code: string;
+    /** Error message */
+    message: string;
+  };
   /** Response data (always present, null on errors or when no data) */
   data?: T | null;
-  /** Error details (only present on errors) */
-  error?: string | any[];
-  /** Pagination metadata (only present for paginated responses) */
+  /** Pagination metadata (only present for paginated responses) - deprecated, use meta.pagination */
   pagination?: PaginationMeta;
   /** Additional response metadata */
   meta?: {
+    /** Pagination metadata (for paginated responses) */
+    pagination?: PaginationMeta;
     /** Response timestamp */
-    timestamp: string;
+    timestamp?: string;
     /** Request ID for tracking */
     requestId?: string;
     /** API version */

@@ -119,7 +119,9 @@ export class ResponseHelper {
       success: true,
       message,
       data,
-      pagination: paginationMeta,
+      meta: {
+        pagination: paginationMeta,
+      },
     };
 
     return res.status(HTTP_STATUS.OK).json(response);
@@ -139,12 +141,17 @@ export class ResponseHelper {
     res: Response,
     message: string = "Internal Server Error",
     statusCode: number = HTTP_STATUS.INTERNAL_SERVER_ERROR,
-    error?: string
+    errorCode?: string,
+    errorMessage?: string
   ): Response<ApiResponse> {
     const response: ApiResponse = {
       success: false,
       message,
-      error,
+      error: {
+        code: errorCode || "Server Error",
+        message: errorMessage || message,
+      },
+      data: null,
     };
 
     return res.status(statusCode).json(response);
@@ -162,12 +169,16 @@ export class ResponseHelper {
   static validationError(
     res: Response,
     message: string = "Validation failed",
-    errors?: any[]
+    errorMessage?: string
   ): Response<ApiResponse> {
     const response: ApiResponse = {
       success: false,
       message,
-      error: errors,
+      error: {
+        code: "Validation Error",
+        message: errorMessage || message,
+      },
+      data: null,
     };
 
     return res.status(HTTP_STATUS.UNPROCESSABLE_ENTITY).json(response);
@@ -185,7 +196,7 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource not found"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.NOT_FOUND);
+    return this.error(res, message, HTTP_STATUS.NOT_FOUND, "Not Found Error", message);
   }
 
   /**
@@ -200,7 +211,7 @@ export class ResponseHelper {
     res: Response,
     message: string = "Unauthorized access"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.UNAUTHORIZED);
+    return this.error(res, message, HTTP_STATUS.UNAUTHORIZED, "Authentication Error", message);
   }
 
   /**
@@ -215,7 +226,7 @@ export class ResponseHelper {
     res: Response,
     message: string = "Access forbidden"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.FORBIDDEN);
+    return this.error(res, message, HTTP_STATUS.FORBIDDEN, "Authorization Error", message);
   }
 
   /**
@@ -230,7 +241,7 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource conflict"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.CONFLICT);
+    return this.error(res, message, HTTP_STATUS.CONFLICT, "Conflict Error", message);
   }
 
   /**
@@ -239,21 +250,15 @@ export class ResponseHelper {
    * @method badRequest
    * @param {Response} res - Express response object
    * @param {string} message - Error message (default: "Bad request")
-   * @param {any[]} errors - Array of error details (optional)
+   * @param {string} errorMessage - Error message details (optional)
    * @returns {Response<ApiResponse>} Express response with JSON error data
    */
   static badRequest(
     res: Response,
     message: string = "Bad request",
-    errors?: any[]
+    errorMessage?: string
   ): Response<ApiResponse> {
-    const response: ApiResponse = {
-      success: false,
-      message,
-      error: errors,
-    };
-
-    return res.status(HTTP_STATUS.BAD_REQUEST).json(response);
+    return this.error(res, message, HTTP_STATUS.BAD_REQUEST, "Bad Request", errorMessage || message);
   }
 }
 

@@ -18,6 +18,7 @@ import {
   changePasswordSchema,
   updateProfileSchema,
   refreshTokenSchema,
+  googleLoginSchema,
 } from "@/validation/authValidation";
 import { authMiddleware } from "@/middleware/auth";
 
@@ -33,6 +34,13 @@ router.post("/register", validateJoi(registerSchema), authController.register);
 
 // User login endpoint
 router.post("/login", validateJoi(loginSchema), authController.login);
+
+// Google OAuth login endpoint
+router.post(
+  "/google/login",
+  validateJoi(googleLoginSchema),
+  authController.googleLogin
+);
 
 // Refresh token endpoint
 router.post(
