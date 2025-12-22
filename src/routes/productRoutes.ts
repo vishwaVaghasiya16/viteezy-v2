@@ -17,6 +17,7 @@ const router = Router();
 
 // Public routes (optional authentication for member pricing)
 router.get("/", optionalAuth, ProductController.getAllProducts);
+router.get("/featured-or-recent", optionalAuth, ProductController.getFeaturedOrRecentProducts);
 router.get("/filters", ProductController.getFilterOptions);
 router.get("/stats", ProductController.getProductStats);
 router.get(

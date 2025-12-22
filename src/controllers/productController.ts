@@ -310,6 +310,98 @@ export class ProductController {
   }
 
   /**
+   * Get featured or recent products
+   * Returns featured products if available, otherwise returns latest/recent products
+   * Maximum 10 products
+   */
+  static async getFeaturedOrRecentProducts(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = req.user?.id || req.userId;
+      const userLang = (req.query.lang as SupportedLanguage) || DEFAULT_LANGUAGE;
+
+      const result = await productService.getFeaturedOrRecentProducts();
+
+      // Fetch user's wishlist if authenticated
+      let userWishlistProductIds = new Set<string>();
+      if (userId) {
+        const wishlistItems = await Wishlists.find({
+          userId: new mongoose.Types.ObjectId(userId),
+        })
+          .select("productId")
+          .lean();
+        userWishlistProductIds = new Set(
+          wishlistItems.map((item) => item.productId.toString())
+        );
+      }
+
+      // Transform products for user's language and add member pricing
+      const productsWithMemberPrices = await Promise.all(
+        result.products.map(async (product: any) => {
+          // First transform product for user's language
+          const transformedProduct = transformProductForLanguage(
+            product,
+            userLang
+          );
+          const productPriceSource: ProductPriceSource = {
+            price: transformedProduct.price,
+            memberPrice: transformedProduct.metadata?.memberPrice,
+            memberDiscountOverride:
+              transformedProduct.metadata?.memberDiscountOverride,
+          };
+
+          const memberPriceResult = await calculateMemberPrice(
+            productPriceSource,
+            userId || ""
+          );
+
+          const enrichedProduct: any = {
+            ...transformedProduct,
+            price: transformedProduct.price,
+          };
+
+          // Only add member pricing fields if user is a member
+          if (memberPriceResult.isMember) {
+            enrichedProduct.memberPrice = memberPriceResult.memberPrice;
+            enrichedProduct.originalPrice = memberPriceResult.originalPrice;
+            enrichedProduct.discount = {
+              amount: memberPriceResult.discountAmount,
+              percentage: memberPriceResult.discountPercentage,
+              type: memberPriceResult.appliedDiscount?.type,
+            };
+            enrichedProduct.isMember = true;
+          } else {
+            enrichedProduct.isMember = false;
+          }
+
+          // Add is_liked field if user is authenticated
+          if (userId) {
+            enrichedProduct.is_liked = userWishlistProductIds.has(
+              transformedProduct._id.toString()
+            );
+          }
+
+          return enrichedProduct;
+        })
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Featured or recent products retrieved successfully",
+        data: {
+          products: productsWithMemberPrices,
+          isFeatured: result.isFeatured,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Get available filter values
    */
   static async getFilterOptions(

@@ -675,6 +675,106 @@ class ProductService {
   }
 
   /**
+   * Get featured or recent products
+   * Returns featured products first, then fills remaining slots with recent products
+   * Maximum 10 products total
+   */
+  async getFeaturedOrRecentProducts(): Promise<{ products: any[]; isFeatured: boolean }> {
+    const MAX_PRODUCTS = 10;
+    
+    // First get featured products
+    const featuredProducts = await Products.find({
+      isDeleted: false,
+      status: true,
+      isFeatured: true,
+    })
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .sort({ createdAt: -1 })
+      .limit(MAX_PRODUCTS)
+      .lean();
+
+    const featuredCount = featuredProducts?.length || 0;
+    const remainingSlots = MAX_PRODUCTS - featuredCount;
+    
+    let allProducts: any[] = [];
+    let hasFeatured = false;
+
+    // Process featured products if available
+    if (featuredCount > 0) {
+      hasFeatured = true;
+      const featuredProductIds = featuredProducts.map((p: any) => p._id);
+      
+      // Convert string ingredient IDs to ObjectIds and lookup for featured products
+      const featuredWithIngredients = await Promise.all(
+        featuredProducts.map(async (product: any) => {
+          const ingredientDetails = await ProductIngredients.find({
+            _id: { $in: product.ingredients || [] },
+          })
+            .select("sId slug name description sortOrder icon image")
+            .lean();
+
+          // Calculate monthly amounts for subscription prices
+          const enrichedProduct = this.calculateMonthlyAmounts({
+            ...product,
+            ingredients: ingredientDetails,
+          });
+
+          return enrichedProduct;
+        })
+      );
+      
+      allProducts = [...featuredWithIngredients];
+    }
+
+    // If we need more products, get recent products (excluding featured ones)
+    if (remainingSlots > 0) {
+      const query: any = {
+        isDeleted: false,
+        status: true,
+      };
+
+      // Exclude featured products if we already have some
+      if (featuredCount > 0) {
+        const featuredProductIds = featuredProducts.map((p: any) => p._id);
+        query._id = { $nin: featuredProductIds };
+      }
+
+      const recentProducts = await Products.find(query)
+        .populate("categories", "sId slug name description sortOrder icon image productCount")
+        .sort({ createdAt: -1 })
+        .limit(remainingSlots)
+        .lean();
+
+      // Convert string ingredient IDs to ObjectIds and lookup for recent products
+      const recentWithIngredients = await Promise.all(
+        recentProducts.map(async (product: any) => {
+          const ingredientDetails = await ProductIngredients.find({
+            _id: { $in: product.ingredients || [] },
+          })
+            .select("sId slug name description sortOrder icon image")
+            .lean();
+
+          // Calculate monthly amounts for subscription prices
+          const enrichedProduct = this.calculateMonthlyAmounts({
+            ...product,
+            ingredients: ingredientDetails,
+          });
+
+          return enrichedProduct;
+        })
+      );
+
+      // Add recent products to the list
+      allProducts = [...allProducts, ...recentWithIngredients];
+    }
+
+    return {
+      products: allProducts.slice(0, MAX_PRODUCTS), // Ensure max 10 products
+      isFeatured: hasFeatured,
+    };
+  }
+
+  /**
    * Get product by ID with full details
    * Includes variants, detailed ingredients, meta, and structured data
    */
