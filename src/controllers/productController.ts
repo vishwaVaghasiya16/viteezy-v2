@@ -436,6 +436,10 @@ export class ProductController {
           name: getTranslatedString(ing.name, userLang),
           icon: ing.icon,
         })),
+        variants: filters.variants,
+        hasStandupPouch: filters.hasStandupPouch,
+        status: filters.status,
+        sortBy: filters.sortBy,
       };
 
       res.status(200).json({
