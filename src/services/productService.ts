@@ -604,7 +604,24 @@ class ProductService {
     }
 
     if (healthGoals?.length) {
-      matchStage.healthGoals = { $in: healthGoals };
+      // Since healthGoals data has HTML tags, use regex to match within tags
+      // Create a single regex pattern that matches any of the provided goals using alternation
+      const escapedGoals = healthGoals.map((goal) => {
+        // Escape special regex characters
+        return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      });
+      
+      // Combine all goals with | (OR) operator
+      const combinedRegex = escapedGoals.join("|");
+      
+      // Use $elemMatch to check if any element in array matches the regex pattern
+      // This handles HTML tags like "<p>\"Bone Health\"</p>"
+      matchStage.healthGoals = {
+        $elemMatch: {
+          $regex: combinedRegex,
+          $options: "i",
+        },
+      };
     }
 
     // Resolve ingredients from names to string IDs
@@ -626,9 +643,12 @@ class ProductService {
     // If search exists, it must be the first $match stage
     if (search && search.trim().length > 0) {
       hasSearch = true;
+      const searchTerm = search.trim();
+      
+      // Try text search first, but also support regex fallback for better compatibility
       // Build text search match with isDeleted filter
       const textSearchMatch: Record<string, any> = {
-        $text: { $search: search.trim() },
+        $text: { $search: searchTerm },
         isDeleted: false,
       };
 
@@ -644,12 +664,68 @@ class ProductService {
         textSearchMatch.hasStandupPouch = hasStandupPouch;
 
       // Text search must be first stage
-      pipeline.push({ $match: textSearchMatch });
+      // Use $or to support both text search and regex fallback
+      const searchConditions: any[] = [textSearchMatch];
+      
+      // Add regex fallback for better search compatibility
+      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regexSearchMatch: Record<string, any> = {
+        $or: [
+          { title: { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+          { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+          { description: { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+          { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+          { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+          { slug: { $regex: escapedSearchTerm, $options: "i" } },
+        ],
+        isDeleted: false,
+      };
+      
+      if (status !== undefined) {
+        regexSearchMatch.status = status;
+      } else {
+        regexSearchMatch.status = true;
+      }
+      if (variant) regexSearchMatch.variant = variant;
+      if (hasStandupPouch !== undefined)
+        regexSearchMatch.hasStandupPouch = hasStandupPouch;
+      
+      searchConditions.push(regexSearchMatch);
+      
+      pipeline.push({
+        $match: {
+          $or: searchConditions,
+        },
+      });
 
-      // Add relevance score immediately after text search
+      // Add relevance score - use textScore if available, otherwise use regex match priority
       pipeline.push({
         $addFields: {
-          relevanceScore: { $meta: "textScore" },
+          relevanceScore: {
+            $ifNull: [
+              { $meta: "textScore" },
+              {
+                $cond: [
+                  {
+                    $or: [
+                      { $regexMatch: { input: { $ifNull: ["$title", ""] }, regex: escapedSearchTerm, options: "i" } },
+                      { $regexMatch: { input: { $ifNull: ["$title.en", ""] }, regex: escapedSearchTerm, options: "i" } },
+                    ],
+                  },
+                  10,
+                  5,
+                ],
+              },
+            ],
+          },
         },
       });
 
@@ -660,7 +736,21 @@ class ProductService {
           $in: categoryObjectIds,
         };
       }
-      if (healthGoals?.length) arrayFilters.healthGoals = { $in: healthGoals };
+      if (healthGoals?.length) {
+        // Use $elemMatch with regex for array filters too
+        const escapedGoals = healthGoals.map((goal) => {
+          return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        });
+        
+        const combinedRegex = escapedGoals.join("|");
+        
+        arrayFilters.healthGoals = {
+          $elemMatch: {
+            $regex: combinedRegex,
+            $options: "i",
+          },
+        };
+      }
       if (ingredientIds.length > 0) {
         arrayFilters.ingredients = { $all: ingredientIds };
       }
@@ -1286,6 +1376,10 @@ class ProductService {
     categories: any[];
     healthGoals: string[];
     ingredients: any[];
+    variants: string[];
+    hasStandupPouch: boolean[];
+    status: boolean[];
+    sortBy: ProductSortOption[];
   }> {
     const [result] = await Products.aggregate([
       {
@@ -1298,6 +1392,9 @@ class ProductService {
           categories: { $ifNull: ["$categories", []] },
           healthGoals: { $ifNull: ["$healthGoals", []] },
           ingredients: { $ifNull: ["$ingredients", []] },
+          variant: 1,
+          hasStandupPouch: 1,
+          status: 1,
         },
       },
       {
@@ -1348,17 +1445,58 @@ class ProductService {
             { $replaceRoot: { newRoot: "$ingredient" } },
             { $sort: { name: 1 } },
           ],
+          variants: [
+            { $match: { variant: { $nin: [null, ""] } } },
+            { $group: { _id: "$variant" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
+          hasStandupPouch: [
+            { $match: { hasStandupPouch: { $ne: null } } },
+            { $group: { _id: "$hasStandupPouch" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
+          status: [
+            { $match: { status: { $ne: null } } },
+            { $group: { _id: "$status" } },
+            { $sort: { _id: 1 } },
+            { $project: { value: "$_id", _id: 0 } },
+          ],
         },
       },
     ]);
 
-    const mapHealthGoals = (items?: Array<{ value: string }>) =>
+    const mapHealthGoals = (items?: Array<{ value: string }>) => {
+      const goals = (items ?? []).map((item) => item.value);
+      // Clean HTML tags from healthGoals for easier use
+      const cleanedGoals = goals.map((goal) => {
+        // Remove HTML tags like <p> and </p>
+        let cleaned = goal.replace(/<[^>]*>/g, "");
+        // Remove escaped quotes like \"Bone Health\"
+        cleaned = cleaned.replace(/\\"/g, '"').replace(/^"|"$/g, "");
+        return cleaned.trim();
+      }).filter((goal) => goal.length > 0);
+      // Return unique values
+      return [...new Set(cleanedGoals)];
+    };
+
+    const mapToValues = (items?: Array<{ value: any }>) =>
       (items ?? []).map((item) => item.value);
+
+    const mapToUniqueValues = (items?: Array<{ value: any }>) => {
+      const values = mapToValues(items);
+      return [...new Set(values)];
+    };
 
     return {
       categories: result?.categories || [],
       healthGoals: mapHealthGoals(result?.healthGoals),
       ingredients: result?.ingredients || [],
+      variants: mapToUniqueValues(result?.variants),
+      hasStandupPouch: mapToUniqueValues(result?.hasStandupPouch),
+      status: mapToUniqueValues(result?.status),
+      sortBy: ["relevance", "priceLowToHigh", "priceHighToLow", "rating"],
     };
   }
 
