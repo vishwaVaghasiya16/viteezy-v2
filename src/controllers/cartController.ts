@@ -263,10 +263,12 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
+      const userLang = await getUserLanguage(req, userId);
       const limit = parseInt(req.query.limit as string, 10) || 10;
       const suggestedProducts = await cartService.getSuggestedProducts(
         userId,
-        limit
+        limit,
+        userLang
       );
 
       res.status(200).json({

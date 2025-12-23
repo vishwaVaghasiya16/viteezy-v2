@@ -2,7 +2,8 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductCategory } from "../models/commerce/categories.model";
-import { ProductStatus, ProductVariant, ReviewStatus } from "../models/enums";
+import { Orders } from "../models/commerce/orders.model";
+import { ProductStatus, ProductVariant, ReviewStatus, OrderStatus, PaymentStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
@@ -13,7 +14,8 @@ export type ProductSortOption =
   | "relevance"
   | "priceLowToHigh"
   | "priceHighToLow"
-  | "rating";
+  | "rating"
+  | "trending";
 
 interface CreateProductData {
   title: string;
@@ -876,6 +878,11 @@ class ProductService {
       }
     );
 
+    // Add trending score calculation if sortBy is "trending"
+    if (sortBy === "trending") {
+      pipeline.push(...this.buildTrendingScoreStages());
+    }
+
     const sortStage = this.buildSortStage(sortBy, sort, hasSearch);
     pipeline.push({ $sort: sortStage });
 
@@ -1616,6 +1623,132 @@ class ProductService {
     return result;
   }
 
+  /**
+   * Build aggregation stages to calculate trending scores
+   * Compares orders in last 7 days vs previous 7 days (7-14 days ago)
+   * Only includes products with at least 2 orders in last 14 days
+   */
+  private buildTrendingScoreStages(): PipelineStage[] {
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last14Days = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    return [
+      // Lookup orders for each product in last 14 days
+      {
+        $lookup: {
+          from: "orders",
+          let: { 
+            productId: "$_id",
+            last14DaysDate: last14Days,
+            nowDate: now,
+            last7DaysDate: last7Days,
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $gte: ["$createdAt", "$$last14DaysDate"] },
+                    { $lt: ["$createdAt", "$$nowDate"] },
+                    {
+                      $in: [
+                        "$status",
+                        [OrderStatus.SHIPPED, OrderStatus.DELIVERED],
+                      ],
+                    },
+                    { $eq: ["$paymentStatus", PaymentStatus.COMPLETED] },
+                  ],
+                },
+              },
+            },
+            {
+              $unwind: "$items",
+            },
+            {
+              $match: {
+                $expr: { $eq: ["$items.productId", "$$productId"] },
+              },
+            },
+            {
+              $project: {
+                createdAt: 1,
+                quantity: "$items.quantity",
+              },
+            },
+          ],
+          as: "recentOrders",
+        },
+      },
+      // Calculate orders in last 7 days and previous 7 days
+      {
+        $addFields: {
+          last7DaysOrders: {
+            $size: {
+              $filter: {
+                input: "$recentOrders",
+                as: "order",
+                cond: {
+                  $and: [
+                    { $gte: ["$$order.createdAt", last7Days] },
+                    { $lt: ["$$order.createdAt", now] },
+                  ],
+                },
+              },
+            },
+          },
+          previous7DaysOrders: {
+            $size: {
+              $filter: {
+                input: "$recentOrders",
+                as: "order",
+                cond: {
+                  $and: [
+                    { $gte: ["$$order.createdAt", last14Days] },
+                    { $lt: ["$$order.createdAt", last7Days] },
+                  ],
+                },
+              },
+            },
+          },
+          totalOrders14Days: {
+            $size: "$recentOrders",
+          },
+        },
+      },
+      // Calculate growth and trending score
+      {
+        $addFields: {
+          growth: {
+            $subtract: ["$last7DaysOrders", "$previous7DaysOrders"],
+          },
+          // Trending score: Higher weight to recent orders and growth
+          // Formula: (last7DaysOrders * 2) + (growth * 3) + previous7DaysOrders
+          // This gives more weight to recent activity and growth
+          trendingScore: {
+            $add: [
+              { $multiply: ["$last7DaysOrders", 2] }, // Recent orders weighted 2x
+              { $multiply: [{ $subtract: ["$last7DaysOrders", "$previous7DaysOrders"] }, 3] }, // Growth weighted 3x
+              "$previous7DaysOrders", // Previous orders weighted 1x
+            ],
+          },
+        },
+      },
+      // Filter: Only include products with at least 2 orders in last 14 days
+      {
+        $match: {
+          totalOrders14Days: { $gte: 2 },
+        },
+      },
+      // Project: Clean up temporary fields
+      {
+        $project: {
+          recentOrders: 0,
+        },
+      },
+    ];
+  }
+
   private buildSortStage(
     sortBy: ProductSortOption | undefined,
     fallbackSort: Record<string, 1 | -1>,
@@ -1633,6 +1766,8 @@ class ProductService {
         return { "price.amount": -1, createdAt: -1 };
       case "rating":
         return { averageRating: -1, ratingCount: -1, createdAt: -1 };
+      case "trending":
+        return { trendingScore: -1, last7DaysOrders: -1, createdAt: -1 };
       default:
         break;
     }

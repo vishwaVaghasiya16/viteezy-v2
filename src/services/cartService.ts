@@ -343,7 +343,11 @@ class CartService {
       };
 
       if (includeSuggested) {
-        const suggestedProducts = await this.getSuggestedProducts(userId, 10);
+        const suggestedProducts = await this.getSuggestedProducts(
+          userId,
+          10,
+          userLang
+        );
         result.suggestedProducts = suggestedProducts;
       }
 
@@ -527,7 +531,11 @@ class CartService {
 
     // Include suggested products if requested
     if (includeSuggested) {
-      const suggestedProducts = await this.getSuggestedProducts(userId, 10);
+      const suggestedProducts = await this.getSuggestedProducts(
+        userId,
+        10,
+        userLang
+      );
       result.suggestedProducts = suggestedProducts;
     }
 
@@ -1472,7 +1480,8 @@ class CartService {
    */
   async getSuggestedProducts(
     userId: string,
-    limit: number = 10
+    limit: number = 10,
+    userLang: SupportedLanguage = DEFAULT_LANGUAGE
   ): Promise<any[]> {
     const cart = await this.getOrCreateCart(userId);
 
@@ -1527,17 +1536,142 @@ class CartService {
       query.variant = suggestedVariant;
     }
 
-    // Fetch suggested products
+    // Fetch suggested products with full details
     const suggestedProducts = await Products.find(query)
-      .select(
-        "title slug skuRoot productImage price variant sachetPrices standupPouchPrice categories"
-      )
-      .populate("categories", "name slug")
+      .populate("categories", "name slug description image")
       .limit(limit)
       .sort({ createdAt: -1 })
       .lean();
 
-    return suggestedProducts;
+    // Manually populate ingredients for suggested products
+    const suggestedIngredientIds: string[] = [];
+    suggestedProducts.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients.forEach((ingredientId: any) => {
+          const id =
+            typeof ingredientId === "string"
+              ? ingredientId
+              : ingredientId?.toString();
+          if (
+            id &&
+            mongoose.Types.ObjectId.isValid(id) &&
+            !suggestedIngredientIds.includes(id)
+          ) {
+            suggestedIngredientIds.push(id);
+          }
+        });
+      }
+    });
+
+    // Fetch all ingredient details for suggested products
+    const suggestedIngredientDetailsMap = new Map();
+    if (suggestedIngredientIds.length > 0) {
+      const ingredientDetails = await ProductIngredients.find({
+        _id: {
+          $in: suggestedIngredientIds.map(
+            (id: string) => new mongoose.Types.ObjectId(id)
+          ),
+        },
+      })
+        .select("_id name description image")
+        .lean();
+
+      ingredientDetails.forEach((ingredient: any) => {
+        suggestedIngredientDetailsMap.set(ingredient._id.toString(), ingredient);
+      });
+    }
+
+    // Replace ingredient IDs with populated ingredient objects for suggested products
+    suggestedProducts.forEach((product: any) => {
+      if (product.ingredients && Array.isArray(product.ingredients)) {
+        product.ingredients = product.ingredients
+          .map((ingredientId: any) => {
+            const id =
+              typeof ingredientId === "string"
+                ? ingredientId
+                : ingredientId?.toString();
+            return suggestedIngredientDetailsMap.get(id);
+          })
+          .filter((ingredient: any) => ingredient !== undefined);
+      }
+    });
+
+    // Transform products and add member pricing
+    const transformedProducts = await Promise.all(
+      suggestedProducts.map(async (product: any) => {
+        // Transform product for language
+        const transformedProduct = transformProductForLanguage(
+          product,
+          userLang
+        );
+
+        // Calculate monthly amounts for subscription pricing
+        const productWithMonthlyAmounts = calculateMonthlyAmounts(
+          transformedProduct
+        );
+
+        // Calculate member pricing
+        const productPriceSource: ProductPriceSource = {
+          price: productWithMonthlyAmounts.price,
+          memberPrice: productWithMonthlyAmounts.metadata?.memberPrice,
+          memberDiscountOverride:
+            productWithMonthlyAmounts.metadata?.memberDiscountOverride,
+        };
+
+        const memberPriceResult = await calculateMemberPrice(
+          productPriceSource,
+          userId
+        );
+
+        // Build full product object similar to getAllProducts format
+        let enrichedProduct: any = {
+          _id: productWithMonthlyAmounts._id,
+          title: productWithMonthlyAmounts.title,
+          slug: productWithMonthlyAmounts.slug,
+          productImage: productWithMonthlyAmounts.productImage,
+          shortDescription: productWithMonthlyAmounts.shortDescription,
+          description: productWithMonthlyAmounts.description,
+          nutritionInfo: productWithMonthlyAmounts.nutritionInfo,
+          howToUse: productWithMonthlyAmounts.howToUse,
+          price: productWithMonthlyAmounts.price,
+          variant: productWithMonthlyAmounts.variant,
+          hasStandupPouch: productWithMonthlyAmounts.hasStandupPouch,
+          sachetPrices: productWithMonthlyAmounts.sachetPrices,
+          standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
+          categories: productWithMonthlyAmounts.categories || [],
+          ingredients: productWithMonthlyAmounts.ingredients || [],
+          variants: productWithMonthlyAmounts.variants || [],
+          metadata: productWithMonthlyAmounts.metadata,
+          skuRoot: productWithMonthlyAmounts.skuRoot,
+          galleryImages: productWithMonthlyAmounts.galleryImages,
+          isFeatured: productWithMonthlyAmounts.isFeatured,
+          comparisonSection: productWithMonthlyAmounts.comparisonSection,
+          specification: productWithMonthlyAmounts.specification,
+          seo: productWithMonthlyAmounts.seo,
+          status: productWithMonthlyAmounts.status,
+          createdAt: productWithMonthlyAmounts.createdAt,
+          updatedAt: productWithMonthlyAmounts.updatedAt,
+        };
+
+        // Add member pricing if user is a member
+        if (memberPriceResult.isMember) {
+          enrichedProduct.memberPrice = memberPriceResult.memberPrice;
+          enrichedProduct.originalPrice = memberPriceResult.originalPrice;
+          enrichedProduct.discount = {
+            amount: memberPriceResult.discountAmount,
+            percentage: memberPriceResult.discountPercentage,
+            type: memberPriceResult.appliedDiscount?.type,
+          };
+          enrichedProduct.isMember = true;
+        } else {
+          enrichedProduct.isMember = false;
+        }
+
+        return enrichedProduct;
+      })
+    );
+
+    return transformedProducts;
   }
 }
 
