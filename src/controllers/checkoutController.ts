@@ -15,6 +15,9 @@ import {
   DEFAULT_LANGUAGE,
   SupportedLanguage,
 } from "../models/common.model";
+import { Products } from "../models/commerce/products.model";
+import { ProductVariants } from "../models/commerce/productVariants.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 
 /**
  * Calculate monthly amount from totalAmount and durationDays
@@ -432,6 +435,8 @@ class CheckoutController {
         throw new AppError("User authentication required", 401);
       }
 
+      const userLang = getUserLanguage(req);
+
       // Parallel execution: Validate cart and fetch addresses simultaneously
       const [cartValidation, shippingAddress, billingAddress] =
         await Promise.all([
@@ -464,10 +469,161 @@ class CheckoutController {
         (item) => item.isMember === true
       );
 
-      // Build summary response
-      const summary = {
-        cart: {
-          items: cartValidation.items.map((item) => ({
+      // Get product IDs and variant IDs from cart items
+      const productIds = cartValidation.items.map((item) =>
+        new mongoose.Types.ObjectId(item.productId)
+      );
+      const variantIds = cartValidation.items
+        .map((item) => item.variantId)
+        .filter((id) => id)
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // Fetch products and variants with full details
+      const [products, variants] = await Promise.all([
+        Products.find({
+          _id: { $in: productIds },
+          isDeleted: false,
+          status: true,
+        })
+          .populate("categories", "name slug description image")
+          .lean(),
+        variantIds.length > 0
+          ? ProductVariants.find({
+              _id: { $in: variantIds },
+              isDeleted: { $ne: true },
+              isActive: true,
+            }).lean()
+          : Promise.resolve([]),
+      ]);
+
+      // Manually populate ingredients for all products
+      const allIngredientIds: string[] = [];
+      products.forEach((product: any) => {
+        if (product.ingredients && Array.isArray(product.ingredients)) {
+          product.ingredients.forEach((ingredientId: any) => {
+            const id =
+              typeof ingredientId === "string"
+                ? ingredientId
+                : ingredientId?.toString();
+            if (
+              id &&
+              mongoose.Types.ObjectId.isValid(id) &&
+              !allIngredientIds.includes(id)
+            ) {
+              allIngredientIds.push(id);
+            }
+          });
+        }
+      });
+
+      // Fetch all ingredient details
+      const ingredientDetailsMap = new Map();
+      if (allIngredientIds.length > 0) {
+        const ingredientDetails = await ProductIngredients.find({
+          _id: {
+            $in: allIngredientIds.map(
+              (id: string) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        })
+          .select("_id name description image")
+          .lean();
+
+        ingredientDetails.forEach((ingredient: any) => {
+          ingredientDetailsMap.set(ingredient._id.toString(), ingredient);
+        });
+      }
+
+      // Replace ingredient IDs with populated ingredient objects
+      products.forEach((product: any) => {
+        if (product.ingredients && Array.isArray(product.ingredients)) {
+          product.ingredients = product.ingredients
+            .map((ingredientId: any) => {
+              const id =
+                typeof ingredientId === "string"
+                  ? ingredientId
+                  : ingredientId?.toString();
+              return ingredientDetailsMap.get(id);
+            })
+            .filter((ingredient: any) => ingredient !== undefined);
+        }
+      });
+
+      // Create maps for quick lookup
+      const productMap = new Map(
+        products.map((p: any) => [p._id.toString(), p])
+      );
+      const variantMap = new Map(
+        variants.map((v: any) => [v._id.toString(), v])
+      );
+
+      // Build items with full product details
+      const itemsWithProducts = await Promise.all(
+        cartValidation.items.map(async (item) => {
+          const product = productMap.get(item.productId);
+          if (!product) {
+            return null;
+          }
+
+          const variant = item.variantId
+            ? variantMap.get(item.variantId)
+            : null;
+
+          // Transform product for language
+          const transformedProduct = transformProductForLanguage(
+            product,
+            userLang
+          );
+
+          // Calculate monthly amounts for subscription pricing
+          const productWithMonthlyAmounts = calculateMonthlyAmounts(
+            transformedProduct
+          );
+
+          // Build full product object similar to getAllProducts format
+          const fullProduct: any = {
+            _id: productWithMonthlyAmounts._id,
+            title: productWithMonthlyAmounts.title,
+            slug: productWithMonthlyAmounts.slug,
+            productImage: productWithMonthlyAmounts.productImage,
+            shortDescription: productWithMonthlyAmounts.shortDescription,
+            description: productWithMonthlyAmounts.description,
+            nutritionInfo: productWithMonthlyAmounts.nutritionInfo,
+            howToUse: productWithMonthlyAmounts.howToUse,
+            price: productWithMonthlyAmounts.price,
+            variant: productWithMonthlyAmounts.variant,
+            hasStandupPouch: productWithMonthlyAmounts.hasStandupPouch,
+            sachetPrices: productWithMonthlyAmounts.sachetPrices,
+            standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
+            categories: productWithMonthlyAmounts.categories || [],
+            ingredients: productWithMonthlyAmounts.ingredients || [],
+            variants: productWithMonthlyAmounts.variants || [],
+            metadata: productWithMonthlyAmounts.metadata,
+            skuRoot: productWithMonthlyAmounts.skuRoot,
+            galleryImages: productWithMonthlyAmounts.galleryImages,
+            isFeatured: productWithMonthlyAmounts.isFeatured,
+            comparisonSection: productWithMonthlyAmounts.comparisonSection,
+            specification: productWithMonthlyAmounts.specification,
+            seo: productWithMonthlyAmounts.seo,
+            status: productWithMonthlyAmounts.status,
+            createdAt: productWithMonthlyAmounts.createdAt,
+            updatedAt: productWithMonthlyAmounts.updatedAt,
+          };
+
+          // Add variant info if exists
+          if (variant) {
+            fullProduct.variantInfo = {
+              _id: variant._id,
+              name: variant.name,
+              sku: variant.sku,
+              attributes: variant.attributes,
+              price: variant.price,
+              compareAtPrice: variant.compareAtPrice,
+            };
+          }
+
+          return {
+            product: fullProduct,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
@@ -475,7 +631,17 @@ class CheckoutController {
             memberPrice: item.memberPrice,
             discount: item.discount,
             isMember: item.isMember || false,
-          })),
+          };
+        })
+      );
+
+      // Filter out null items
+      const validItems = itemsWithProducts.filter((item) => item !== null);
+
+      // Build summary response
+      const summary = {
+        cart: {
+          items: validItems,
         },
         pricing: {
           originalSubtotal: cartValidation.pricing.originalSubtotal,

@@ -2,11 +2,61 @@ import { Request, Response, NextFunction } from "express";
 import { cartService } from "../services/cartService";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
+import {
+  I18nStringType,
+  I18nTextType,
+  DEFAULT_LANGUAGE,
+  SupportedLanguage,
+} from "../models/common.model";
+import { User } from "../models/core";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
   userId?: string;
 }
+
+/**
+ * Map user language name to language code
+ */
+const mapLanguageToCode = (language?: string): SupportedLanguage => {
+  const languageMap: Record<string, SupportedLanguage> = {
+    English: "en",
+    Spanish: "es",
+    French: "fr",
+    Dutch: "nl",
+    German: "de",
+  };
+
+  if (!language) {
+    return DEFAULT_LANGUAGE;
+  }
+
+  return languageMap[language] || DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get user language from request
+ */
+const getUserLanguage = async (
+  req: AuthenticatedRequest,
+  userId: string
+): Promise<SupportedLanguage> => {
+  if (req.user?.language) {
+    return mapLanguageToCode(req.user.language);
+  }
+
+  // Fetch user language from database if not in request
+  try {
+    const user = await User.findById(userId).select("language").lean();
+    if (user?.language) {
+      return mapLanguageToCode(user.language);
+    }
+  } catch (error) {
+    // If user not found or error, default to English
+  }
+
+  return DEFAULT_LANGUAGE;
+};
 
 export class CartController {
   /**
@@ -23,8 +73,13 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
+      const userLang = await getUserLanguage(req, userId);
       const includeSuggested = req.query.includeSuggested !== "false"; // Default true
-      const result = await cartService.getCart(userId, includeSuggested);
+      const result = await cartService.getCart(
+        userId,
+        includeSuggested,
+        userLang
+      );
 
       res.status(200).json({
         success: true,
