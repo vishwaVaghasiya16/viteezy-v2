@@ -4,3 +4,5 @@ export { AuthSessions } from "./authSessions.model";
 export { User } from "./users.model";
 export { OTP } from "./otp.model";
 export { MemberReferrals } from "./memberReferrals.model";
+export { Countries, ICountry } from "./countries.model";
+export { States, IState } from "./states.model";

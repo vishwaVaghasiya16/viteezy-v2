@@ -44,6 +44,8 @@ import dashboardRoutes from "./dashboardRoutes";
 import landingPageRoutes from "./landingPageRoutes";
 import aboutUsRoutes from "./aboutUsRoutes";
 import teamMemberRoutes from "./teamMemberRoutes";
+import countryRoutes from "./countryRoutes";
+import stateRoutes from "./stateRoutes";
 
 const router = Router();
 
@@ -95,5 +97,7 @@ router.use("/saved-cards", savedCardRoutes);
 router.use("/subscriptions", subscriptionRoutes);
 router.use("/memberships", membershipRoutes);
 router.use("/reviews", reviewRoutes);
+router.use("/countries", countryRoutes);
+router.use("/states", stateRoutes);
 
 export default router;

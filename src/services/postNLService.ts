@@ -62,38 +62,49 @@ export class PostNLService {
   async validateAddress(
     request: PostNLAddressRequest
   ): Promise<PostNLAddressValidationResult> {
-    const { sanitized, apiPayload } = this.buildPayload(request);
+    const { sanitized, queryParams } = this.buildPayload(request);
 
     if (!this.isConfigured) {
-      logger.debug("Skipping PostNL validation (service not configured)", {
+      logger.warn("PostNL validation service not configured", {
         payload: sanitized,
       });
 
-      return {
-        isValid: true,
-        source: "skipped",
-        normalizedAddress: {
-          postcode: sanitized.postcode,
-          houseNumber: sanitized.houseNumber,
-          houseNumberAddition: sanitized.houseNumberAddition,
-        },
-      };
+      // Throw error instead of skipping - validation is mandatory
+      throw new PostNLServiceError(
+        "PostNL address validation service is not configured. Please set POSTNL_API_KEY environment variable.",
+        { configured: false }
+      );
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(this.url, {
-        method: "POST",
+      // Build URL with query parameters (v2 API uses GET method)
+      const queryString = new URLSearchParams(
+        Object.entries(queryParams).reduce((acc, [key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            acc[key] = String(value);
+          }
+          return acc;
+        }, {} as Record<string, string>)
+      ).toString();
+
+      const urlWithParams = `${this.url}?${queryString}`;
+
+      const response = await fetch(urlWithParams, {
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           Accept: "application/json",
           apikey: this.apiKey,
-          Authorization: `Bearer ${this.apiKey}`,
         },
-        body: JSON.stringify(apiPayload),
         signal: controller.signal,
+      });
+
+      logger.debug("PostNL API v2 request", {
+        url: urlWithParams,
+        queryParams,
+        status: response.status,
       });
 
       clearTimeout(timeout);
@@ -132,7 +143,7 @@ export class PostNLService {
 
   private buildPayload(request: PostNLAddressRequest): {
     sanitized: PostNLAddressRequest;
-    apiPayload: Record<string, string>;
+    queryParams: Record<string, string>;
   } {
     const sanitizedPostcode = request.postcode
       .replace(/\s+/g, "")
@@ -150,22 +161,26 @@ export class PostNLService {
       countryCode,
     };
 
-    const apiPayload: Record<string, string> = {
-      postalCode: sanitizedPostcode,
-      PostalCode: sanitizedPostcode,
-      Postcode: sanitizedPostcode,
-      houseNumber,
-      HouseNumber: houseNumber,
-      CountryIso: countryCode,
+    // PostNL API v2 benelux endpoint uses GET with query parameters
+    const queryParams: Record<string, string> = {
+      countryIso: countryCode,
+      houseNumber: houseNumber,
     };
 
-    if (houseNumberAddition) {
-      apiPayload.Addition = houseNumberAddition;
-      apiPayload.AdditionNumber = houseNumberAddition;
-      apiPayload.HouseNumberAddition = houseNumberAddition;
+    // Add optional parameters if provided
+    if (sanitizedPostcode) {
+      queryParams.postalCode = sanitizedPostcode;
     }
 
-    return { sanitized: sanitizedPayload, apiPayload };
+    if (houseNumberAddition) {
+      queryParams.houseNumberAddition = houseNumberAddition;
+      // For Belgium, also use 'bus' parameter
+      if (countryCode === "BE") {
+        queryParams.bus = houseNumberAddition;
+      }
+    }
+
+    return { sanitized: sanitizedPayload, queryParams };
   }
 
   private async parseResponse(response: Response): Promise<any> {
@@ -182,10 +197,13 @@ export class PostNLService {
     }
 
     if (!response.ok) {
-      throw new PostNLServiceError(
+      const error = new PostNLServiceError(
         `PostNL responded with status ${response.status}`,
-        parsed || text
+        { status: response.status, body: parsed || text }
       );
+      // Attach status code for easier error handling
+      (error as any).status = response.status;
+      throw error;
     }
 
     return parsed;
@@ -245,39 +263,38 @@ export class PostNLService {
       return undefined;
     }
 
+    // PostNL v2 API response structure
     return {
       street:
-        data?.street ||
-        data?.Street ||
-        data?.ValidatedAddress?.Street ||
-        data?.Address?.Street ||
-        data?.FormattedAddress?.[0],
+        data?.streetName || data?.StreetName || data?.street || data?.Street,
       city:
+        data?.cityName ||
+        data?.CityName ||
         data?.city ||
         data?.City ||
-        data?.ValidatedAddress?.City ||
-        data?.Address?.City ||
-        data?.CityName,
+        data?.localityName ||
+        data?.LocalityName,
       state:
+        data?.stateName ||
+        data?.StateName ||
         data?.state ||
         data?.State ||
-        data?.Province ||
-        data?.ValidatedAddress?.Province ||
-        data?.ProvinceName,
+        data?.province ||
+        data?.Province,
       postcode:
-        data?.postcode ||
+        data?.postalCode ||
         data?.PostalCode ||
-        data?.ValidatedAddress?.PostalCode ||
-        data?.Zipcode,
+        data?.postcode ||
+        data?.Postcode,
       houseNumber:
         data?.houseNumber ||
         data?.HouseNumber ||
-        data?.ValidatedAddress?.HouseNumber,
+        String(data?.houseNumber || ""),
       houseNumberAddition:
         data?.houseNumberAddition ||
-        data?.HouseNumberSuffix ||
-        data?.ValidatedAddress?.HouseNumberSuffix ||
-        data?.Addition,
+        data?.HouseNumberAddition ||
+        data?.bus ||
+        data?.Bus,
     };
   }
 }

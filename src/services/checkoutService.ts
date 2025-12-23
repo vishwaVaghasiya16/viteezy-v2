@@ -443,7 +443,10 @@ class CheckoutService {
     }
 
     // Calculate final total
-    const totalAmount = totalSubtotal + totalTax - totalDiscount;
+    // Note: totalSubtotal already contains discounted prices for 90-day plans
+    // totalDiscount is tracked separately for display purposes only
+    // So we don't subtract it again here
+    const totalAmount = totalSubtotal + totalTax;
 
     // Merge sachetPrices from all products
     const mergedSachetPrices: MergedSachetPrices = {};

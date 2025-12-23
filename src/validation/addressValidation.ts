@@ -5,7 +5,6 @@
  */
 
 import Joi from "joi";
-import { AddressType, ADDRESS_TYPE_VALUES } from "../models/enums";
 import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 
@@ -22,6 +21,54 @@ const objectIdSchema = Joi.string()
     "any.invalid": "Invalid ID format",
     "any.required": "ID is required",
   });
+
+/**
+ * Country-specific validation helper
+ */
+const validateAddressByCountry = (
+  value: any,
+  helpers: Joi.CustomHelpers,
+  country?: string
+) => {
+  const countryCode = country?.toUpperCase();
+
+  // Netherlands (NL): postalCode + houseNumber are primary
+  if (countryCode === "NL" || countryCode === "NETHERLANDS") {
+    if (!value.postalCode || !value.houseNumber) {
+      return helpers.error("any.custom", {
+        message:
+          "For Netherlands addresses, postalCode and houseNumber are required",
+      });
+    }
+  }
+
+  // Belgium (BE): streetName + city + postalCode + houseNumber are required
+  if (countryCode === "BE" || countryCode === "BELGIUM") {
+    if (
+      !value.streetName ||
+      !value.city ||
+      !value.postalCode ||
+      !value.houseNumber
+    ) {
+      return helpers.error("any.custom", {
+        message:
+          "For Belgium addresses, streetName, city, postalCode, and houseNumber are required",
+      });
+    }
+  }
+
+  // Luxembourg (LU): postalCode + houseNumber are required (similar to NL)
+  if (countryCode === "LU" || countryCode === "LUXEMBOURG") {
+    if (!value.postalCode || !value.houseNumber) {
+      return helpers.error("any.custom", {
+        message:
+          "For Luxembourg addresses, postalCode and houseNumber are required",
+      });
+    }
+  }
+
+  return value;
+};
 
 /**
  * Add Address Body Validation Schema
@@ -42,49 +89,11 @@ export const addAddressSchema = Joi.object(
       "string.max": "Last name must not exceed 50 characters",
       "any.required": "Last name is required",
     }),
-    phone: Joi.string()
-      .trim()
-      .required()
-      .pattern(
-        /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
-      )
-      .messages({
-        "string.empty": "Phone number is required",
-        "string.pattern.base": "Please provide a valid phone number",
-        "any.required": "Phone number is required",
-      }),
-    country: Joi.string().trim().required().min(2).max(100).messages({
-      "string.empty": "Country is required",
-      "string.min": "Country must be at least 2 characters",
-      "string.max": "Country must not exceed 100 characters",
-      "any.required": "Country is required",
-    }),
-    state: Joi.string().trim().required().min(1).max(100).messages({
-      "string.empty": "State is required",
-      "string.min": "State must be at least 1 character",
-      "string.max": "State must not exceed 100 characters",
-      "any.required": "State is required",
-    }),
-    city: Joi.string().trim().required().min(1).max(100).messages({
-      "string.empty": "City is required",
-      "string.min": "City must be at least 1 character",
-      "string.max": "City must not exceed 100 characters",
-      "any.required": "City is required",
-    }),
-    zip: Joi.string().trim().required().min(3).max(20).messages({
-      "string.empty": "ZIP/Postal code is required",
-      "string.min": "ZIP/Postal code must be at least 3 characters",
-      "string.max": "ZIP/Postal code must not exceed 20 characters",
-      "any.required": "ZIP/Postal code is required",
-    }),
-    addressLine1: Joi.string().trim().required().min(5).max(200).messages({
-      "string.empty": "Address line 1 is required",
-      "string.min": "Address line 1 must be at least 5 characters",
-      "string.max": "Address line 1 must not exceed 200 characters",
-      "any.required": "Address line 1 is required",
-    }),
-    addressLine2: Joi.string().trim().optional().allow("").max(200).messages({
-      "string.max": "Address line 2 must not exceed 200 characters",
+    streetName: Joi.string().trim().required().min(1).max(200).messages({
+      "string.empty": "Street name is required",
+      "string.min": "Street name must be at least 1 character",
+      "string.max": "Street name must not exceed 200 characters",
+      "any.required": "Street name is required",
     }),
     houseNumber: Joi.alternatives()
       .try(
@@ -94,6 +103,7 @@ export const addAddressSchema = Joi.object(
         Joi.number().min(1).max(99999)
       )
       .optional()
+      .allow(null, "")
       .messages({
         "alternatives.match":
           "House number must be numeric with optional letters",
@@ -103,27 +113,51 @@ export const addAddressSchema = Joi.object(
     houseNumberAddition: Joi.string()
       .trim()
       .optional()
-      .allow("")
+      .allow(null, "")
       .max(10)
       .messages({
         "string.max": "House number addition must not exceed 10 characters",
       }),
-    isDefault: Joi.boolean().optional().default(false),
-    type: Joi.string()
-      .valid(...ADDRESS_TYPE_VALUES)
-      .optional()
-      .default(AddressType.HOME)
-      .messages({
-        "any.only": `Type must be one of: ${ADDRESS_TYPE_VALUES.join(", ")}`,
-      }),
-    label: Joi.string().trim().optional().allow("").max(50).messages({
-      "string.max": "Label must not exceed 50 characters",
+    postalCode: Joi.string().trim().required().min(3).max(20).messages({
+      "string.empty": "Postal code is required",
+      "string.min": "Postal code must be at least 3 characters",
+      "string.max": "Postal code must not exceed 20 characters",
+      "any.required": "Postal code is required",
     }),
-    instructions: Joi.string().trim().optional().allow("").max(500).messages({
-      "string.max": "Instructions must not exceed 500 characters",
+    address: Joi.string().trim().required().min(5).max(300).messages({
+      "string.empty": "Address is required",
+      "string.min": "Address must be at least 5 characters",
+      "string.max": "Address must not exceed 300 characters",
+      "any.required": "Address is required",
+    }),
+    phone: Joi.string()
+      .trim()
+      .optional()
+      .allow(null, "")
+      .pattern(
+        /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
+      )
+      .messages({
+        "string.pattern.base": "Please provide a valid phone number",
+      }),
+    country: Joi.string().trim().required().min(2).max(100).messages({
+      "string.empty": "Country is required",
+      "string.min": "Country must be at least 2 characters",
+      "string.max": "Country must not exceed 100 characters",
+      "any.required": "Country is required",
+    }),
+    city: Joi.string().trim().optional().allow(null, "").max(100).messages({
+      "string.max": "City must not exceed 100 characters",
+    }),
+    isDefault: Joi.boolean().optional().default(false),
+    note: Joi.string().trim().optional().allow(null, "").max(500).messages({
+      "string.max": "Note must not exceed 500 characters",
     }),
   })
 )
+  .custom((value, helpers) =>
+    validateAddressByCountry(value, helpers, value.country)
+  )
   .unknown(false)
   .label("AddAddressPayload");
 
@@ -142,9 +176,45 @@ export const updateAddressSchema = Joi.object(
       "string.min": "Last name must be at least 1 character",
       "string.max": "Last name must not exceed 50 characters",
     }),
+    streetName: Joi.string().trim().optional().min(1).max(200).messages({
+      "string.min": "Street name must be at least 1 character",
+      "string.max": "Street name must not exceed 200 characters",
+    }),
+    houseNumber: Joi.alternatives()
+      .try(
+        Joi.string()
+          .trim()
+          .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
+        Joi.number().min(1).max(99999)
+      )
+      .optional()
+      .allow(null, "")
+      .messages({
+        "alternatives.match":
+          "House number must be numeric with optional letters",
+        "string.pattern.base":
+          "House number must be numeric with optional letters",
+      }),
+    houseNumberAddition: Joi.string()
+      .trim()
+      .optional()
+      .allow(null, "")
+      .max(10)
+      .messages({
+        "string.max": "House number addition must not exceed 10 characters",
+      }),
+    postalCode: Joi.string().trim().optional().min(3).max(20).messages({
+      "string.min": "Postal code must be at least 3 characters",
+      "string.max": "Postal code must not exceed 20 characters",
+    }),
+    address: Joi.string().trim().optional().min(5).max(300).messages({
+      "string.min": "Address must be at least 5 characters",
+      "string.max": "Address must not exceed 300 characters",
+    }),
     phone: Joi.string()
       .trim()
       .optional()
+      .allow(null, "")
       .pattern(
         /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/
       )
@@ -155,62 +225,22 @@ export const updateAddressSchema = Joi.object(
       "string.min": "Country must be at least 2 characters",
       "string.max": "Country must not exceed 100 characters",
     }),
-    state: Joi.string().trim().optional().min(1).max(100).messages({
-      "string.min": "State must be at least 1 character",
-      "string.max": "State must not exceed 100 characters",
-    }),
-    city: Joi.string().trim().optional().min(1).max(100).messages({
-      "string.min": "City must be at least 1 character",
+    city: Joi.string().trim().optional().allow(null, "").max(100).messages({
       "string.max": "City must not exceed 100 characters",
     }),
-    zip: Joi.string().trim().optional().min(3).max(20).messages({
-      "string.min": "ZIP/Postal code must be at least 3 characters",
-      "string.max": "ZIP/Postal code must not exceed 20 characters",
-    }),
-    addressLine1: Joi.string().trim().optional().min(5).max(200).messages({
-      "string.min": "Address line 1 must be at least 5 characters",
-      "string.max": "Address line 1 must not exceed 200 characters",
-    }),
-    addressLine2: Joi.string().trim().optional().allow("").max(200).messages({
-      "string.max": "Address line 2 must not exceed 200 characters",
-    }),
-    houseNumber: Joi.alternatives()
-      .try(
-        Joi.string()
-          .trim()
-          .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
-        Joi.number().min(1).max(99999)
-      )
-      .optional()
-      .messages({
-        "alternatives.match":
-          "House number must be numeric with optional letters",
-        "string.pattern.base":
-          "House number must be numeric with optional letters",
-      }),
-    houseNumberAddition: Joi.string()
-      .trim()
-      .optional()
-      .allow("")
-      .max(10)
-      .messages({
-        "string.max": "House number addition must not exceed 10 characters",
-      }),
     isDefault: Joi.boolean().optional(),
-    type: Joi.string()
-      .valid(...ADDRESS_TYPE_VALUES)
-      .optional()
-      .messages({
-        "any.only": `Type must be one of: ${ADDRESS_TYPE_VALUES.join(", ")}`,
-      }),
-    label: Joi.string().trim().optional().allow("").max(50).messages({
-      "string.max": "Label must not exceed 50 characters",
-    }),
-    instructions: Joi.string().trim().optional().allow("").max(500).messages({
-      "string.max": "Instructions must not exceed 500 characters",
+    note: Joi.string().trim().optional().allow(null, "").max(500).messages({
+      "string.max": "Note must not exceed 500 characters",
     }),
   })
 )
+  .custom((value, helpers) => {
+    // Only validate if country is being updated
+    if (value.country) {
+      return validateAddressByCountry(value, helpers, value.country);
+    }
+    return value;
+  })
   .unknown(false)
   .label("UpdateAddressPayload");
 
