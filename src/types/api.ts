@@ -45,13 +45,10 @@ export interface ApiResponse<T = any> {
   success: boolean;
   /** Response message */
   message: string;
-  /** Error object (only present on errors) */
-  error?: {
-    /** Error code/type */
-    code: string;
-    /** Error message */
-    message: string;
-  };
+  /** Error type/category (only present on errors) */
+  errorType?: string;
+  /** Error message as string (only present on errors) */
+  error?: string;
   /** Response data (always present, null on errors or when no data) */
   data?: T | null;
   /** Pagination metadata (only present for paginated responses) - deprecated, use meta.pagination */

@@ -145,10 +145,8 @@ export class ResponseHelper {
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: errorCode || "Server Error",
-        message: errorMessage || message,
-      },
+      errorType: errorCode || "Server Error",
+      error: errorMessage || message,
       data: null,
     };
 
@@ -172,10 +170,8 @@ export class ResponseHelper {
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Validation Error",
-        message: errorMessage || message,
-      },
+      errorType: "Validation Error",
+      error: errorMessage || message,
       data: null,
     };
 

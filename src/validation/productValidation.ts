@@ -115,11 +115,9 @@ const howToUseSchema = Joi.string().trim().optional().allow("").messages({
   "string.base": "How to use must be a string",
 });
 
-const statusSchema = Joi.boolean()
-  .optional()
-  .messages({
-    "boolean.base": "Status must be true or false",
-  });
+const statusSchema = Joi.boolean().optional().messages({
+  "boolean.base": "Status must be true or false",
+});
 
 const priceSchema = Joi.object({
   currency: Joi.string()
@@ -144,35 +142,34 @@ const priceSchema = Joi.object({
   });
 
 // Extended price schema for subscription periods with additional metadata
-const subscriptionPriceSchema = priceSchema
-  .keys({
-    amount: Joi.number().min(0).required().messages({
-      "number.min": "Amount must be greater than or equal to 0",
-      "any.required": "Amount is required",
-    }),
-    discountedPrice: Joi.number().min(0).optional().messages({
-      "number.min": "Discounted price must be greater than or equal to 0",
-    }),
-    totalAmount: Joi.number().min(0).optional().messages({
-      "number.min": "Total amount must be greater than or equal to 0",
-    }),
-    durationDays: Joi.number().min(1).optional().messages({
-      "number.min": "Duration days must be greater than or equal to 1",
-    }),
-    capsuleCount: Joi.number().min(0).optional().messages({
-      "number.min": "Capsule count must be greater than or equal to 0",
-    }),
-    savingsPercentage: Joi.number().min(0).max(100).optional().messages({
-      "number.min": "Savings percentage must be greater than or equal to 0",
-      "number.max": "Savings percentage must be less than or equal to 100",
-    }),
-    features: Joi.array().items(Joi.string().trim()).optional().messages({
-      "array.base": "Features must be an array of strings",
-    }),
-    icon: Joi.string().trim().uri().optional().messages({
-      "string.uri": "Icon must be a valid URL",
-    }),
-  });
+const subscriptionPriceSchema = priceSchema.keys({
+  amount: Joi.number().min(0).required().messages({
+    "number.min": "Amount must be greater than or equal to 0",
+    "any.required": "Amount is required",
+  }),
+  discountedPrice: Joi.number().min(0).optional().messages({
+    "number.min": "Discounted price must be greater than or equal to 0",
+  }),
+  totalAmount: Joi.number().min(0).optional().messages({
+    "number.min": "Total amount must be greater than or equal to 0",
+  }),
+  durationDays: Joi.number().min(1).optional().messages({
+    "number.min": "Duration days must be greater than or equal to 1",
+  }),
+  capsuleCount: Joi.number().min(0).optional().messages({
+    "number.min": "Capsule count must be greater than or equal to 0",
+  }),
+  savingsPercentage: Joi.number().min(0).max(100).optional().messages({
+    "number.min": "Savings percentage must be greater than or equal to 0",
+    "number.max": "Savings percentage must be less than or equal to 100",
+  }),
+  features: Joi.array().items(Joi.string().trim()).optional().messages({
+    "array.base": "Features must be an array of strings",
+  }),
+  icon: Joi.string().trim().uri().optional().messages({
+    "string.uri": "Icon must be a valid URL",
+  }),
+});
 
 const variantSchema = Joi.string()
   .valid(...PRODUCT_VARIANT_VALUES)
@@ -349,9 +346,10 @@ export const createProductSchema = Joi.object({
   // If price is not provided and sachetPrices exists, set price from sachetPrices.thirtyDays
   if (!value.price && value.sachetPrices && value.sachetPrices.thirtyDays) {
     const thirtyDays = value.sachetPrices.thirtyDays;
-    const baseAmount = thirtyDays.discountedPrice !== undefined
-      ? thirtyDays.discountedPrice
-      : thirtyDays.amount || thirtyDays.totalAmount || 0;
+    const baseAmount =
+      thirtyDays.discountedPrice !== undefined
+        ? thirtyDays.discountedPrice
+        : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
       currency: thirtyDays.currency || "EUR",
       amount: baseAmount,
@@ -388,10 +386,7 @@ export const updateProductSchema = Joi.object({
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is being set to true, standupPouchPrice must be provided
   // Only validate if hasStandupPouch is explicitly being updated to true
-  if (
-    value.hasStandupPouch === true &&
-    value.standupPouchPrice === undefined
-  ) {
+  if (value.hasStandupPouch === true && value.standupPouchPrice === undefined) {
     return helpers.error("any.custom", {
       message: "standupPouchPrice is required when hasStandupPouch is true",
     });
@@ -399,9 +394,10 @@ export const updateProductSchema = Joi.object({
   // If price is not provided and sachetPrices is being updated, derive price from sachetPrices.thirtyDays
   if (!value.price && value.sachetPrices && value.sachetPrices.thirtyDays) {
     const thirtyDays = value.sachetPrices.thirtyDays;
-    const baseAmount = thirtyDays.discountedPrice !== undefined
-      ? thirtyDays.discountedPrice
-      : thirtyDays.amount || thirtyDays.totalAmount || 0;
+    const baseAmount =
+      thirtyDays.discountedPrice !== undefined
+        ? thirtyDays.discountedPrice
+        : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
       currency: thirtyDays.currency || "EUR",
       amount: baseAmount,
@@ -431,6 +427,15 @@ export const getProductCategoriesSchema = Joi.object({
 })
   .unknown(false)
   .label("ProductCategoriesQuery");
+
+// Get product categories list with products query schema (for navbar)
+export const listProductCategoriesSchema = Joi.object({
+  lan: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
+    "any.only": "Language must be one of: en, nl, de, fr, es",
+  }),
+})
+  .unknown(false)
+  .label("ListProductCategoriesQuery");
 
 // Validation middleware
 export const validateProduct = (schema: Joi.ObjectSchema) => {

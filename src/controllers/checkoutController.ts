@@ -47,10 +47,8 @@ class CheckoutController {
         res.status(400).json({
           success: false,
           message: "Cart validation failed",
-          error: {
-            code: "Validation Error",
-            message: "Cart validation failed",
-          },
+          errorType: "Validation Error",
+          error: "Cart validation failed",
           data: null,
         });
         return;

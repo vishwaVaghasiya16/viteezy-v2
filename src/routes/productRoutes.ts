@@ -6,6 +6,7 @@ import {
   updateProductSchema,
   updateProductStatusSchema,
   getProductCategoriesSchema,
+  listProductCategoriesSchema,
 } from "../validation/productValidation";
 import { authMiddleware, optionalAuth, authorize } from "../middleware/auth";
 import { upload } from "../middleware/upload";
@@ -17,13 +18,23 @@ const router = Router();
 
 // Public routes (optional authentication for member pricing)
 router.get("/", optionalAuth, ProductController.getAllProducts);
-router.get("/featured-or-recent", optionalAuth, ProductController.getFeaturedOrRecentProducts);
+router.get(
+  "/featured-or-recent",
+  optionalAuth,
+  ProductController.getFeaturedOrRecentProducts
+);
 router.get("/filters", ProductController.getFilterOptions);
 router.get("/stats", ProductController.getProductStats);
 router.get(
   "/categories",
   validateQuery(getProductCategoriesSchema),
   ProductController.getProductCategories
+);
+router.get(
+  "/categories/list",
+  authMiddleware,
+  validateQuery(listProductCategoriesSchema),
+  ProductController.listCategoriesWithProducts
 );
 router.get("/slug/:slug", optionalAuth, ProductController.getProductBySlug);
 router.get("/:id", optionalAuth, ProductController.getProductById);

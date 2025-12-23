@@ -26,10 +26,8 @@ export const notFoundHandler = (
   const response: ApiResponse = {
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`,
-    error: {
-      code: "Not Found Error",
-      message: "The requested resource was not found on this server",
-    },
+    errorType: "Not Found Error",
+    error: "The requested resource was not found on this server",
     data: null,
   };
 

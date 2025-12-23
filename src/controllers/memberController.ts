@@ -370,10 +370,8 @@ class MemberController {
         res.status(200).json({
           success: false,
           message: "Invalid member ID format",
-          error: {
-            code: "Validation Error",
-            message: "Invalid member ID format",
-          },
+          errorType: "Validation Error",
+          error: "Invalid member ID format",
           data: { valid: false },
         });
         return;

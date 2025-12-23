@@ -177,8 +177,8 @@ export const errorHandler = (
   if (error instanceof AppError) {
     statusCode = error.statusCode;
     message = error.message;
-    errorType = (error as any).errorType || errorType;
-    errorText = (error as any).error || errorText;
+    errorType = error.errorType || errorType;
+    errorText = error.message; // Use the error message as error text
   }
   // Handle Mongoose validation errors
   else if (error.name === "ValidationError") {
@@ -270,10 +270,8 @@ export const errorHandler = (
   const response: ApiResponse = {
     success: false,
     message,
-    error: {
-      code: errorType || "Server Error",
-      message: errorText || message,
-    },
+    errorType: errorType || "Server Error",
+    error: errorText || message,
     data: null,
   };
 

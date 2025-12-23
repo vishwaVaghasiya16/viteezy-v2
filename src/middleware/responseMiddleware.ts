@@ -178,10 +178,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: errorCode || "Server Error",
-        message: errorMessage || message,
-      },
+      errorType: errorCode || "Server Error",
+      error: errorMessage || message,
       data: null,
     };
     res.status(statusCode).json(response);
@@ -200,10 +198,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Validation Error",
-        message: errorMessage || message,
-      },
+      errorType: "Validation Error",
+      error: errorMessage || message,
       data: null,
     };
     res.status(HTTP_STATUS.UNPROCESSABLE_ENTITY).json(response);
@@ -218,10 +214,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Not Found Error",
-        message: message,
-      },
+      errorType: "Not Found Error",
+      error: message,
       data: null,
     };
     res.status(HTTP_STATUS.NOT_FOUND).json(response);
@@ -236,10 +230,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Authentication Error",
-        message: message,
-      },
+      errorType: "Authentication Error",
+      error: message,
       data: null,
     };
     res.status(HTTP_STATUS.UNAUTHORIZED).json(response);
@@ -254,10 +246,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Authorization Error",
-        message: message,
-      },
+      errorType: "Authorization Error",
+      error: message,
       data: null,
     };
     res.status(HTTP_STATUS.FORBIDDEN).json(response);
@@ -272,10 +262,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Conflict Error",
-        message: message,
-      },
+      errorType: "Conflict Error",
+      error: message,
       data: null,
     };
     res.status(HTTP_STATUS.CONFLICT).json(response);
@@ -294,10 +282,8 @@ export const responseMiddleware = (
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Bad Request",
-        message: errorMessage || message,
-      },
+      errorType: "Bad Request",
+      error: errorMessage || message,
       data: null,
     };
     res.status(HTTP_STATUS.BAD_REQUEST).json(response);

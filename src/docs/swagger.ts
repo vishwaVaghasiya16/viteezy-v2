@@ -1,168 +1,170 @@
-import swaggerJsdoc from 'swagger-jsdoc';
-import { config } from '@/config';
+import swaggerJsdoc from "swagger-jsdoc";
+import { config } from "@/config";
 
 const options = {
   definition: {
-    openapi: '3.0.0',
+    openapi: "3.0.0",
     info: {
-      title: 'Viteezy Phase 2 API',
-      version: '1.0.0',
-      description: 'A comprehensive Node.js TypeScript backend API with MongoDB',
+      title: "Viteezy Phase 2 API",
+      version: "1.0.0",
+      description:
+        "A comprehensive Node.js TypeScript backend API with MongoDB",
       contact: {
-        name: 'API Support',
-        email: 'support@viteezy.com'
+        name: "API Support",
+        email: "support@viteezy.com",
       },
       license: {
-        name: 'MIT',
-        url: 'https://opensource.org/licenses/MIT'
-      }
+        name: "MIT",
+        url: "https://opensource.org/licenses/MIT",
+      },
     },
     servers: [
       {
         url: `http://localhost:${config.server.port}`,
-        description: 'Development server'
+        description: "Development server",
       },
       {
-        url: 'https://api.viteezy.com',
-        description: 'Production server'
-      }
+        url: "https://api.viteezy.com",
+        description: "Production server",
+      },
     ],
     components: {
       securitySchemes: {
         bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
       },
       schemas: {
         User: {
-          type: 'object',
+          type: "object",
           properties: {
             _id: {
-              type: 'string',
-              description: 'User ID'
+              type: "string",
+              description: "User ID",
             },
             name: {
-              type: 'string',
-              description: 'User full name'
+              type: "string",
+              description: "User full name",
             },
             email: {
-              type: 'string',
-              format: 'email',
-              description: 'User email address'
+              type: "string",
+              format: "email",
+              description: "User email address",
             },
             role: {
-              type: 'string',
-              enum: ['user', 'admin', 'moderator'],
-              description: 'User role'
+              type: "string",
+              enum: ["user", "admin", "moderator"],
+              description: "User role",
             },
             isActive: {
-              type: 'boolean',
-              description: 'User active status'
+              type: "boolean",
+              description: "User active status",
             },
             isEmailVerified: {
-              type: 'boolean',
-              description: 'Email verification status'
+              type: "boolean",
+              description: "Email verification status",
             },
             avatar: {
-              type: 'string',
-              description: 'User avatar URL'
+              type: "string",
+              description: "User avatar URL",
             },
             lastLogin: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Last login timestamp'
+              type: "string",
+              format: "date-time",
+              description: "Last login timestamp",
             },
             createdAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Account creation timestamp'
+              type: "string",
+              format: "date-time",
+              description: "Account creation timestamp",
             },
             updatedAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Last update timestamp'
-            }
-          }
+              type: "string",
+              format: "date-time",
+              description: "Last update timestamp",
+            },
+          },
         },
         AuthTokens: {
-          type: 'object',
+          type: "object",
           properties: {
             accessToken: {
-              type: 'string',
-              description: 'JWT access token'
+              type: "string",
+              description: "JWT access token",
             },
             refreshToken: {
-              type: 'string',
-              description: 'JWT refresh token'
+              type: "string",
+              description: "JWT refresh token",
             },
             user: {
-              $ref: '#/components/schemas/User'
-            }
-          }
+              $ref: "#/components/schemas/User",
+            },
+          },
         },
         ApiResponse: {
-          type: 'object',
+          type: "object",
           properties: {
             success: {
-              type: 'boolean',
-              description: 'Request success status'
+              type: "boolean",
+              description: "Request success status",
             },
             message: {
-              type: 'string',
-              description: 'Response message'
+              type: "string",
+              description: "Response message",
             },
             data: {
-              type: 'object',
-              description: 'Response data'
+              type: "object",
+              description: "Response data",
+            },
+            errorType: {
+              type: "string",
+              description: "Error type/category (only present on errors)",
             },
             error: {
-              type: 'string',
-              description: 'Error message (if any)'
+              type: "string",
+              description: "Error message (only present on errors)",
             },
             pagination: {
-              type: 'object',
+              type: "object",
               properties: {
-                page: { type: 'number' },
-                limit: { type: 'number' },
-                total: { type: 'number' },
-                pages: { type: 'number' },
-                hasNext: { type: 'boolean' },
-                hasPrev: { type: 'boolean' }
-              }
-            }
-          }
+                page: { type: "number" },
+                limit: { type: "number" },
+                total: { type: "number" },
+                pages: { type: "number" },
+                hasNext: { type: "boolean" },
+                hasPrev: { type: "boolean" },
+              },
+            },
+          },
         },
         ValidationError: {
-          type: 'object',
+          type: "object",
           properties: {
             field: {
-              type: 'string',
-              description: 'Field name with error'
+              type: "string",
+              description: "Field name with error",
             },
             message: {
-              type: 'string',
-              description: 'Error message'
+              type: "string",
+              description: "Error message",
             },
             value: {
-              type: 'string',
-              description: 'Invalid value'
-            }
-          }
-        }
-      }
+              type: "string",
+              description: "Invalid value",
+            },
+          },
+        },
+      },
     },
     security: [
       {
-        bearerAuth: []
-      }
-    ]
+        bearerAuth: [],
+      },
+    ],
   },
-  apis: [
-    './src/routes/*.ts',
-    './src/controllers/*.ts'
-  ]
+  apis: ["./src/routes/*.ts", "./src/controllers/*.ts"],
 };
 
 export const swaggerSpec = swaggerJsdoc(options);
