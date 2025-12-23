@@ -183,11 +183,7 @@ class AdminTeamMemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        transformedTeamMembers,
-        pagination,
-        "Team members retrieved successfully"
-      );
+      res.apiPaginated(transformedTeamMembers, pagination, "Team members retrieved");
     }
   );
 

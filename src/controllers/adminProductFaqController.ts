@@ -139,11 +139,7 @@ class AdminProductFaqController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        productFaqs,
-        pagination,
-        "Product FAQs retrieved successfully"
-      );
+      res.apiPaginated(productFaqs, pagination, "Product FAQs retrieved");
     }
   );
 

@@ -140,11 +140,7 @@ class BlogController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        transformedBlogs,
-        pagination,
-        "Blogs retrieved successfully"
-      );
+      res.apiPaginated(transformedBlogs, pagination, "Blogs retrieved");
     }
   );
 

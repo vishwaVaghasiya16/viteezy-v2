@@ -217,12 +217,8 @@ class AdminMembershipPlanController {
       res.status(200).json({
         success: true,
         message: "Membership plans retrieved successfully",
-        data: {
-          plans,
-        },
-        meta: {
-          pagination: paginationMeta,
-        },
+        data: plans,
+        pagination: getPaginationMeta(Number(page), Number(limit), total),
       });
     }
   );

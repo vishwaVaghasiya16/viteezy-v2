@@ -309,17 +309,7 @@ class MemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.status(200).json({
-        success: true,
-        message: "Child member orders retrieved successfully",
-        data: {
-          child: profile,
-          orders,
-        },
-        meta: {
-          pagination,
-        },
-      });
+      res.apiPaginated(orders, pagination, "Child member orders retrieved");
     }
   );
 

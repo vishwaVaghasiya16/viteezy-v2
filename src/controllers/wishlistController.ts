@@ -85,7 +85,7 @@ class WishlistController {
       res.apiPaginated(
         itemsWithReviews,
         pagination,
-        "Wishlist retrieved successfully"
+        "Wishlist items retrieved"
       );
     }
   );

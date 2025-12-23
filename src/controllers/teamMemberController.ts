@@ -81,7 +81,7 @@ class TeamMemberController {
       res.apiPaginated(
         transformedTeamMembers,
         pagination,
-        "Team members retrieved successfully"
+        "Team members retrieved"
       );
     }
   );

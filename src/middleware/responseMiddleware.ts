@@ -131,12 +131,12 @@ export const responseMiddleware = (
    * @param {number} pagination.limit - Items per page
    * @param {number} pagination.total - Total number of items
    * @param {number} pagination.pages - Total number of pages
-   * @param {string} message - Success message (default: "Data retrieved successfully")
+   * @param {string} message - Success message (default: "")
    */
   res.apiPaginated = <T>(
     data: T[],
     pagination: { page: number; limit: number; total: number; pages: number },
-    message: string = "Data retrieved successfully"
+    message: string = ""
   ): void => {
     // Calculate hasNext and hasPrev for PaginationMeta
     const paginationMeta = {

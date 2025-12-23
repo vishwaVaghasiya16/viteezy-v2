@@ -743,11 +743,7 @@ class OrderController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        transformedOrders,
-        pagination,
-        "Order history retrieved successfully"
-      );
+      res.apiPaginated(transformedOrders, pagination, "Orders retrieved");
     }
   );
 
