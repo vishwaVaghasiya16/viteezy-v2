@@ -122,11 +122,7 @@ class AdminStaticPageController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        staticPages,
-        pagination,
-        "Static pages retrieved successfully"
-      );
+      res.apiPaginated(staticPages, pagination, "Static pages retrieved");
     }
   );
 

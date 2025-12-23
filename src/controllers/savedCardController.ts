@@ -209,12 +209,8 @@ class SavedCardController {
       res.status(200).json({
         success: true,
         message: "Saved cards retrieved successfully",
-        data: {
-          cards: formattedCards,
-        },
-        meta: {
-          pagination: paginationMeta,
-        },
+        data: formattedCards,
+        pagination: paginationMeta,
       });
     }
   );

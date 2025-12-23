@@ -6,7 +6,9 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
-import { ProductCategory, Wishlists } from "../models/commerce";
+import { AppError } from "../utils/AppError";
+import { ProductCategory, Products, Wishlists } from "../models/commerce";
+import { User } from "../models/core";
 import {
   I18nStringType,
   I18nTextType,
@@ -310,9 +312,7 @@ export class ProductController {
         success: true,
         message: "Products retrieved successfully",
         data: productsWithMemberPrices,
-        meta: {
-          pagination,
-        },
+        pagination,
       });
     } catch (error) {
       next(error);
@@ -331,7 +331,8 @@ export class ProductController {
   ) {
     try {
       const userId = req.user?.id || req.userId;
-      const userLang = (req.query.lang as SupportedLanguage) || DEFAULT_LANGUAGE;
+      const userLang =
+        (req.query.lang as SupportedLanguage) || DEFAULT_LANGUAGE;
 
       const result = await productService.getFeaturedOrRecentProducts();
 
@@ -839,6 +840,108 @@ export class ProductController {
         message: "Product categories retrieved successfully",
         data: {
           categories: transformedCategories,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get list of active product categories with top 3 products each (for navbar)
+   * @route GET /api/v1/products/categories/list
+   * @access Authenticated users only
+   * @query lan - Language code (en, nl, de, fr, es)
+   */
+  static async listCategoriesWithProducts(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      // Check authentication
+      if (!req.user || !req.user._id) {
+        return next(new AppError("User not authenticated", 401));
+      }
+
+      // Get language from query parameter or user preference
+      const { lan } = req.query as { lan?: string };
+
+      let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
+
+      // Priority: query parameter > user profile > default
+      if (lan) {
+        // Map language code from query
+        const langMap: Record<string, SupportedLanguage> = {
+          en: "en",
+          nl: "nl",
+          de: "de",
+          fr: "fr",
+          es: "es",
+        };
+        userLang = langMap[lan.toLowerCase()] || DEFAULT_LANGUAGE;
+      } else {
+        // Get user language from profile
+        const user = await User.findById(req.user._id)
+          .select("language")
+          .lean();
+
+        if (user && user.language) {
+          userLang = mapLanguageToCode(user.language);
+        }
+      }
+
+      // Fetch active categories
+      const categories = await ProductCategory.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .lean();
+
+      // Fetch products for each category
+      const categoriesWithProducts = await Promise.all(
+        categories.map(async (category: any) => {
+          // Get top 3 products for this category (featured first, then by creation date)
+          const products = await Products.find({
+            categories: { $in: [category._id] },
+            status: true, // Active products
+            isDeleted: { $ne: true },
+          })
+            .sort({ isFeatured: -1, createdAt: -1 }) // Featured first, then by creation date
+            .limit(3)
+            .select("title slug productImage galleryImages shortDescription")
+            .lean();
+
+          // Transform products for the response
+          const transformedProducts = products.map((product: any) => ({
+            _id: product._id,
+            title: getTranslatedString(product.title, userLang),
+            slug: product.slug,
+            productImage: product.productImage || null,
+            galleryImages: product.galleryImages || [],
+            shortDescription: product.shortDescription || "",
+          }));
+
+          // Transform category for the response
+          return {
+            _id: category._id,
+            slug: category.slug,
+            name: getTranslatedString(category.name, userLang),
+            description: getTranslatedText(category.description, userLang),
+            sortOrder: category.sortOrder || 0,
+            icon: category.icon || null,
+            image: category.image || null,
+            products: transformedProducts,
+          };
+        })
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Product categories retrieved successfully",
+        data: {
+          categories: categoriesWithProducts,
         },
       });
     } catch (error) {

@@ -309,17 +309,7 @@ class MemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.status(200).json({
-        success: true,
-        message: "Child member orders retrieved successfully",
-        data: {
-          child: profile,
-          orders,
-        },
-        meta: {
-          pagination,
-        },
-      });
+      res.apiPaginated(orders, pagination, "Child member orders retrieved");
     }
   );
 
@@ -362,9 +352,7 @@ class MemberController {
           child: profile,
           subscriptions: memberships,
         },
-        meta: {
-          pagination,
-        },
+        pagination,
       });
     }
   );
@@ -382,10 +370,8 @@ class MemberController {
         res.status(200).json({
           success: false,
           message: "Invalid member ID format",
-          error: {
-            code: "Validation Error",
-            message: "Invalid member ID format",
-          },
+          errorType: "Validation Error",
+          error: "Invalid member ID format",
           data: { valid: false },
         });
         return;

@@ -75,7 +75,6 @@ const orderItemSchema = Joi.object(
     quantity: Joi.number().integer().min(1).required(),
     price: priceSchema.required(),
     name: Joi.string().trim().optional(),
-    sku: Joi.string().trim().optional(),
   })
 );
 
@@ -123,8 +122,8 @@ const planSchema = Joi.object(
 export const createOrderSchema = Joi.object(
   withFieldLabels({
     items: Joi.array().items(orderItemSchema).min(1).label("Items").required(),
-    shippingAddress: addressSchema.required(),
-    billingAddress: addressSchema.optional(),
+    shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
+    billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
     shippingAmount: priceSchema.default({
       currency: "EUR",
       amount: 0,

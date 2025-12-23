@@ -9,11 +9,7 @@ import {
   OrderPlanType,
 } from "@/models/enums";
 import { logger } from "@/utils/logger";
-import {
-  calculateNextDeliveryDate,
-  calculateNextBillingDate,
-  computeSubscriptionMetrics,
-} from "@/services/subscriptionService";
+import { computeSubscriptionMetrics } from "@/services/subscriptionService";
 import { calculateRecurringBillingAmount } from "@/utils/productSubscriptionPrice";
 
 interface AuthenticatedRequest extends Request {
@@ -355,12 +351,8 @@ class SubscriptionController {
       res.status(200).json({
         success: true,
         message: "Subscriptions retrieved successfully",
-        data: {
-          subscriptions: formattedSubscriptions,
-        },
-        meta: {
-          pagination: paginationMeta,
-        },
+        data: formattedSubscriptions,
+        pagination: paginationMeta,
       });
     }
   );

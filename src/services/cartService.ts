@@ -9,7 +9,7 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
-import { ProductStatus, ProductVariant } from "../models/enums";
+import { ProductVariant } from "../models/enums";
 
 interface AddCartItemData {
   productId: string;
@@ -124,7 +124,7 @@ class CartService {
     const product = await Products.findOne({
       _id: new mongoose.Types.ObjectId(productId),
       isDeleted: false,
-      status: ProductStatus.ACTIVE,
+      status: true, // true = Active, false = Inactive
     }).lean();
 
     if (!product) {

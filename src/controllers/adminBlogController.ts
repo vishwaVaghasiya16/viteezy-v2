@@ -187,7 +187,7 @@ class AdminBlogController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(blogs, pagination, "Blogs retrieved successfully");
+      res.apiPaginated(blogs, pagination, "Blogs retrieved");
     }
   );
 

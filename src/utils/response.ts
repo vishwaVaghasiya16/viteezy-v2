@@ -91,7 +91,7 @@ export class ResponseHelper {
    * @param {number} pagination.limit - Items per page
    * @param {number} pagination.total - Total number of items
    * @param {number} pagination.pages - Total number of pages
-   * @param {string} message - Success message (default: "Data retrieved successfully")
+   * @param {string} message - Success message (default: "")
    * @returns {Response<ApiResponse<T[]>>} Express response with JSON data
    */
   static paginated<T>(
@@ -103,7 +103,7 @@ export class ResponseHelper {
       total: number;
       pages: number;
     },
-    message: string = "Data retrieved successfully"
+    message: string = ""
   ): Response<ApiResponse<T[]>> {
     // Calculate hasNext and hasPrev for PaginationMeta
     const paginationMeta = {
@@ -119,9 +119,7 @@ export class ResponseHelper {
       success: true,
       message,
       data,
-      meta: {
-        pagination: paginationMeta,
-      },
+      pagination: paginationMeta,
     };
 
     return res.status(HTTP_STATUS.OK).json(response);
@@ -147,10 +145,8 @@ export class ResponseHelper {
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: errorCode || "Server Error",
-        message: errorMessage || message,
-      },
+      errorType: errorCode || "Server Error",
+      error: errorMessage || message,
       data: null,
     };
 
@@ -174,10 +170,8 @@ export class ResponseHelper {
     const response: ApiResponse = {
       success: false,
       message,
-      error: {
-        code: "Validation Error",
-        message: errorMessage || message,
-      },
+      errorType: "Validation Error",
+      error: errorMessage || message,
       data: null,
     };
 
@@ -196,7 +190,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource not found"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.NOT_FOUND, "Not Found Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.NOT_FOUND,
+      "Not Found Error",
+      message
+    );
   }
 
   /**
@@ -211,7 +211,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Unauthorized access"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.UNAUTHORIZED, "Authentication Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.UNAUTHORIZED,
+      "Authentication Error",
+      message
+    );
   }
 
   /**
@@ -226,7 +232,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Access forbidden"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.FORBIDDEN, "Authorization Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.FORBIDDEN,
+      "Authorization Error",
+      message
+    );
   }
 
   /**
@@ -241,7 +253,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource conflict"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.CONFLICT, "Conflict Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.CONFLICT,
+      "Conflict Error",
+      message
+    );
   }
 
   /**
@@ -258,7 +276,13 @@ export class ResponseHelper {
     message: string = "Bad request",
     errorMessage?: string
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.BAD_REQUEST, "Bad Request", errorMessage || message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.BAD_REQUEST,
+      "Bad Request",
+      errorMessage || message
+    );
   }
 }
 

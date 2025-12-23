@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Orders, Payments, Products, Coupons } from "@/models/commerce";
+import { Addresses } from "@/models/core";
 import { CouponType, OrderPlanType, SubscriptionCycle } from "@/models/enums";
 import { PriceType } from "@/models/common.model";
 import {
@@ -261,8 +262,8 @@ class OrderController {
 
       const {
         items,
-        shippingAddress,
-        billingAddress,
+        shippingAddressId,
+        billingAddressId,
         shippingAmount,
         taxAmount,
         couponCode,
@@ -274,6 +275,48 @@ class OrderController {
       } = req.body;
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Validate and fetch shipping address
+      if (!shippingAddressId) {
+        throw new AppError("Shipping address ID is required", 400);
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(shippingAddressId)) {
+        throw new AppError("Invalid shipping address ID format", 400);
+      }
+
+      const shippingAddressDoc = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(shippingAddressId),
+        userId: userId,
+        isDeleted: false,
+      }).lean();
+
+      if (!shippingAddressDoc) {
+        throw new AppError(
+          "Shipping address not found or does not belong to user",
+          404
+        );
+      }
+
+      // Validate billing address if provided
+      if (billingAddressId) {
+        if (!mongoose.Types.ObjectId.isValid(billingAddressId)) {
+          throw new AppError("Invalid billing address ID format", 400);
+        }
+
+        const billingAddressDoc = await Addresses.findOne({
+          _id: new mongoose.Types.ObjectId(billingAddressId),
+          userId: userId,
+          isDeleted: false,
+        }).lean();
+
+        if (!billingAddressDoc) {
+          throw new AppError(
+            "Billing address not found or does not belong to user",
+            404
+          );
+        }
+      }
 
       const productObjectIds = items.map(
         (item: any) => new mongoose.Types.ObjectId(item.productId)
@@ -391,7 +434,6 @@ class OrderController {
             product.title?.nl ||
             product.slug ||
             "Product",
-          sku: item.sku || product.skuRoot,
         };
       });
 
@@ -559,8 +601,10 @@ class OrderController {
         membershipDiscount: membershipDiscountPrice,
         subscriptionPlanDiscount: subscriptionPlanDiscountPrice,
         total: totalPrice,
-        shippingAddress,
-        billingAddress: billingAddress || shippingAddress,
+        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        billingAddressId: billingAddressId
+          ? new mongoose.Types.ObjectId(billingAddressId)
+          : undefined,
         paymentMethod,
         couponCode: normalizedCouponCode,
         couponMetadata: couponMetadata || {},
@@ -674,7 +718,6 @@ class OrderController {
           variantId: item.variantId,
           quantity: item.quantity,
           name: item.name,
-          sku: item.sku,
           price: item.price,
         })),
         pricing: {
@@ -700,11 +743,7 @@ class OrderController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        transformedOrders,
-        pagination,
-        "Order history retrieved successfully"
-      );
+      res.apiPaginated(transformedOrders, pagination, "Orders retrieved");
     }
   );
 
@@ -727,12 +766,21 @@ class OrderController {
         throw new AppError("Invalid order ID", 400);
       }
 
-      // Get order
+      // Get order with populated addresses
       const order = await Orders.findOne({
         _id: new mongoose.Types.ObjectId(orderId),
         userId: new mongoose.Types.ObjectId(req.user._id),
         isDeleted: false,
-      }).lean();
+      })
+        .populate(
+          "shippingAddressId",
+          "firstName lastName phone addressLine1 addressLine2 houseNumber houseNumberAddition city state zip country"
+        )
+        .populate(
+          "billingAddressId",
+          "firstName lastName phone addressLine1 addressLine2 houseNumber houseNumberAddition city state zip country"
+        )
+        .lean();
 
       if (!order) {
         throw new AppError("Order not found", 404);
@@ -800,7 +848,6 @@ class OrderController {
           variantId: item.variantId,
           quantity: item.quantity,
           name: item.name,
-          sku: item.sku,
           price: item.price,
           product: product
             ? {
@@ -837,8 +884,8 @@ class OrderController {
           subscriptionPlanDiscount: order.subscriptionPlanDiscount,
           total: order.total,
         },
-        shippingAddress: order.shippingAddress,
-        billingAddress: order.billingAddress,
+        shippingAddressId: order.shippingAddressId,
+        billingAddressId: order.billingAddressId,
         paymentMethod: order.paymentMethod,
         payment: paymentData,
         couponCode: order.couponCode,

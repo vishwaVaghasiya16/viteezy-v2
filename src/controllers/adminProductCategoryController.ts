@@ -165,11 +165,7 @@ class AdminProductCategoryController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        categories,
-        pagination,
-        "Product categories retrieved successfully"
-      );
+      res.apiPaginated(categories, pagination, "Categories retrieved");
     }
   );
 

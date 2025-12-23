@@ -126,7 +126,7 @@ class AdminFaqController {
 
     const pagination = getPaginationMeta(page, limit, total);
 
-    res.apiPaginated(faqs, pagination, "FAQs retrieved successfully");
+    res.apiPaginated(faqs, pagination, "FAQs retrieved");
   });
 
   /**

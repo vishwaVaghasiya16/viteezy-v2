@@ -143,17 +143,11 @@ class AdminUserController {
       const total = enrichedUsers.length;
       const paginatedUsers = enrichedUsers.slice(skip, skip + limitNum);
 
-      const paginationMeta = getPaginationMeta(pageNum, limitNum, total);
-      res.status(200).json({
-        success: true,
-        message: "Users retrieved successfully",
-        data: {
-          users: paginatedUsers,
-        },
-        meta: {
-          pagination: paginationMeta,
-        },
-      });
+      res.apiPaginated(
+        paginatedUsers,
+        getPaginationMeta(pageNum, limitNum, total),
+        "Users retrieved"
+      );
     }
   );
 

@@ -168,7 +168,7 @@ class ProductIngredientController {
       res.apiPaginated(
         transformedIngredients,
         pagination,
-        "Product ingredients retrieved successfully"
+        "Ingredients retrieved"
       );
     }
   );
