@@ -10,6 +10,20 @@ const router = Router();
 router.use(authMiddleware);
 
 /**
+ * @route   GET /api/v1/checkout/products
+ * @desc    Get checkout products with all pricing details
+ * @access  Private
+ */
+router.get("/products", CheckoutController.getCheckoutProducts);
+
+/**
+ * @route   GET /api/v1/checkout/featured-products
+ * @desc    Get featured products excluding cart items (3-5 products)
+ * @access  Private
+ */
+router.get("/featured-products", CheckoutController.getFeaturedProducts);
+
+/**
  * @route   GET /api/checkout/summary
  * @desc    Get checkout summary with membership discount calculation
  * @access  Private

@@ -141,6 +141,7 @@ const SORT_OPTIONS: ProductSortOption[] = [
   "priceLowToHigh",
   "priceHighToLow",
   "rating",
+  "trending",
 ];
 
 const isValidSortOption = (value: unknown): value is ProductSortOption => {
