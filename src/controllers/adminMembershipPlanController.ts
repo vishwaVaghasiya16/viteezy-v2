@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { asyncHandler } from "@/utils";
+import { asyncHandler, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { MembershipPlans } from "@/models/commerce/membershipPlans.model";
 import { logger } from "@/utils/logger";
@@ -211,15 +211,8 @@ class AdminMembershipPlanController {
       res.status(200).json({
         success: true,
         message: "Membership plans retrieved successfully",
-        data: {
-          plans,
-          pagination: {
-            page: Number(page),
-            limit: Number(limit),
-            total,
-            pages: Math.ceil(total / Number(limit)),
-          },
-        },
+        data: plans,
+        pagination: getPaginationMeta(Number(page), Number(limit), total),
       });
     }
   );

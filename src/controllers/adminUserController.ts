@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { asyncHandler } from "@/utils";
+import { asyncHandler, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { User, MemberReferrals, Addresses } from "@/models/core";
 import {
@@ -142,17 +142,10 @@ class AdminUserController {
       const total = enrichedUsers.length;
       const paginatedUsers = enrichedUsers.slice(skip, skip + limitNum);
 
-      res.apiSuccess(
-        {
-          users: paginatedUsers,
-          pagination: {
-            page: pageNum,
-            limit: limitNum,
-            total,
-            pages: Math.ceil(total / limitNum),
-          },
-        },
-        "Users retrieved successfully"
+      res.apiPaginated(
+        paginatedUsers,
+        getPaginationMeta(pageNum, limitNum, total),
+        "Users retrieved"
       );
     }
   );

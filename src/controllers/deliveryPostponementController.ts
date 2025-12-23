@@ -278,19 +278,15 @@ class DeliveryPostponementController {
         DeliveryPostponements.countDocuments(query),
       ]);
 
-      const paginationMeta = getPaginationMeta(
-        paginationOptions.page,
-        paginationOptions.limit,
-        total
-      );
-
       res.status(200).json({
         success: true,
         message: "Postponement history retrieved successfully",
-        pagination: paginationMeta,
-        data: {
-          postponements,
-        },
+        data: postponements,
+        pagination: getPaginationMeta(
+          paginationOptions.page,
+          paginationOptions.limit,
+          total
+        ),
       });
     }
   );

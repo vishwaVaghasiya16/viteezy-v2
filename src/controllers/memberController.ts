@@ -309,14 +309,7 @@ class MemberController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiSuccess(
-        {
-          child: profile,
-          orders,
-          pagination,
-        },
-        "Child member orders retrieved successfully"
-      );
+      res.apiPaginated(orders, pagination, "Child member orders retrieved");
     }
   );
 

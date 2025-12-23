@@ -343,14 +343,10 @@ class UserController {
         createdAt: payment.createdAt,
       }));
 
-      const pagination = getPaginationMeta(page, limit, total);
-
-      res.apiSuccess(
-        {
-          transactions: formattedTransactions,
-          pagination,
-        },
-        "Transaction history retrieved successfully"
+      res.apiPaginated(
+        formattedTransactions,
+        getPaginationMeta(page, limit, total),
+        "Transaction history retrieved"
       );
     }
   );

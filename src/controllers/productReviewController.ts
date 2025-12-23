@@ -109,11 +109,10 @@ class ProductReviewController {
         Reviews.countDocuments(query),
       ]);
 
-      const pagination = getPaginationMeta(page, limit, total);
-
-      res.apiSuccess(
-        { reviews, pagination },
-        "Product reviews retrieved successfully"
+      res.apiPaginated(
+        reviews,
+        getPaginationMeta(page, limit, total),
+        "Product reviews retrieved"
       );
     }
   );

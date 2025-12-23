@@ -215,7 +215,7 @@ class ProductTestimonialController {
       res.apiPaginated(
         transformedTestimonials,
         pagination,
-        "Product testimonials retrieved successfully"
+        "Testimonials retrieved"
       );
     }
   );

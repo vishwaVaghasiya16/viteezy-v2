@@ -98,11 +98,7 @@ class AdminBlogCategoryController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        categories,
-        pagination,
-        "Categories retrieved successfully"
-      );
+      res.apiPaginated(categories, pagination, "Categories retrieved");
     }
   );
 

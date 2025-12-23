@@ -46,11 +46,7 @@ class ExampleController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        paginatedData,
-        pagination,
-        "Paginated data retrieved successfully"
-      );
+      res.apiPaginated(paginatedData, pagination, "Data retrieved");
     }
   );
 

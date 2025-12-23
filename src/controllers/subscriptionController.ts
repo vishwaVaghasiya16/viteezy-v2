@@ -355,10 +355,8 @@ class SubscriptionController {
       res.status(200).json({
         success: true,
         message: "Subscriptions retrieved successfully",
-        data: {
-          subscriptions: formattedSubscriptions,
-          pagination: paginationMeta,
-        },
+        data: formattedSubscriptions,
+        pagination: paginationMeta,
       });
     }
   );

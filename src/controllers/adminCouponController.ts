@@ -159,7 +159,7 @@ class AdminCouponController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(coupons, pagination, "Coupons retrieved successfully");
+      res.apiPaginated(coupons, pagination, "Coupons retrieved");
     }
   );
 
