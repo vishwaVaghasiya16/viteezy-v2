@@ -35,7 +35,12 @@ declare global {
         message?: string
       ) => void;
       /** Send error response */
-      apiError: (message?: string, statusCode?: number, errorCode?: string, errorMessage?: string) => void;
+      apiError: (
+        message?: string,
+        statusCode?: number,
+        errorCode?: string,
+        errorMessage?: string
+      ) => void;
       /** Send validation error response (422) */
       apiValidationError: (message?: string, errorMessage?: string) => void;
       /** Send not found response (404) */
@@ -152,9 +157,7 @@ export const responseMiddleware = (
       success: true,
       message,
       data,
-      meta: {
-        pagination: paginationMeta,
-      },
+      pagination: paginationMeta,
     };
     res.status(HTTP_STATUS.OK).json(response);
   };

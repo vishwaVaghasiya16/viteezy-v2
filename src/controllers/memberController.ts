@@ -352,9 +352,7 @@ class MemberController {
           child: profile,
           subscriptions: memberships,
         },
-        meta: {
-          pagination,
-        },
+        pagination,
       });
     }
   );

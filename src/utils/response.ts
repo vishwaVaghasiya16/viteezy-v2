@@ -119,9 +119,7 @@ export class ResponseHelper {
       success: true,
       message,
       data,
-      meta: {
-        pagination: paginationMeta,
-      },
+      pagination: paginationMeta,
     };
 
     return res.status(HTTP_STATUS.OK).json(response);
@@ -196,7 +194,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource not found"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.NOT_FOUND, "Not Found Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.NOT_FOUND,
+      "Not Found Error",
+      message
+    );
   }
 
   /**
@@ -211,7 +215,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Unauthorized access"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.UNAUTHORIZED, "Authentication Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.UNAUTHORIZED,
+      "Authentication Error",
+      message
+    );
   }
 
   /**
@@ -226,7 +236,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Access forbidden"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.FORBIDDEN, "Authorization Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.FORBIDDEN,
+      "Authorization Error",
+      message
+    );
   }
 
   /**
@@ -241,7 +257,13 @@ export class ResponseHelper {
     res: Response,
     message: string = "Resource conflict"
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.CONFLICT, "Conflict Error", message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.CONFLICT,
+      "Conflict Error",
+      message
+    );
   }
 
   /**
@@ -258,7 +280,13 @@ export class ResponseHelper {
     message: string = "Bad request",
     errorMessage?: string
   ): Response<ApiResponse> {
-    return this.error(res, message, HTTP_STATUS.BAD_REQUEST, "Bad Request", errorMessage || message);
+    return this.error(
+      res,
+      message,
+      HTTP_STATUS.BAD_REQUEST,
+      "Bad Request",
+      errorMessage || message
+    );
   }
 }
 

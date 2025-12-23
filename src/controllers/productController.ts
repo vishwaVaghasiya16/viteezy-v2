@@ -310,9 +310,7 @@ export class ProductController {
         success: true,
         message: "Products retrieved successfully",
         data: productsWithMemberPrices,
-        meta: {
-          pagination,
-        },
+        pagination,
       });
     } catch (error) {
       next(error);
@@ -331,7 +329,8 @@ export class ProductController {
   ) {
     try {
       const userId = req.user?.id || req.userId;
-      const userLang = (req.query.lang as SupportedLanguage) || DEFAULT_LANGUAGE;
+      const userLang =
+        (req.query.lang as SupportedLanguage) || DEFAULT_LANGUAGE;
 
       const result = await productService.getFeaturedOrRecentProducts();
 

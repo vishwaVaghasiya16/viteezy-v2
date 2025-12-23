@@ -190,9 +190,7 @@ class AdminProductTestimonialController {
         data: {
           testimonials,
         },
-        meta: {
-          pagination: paginationMeta,
-        },
+        pagination: paginationMeta,
       });
     }
   );
