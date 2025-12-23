@@ -1102,19 +1102,23 @@ export class PaymentService {
       return {};
     }
 
+    // Build line1 from streetName, houseNumber, and houseNumberAddition
+    const line1Parts = [
+      address.streetName,
+      address.houseNumber,
+      address.houseNumberAddition,
+    ].filter(Boolean);
+
     return {
       name:
         `${address.firstName || ""} ${address.lastName || ""}`.trim() ||
         undefined,
       phone: address.phone || undefined,
-      line1:
-        [address.addressLine1, address.houseNumber, address.houseNumberAddition]
-          .filter(Boolean)
-          .join(" ") || undefined,
-      line2: address.addressLine2 || undefined,
+      line1: line1Parts.join(" ") || address.address || undefined,
+      line2: undefined, // No longer used
       city: address.city || undefined,
-      state: address.state || undefined,
-      zip: address.zip || undefined,
+      state: undefined, // No longer used
+      zip: address.postalCode || undefined,
       country: address.country || undefined,
     };
   }

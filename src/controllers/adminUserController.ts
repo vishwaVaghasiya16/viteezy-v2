@@ -232,7 +232,7 @@ class AdminUserController {
         // User addresses
         Addresses.find({ userId, isDeleted: { $ne: true } })
           .select(
-            "firstName lastName phone country state city zip addressLine1 addressLine2 houseNumber houseNumberAddition isDefault type label"
+            "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city isDefault note"
           )
           .sort({ isDefault: -1, createdAt: -1 })
           .lean(),

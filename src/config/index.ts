@@ -39,9 +39,10 @@ const DEFAULT_VALUES = {
   DIGITALOCEAN_ACCESS_KEY: "",
   DIGITALOCEAN_SPACES_SECRET_KEY: "",
   DO_SPACES_CDN_BASE_URL: "",
-  POSTNL_URL: "https://api.postnl.nl/address/national/v1/validate",
+  POSTNL_URL: "https://api.postnl.nl/v2/address/benelux",
   POSTNL_TIMEOUT_MS: 5000,
-  GOOGLE_CLIENT_ID: "137831918294-e52avbjc9i935c7b71tupto5m6jtunj0.apps.googleusercontent.com",
+  GOOGLE_CLIENT_ID:
+    "137831918294-e52avbjc9i935c7b71tupto5m6jtunj0.apps.googleusercontent.com",
 } as const;
 
 /**
@@ -205,8 +206,7 @@ export const config = {
    * @property {string} clientId - Google OAuth Client ID
    */
   google: {
-    clientId:
-      process.env.GOOGLE_CLIENT_ID || DEFAULT_VALUES.GOOGLE_CLIENT_ID,
+    clientId: process.env.GOOGLE_CLIENT_ID || DEFAULT_VALUES.GOOGLE_CLIENT_ID,
   },
 } as const;
 

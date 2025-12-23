@@ -774,11 +774,11 @@ class OrderController {
       })
         .populate(
           "shippingAddressId",
-          "firstName lastName phone addressLine1 addressLine2 houseNumber houseNumberAddition city state zip country"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
         )
         .populate(
           "billingAddressId",
-          "firstName lastName phone addressLine1 addressLine2 houseNumber houseNumberAddition city state zip country"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
         )
         .lean();
 

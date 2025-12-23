@@ -1,24 +1,20 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { SoftDelete, AuditSchema } from "../common.model";
-import { AddressType, ADDRESS_TYPE_VALUES } from "../enums";
 
 export interface IAddress extends Document {
   userId: mongoose.Types.ObjectId;
   firstName: string;
   lastName: string;
-  phone: string;
-  country: string;
-  state: string;
-  city: string;
-  zip: string;
-  addressLine1: string;
-  addressLine2?: string;
+  streetName: string;
   houseNumber?: string;
   houseNumberAddition?: string;
+  postalCode: string;
+  address: string; // Full address line
+  phone?: string;
+  country: string;
+  city?: string; // Optional, but may be needed for BE validation
   isDefault: boolean;
-  type?: AddressType;
-  label?: string;
-  instructions?: string;
+  note?: string; // Renamed from instructions
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,64 +36,54 @@ const AddressSchema = new Schema<IAddress>(
       required: true,
       trim: true,
     },
-    phone: {
+    streetName: {
       type: String,
       required: true,
       trim: true,
+    },
+    houseNumber: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    houseNumberAddition: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    postalCode: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    address: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: null,
     },
     country: {
       type: String,
       required: true,
       trim: true,
     },
-    state: {
-      type: String,
-      required: true,
-      trim: true,
-    },
     city: {
       type: String,
-      required: true,
       trim: true,
-    },
-    zip: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    addressLine1: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    addressLine2: {
-      type: String,
-      trim: true,
-    },
-    houseNumber: {
-      type: String,
-      trim: true,
-    },
-    houseNumberAddition: {
-      type: String,
-      trim: true,
+      default: null,
     },
     isDefault: {
       type: Boolean,
       default: false,
     },
-    type: {
-      type: String,
-      enum: ADDRESS_TYPE_VALUES,
-      default: AddressType.HOME,
-    },
-    label: {
+    note: {
       type: String,
       trim: true,
-    },
-    instructions: {
-      type: String,
-      trim: true,
+      default: null,
     },
     ...SoftDelete,
     ...AuditSchema.obj,
@@ -113,9 +99,8 @@ const AddressSchema = new Schema<IAddress>(
 AddressSchema.index({ userId: 1 });
 AddressSchema.index({ country: 1 });
 AddressSchema.index({ isDefault: 1 });
-AddressSchema.index({ type: 1 });
 AddressSchema.index({ userId: 1, isDefault: 1 });
-AddressSchema.index({ userId: 1, type: 1 });
 AddressSchema.index({ country: 1, city: 1 });
+AddressSchema.index({ postalCode: 1 });
 
 export const Addresses = mongoose.model<IAddress>("addresses", AddressSchema);
