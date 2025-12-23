@@ -97,7 +97,7 @@ class StateController {
    */
   getStateByCode = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const { code, countryCode } = req.query;
+      const { code } = req.params;
 
       if (!code || typeof code !== "string") {
         throw new AppError("State code is required", 400);
@@ -107,10 +107,6 @@ class StateController {
         code: code.toUpperCase(),
         isDeleted: false,
       };
-
-      if (countryCode && typeof countryCode === "string") {
-        query.countryCode = countryCode.toUpperCase();
-      }
 
       const state = await States.findOne(query)
         .populate("countryId", "name alpha2 alpha3")
