@@ -18,15 +18,15 @@ router.get("/", CartController.getCart);
 // Add item to cart
 router.post("/items", validateCart(addCartItemSchema), CartController.addItem);
 
-// Update cart item quantity
+// Update cart item quantity (by productId)
 router.put(
-  "/items/:index",
+  "/items",
   validateCart(updateCartItemSchema),
   CartController.updateItem
 );
 
-// Remove item from cart
-router.delete("/items/:index", CartController.removeItem);
+// Remove item from cart (by productId)
+router.delete("/items", CartController.removeItem);
 
 // Clear cart
 router.delete("/", CartController.clearCart);

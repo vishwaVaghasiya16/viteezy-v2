@@ -41,6 +41,30 @@ export const addCartItemSchema = Joi.object({
 
 // Update cart item schema
 export const updateCartItemSchema = Joi.object({
+  productId: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid", { message: "Invalid product ID format" });
+      }
+      return value;
+    })
+    .messages({
+      "any.required": "Product ID is required",
+      "any.invalid": "Product ID must be a valid MongoDB ObjectId",
+    }),
+  variantId: Joi.string()
+    .optional()
+    .allow(null, "")
+    .custom((value, helpers) => {
+      if (value && !mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid", { message: "Invalid variant ID format" });
+      }
+      return value;
+    })
+    .messages({
+      "any.invalid": "Variant ID must be a valid MongoDB ObjectId",
+    }),
   quantity: Joi.number()
     .integer()
     .min(1)

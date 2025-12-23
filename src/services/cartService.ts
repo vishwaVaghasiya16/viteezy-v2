@@ -2,6 +2,7 @@ import { type ICart, Carts } from "../models/commerce/carts.model";
 import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
+import { Wishlists } from "../models/commerce/wishlists.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import {
@@ -11,11 +12,10 @@ import {
 import mongoose from "mongoose";
 import { ProductVariant } from "../models/enums";
 import {
-  I18nStringType,
-  I18nTextType,
   DEFAULT_LANGUAGE,
   SupportedLanguage,
 } from "../models/common.model";
+import { fetchAndEnrichProducts } from "./productEnrichmentService";
 
 interface AddCartItemData {
   productId: string;
@@ -24,7 +24,15 @@ interface AddCartItemData {
 }
 
 interface UpdateCartItemData {
+  productId: string;
+  variantId?: string;
   quantity: number;
+}
+
+interface RemoveCartItemData {
+  productId: string;
+  variantId?: string;
+  quantity?: number; // Optional, defaults to 1 if not provided
 }
 
 interface CartItemWithDetails {
@@ -40,146 +48,6 @@ interface CartItemWithDetails {
   product?: any;
   variant?: any;
 }
-
-/**
- * Get translated string from I18nStringType
- */
-const getTranslatedString = (
-  i18nString: I18nStringType | string | undefined,
-  lang: SupportedLanguage
-): string => {
-  if (!i18nString) return "";
-
-  if (typeof i18nString === "string") {
-    return i18nString;
-  }
-
-  return i18nString[lang] || i18nString.en || "";
-};
-
-/**
- * Get translated text from I18nTextType
- */
-const getTranslatedText = (
-  i18nText: I18nTextType | string | undefined,
-  lang: SupportedLanguage
-): string => {
-  if (!i18nText) return "";
-
-  if (typeof i18nText === "string") {
-    return i18nText;
-  }
-
-  return i18nText[lang] || i18nText.en || "";
-};
-
-/**
- * Transform product to use user's language
- */
-const transformProductForLanguage = (
-  product: any,
-  lang: SupportedLanguage
-): any => {
-  return {
-    ...product,
-    title: getTranslatedString(product.title, lang),
-    description: getTranslatedText(product.description, lang),
-    nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
-    howToUse: getTranslatedText(product.howToUse, lang),
-    variants:
-      product.variants?.map((variant: any) => ({
-        ...variant,
-        name: getTranslatedString(variant.name, lang),
-      })) ||
-      product.variants ||
-      [],
-    ingredients:
-      product.ingredients?.map((ingredient: any) => ({
-        ...ingredient,
-        name: getTranslatedString(ingredient.name, lang),
-        description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || undefined,
-      })) || [],
-    categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
-  };
-};
-
-/**
- * Calculate monthly amount from totalAmount and durationDays
- */
-const calculateMonthlyAmount = (
-  totalAmount: number | undefined,
-  durationDays: number | undefined
-): number | undefined => {
-  if (!totalAmount || !durationDays || durationDays <= 0) {
-    return undefined;
-  }
-  const months = durationDays / 30;
-  return Math.round((totalAmount / months) * 100) / 100;
-};
-
-/**
- * Calculate monthly amounts for all subscription prices in a product
- */
-const calculateMonthlyAmounts = (product: any): any => {
-  const result = { ...product };
-
-  if (product.sachetPrices) {
-    const sachetPrices = { ...product.sachetPrices };
-
-    const periods = [
-      "thirtyDays",
-      "sixtyDays",
-      "ninetyDays",
-      "oneEightyDays",
-    ] as const;
-
-    periods.forEach((period) => {
-      if (sachetPrices[period]) {
-        const periodData = { ...sachetPrices[period] };
-        if (
-          !periodData.amount &&
-          periodData.totalAmount &&
-          periodData.durationDays
-        ) {
-          periodData.amount = calculateMonthlyAmount(
-            periodData.totalAmount,
-            periodData.durationDays
-          );
-        }
-        sachetPrices[period] = periodData;
-      }
-    });
-
-    if (sachetPrices.oneTime) {
-      sachetPrices.oneTime = {
-        count30: { ...sachetPrices.oneTime.count30 },
-        count60: { ...sachetPrices.oneTime.count60 },
-      };
-    }
-
-    result.sachetPrices = sachetPrices;
-  }
-
-  if (product.standupPouchPrice) {
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
-      result.standupPouchPrice = {
-        count30: { ...product.standupPouchPrice.count30 },
-        count60: { ...product.standupPouchPrice.count60 },
-      };
-    } else {
-      result.standupPouchPrice = { ...product.standupPouchPrice };
-    }
-  }
-
-  return result;
-};
 
 class CartService {
   private readonly LOW_STOCK_THRESHOLD = 10; // Warn if stock < 10
@@ -360,164 +228,86 @@ class CartService {
       .map((item: any) => item.variantId)
       .filter((id: any) => id);
 
-    // Fetch products and variants with full details
-    const [products, variants] = await Promise.all([
-      Products.find({
-        _id: { $in: productIds },
-        isDeleted: false,
-        status: true,
+    // Get user's wishlist product IDs for is_liked field
+    let wishlistProductIds: Set<string> = new Set();
+    try {
+      const wishlistItems = await Wishlists.find({
+        userId: new mongoose.Types.ObjectId(userId),
       })
-        .populate("categories", "name slug description image")
-        .lean(),
+        .select("productId")
+        .lean();
+      wishlistProductIds = new Set(
+        wishlistItems.map((item: any) => item.productId.toString())
+      );
+    } catch (error) {
+      // If wishlist fetch fails, continue without wishlist data
+      logger.warn("Failed to fetch wishlist for cart", error);
+    }
+
+    // Fetch and enrich products using common service
+    const enrichedProducts = await fetchAndEnrichProducts(
+      productIds.map((id: any) => new mongoose.Types.ObjectId(id)),
+      {
+        userId,
+        userLang,
+        wishlistProductIds,
+      }
+    );
+
+    // Fetch variants
+    const variants =
       variantIds.length > 0
-        ? ProductVariants.find({
+        ? await ProductVariants.find({
             _id: { $in: variantIds },
             isDeleted: { $ne: true },
             isActive: true,
           }).lean()
-        : Promise.resolve([]),
-    ]);
-
-    // Manually populate ingredients for all products
-    const allIngredientIds: string[] = [];
-    products.forEach((product: any) => {
-      if (product.ingredients && Array.isArray(product.ingredients)) {
-        product.ingredients.forEach((ingredientId: any) => {
-          const id =
-            typeof ingredientId === "string"
-              ? ingredientId
-              : ingredientId?.toString();
-          if (
-            id &&
-            mongoose.Types.ObjectId.isValid(id) &&
-            !allIngredientIds.includes(id)
-          ) {
-            allIngredientIds.push(id);
-          }
-        });
-      }
-    });
-
-    // Fetch all ingredient details
-    const ingredientDetailsMap = new Map();
-    if (allIngredientIds.length > 0) {
-      const ingredientDetails = await ProductIngredients.find({
-        _id: {
-          $in: allIngredientIds.map(
-            (id: string) => new mongoose.Types.ObjectId(id)
-          ),
-        },
-      })
-        .select("_id name description image")
-        .lean();
-
-      ingredientDetails.forEach((ingredient: any) => {
-        ingredientDetailsMap.set(ingredient._id.toString(), ingredient);
-      });
-    }
-
-    // Replace ingredient IDs with populated ingredient objects
-    products.forEach((product: any) => {
-      if (product.ingredients && Array.isArray(product.ingredients)) {
-        product.ingredients = product.ingredients
-          .map((ingredientId: any) => {
-            const id =
-              typeof ingredientId === "string"
-                ? ingredientId
-                : ingredientId?.toString();
-            return ingredientDetailsMap.get(id);
-          })
-          .filter((ingredient: any) => ingredient !== undefined);
-      }
-    });
+        : [];
 
     // Create maps for quick lookup
     const productMap = new Map(
-      products.map((p: any) => [p._id.toString(), p])
+      enrichedProducts.map((p: any) => [p._id.toString(), p])
     );
     const variantMap = new Map(
       variants.map((v: any) => [v._id.toString(), v])
     );
 
     // Build items with full product details
-    const itemsWithDetails = await Promise.all(
-      (cart.items || []).map(async (item: any) => {
-        const product = productMap.get(item.productId.toString());
-        if (!product) {
-          return {
-            ...item,
-            product: null,
-            variant: item.variantId
-              ? variantMap.get(item.variantId.toString()) || undefined
-              : undefined,
-          };
-        }
-
-        const variant = item.variantId
-          ? variantMap.get(item.variantId.toString())
-          : null;
-
-        // Transform product for language
-        const transformedProduct = transformProductForLanguage(
-          product,
-          userLang
-        );
-
-        // Calculate monthly amounts for subscription pricing
-        const productWithMonthlyAmounts = calculateMonthlyAmounts(
-          transformedProduct
-        );
-
-        // Build full product object similar to getAllProducts format
-        const fullProduct: any = {
-          _id: productWithMonthlyAmounts._id,
-          title: productWithMonthlyAmounts.title,
-          slug: productWithMonthlyAmounts.slug,
-          productImage: productWithMonthlyAmounts.productImage,
-          shortDescription: productWithMonthlyAmounts.shortDescription,
-          description: productWithMonthlyAmounts.description,
-          nutritionInfo: productWithMonthlyAmounts.nutritionInfo,
-          howToUse: productWithMonthlyAmounts.howToUse,
-          price: productWithMonthlyAmounts.price,
-          variant: productWithMonthlyAmounts.variant,
-          hasStandupPouch: productWithMonthlyAmounts.hasStandupPouch,
-          sachetPrices: productWithMonthlyAmounts.sachetPrices,
-          standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
-          categories: productWithMonthlyAmounts.categories || [],
-          ingredients: productWithMonthlyAmounts.ingredients || [],
-          variants: productWithMonthlyAmounts.variants || [],
-          metadata: productWithMonthlyAmounts.metadata,
-          skuRoot: productWithMonthlyAmounts.skuRoot,
-          galleryImages: productWithMonthlyAmounts.galleryImages,
-          isFeatured: productWithMonthlyAmounts.isFeatured,
-          comparisonSection: productWithMonthlyAmounts.comparisonSection,
-          specification: productWithMonthlyAmounts.specification,
-          seo: productWithMonthlyAmounts.seo,
-          status: productWithMonthlyAmounts.status,
-          createdAt: productWithMonthlyAmounts.createdAt,
-          updatedAt: productWithMonthlyAmounts.updatedAt,
-        };
-
-        // Add variant info if exists
-        let variantInfo = null;
-        if (variant) {
-          variantInfo = {
-            _id: variant._id,
-            name: variant.name,
-            sku: variant.sku,
-            attributes: variant.attributes,
-            price: variant.price,
-            compareAtPrice: variant.compareAtPrice,
-          };
-        }
-
+    const itemsWithDetails = (cart.items || []).map((item: any) => {
+      const product = productMap.get(item.productId.toString());
+      if (!product) {
         return {
           ...item,
-          product: fullProduct,
-          variant: variantInfo || undefined,
+          product: null,
+          variant: item.variantId
+            ? variantMap.get(item.variantId.toString()) || undefined
+            : undefined,
         };
-      })
-    );
+      }
+
+      const variant = item.variantId
+        ? variantMap.get(item.variantId.toString())
+        : null;
+
+      // Add variant info if exists
+      let variantInfo = null;
+      if (variant) {
+        variantInfo = {
+          _id: variant._id,
+          name: variant.name,
+          sku: variant.sku,
+          attributes: variant.attributes,
+          price: variant.price,
+          compareAtPrice: variant.compareAtPrice,
+        };
+      }
+
+      return {
+        ...item,
+        product: product, // Already enriched with full details from common service
+        variant: variantInfo || undefined,
+      };
+    });
 
     const totals = this.calculateCartTotals(itemsWithDetails);
 
@@ -632,21 +422,33 @@ class CartService {
   }
 
   /**
-   * Update cart item quantity
+   * Update cart item quantity by productId
    */
   async updateItem(
     userId: string,
-    itemIndex: number,
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
+    const { productId, variantId, quantity } = data;
 
-    if (itemIndex < 0 || itemIndex >= (cart.items || []).length) {
+    // Find the item in cart by productId and variantId (if provided)
+    const itemIndex = cart.items.findIndex((item: any) => {
+      const productMatch =
+        item.productId.toString() === productId ||
+        item.productId.toString() === productId.toString();
+      const variantMatch = variantId
+        ? (item.variantId?.toString() === variantId ||
+           item.variantId?.toString() === variantId.toString())
+        : !item.variantId; // If variantId not provided, match items without variantId
+
+      return productMatch && variantMatch;
+    });
+
+    if (itemIndex === -1) {
       throw new AppError("Cart item not found", 404);
     }
 
     const item = cart.items[itemIndex];
-    const { quantity } = data;
 
     // Validate stock if variant exists
     if (item.variantId) {
@@ -685,7 +487,9 @@ class CartService {
       { new: true }
     ).lean();
 
-    logger.info(`Cart item updated for user ${userId}`);
+    logger.info(
+      `Cart item updated for user ${userId} (productId: ${productId}, quantity: ${quantity})`
+    );
 
     return {
       cart: updatedCart,
@@ -698,38 +502,90 @@ class CartService {
    */
   async removeItem(
     userId: string,
-    itemIndex: number
+    data: RemoveCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
+    const { productId, variantId, quantity = 1 } = data;
 
-    if (itemIndex < 0 || itemIndex >= (cart.items || []).length) {
+    // Find the item in cart by productId and variantId (if provided)
+    const itemIndex = cart.items.findIndex((item: any) => {
+      const productMatch =
+        item.productId.toString() === productId ||
+        item.productId.toString() === productId.toString();
+      const variantMatch = variantId
+        ? (item.variantId?.toString() === variantId ||
+           item.variantId?.toString() === variantId.toString())
+        : !item.variantId; // If variantId not provided, match items without variantId
+
+      return productMatch && variantMatch;
+    });
+
+    if (itemIndex === -1) {
       throw new AppError("Cart item not found", 404);
     }
 
-    // Remove item
-    const updatedItems = [...(cart.items || [])];
-    updatedItems.splice(itemIndex, 1);
+    const item = cart.items[itemIndex];
+    const currentQuantity = item.quantity;
+    const removeQuantity = quantity || 1;
 
-    // Calculate totals
-    const totals = this.calculateCartTotals(updatedItems);
+    // If removing all or more than available, remove the entire item
+    if (removeQuantity >= currentQuantity) {
+      const updatedItems = [...(cart.items || [])];
+      updatedItems.splice(itemIndex, 1);
 
-    // Update cart
-    const updatedCart = await Carts.findByIdAndUpdate(
-      cart._id,
-      {
-        items: updatedItems,
-        ...totals,
-        updatedAt: new Date(),
-      },
-      { new: true }
-    ).lean();
+      // Calculate totals
+      const totals = this.calculateCartTotals(updatedItems);
 
-    logger.info(`Item removed from cart for user ${userId}`);
+      // Update cart
+      const updatedCart = await Carts.findByIdAndUpdate(
+        cart._id,
+        {
+          items: updatedItems,
+          ...totals,
+          updatedAt: new Date(),
+        },
+        { new: true }
+      ).lean();
 
-    return {
-      cart: updatedCart,
-      message: "Item removed from cart",
-    };
+      logger.info(
+        `Item removed from cart for user ${userId} (productId: ${productId})`
+      );
+
+      return {
+        cart: updatedCart,
+        message: "Item removed from cart",
+      };
+    } else {
+      // Reduce quantity
+      const updatedItems = [...(cart.items || [])];
+      updatedItems[itemIndex] = {
+        ...item,
+        quantity: currentQuantity - removeQuantity,
+      };
+
+      // Calculate totals
+      const totals = this.calculateCartTotals(updatedItems);
+
+      // Update cart
+      const updatedCart = await Carts.findByIdAndUpdate(
+        cart._id,
+        {
+          items: updatedItems,
+          ...totals,
+          updatedAt: new Date(),
+        },
+        { new: true }
+      ).lean();
+
+      logger.info(
+        `Item quantity reduced in cart for user ${userId} (productId: ${productId}, removed: ${removeQuantity})`
+      );
+
+      return {
+        cart: updatedCart,
+        message: `Removed ${removeQuantity} item(s) from cart`,
+      };
+    }
   }
 
   /**
@@ -1536,142 +1392,48 @@ class CartService {
       query.variant = suggestedVariant;
     }
 
-    // Fetch suggested products with full details
-    const suggestedProducts = await Products.find(query)
-      .populate("categories", "name slug description image")
+    // Fetch suggested product IDs
+    const suggestedProductDocs = await Products.find(query)
+      .select("_id")
       .limit(limit)
       .sort({ createdAt: -1 })
       .lean();
 
-    // Manually populate ingredients for suggested products
-    const suggestedIngredientIds: string[] = [];
-    suggestedProducts.forEach((product: any) => {
-      if (product.ingredients && Array.isArray(product.ingredients)) {
-        product.ingredients.forEach((ingredientId: any) => {
-          const id =
-            typeof ingredientId === "string"
-              ? ingredientId
-              : ingredientId?.toString();
-          if (
-            id &&
-            mongoose.Types.ObjectId.isValid(id) &&
-            !suggestedIngredientIds.includes(id)
-          ) {
-            suggestedIngredientIds.push(id);
-          }
-        });
-      }
-    });
-
-    // Fetch all ingredient details for suggested products
-    const suggestedIngredientDetailsMap = new Map();
-    if (suggestedIngredientIds.length > 0) {
-      const ingredientDetails = await ProductIngredients.find({
-        _id: {
-          $in: suggestedIngredientIds.map(
-            (id: string) => new mongoose.Types.ObjectId(id)
-          ),
-        },
-      })
-        .select("_id name description image")
-        .lean();
-
-      ingredientDetails.forEach((ingredient: any) => {
-        suggestedIngredientDetailsMap.set(ingredient._id.toString(), ingredient);
-      });
-    }
-
-    // Replace ingredient IDs with populated ingredient objects for suggested products
-    suggestedProducts.forEach((product: any) => {
-      if (product.ingredients && Array.isArray(product.ingredients)) {
-        product.ingredients = product.ingredients
-          .map((ingredientId: any) => {
-            const id =
-              typeof ingredientId === "string"
-                ? ingredientId
-                : ingredientId?.toString();
-            return suggestedIngredientDetailsMap.get(id);
-          })
-          .filter((ingredient: any) => ingredient !== undefined);
-      }
-    });
-
-    // Transform products and add member pricing
-    const transformedProducts = await Promise.all(
-      suggestedProducts.map(async (product: any) => {
-        // Transform product for language
-        const transformedProduct = transformProductForLanguage(
-          product,
-          userLang
-        );
-
-        // Calculate monthly amounts for subscription pricing
-        const productWithMonthlyAmounts = calculateMonthlyAmounts(
-          transformedProduct
-        );
-
-        // Calculate member pricing
-        const productPriceSource: ProductPriceSource = {
-          price: productWithMonthlyAmounts.price,
-          memberPrice: productWithMonthlyAmounts.metadata?.memberPrice,
-          memberDiscountOverride:
-            productWithMonthlyAmounts.metadata?.memberDiscountOverride,
-        };
-
-        const memberPriceResult = await calculateMemberPrice(
-          productPriceSource,
-          userId
-        );
-
-        // Build full product object similar to getAllProducts format
-        let enrichedProduct: any = {
-          _id: productWithMonthlyAmounts._id,
-          title: productWithMonthlyAmounts.title,
-          slug: productWithMonthlyAmounts.slug,
-          productImage: productWithMonthlyAmounts.productImage,
-          shortDescription: productWithMonthlyAmounts.shortDescription,
-          description: productWithMonthlyAmounts.description,
-          nutritionInfo: productWithMonthlyAmounts.nutritionInfo,
-          howToUse: productWithMonthlyAmounts.howToUse,
-          price: productWithMonthlyAmounts.price,
-          variant: productWithMonthlyAmounts.variant,
-          hasStandupPouch: productWithMonthlyAmounts.hasStandupPouch,
-          sachetPrices: productWithMonthlyAmounts.sachetPrices,
-          standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
-          categories: productWithMonthlyAmounts.categories || [],
-          ingredients: productWithMonthlyAmounts.ingredients || [],
-          variants: productWithMonthlyAmounts.variants || [],
-          metadata: productWithMonthlyAmounts.metadata,
-          skuRoot: productWithMonthlyAmounts.skuRoot,
-          galleryImages: productWithMonthlyAmounts.galleryImages,
-          isFeatured: productWithMonthlyAmounts.isFeatured,
-          comparisonSection: productWithMonthlyAmounts.comparisonSection,
-          specification: productWithMonthlyAmounts.specification,
-          seo: productWithMonthlyAmounts.seo,
-          status: productWithMonthlyAmounts.status,
-          createdAt: productWithMonthlyAmounts.createdAt,
-          updatedAt: productWithMonthlyAmounts.updatedAt,
-        };
-
-        // Add member pricing if user is a member
-        if (memberPriceResult.isMember) {
-          enrichedProduct.memberPrice = memberPriceResult.memberPrice;
-          enrichedProduct.originalPrice = memberPriceResult.originalPrice;
-          enrichedProduct.discount = {
-            amount: memberPriceResult.discountAmount,
-            percentage: memberPriceResult.discountPercentage,
-            type: memberPriceResult.appliedDiscount?.type,
-          };
-          enrichedProduct.isMember = true;
-        } else {
-          enrichedProduct.isMember = false;
-        }
-
-        return enrichedProduct;
-      })
+    const suggestedProductIds = suggestedProductDocs.map(
+      (doc: any) => doc._id
     );
 
-    return transformedProducts;
+    if (suggestedProductIds.length === 0) {
+      return [];
+    }
+
+    // Get user's wishlist product IDs for is_liked field
+    let wishlistProductIds: Set<string> = new Set();
+    try {
+      const wishlistItems = await Wishlists.find({
+        userId: new mongoose.Types.ObjectId(userId),
+      })
+        .select("productId")
+        .lean();
+      wishlistProductIds = new Set(
+        wishlistItems.map((item: any) => item.productId.toString())
+      );
+    } catch (error) {
+      // If wishlist fetch fails, continue without wishlist data
+      logger.warn("Failed to fetch wishlist for suggested products", error);
+    }
+
+    // Fetch and enrich suggested products using common service
+    const enrichedProducts = await fetchAndEnrichProducts(
+      suggestedProductIds.map((id: any) => new mongoose.Types.ObjectId(id)),
+      {
+        userId,
+        userLang,
+        wishlistProductIds,
+      }
+    );
+
+    return enrichedProducts;
   }
 }
 

@@ -125,7 +125,7 @@ export class CartController {
   }
 
   /**
-   * Update cart item quantity
+   * Update cart item quantity by productId
    */
   static async updateItem(
     req: AuthenticatedRequest,
@@ -138,12 +138,21 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const itemIndex = parseInt(req.params.index, 10);
-      if (isNaN(itemIndex)) {
-        throw new AppError("Invalid item index", 400);
+      const { productId, variantId, quantity } = req.body;
+
+      if (!productId) {
+        throw new AppError("productId is required", 400);
       }
 
-      const result = await cartService.updateItem(userId, itemIndex, req.body);
+      if (!quantity || quantity < 1) {
+        throw new AppError("quantity must be at least 1", 400);
+      }
+
+      const result = await cartService.updateItem(userId, {
+        productId,
+        variantId,
+        quantity,
+      });
 
       res.status(200).json({
         success: true,
@@ -158,7 +167,7 @@ export class CartController {
   }
 
   /**
-   * Remove item from cart
+   * Remove item from cart by productId
    */
   static async removeItem(
     req: AuthenticatedRequest,
@@ -171,12 +180,17 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const itemIndex = parseInt(req.params.index, 10);
-      if (isNaN(itemIndex)) {
-        throw new AppError("Invalid item index", 400);
+      const { productId, variantId, quantity } = req.body;
+
+      if (!productId) {
+        throw new AppError("productId is required", 400);
       }
 
-      const result = await cartService.removeItem(userId, itemIndex);
+      const result = await cartService.removeItem(userId, {
+        productId,
+        variantId,
+        quantity: quantity || 1, // Default to 1 if not provided
+      });
 
       res.status(200).json({
         success: true,
