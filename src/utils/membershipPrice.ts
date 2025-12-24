@@ -41,7 +41,7 @@ function extractDiscountFromBenefits(benefits: string[]): number | null {
   }
 
   const discountPattern = /(\d+(?:\.\d+)?)\s*%\s*(?:discount|off|reduction)/i;
-  
+
   for (const benefit of benefits) {
     const match = benefit.match(discountPattern);
     if (match) {
@@ -108,17 +108,28 @@ async function getMembershipDiscount(userId: string): Promise<number | null> {
 
     // Get membership plan
     const plan = await MembershipPlans.findById(user.membershipPlanId)
-      .select("benefits metadata")
+      .select("benefits metadata discountPercentage")
       .lean();
 
     if (!plan) {
       return null;
     }
 
-    // Try to get discount from metadata first (more reliable)
+    // Try to get discount from explicit field first (table column)
+    if (
+      typeof (plan as any).discountPercentage === "number" &&
+      (plan as any).discountPercentage > 0
+    ) {
+      return (plan as any).discountPercentage;
+    }
+
+    // Fallback: try to get discount from metadata (backward compatibility)
     if (plan.metadata && typeof plan.metadata === "object") {
       const metadata = plan.metadata as Record<string, any>;
-      if (metadata.discountPercentage && typeof metadata.discountPercentage === "number") {
+      if (
+        typeof metadata.discountPercentage === "number" &&
+        metadata.discountPercentage > 0
+      ) {
         return metadata.discountPercentage;
       }
     }
@@ -139,12 +150,12 @@ function roundAmount(amount: number): number {
 
 /**
  * Calculate member price for a product
- * 
+ *
  * Priority order:
  * 1. Product-specific member price override (if exists)
  * 2. Product-specific discount override (if exists)
  * 3. Universal membership discount from plan
- * 
+ *
  * @param product - Product with price information
  * @param user - User object or userId string
  * @returns MemberPriceResult with original and member prices
@@ -217,7 +228,10 @@ export async function calculateMemberPrice(
     );
     result.appliedDiscount = {
       type: "product_override",
-      value: override.type === "percentage" ? override.value : result.discountPercentage,
+      value:
+        override.type === "percentage"
+          ? override.value
+          : result.discountPercentage,
     };
     return result;
   }
@@ -257,4 +271,3 @@ export async function calculateMemberPrices(
   );
   return results;
 }
-

@@ -20,6 +20,11 @@ export interface IMembershipPlan extends Document {
   interval: MembershipInterval;
   durationDays: number;
   benefits: string[];
+  /**
+   * Universal percentage discount applied to products for members
+   * Example: 10 = 10% off all eligible products
+   */
+  discountPercentage?: number;
   isActive: boolean;
   isAutoRenew: boolean;
   metadata?: Record<string, any>;
@@ -62,6 +67,11 @@ const MembershipPlanSchema = new Schema<IMembershipPlan>(
       type: Number,
       required: true,
       min: 1,
+    },
+    discountPercentage: {
+      type: Number,
+      min: 0,
+      max: 100,
     },
     benefits: [
       {

@@ -355,6 +355,8 @@ Table membership_plans {
   shortDescription json // I18nStringType
   description json // I18nTextType
   price json // PriceType
+  // Universal percentage discount applied to products for members
+  discountPercentage number
   interval string
   durationDays number
   benefits string[]

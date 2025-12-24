@@ -18,6 +18,7 @@ interface GroupedFaqItem {
   _id: string;
   question: string;
   answer: string;
+  createdAt: Date;
 }
 
 export interface GroupedFaqResponse {
@@ -159,6 +160,7 @@ class FaqService {
         _id: faq._id.toString(),
         question: this.resolveI18nField(faq.question, lang),
         answer: this.resolveI18nField(faq.answer, lang),
+        createdAt: faq.createdAt,
       };
 
       if (faq.categoryId) {
