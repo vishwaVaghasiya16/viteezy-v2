@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { CheckoutController } from "../controllers/checkoutController";
 import { authMiddleware } from "../middleware/auth";
+import { validateJoi } from "../middleware/joiValidation";
+import { checkoutPlanSelectionSchema } from "../validation/checkoutPlanSelectionValidation";
 
 const router = Router();
 
@@ -37,5 +39,16 @@ router.get("/summary", CheckoutController.getCheckoutSummary);
  * @query   selectedPlans (optional) - JSON string of selected plans per product
  */
 router.get("/purchase-plans", CheckoutController.getPurchasePlans);
+
+/**
+ * @route   POST /api/v1/checkout/plan-selection
+ * @desc    Calculate pricing for a selected plan on checkout page
+ * @access  Private
+ */
+router.post(
+  "/plan-selection",
+  validateJoi(checkoutPlanSelectionSchema),
+  CheckoutController.selectPlan
+);
 
 export default router;

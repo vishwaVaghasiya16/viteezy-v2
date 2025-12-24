@@ -83,7 +83,10 @@ const calculateMonthlyAmounts = (product: any): any => {
 
   // Preserve standupPouchPrice
   if (product.standupPouchPrice) {
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+    if (
+      product.standupPouchPrice.count30 ||
+      product.standupPouchPrice.count60
+    ) {
       result.standupPouchPrice = {
         count30: { ...product.standupPouchPrice.count30 },
         count60: { ...product.standupPouchPrice.count60 },
@@ -238,8 +241,12 @@ class CheckoutController {
             ...product,
             price: product.pricing?.originalPrice || product.price,
             variant: product.productVariant || product.variant,
-            sachetPrices: product.pricing?.productPricing?.sachetPrices || product.sachetPrices,
-            standupPouchPrice: product.pricing?.productPricing?.standupPouchPrice || product.standupPouchPrice,
+            sachetPrices:
+              product.pricing?.productPricing?.sachetPrices ||
+              product.sachetPrices,
+            standupPouchPrice:
+              product.pricing?.productPricing?.standupPouchPrice ||
+              product.standupPouchPrice,
           };
 
           // Transform product for language
@@ -423,6 +430,13 @@ class CheckoutController {
    * Get checkout summary with membership discount calculation
    * @route GET /api/checkout/summary
    * @access Private
+   *
+   * Query parameters (optional):
+   * - planDurationDays: 30 | 60 | 90 | 180
+   * - isSubscription: boolean (T for subscription, F for one-time)
+   * - supplementsCount: 30 | 60 (required if isSubscription is false)
+   * - variantType: "SACHETS" | "STAND_UP_POUCH"
+   * - couponCode: string (optional)
    */
   static async getCheckoutSummary(
     req: AuthenticatedRequest,
@@ -435,6 +449,70 @@ class CheckoutController {
         throw new AppError("User authentication required", 401);
       }
 
+      // Check if plan selection parameters are provided
+      const planDurationDays = req.query.planDurationDays
+        ? parseInt(req.query.planDurationDays as string, 10)
+        : undefined;
+      const isSubscription =
+        req.query.isSubscription !== undefined
+          ? req.query.isSubscription === "true" ||
+            req.query.isSubscription === "T"
+          : undefined;
+      const supplementsCount = req.query.supplementsCount
+        ? parseInt(req.query.supplementsCount as string, 10)
+        : undefined;
+      const variantType = req.query.variantType as string | undefined;
+      const couponCode = req.query.couponCode as string | undefined;
+
+      // If plan selection parameters are provided, use new logic
+      if (
+        planDurationDays &&
+        isSubscription !== undefined &&
+        variantType &&
+        [30, 60, 90, 180].includes(planDurationDays) &&
+        ["SACHETS", "STAND_UP_POUCH"].includes(variantType)
+      ) {
+        // Validate supplementsCount for one-time purchases
+        if (!isSubscription && !supplementsCount) {
+          throw new AppError(
+            "Supplements count is required for one-time purchases",
+            400
+          );
+        }
+
+        if (
+          !isSubscription &&
+          supplementsCount &&
+          ![30, 60].includes(supplementsCount)
+        ) {
+          throw new AppError(
+            "Supplements count must be 30 or 60 for one-time purchases",
+            400
+          );
+        }
+
+        const result =
+          await checkoutService.getCheckoutSummaryWithPlanSelection(userId, {
+            planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
+            isSubscription,
+            supplementsCount: supplementsCount as 30 | 60 | undefined,
+            variantType: variantType as any,
+            couponCode,
+          });
+
+        res.status(200).json({
+          success: true,
+          message:
+            "Checkout summary with plan selection retrieved successfully",
+          data: {
+            products: result.products,
+            payment: result.payment,
+          },
+        });
+        return;
+      }
+
+      // Fallback to original behavior if no plan selection parameters
       const userLang = getUserLanguage(req);
 
       // Parallel execution: Validate cart and fetch addresses simultaneously
@@ -470,8 +548,8 @@ class CheckoutController {
       );
 
       // Get product IDs and variant IDs from cart items
-      const productIds = cartValidation.items.map((item) =>
-        new mongoose.Types.ObjectId(item.productId)
+      const productIds = cartValidation.items.map(
+        (item) => new mongoose.Types.ObjectId(item.productId)
       );
       const variantIds = cartValidation.items
         .map((item) => item.variantId)
@@ -576,9 +654,8 @@ class CheckoutController {
           );
 
           // Calculate monthly amounts for subscription pricing
-          const productWithMonthlyAmounts = calculateMonthlyAmounts(
-            transformedProduct
-          );
+          const productWithMonthlyAmounts =
+            calculateMonthlyAmounts(transformedProduct);
 
           // Build full product object similar to getAllProducts format
           const fullProduct: any = {
@@ -748,6 +825,55 @@ class CheckoutController {
       res.status(200).json({
         success: true,
         message: "Purchase plans retrieved successfully",
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Plan selection API for checkout page
+   * @route POST /api/v1/checkout/plan-selection
+   * @access Private
+   *
+   * Request body:
+   *  - planDurationDays (in days) - 30, 60, 90, or 180
+   *  - isSubscription (true = subscription, false = one-time)
+   *  - supplementsCount (required for one-time, e.g. 30 or 60)
+   *  - variantType (e.g. SACHETS, STAND_UP_POUCH)
+   *
+   * Response:
+   *  - Selected product list with prices based on chosen plan
+   *  - Membership prices and discounts for each product (if member)
+   *  - Payment details:
+   *    - subtotal (with member prices if applicable)
+   *    - discountPrice (coupon discount, if any)
+   *    - ninetyDayPlanDiscount (if 90-day plan selected)
+   *    - tax (future scope, currently 0)
+   *    - shippingFees (currently 0)
+   *    - membershipDiscount (total membership discount amount)
+   *    - totalAmount
+   */
+  static async selectPlan(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?._id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const result = await checkoutService.getPlanSelection(
+        userId,
+        req.body as any
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Checkout plan selection calculated successfully",
         data: result,
       });
     } catch (error) {
