@@ -490,6 +490,64 @@ class ChatService:
         user_message = ChatMessage(role="user", content=payload.message)
 
         onboarding_state = self._get_onboarding_state(session)
+        
+        # Check if this is the very first message (session has no messages)
+        # If so, automatically start onboarding by asking the first question
+        # UNLESS the first question was already shown via GET /first-question endpoint
+        is_first_message = len(session.messages) == 0
+        first_question_already_shown = onboarding_state.get("first_question_shown", False)
+        
+        if is_first_message and not onboarding_state.get("complete") and not first_question_already_shown:
+            # Initialize onboarding state if not already initialized
+            if onboarding_state.get("step", 0) == 0 and not onboarding_state.get("awaiting_answer"):
+                # Get the first question
+                has_previous_sessions = (session.metadata or {}).get("has_previous_sessions", False)
+                ordered_steps = self._ordered_steps(onboarding_state["responses"], has_previous_sessions=has_previous_sessions)
+                
+                if ordered_steps:
+                    first_field = ordered_steps[0]
+                    first_prompt = self._build_prompt(field=first_field, responses=onboarding_state["responses"])
+                    
+                    # Build the first question with friendly greeting
+                    question_content = self._friendly_question(
+                        prompt=first_prompt,
+                        step=0,
+                        prev_answer=None,
+                        prev_field=None,
+                        responses=onboarding_state.get("responses", {}),
+                    )
+                    
+                    # Save the user's trigger message (even though we ignore its content)
+                    await self.session_repo.append_messages(
+                        session_id=session.id, messages=[user_message], user_id=user_id
+                    )
+                    
+                    # Create the first question reply
+                    first_reply = ChatMessage(role="assistant", content=question_content)
+                    
+                    # Get options for the first question
+                    options, question_type = self._get_question_options(first_field)
+                    
+                    # Update onboarding state
+                    onboarding_state["step"] = 0
+                    onboarding_state["awaiting_answer"] = True
+                    await self.session_repo.append_messages(
+                        session_id=session.id, messages=[first_reply], user_id=user_id
+                    )
+                    await self.session_repo.update_metadata(
+                        session_id=session.id,
+                        metadata={**(session.metadata or {}), "onboarding": onboarding_state},
+                        user_id=user_id,
+                    )
+                    
+                    return ChatResponse(
+                        session_id=session.id,
+                        reply=first_reply,
+                        session_created=False,
+                        options=options,
+                        question_type=question_type,
+                        isRegistered=is_registered,
+                    )
 
         # Check if onboarding is complete and recommendations have been shown
         # If so, prevent further conversation
@@ -1151,6 +1209,7 @@ class ChatService:
             "complete": bool(state.get("complete", False)),
             "last_answer": state.get("last_answer"),
             "last_field": state.get("last_field"),
+            "first_question_shown": bool(state.get("first_question_shown", False)),
         }
 
     def _ordered_steps(self, responses: dict, has_previous_sessions: bool = False) -> list[str]:
@@ -3201,6 +3260,138 @@ class ChatService:
         # Default: no options (free text)
         return None, "text"
     
+    async def get_first_question(self, session_id: str) -> ChatResponse:
+        """
+        Get the first question from the bot without requiring a user message.
+        Initializes the onboarding flow and returns the first question.
+        
+        This is useful when you want to display the first question immediately
+        after creating a session, without sending a trigger message.
+        """
+        # Try without user_id first (legacy), then with user_id if found
+        session = await self.session_repo.get(session_id)
+        if not session:
+            raise SessionNotFoundError(f"Session {session_id} not found.")
+        
+        # If session found but no messages, try with user_id from metadata
+        user_id = self._get_user_id_from_session(session)
+        if user_id and not session.messages:
+            # Retry with user_id
+            session = await self.session_repo.get(session_id, user_id=user_id)
+            if not session:
+                raise SessionNotFoundError(f"Session {session_id} not found.")
+        
+        onboarding_state = self._get_onboarding_state(session)
+        
+        # Check if onboarding is already complete
+        if onboarding_state.get("complete"):
+            # Return a message indicating onboarding is complete
+            return ChatResponse(
+                session_id=session_id,
+                reply=ChatMessage(
+                    role="assistant",
+                    content="You have already completed the onboarding. Your recommendations have been provided."
+                ),
+                session_created=False,
+                options=None,
+                question_type=None,
+                isRegistered=self._get_is_registered_from_session(session),
+            )
+        
+        # Check if first question was already asked (session has messages)
+        if len(session.messages) > 0:
+            # Get the current question instead
+            return await self._get_current_question_response(session_id, session, onboarding_state)
+        
+        # Initialize onboarding and get first question
+        has_previous_sessions = (session.metadata or {}).get("has_previous_sessions", False)
+        ordered_steps = self._ordered_steps(onboarding_state["responses"], has_previous_sessions=has_previous_sessions)
+        
+        if not ordered_steps:
+            raise ValueError("No onboarding steps available")
+        
+        first_field = ordered_steps[0]
+        first_prompt = self._build_prompt(field=first_field, responses=onboarding_state["responses"])
+        
+        # Build the first question with friendly greeting
+        question_content = self._friendly_question(
+            prompt=first_prompt,
+            step=0,
+            prev_answer=None,
+            prev_field=None,
+            responses=onboarding_state.get("responses", {}),
+        )
+        
+        # Create the first question reply
+        first_reply = ChatMessage(role="assistant", content=question_content)
+        
+        # Get options for the first question
+        options, question_type = self._get_question_options(first_field)
+        
+        # Update onboarding state (mark as initialized and awaiting answer)
+        onboarding_state["step"] = 0
+        onboarding_state["awaiting_answer"] = True
+        onboarding_state["first_question_shown"] = True  # Mark that first question was shown via GET
+        
+        # Save the first question to session
+        await self.session_repo.append_messages(
+            session_id=session.id, messages=[first_reply], user_id=user_id
+        )
+        await self.session_repo.update_metadata(
+            session_id=session.id,
+            metadata={**(session.metadata or {}), "onboarding": onboarding_state},
+            user_id=user_id,
+        )
+        
+        return ChatResponse(
+            session_id=session_id,
+            reply=first_reply,
+            session_created=False,
+            options=options,
+            question_type=question_type,
+            isRegistered=self._get_is_registered_from_session(session),
+        )
+    
+    async def _get_current_question_response(self, session_id: str, session: Session, onboarding_state: dict) -> ChatResponse:
+        """Helper method to get current question as ChatResponse."""
+        has_previous_sessions = (session.metadata or {}).get("has_previous_sessions", False)
+        ordered_steps = self._ordered_steps(onboarding_state["responses"], has_previous_sessions=has_previous_sessions)
+        
+        if onboarding_state["step"] < len(ordered_steps):
+            current_field = ordered_steps[onboarding_state["step"]]
+            question_text = self._build_prompt(field=current_field, responses=onboarding_state["responses"])
+            question_text = self._friendly_question(
+                prompt=question_text,
+                step=onboarding_state["step"],
+                prev_answer=onboarding_state.get("last_answer"),
+                prev_field=onboarding_state.get("last_field"),
+                responses=onboarding_state.get("responses", {}),
+            )
+            
+            options, question_type = self._get_question_options(current_field)
+            
+            return ChatResponse(
+                session_id=session_id,
+                reply=ChatMessage(role="assistant", content=question_text),
+                session_created=False,
+                options=options,
+                question_type=question_type,
+                isRegistered=self._get_is_registered_from_session(session),
+            )
+        
+        # Onboarding complete
+        return ChatResponse(
+            session_id=session_id,
+            reply=ChatMessage(
+                role="assistant",
+                content="Onboarding is complete. Your recommendations have been provided."
+            ),
+            session_created=False,
+            options=None,
+            question_type=None,
+            isRegistered=self._get_is_registered_from_session(session),
+        )
+
     async def get_current_question(self, session_id: str) -> QuestionStateResponse:
         """
         Get the current question state with available options.

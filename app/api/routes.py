@@ -347,6 +347,57 @@ async def chat(
 
 
 @router.get(
+    "/sessions/{session_id}/first-question",
+    response_model=ChatResponseWrapper,
+    responses={
+        404: {"model": ErrorResponse, "description": "Session not found"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
+async def get_first_question(
+    session_id: str,
+    chat_service: ChatService = Depends(get_chat_service),
+) -> ChatResponseWrapper:
+    """
+    Get the first question from the bot without sending any message.
+    
+    This endpoint initializes the onboarding flow and returns the first question
+    (e.g., "Hey! I'm Viteezy. What should I call you?").
+    
+    After calling this endpoint, you can POST to /chat with the user's answer
+    to continue the conversation.
+    
+    Returns a standardized success response with the first question.
+    """
+    try:
+        first_question = await chat_service.get_first_question(session_id)
+        return ChatResponseWrapper(
+            status="success",
+            message="First question retrieved successfully",
+            data=first_question.model_dump()
+        )
+    except SessionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ErrorResponse(
+                status="error",
+                message=str(exc),
+                error_code="SESSION_NOT_FOUND",
+                details={"session_id": session_id}
+            ).model_dump()
+        ) from exc
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorResponse(
+                status="error",
+                message="Failed to retrieve first question",
+                error_code="INTERNAL_ERROR"
+            ).model_dump()
+        ) from e
+
+
+@router.get(
     "/sessions/{session_id}/question",
     response_model=QuestionStateResponseWrapper,
     responses={
