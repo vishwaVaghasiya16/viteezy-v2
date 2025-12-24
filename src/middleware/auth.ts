@@ -52,7 +52,8 @@ const extractUserData = (user: any): object => {
   return {
     _id: userId,
     id: userId, // Add id field for consistency with controllers
-    name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
     email: user.email,
     phone: user.phone,
     role: user.role,

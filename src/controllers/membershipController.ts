@@ -12,7 +12,8 @@ interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
     email?: string;
-    name?: string;
+    firstName?: string;
+    lastName?: string;
   };
 }
 
@@ -183,7 +184,11 @@ class MembershipController {
         planId: plan._id.toString(),
         planName: plan.name,
         beneficiaryUserId: beneficiaryInfo?.userId || targetUserId,
-        beneficiaryName: beneficiaryInfo?.name ?? req.user?.name ?? "",
+        beneficiaryName:
+          beneficiaryInfo?.name ??
+          (req.user?.firstName && req.user?.lastName
+            ? `${req.user.firstName} ${req.user.lastName}`.trim()
+            : req.user?.firstName || req.user?.lastName || ""),
       };
 
       const paymentResponse =
@@ -216,7 +221,13 @@ class MembershipController {
             },
             beneficiary: beneficiaryInfo
               ? beneficiaryInfo
-              : { userId: req.user._id, name: req.user.name },
+              : {
+                  userId: req.user._id,
+                  name:
+                    req.user.firstName && req.user.lastName
+                      ? `${req.user.firstName} ${req.user.lastName}`.trim()
+                      : req.user.firstName || req.user.lastName || "",
+                },
           },
           payment: {
             id: paymentResponse.payment._id,

@@ -16,10 +16,12 @@ class AuthController {
    */
   register = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { name, email, password, phone, countryCode } = req.body;
+      const { firstName, lastName, email, password, phone, countryCode } =
+        req.body;
 
       const result = await authService.register({
-        name,
+        firstName,
+        lastName,
         email,
         password,
         phone,
@@ -246,7 +248,8 @@ class AuthController {
         {
           user: {
             _id: fullUser._id,
-            name: fullUser.name,
+            firstName: fullUser.firstName,
+            lastName: fullUser.lastName,
             email: fullUser.email,
             phone: fullUser.phone,
             countryCode: fullUser.countryCode,
@@ -274,8 +277,16 @@ class AuthController {
   updateProfile = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?._id || req.user?.id;
-      const { name, phone, countryCode, profileImage, gender, age, language } =
-        req.body;
+      const {
+        firstName,
+        lastName,
+        phone,
+        countryCode,
+        profileImage,
+        gender,
+        age,
+        language,
+      } = req.body;
 
       if (!userId) {
         throw new AppError("User not authenticated", 401);
@@ -283,7 +294,8 @@ class AuthController {
 
       // Build update object with only provided fields
       const updateData: any = {};
-      if (name !== undefined) updateData.name = name;
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
       if (phone !== undefined) updateData.phone = phone;
       if (countryCode !== undefined) updateData.countryCode = countryCode;
       if (profileImage !== undefined) updateData.profileImage = profileImage;
@@ -309,7 +321,8 @@ class AuthController {
         {
           user: {
             _id: updatedUser._id.toString(),
-            name: updatedUser.name,
+            firstName: updatedUser.firstName,
+            lastName: updatedUser.lastName,
             email: updatedUser.email,
             phone: updatedUser.phone,
             countryCode: updatedUser.countryCode,

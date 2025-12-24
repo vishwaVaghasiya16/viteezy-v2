@@ -4,7 +4,8 @@ import { withFieldLabels } from "./helpers";
 
 export const updateCurrentUserSchema = Joi.object(
   withFieldLabels({
-    name: Joi.string().trim().min(2).max(50).optional(),
+    firstName: Joi.string().trim().min(1).max(50).optional(),
+    lastName: Joi.string().trim().min(1).max(50).optional(),
     phone: Joi.string()
       .pattern(/^[+]?[1-9]\d{1,14}$/)
       .message("Phone must be a valid E.164 number")

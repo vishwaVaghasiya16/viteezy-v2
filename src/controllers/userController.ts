@@ -66,7 +66,9 @@ class UserController {
       } = req.body;
 
       const updateData: Record<string, unknown> = {};
-      if (name !== undefined) updateData.name = name;
+      const { firstName, lastName } = req.body;
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
       if (phone !== undefined) updateData.phone = phone;
       if (countryCode !== undefined) updateData.countryCode = countryCode;
       if (gender !== undefined) updateData.gender = gender;

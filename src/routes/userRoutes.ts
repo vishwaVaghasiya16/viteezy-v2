@@ -18,7 +18,8 @@ router.get("/me", authenticate, userController.getCurrentUser);
 /**
  * Update current authenticated user profile
  * Supports multipart/form-data for profile image and avatar upload
- * @body {String} [name] - User name
+ * @body {String} [firstName] - User first name
+ * @body {String} [lastName] - User last name
  * @body {String} [phone] - Phone number
  * @body {String} [countryCode] - Country code (2 characters)
  * @body {File} [profileImage] - Profile image file (JPEG, PNG, GIF, WEBP, max 5MB)

@@ -297,13 +297,17 @@ class DeliveryPostponementController {
   private async sendAdminNotification(
     postponement: any,
     order: any,
-    user: { email?: string; name?: string }
+    user: { email?: string; firstName?: string; lastName?: string }
   ): Promise<void> {
     const adminEmail =
       process.env.ADMIN_EMAIL ||
       process.env.SENDGRID_FROM_EMAIL ||
       "admin@viteezy.com";
-    const userName = user.name || user.email || "User";
+    const fullName =
+      user.firstName && user.lastName
+        ? `${user.firstName} ${user.lastName}`.trim()
+        : user.firstName || user.lastName || user.email || "User";
+    const userName = fullName;
     const orderNumber = order.orderNumber || order._id.toString();
 
     const subject = `New Delivery Postponement Request - Order ${orderNumber}`;

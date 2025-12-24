@@ -102,11 +102,18 @@ export const VALIDATION = {
     /** Password pattern: must contain at least one lowercase, one uppercase, and one digit */
     PATTERN: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
   },
-  /** Name validation rules */
-  NAME: {
-    /** Minimum name length */
-    MIN_LENGTH: 2,
-    /** Maximum name length */
+  /** First name validation rules */
+  FIRST_NAME: {
+    /** Minimum first name length */
+    MIN_LENGTH: 1,
+    /** Maximum first name length */
+    MAX_LENGTH: 50,
+  },
+  /** Last name validation rules */
+  LAST_NAME: {
+    /** Minimum last name length */
+    MIN_LENGTH: 1,
+    /** Maximum last name length */
     MAX_LENGTH: 50,
   },
   /** Email validation rules */

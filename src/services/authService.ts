@@ -11,8 +11,31 @@ import { generateMemberId } from "../utils/memberIdGenerator";
 import { firebaseService } from "./firebaseService";
 import { config } from "../config";
 
+/**
+ * Helper function to split full name into firstName and lastName
+ */
+function splitFullName(fullName: string): {
+  firstName: string;
+  lastName: string;
+} {
+  const trimmed = fullName.trim();
+  if (!trimmed) {
+    return { firstName: "User", lastName: "" };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+
+  const firstName = parts[0];
+  const lastName = parts.slice(1).join(" ");
+  return { firstName, lastName };
+}
+
 interface RegisterData {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
   phone?: string;
@@ -207,9 +230,14 @@ class AuthService {
   /**
    * Send welcome email asynchronously so that registration response is not delayed
    */
-  private sendWelcomeEmailAsync(email: string, name: string): void {
+  private sendWelcomeEmailAsync(
+    email: string,
+    firstName: string,
+    lastName: string
+  ): void {
+    const fullName = `${firstName} ${lastName}`.trim();
     Promise.resolve()
-      .then(() => emailService.sendWelcomeEmail(email, name))
+      .then(() => emailService.sendWelcomeEmail(email, fullName))
       .catch((error) => {
         logger.error("Failed to send welcome email:", error);
       });
@@ -219,7 +247,7 @@ class AuthService {
    * Register new user
    */
   async register(data: RegisterData): Promise<{ user: any; message: string }> {
-    const { name, email, password, phone, countryCode } = data;
+    const { firstName, lastName, email, password, phone, countryCode } = data;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -230,8 +258,13 @@ class AuthService {
 
       let userUpdated = false;
 
-      if (existingUser.name !== name) {
-        existingUser.name = name;
+      if (existingUser.firstName !== firstName) {
+        existingUser.firstName = firstName;
+        userUpdated = true;
+      }
+
+      if (existingUser.lastName !== lastName) {
+        existingUser.lastName = lastName;
         userUpdated = true;
       }
 
@@ -291,7 +324,8 @@ class AuthService {
       return {
         user: {
           _id: existingUser._id,
-          name: existingUser.name,
+          firstName: existingUser.firstName,
+          lastName: existingUser.lastName,
           email: existingUser.email,
           phone: existingUser.phone,
           countryCode: existingUser.countryCode,
@@ -310,7 +344,8 @@ class AuthService {
     // Create user (password will be hashed by pre-save hook)
     // registeredAt will be automatically set by pre-save hook
     const user = await User.create({
-      name,
+      firstName,
+      lastName,
       email,
       password, // Let the pre-save hook handle hashing
       phone,
@@ -331,7 +366,7 @@ class AuthService {
     );
 
     // Send welcome email asynchronously to avoid delaying the API response
-    this.sendWelcomeEmailAsync(email, name);
+    this.sendWelcomeEmailAsync(email, firstName, lastName);
 
     // Use registeredAt if set, otherwise fallback to createdAt
     const registrationDate = user.registeredAt || user.createdAt;
@@ -339,7 +374,8 @@ class AuthService {
     return {
       user: {
         _id: user._id,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         phone: user.phone,
         countryCode: user.countryCode,
@@ -494,7 +530,8 @@ class AuthService {
       return {
         user: {
           _id: user._id,
-          name: user.name,
+          firstName: user.firstName,
+          lastName: user.lastName,
           email: user.email,
           phone: user.phone,
           isEmailVerified: user.isEmailVerified,
@@ -534,7 +571,8 @@ class AuthService {
     return {
       user: {
         _id: user._id,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         phone: user.phone,
         isEmailVerified:
@@ -622,7 +660,8 @@ class AuthService {
     return {
       user: {
         _id: user._id,
-        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         email: user.email,
         phone: user.phone,
         isEmailVerified: user.isEmailVerified,
@@ -646,7 +685,8 @@ class AuthService {
 
     // Extract user information from token (email and name are guaranteed from getUserInfoFromToken)
     const email = firebaseUser.email.toLowerCase().trim();
-    const name = firebaseUser.name;
+    const fullName = firebaseUser.name;
+    const { firstName, lastName } = splitFullName(fullName);
 
     if (!email) {
       throw new AppError(
@@ -662,7 +702,8 @@ class AuthService {
       // Create new user for Apple login (Register)
       const memberId = await generateMemberId();
       user = await User.create({
-        name,
+        firstName,
+        lastName,
         email,
         password: crypto.randomBytes(32).toString("hex"), // Random password since Apple handles auth
         isEmailVerified: firebaseUser.emailVerified, // Apple emails are typically verified
@@ -687,8 +728,14 @@ class AuthService {
       }
 
       // Update name if it was changed or empty
-      if (!user.name || user.name === "Apple User") {
-        user.name = name;
+      const currentFullName = `${user.firstName} ${user.lastName}`.trim();
+      if (
+        !currentFullName ||
+        currentFullName === "Apple User" ||
+        currentFullName === "User"
+      ) {
+        user.firstName = firstName;
+        user.lastName = lastName;
         await user.save();
       }
 
@@ -729,7 +776,8 @@ class AuthService {
     return {
       user: {
         _id: updatedUser!._id,
-        name: updatedUser!.name,
+        firstName: updatedUser!.firstName,
+        lastName: updatedUser!.lastName,
         email: updatedUser!.email,
         phone: updatedUser!.phone || null,
         isEmailVerified: updatedUser!.isEmailVerified,
@@ -849,9 +897,10 @@ class AuthService {
         )}`;
 
         // Send reset link via email
+        const fullName = `${user.firstName} ${user.lastName}`.trim();
         const emailSent = await emailService.sendPasswordResetLinkEmail(
           email,
-          user.name,
+          fullName,
           resetUrl
         );
 
@@ -972,7 +1021,7 @@ class AuthService {
 
       if (!verifiedOTP) {
         throw new AppError(
-          "No verified OTP found. Please verify OTP first via verify-otp API.",
+          "No verified OTP found. Please verify OTP first.",
           400
         );
       }
@@ -1275,7 +1324,11 @@ class AuthService {
 
     try {
       // Validate token format before verification
-      if (!idToken || typeof idToken !== "string" || idToken.trim().length === 0) {
+      if (
+        !idToken ||
+        typeof idToken !== "string" ||
+        idToken.trim().length === 0
+      ) {
         throw new AppError("Invalid Google ID token format", 400);
       }
 
@@ -1302,13 +1355,18 @@ class AuthService {
         throw new AppError("Email not provided by Google", 400);
       }
 
+      // Split full name into firstName and lastName
+      const fullName = name || email.split("@")[0];
+      const { firstName, lastName } = splitFullName(fullName);
+
       // Check if user exists with this email
       let user = await User.findOne({ email: email.toLowerCase() });
 
       if (!user) {
         // Create new user
         const newUserData: any = {
-          name: name || email.split("@")[0],
+          firstName,
+          lastName,
           email: email.toLowerCase(),
           isEmailVerified: true, // Google emails are verified
           avatar: picture || null,
@@ -1323,7 +1381,7 @@ class AuthService {
         logger.info(`New user created via Google OAuth: ${user._id}`);
 
         // Send welcome email asynchronously
-        this.sendWelcomeEmailAsync(email, user.name);
+        this.sendWelcomeEmailAsync(email, firstName, lastName);
       } else {
         // Update existing user
         // Update avatar if provided and user doesn't have one
@@ -1335,8 +1393,10 @@ class AuthService {
           user.isEmailVerified = true;
         }
         // Update name if changed
-        if (name && user.name !== name) {
-          user.name = name;
+        const currentFullName = `${user.firstName} ${user.lastName}`.trim();
+        if (name && currentFullName !== fullName.trim()) {
+          user.firstName = firstName;
+          user.lastName = lastName;
         }
         await user.save();
       }
@@ -1383,7 +1443,8 @@ class AuthService {
       return {
         user: {
           _id: updatedUser!._id,
-          name: updatedUser!.name,
+          firstName: updatedUser!.firstName,
+          lastName: updatedUser!.lastName,
           email: updatedUser!.email,
           phone: updatedUser!.phone,
           isEmailVerified: updatedUser!.isEmailVerified,
@@ -1395,7 +1456,7 @@ class AuthService {
       };
     } catch (error: any) {
       logger.error("Google OAuth error:", error);
-      
+
       // Handle specific Google OAuth errors
       if (error instanceof AppError) {
         throw error;
@@ -1412,14 +1473,14 @@ class AuthService {
       }
 
       // Handle expired token
-      if (error.code === "auth/id-token-expired" || error.message?.includes("expired")) {
+      if (
+        error.code === "auth/id-token-expired" ||
+        error.message?.includes("expired")
+      ) {
         throw new AppError("Google ID token has expired", 401);
       }
 
-      throw new AppError(
-        error.message || "Google authentication failed",
-        401
-      );
+      throw new AppError(error.message || "Google authentication failed", 401);
     }
   }
 }

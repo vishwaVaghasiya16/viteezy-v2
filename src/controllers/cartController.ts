@@ -86,6 +86,9 @@ export class CartController {
         message: "Cart retrieved successfully",
         data: {
           cart: result.cart,
+          ...(result.paymentDetails && {
+            paymentDetails: result.paymentDetails,
+          }),
           ...(result.suggestedProducts && {
             suggestedProducts: result.suggestedProducts,
           }),

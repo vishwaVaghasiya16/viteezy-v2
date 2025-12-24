@@ -20,7 +20,8 @@ export interface IUserSessionInfo {
 
 export interface IUser extends Document {
   _id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   countryCode?: string;
   password: string;
@@ -51,12 +52,19 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
-    name: {
+    firstName: {
       type: String,
-      required: [true, "Name is required"],
+      required: [true, "First name is required"],
       trim: true,
-      minlength: [2, "Name must be at least 2 characters long"],
-      maxlength: [50, "Name cannot exceed 50 characters"],
+      minlength: [1, "First name must be at least 1 character long"],
+      maxlength: [50, "First name cannot exceed 50 characters"],
+    },
+    lastName: {
+      type: String,
+      required: [true, "Last name is required"],
+      trim: true,
+      minlength: [1, "Last name must be at least 1 character long"],
+      maxlength: [50, "Last name cannot exceed 50 characters"],
     },
     email: {
       type: String,
