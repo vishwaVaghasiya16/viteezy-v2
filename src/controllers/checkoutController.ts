@@ -285,6 +285,7 @@ class CheckoutController {
             is_liked: userWishlistProductIds.has(
               transformedProduct._id.toString()
             ),
+            isInCart: true, // Products in checkout are always in cart
           };
 
           // Calculate monthly amounts for subscription pricing (same as getAllProducts)
@@ -351,6 +352,9 @@ class CheckoutController {
         wishlistItems.map((item: any) => item.productId.toString())
       );
 
+      // Get cart product IDs to check if featured products are in cart
+      const cartProductIds = await cartService.getCartProductIds(userId);
+
       const featuredProducts = await cartService.getFeaturedProducts(
         userId,
         minCount,
@@ -386,6 +390,9 @@ class CheckoutController {
             is_liked: userWishlistProductIds.has(
               transformedProduct._id.toString()
             ),
+            isInCart: cartProductIds.has(
+              transformedProduct._id.toString()
+            ), // Check if product is in cart
           };
 
           // Calculate monthly amounts for subscription pricing (same as getAllProducts)
@@ -608,6 +615,7 @@ class CheckoutController {
             status: productWithMonthlyAmounts.status,
             createdAt: productWithMonthlyAmounts.createdAt,
             updatedAt: productWithMonthlyAmounts.updatedAt,
+            isInCart: true, // Products in checkout summary are in cart
           };
 
           // Add variant info if exists

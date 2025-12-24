@@ -87,7 +87,7 @@ class CartService {
     });
 
     const taxAmount = totalTaxAmount;
-    const totalAmount = subtotalAmount + taxAmount;
+    const totalAmount = subtotalAmount + taxAmount + shippingAmount - discountAmount;
 
     // Since taxRate is now a direct amount (not percentage), we use 0 as taxRate in totals
     // The actual tax amount is stored in tax.amount
@@ -98,6 +98,8 @@ class CartService {
         taxRate: 0,
       },
       tax: { currency, amount: Math.round(taxAmount * 100) / 100, taxRate: 0 },
+      shipping: { currency, amount: Math.round(shippingAmount * 100) / 100, taxRate: 0 },
+      discount: { currency, amount: Math.round(discountAmount * 100) / 100, taxRate: 0 },
       total: { currency, amount: Math.round(totalAmount * 100) / 100, taxRate: 0 },
     };
   }
@@ -331,9 +333,14 @@ class CartService {
         };
       }
 
+      // Add isInCart: true since this product is in the cart
+      const productWithCartFlag = product
+        ? { ...product, isInCart: true }
+        : null;
+
       return {
         ...item,
-        product: product, // Already enriched with full details from common service
+        product: productWithCartFlag, // Already enriched with full details from common service
         variant: variantInfo || undefined,
       };
     });
@@ -581,7 +588,7 @@ class CartService {
       updatedItems.splice(itemIndex, 1);
 
       // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems);
+      const totals = this.calculateCartTotals(updatedItems, 0, 0);
 
       // Update cart
       const updatedCart = await Carts.findByIdAndUpdate(
@@ -701,7 +708,7 @@ class CartService {
       updatedItems.splice(itemIndex, 1);
 
       // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems);
+      const totals = this.calculateCartTotals(updatedItems, 0, 0);
 
       // Update cart
       const updatedCart = await Carts.findByIdAndUpdate(
@@ -1339,6 +1346,7 @@ class CartService {
         productVariant: product.variant,
         hasStandupPouch: product.hasStandupPouch,
         quantity: item.quantity,
+        isInCart: true, // This product is in cart
         // Pricing details
         pricing: {
           // Cart price (current price in cart - selected plan price)
@@ -1605,6 +1613,7 @@ class CartService {
     });
 
     // Limit to maxCount and return full product objects
+    // Note: isInCart will be set by the controller after checking cart
     return featuredProducts.slice(0, maxCount);
   }
 
@@ -1710,7 +1719,11 @@ class CartService {
       }
     );
 
-    return enrichedProducts;
+    // Add isInCart: false since these are suggested products (not in cart)
+    return enrichedProducts.map((product: any) => ({
+      ...product,
+      isInCart: false,
+    }));
   }
 }
 
