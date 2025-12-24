@@ -3,6 +3,7 @@ export { Campaigns } from "./campaigns.model";
 export { Carts } from "./carts.model";
 export { ProductCategory } from "./categories.model";
 export { Coupons } from "./coupons.model";
+export { CouponUsageHistory } from "./couponUsageHistory.model";
 export { DeliveryPostponements } from "./deliveryPostponements.model";
 export { ProductIngredients } from "./productIngredients.model";
 export { Orders } from "./orders.model";
