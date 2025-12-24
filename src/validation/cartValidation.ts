@@ -68,12 +68,11 @@ export const updateCartItemSchema = Joi.object({
   quantity: Joi.number()
     .integer()
     .min(1)
-    .required()
+    .optional()
     .messages({
       "number.base": "Quantity must be a number",
       "number.integer": "Quantity must be an integer",
       "number.min": "Quantity must be at least 1",
-      "any.required": "Quantity is required",
     }),
 });
 

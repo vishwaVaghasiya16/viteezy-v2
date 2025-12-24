@@ -1,25 +1,27 @@
 import { Router } from "express";
 import { FAQController } from "@/controllers/faqController";
-import { validateQuery } from "@/middleware/joiValidation";
+import { validateQuery, validateJoi } from "@/middleware/joiValidation";
 import { optionalAuth } from "@/middleware/auth";
 import {
   getFaqCategoriesQuerySchema,
+  getFaqCategoriesBodySchema,
   getFaqsQuerySchema,
+  getFaqsBodySchema,
 } from "@/validation/faqValidation";
 
 const router = Router();
 
-router.get(
+router.post(
   "/categories/list",
   optionalAuth,
-  validateQuery(getFaqCategoriesQuerySchema),
+  validateJoi(getFaqCategoriesBodySchema),
   FAQController.getFaqCategories
 );
 
-router.get(
+router.post(
   "/",
   optionalAuth,
-  validateQuery(getFaqsQuerySchema),
+  validateJoi(getFaqsBodySchema),
   FAQController.getFaqs
 );
 

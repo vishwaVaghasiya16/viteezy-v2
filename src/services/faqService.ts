@@ -1,10 +1,12 @@
 import mongoose, { FilterQuery } from "mongoose";
 import { FAQs, IFAQ } from "@/models/cms/faqs.model";
 import { FaqCategories, IFaqCategory } from "@/models/cms/faqCategories.model";
-import { I18nStringType, I18nTextType } from "@/models/common.model";
+import {
+  I18nStringType,
+  I18nTextType,
+  SupportedLanguage,
+} from "@/models/common.model";
 import { FAQStatus } from "@/models/enums";
-
-type SupportedLanguage = "en" | "nl";
 type LeanFaqCategory = IFaqCategory & { _id: mongoose.Types.ObjectId };
 type LeanFaq = IFAQ & { _id: mongoose.Types.ObjectId };
 
@@ -65,7 +67,13 @@ class FaqService {
         const regex = this.buildRegex(categoryValue);
         const matchedCategories = await FaqCategories.find({
           isDeleted: false,
-          $or: [{ "title.en": regex }, { "title.nl": regex }],
+          $or: [
+            { "title.en": regex },
+            { "title.nl": regex },
+            { "title.de": regex },
+            { "title.fr": regex },
+            { "title.es": regex },
+          ],
         })
           .select("_id")
           .lean();
@@ -99,12 +107,14 @@ class FaqService {
   async getCategories({
     lang = "en",
     status = "active",
+    title,
   }: {
     lang?: SupportedLanguage;
     status?: "active" | "all";
+    title?: string;
   } = {}) {
     const onlyActive = status !== "all";
-    const categories = await this.fetchCategories({ onlyActive });
+    const categories = await this.fetchCategories({ onlyActive, title });
 
     return categories.map((category) => ({
       _id: category._id.toString(),
@@ -117,12 +127,27 @@ class FaqService {
 
   private async fetchCategories({
     onlyActive,
+    title,
   }: {
     onlyActive: boolean;
+    title?: string;
   }): Promise<LeanFaqCategory[]> {
     const filter: FilterQuery<IFaqCategory> = { isDeleted: false };
     if (onlyActive) {
       filter.isActive = true;
+    }
+
+    // Add title search filter if provided
+    if (title && title.trim()) {
+      const titleRegex = this.buildRegex(title.trim());
+      filter.$or = [
+        { "title.en": titleRegex },
+        { "title.nl": titleRegex },
+        { "title.de": titleRegex },
+        { "title.fr": titleRegex },
+        { "title.es": titleRegex },
+        { slug: titleRegex },
+      ];
     }
 
     return (await FaqCategories.find(filter)

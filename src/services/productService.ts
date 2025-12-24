@@ -253,10 +253,11 @@ class ProductService {
     // Calculate totalAmount
     // If totalAmount is already provided, use it
     // Otherwise, calculate from discountedPrice (if provided) or amount, then add tax
+    // taxRate is now a direct amount (not percentage), so add it directly
     let totalAmount = priceObj.totalAmount;
     if (totalAmount === undefined) {
       const baseAmount = discountedPrice !== undefined ? discountedPrice : amount;
-      totalAmount = Math.round((baseAmount * (1 + taxRate)) * 100) / 100;
+      totalAmount = Math.round((baseAmount + taxRate) * 100) / 100;
     }
 
     const result: any = {
