@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import { productService, ProductSortOption } from "../services/productService";
+import { cartService } from "../services/cartService";
 import { getPaginationOptions, getPaginationMeta } from "../utils/pagination";
 import {
   calculateMemberPrice,
@@ -254,6 +255,12 @@ export class ProductController {
         );
       }
 
+      // Get cart product IDs if authenticated
+      let cartProductIds: Set<string> = new Set();
+      if (userId) {
+        cartProductIds = await cartService.getCartProductIds(userId);
+      }
+
       // Calculate member prices for all products and transform for language
       const productsWithMemberPrices = await Promise.all(
         result.products.map(async (product: any) => {
@@ -301,6 +308,15 @@ export class ProductController {
             enrichedProduct.is_liked = userWishlistProductIds.has(
               transformedProduct._id.toString()
             );
+          }
+
+          // Add isInCart field if user is authenticated
+          if (userId) {
+            enrichedProduct.isInCart = cartProductIds.has(
+              transformedProduct._id.toString()
+            );
+          } else {
+            enrichedProduct.isInCart = false;
           }
 
           return enrichedProduct;
@@ -566,6 +582,16 @@ export class ProductController {
         enrichedProduct.is_liked = !!isInWishlist;
       }
 
+      // Add isInCart field if user is authenticated
+      if (userId) {
+        enrichedProduct.isInCart = await cartService.isProductInCart(
+          userId,
+          id
+        );
+      } else {
+        enrichedProduct.isInCart = false;
+      }
+
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
@@ -686,6 +712,16 @@ export class ProductController {
           productId: transformedProduct._id,
         });
         enrichedProduct.is_liked = !!isInWishlist;
+      }
+
+      // Add isInCart field if user is authenticated
+      if (userId) {
+        enrichedProduct.isInCart = await cartService.isProductInCart(
+          userId,
+          transformedProduct._id.toString()
+        );
+      } else {
+        enrichedProduct.isInCart = false;
       }
 
       res.status(200).json({

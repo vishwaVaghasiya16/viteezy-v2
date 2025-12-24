@@ -26,7 +26,7 @@ interface AddCartItemData {
 interface UpdateCartItemData {
   productId: string;
   variantId?: string;
-  quantity: number;
+  quantity?: number;
 }
 
 interface RemoveCartItemData {
@@ -70,24 +70,30 @@ class CartService {
 
     // Use currency from first item (assuming all items have same currency)
     const currency = items[0].price.currency;
-    const taxRate = items[0].price.taxRate;
 
     let subtotalAmount = 0;
+    let totalTaxAmount = 0;
+    
     items.forEach((item) => {
       subtotalAmount += item.price.amount * item.quantity;
+      // Tax rate is now a direct amount (not percentage), so add it directly
+      // Multiply by quantity because tax is per item
+      totalTaxAmount += (item.price.taxRate || 0) * item.quantity;
     });
 
-    const taxAmount = subtotalAmount * taxRate;
+    const taxAmount = totalTaxAmount;
     const totalAmount = subtotalAmount + taxAmount;
 
+    // Since taxRate is now a direct amount (not percentage), we use 0 as taxRate in totals
+    // The actual tax amount is stored in tax.amount
     return {
       subtotal: {
         currency,
         amount: Math.round(subtotalAmount * 100) / 100,
-        taxRate,
+        taxRate: 0,
       },
-      tax: { currency, amount: Math.round(taxAmount * 100) / 100, taxRate },
-      total: { currency, amount: Math.round(totalAmount * 100) / 100, taxRate },
+      tax: { currency, amount: Math.round(taxAmount * 100) / 100, taxRate: 0 },
+      total: { currency, amount: Math.round(totalAmount * 100) / 100, taxRate: 0 },
     };
   }
 
@@ -333,6 +339,64 @@ class CartService {
   }
 
   /**
+   * Check if a product is in user's cart
+   * Returns true if product (with optional variantId) exists in cart
+   */
+  async isProductInCart(
+    userId: string,
+    productId: string,
+    variantId?: string | null
+  ): Promise<boolean> {
+    try {
+      const cart = await this.getOrCreateCart(userId);
+      if (!cart.items || cart.items.length === 0) {
+        return false;
+      }
+
+      const productObjectId = productId.toString();
+      const variantObjectId = variantId ? variantId.toString() : null;
+
+      const itemExists = cart.items.some((item: any) => {
+        const productMatch =
+          item.productId.toString() === productObjectId ||
+          item.productId.toString() === productObjectId.toString();
+        const variantMatch = variantObjectId
+          ? (item.variantId?.toString() === variantObjectId ||
+             item.variantId?.toString() === variantObjectId.toString())
+          : !item.variantId; // If variantId not provided, match items without variantId
+
+        return productMatch && variantMatch;
+      });
+
+      return itemExists;
+    } catch (error) {
+      // If error occurs, return false (product not in cart)
+      logger.error(`Error checking if product ${productId} is in cart:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Get cart product IDs for a user (helper for batch checking)
+   * Returns a Set of product IDs that are in the user's cart
+   */
+  async getCartProductIds(userId: string): Promise<Set<string>> {
+    try {
+      const cart = await this.getOrCreateCart(userId);
+      if (!cart.items || cart.items.length === 0) {
+        return new Set();
+      }
+
+      return new Set(
+        cart.items.map((item: any) => item.productId.toString())
+      );
+    } catch (error) {
+      logger.error(`Error getting cart product IDs for user ${userId}:`, error);
+      return new Set();
+    }
+  }
+
+  /**
    * Add item to cart
    */
   async addItem(
@@ -423,6 +487,7 @@ class CartService {
 
   /**
    * Update cart item quantity by productId
+   * If quantity is not provided, removes the item from cart entirely
    */
   async updateItem(
     userId: string,
@@ -449,6 +514,35 @@ class CartService {
     }
 
     const item = cart.items[itemIndex];
+
+    // If quantity is not provided, remove the item entirely
+    if (quantity === undefined || quantity === null) {
+      const updatedItems = [...(cart.items || [])];
+      updatedItems.splice(itemIndex, 1);
+
+      // Calculate totals
+      const totals = this.calculateCartTotals(updatedItems);
+
+      // Update cart
+      const updatedCart = await Carts.findByIdAndUpdate(
+        cart._id,
+        {
+          items: updatedItems,
+          ...totals,
+          updatedAt: new Date(),
+        },
+        { new: true }
+      ).lean();
+
+      logger.info(
+        `Cart item removed for user ${userId} (productId: ${productId})`
+      );
+
+      return {
+        cart: updatedCart,
+        message: "Cart item removed successfully",
+      };
+    }
 
     // Validate stock if variant exists
     if (item.variantId) {
@@ -499,13 +593,14 @@ class CartService {
 
   /**
    * Remove item from cart
+   * If quantity is not provided, removes the entire item from cart
    */
   async removeItem(
     userId: string,
     data: RemoveCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantId, quantity = 1 } = data;
+    const { productId, variantId, quantity } = data;
 
     // Find the item in cart by productId and variantId (if provided)
     const itemIndex = cart.items.findIndex((item: any) => {
@@ -526,7 +621,37 @@ class CartService {
 
     const item = cart.items[itemIndex];
     const currentQuantity = item.quantity;
-    const removeQuantity = quantity || 1;
+
+    // If quantity is not provided, remove the entire item
+    if (quantity === undefined || quantity === null) {
+      const updatedItems = [...(cart.items || [])];
+      updatedItems.splice(itemIndex, 1);
+
+      // Calculate totals
+      const totals = this.calculateCartTotals(updatedItems);
+
+      // Update cart
+      const updatedCart = await Carts.findByIdAndUpdate(
+        cart._id,
+        {
+          items: updatedItems,
+          ...totals,
+          updatedAt: new Date(),
+        },
+        { new: true }
+      ).lean();
+
+      logger.info(
+        `Item removed from cart for user ${userId} (productId: ${productId})`
+      );
+
+      return {
+        cart: updatedCart,
+        message: "Item removed from cart",
+      };
+    }
+
+    const removeQuantity = quantity;
 
     // If removing all or more than available, remove the entire item
     if (removeQuantity >= currentQuantity) {
@@ -662,7 +787,6 @@ class CartService {
     let originalSubtotal = 0;
     let memberSubtotal = 0;
     let currency = cart.items[0]?.price?.currency || "EUR";
-    let taxRate = cart.items[0]?.price?.taxRate || 0;
 
     // Batch fetch all products and variants at once for better performance
     const productIds = cart.items.map((item: any) => item.productId);
@@ -792,12 +916,12 @@ class CartService {
         subtotal: {
           currency,
           amount: Math.round((finalSubtotal + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         originalSubtotal: {
           currency,
           amount: Math.round((originalSubtotal + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         membershipDiscount: {
           currency,
@@ -808,7 +932,7 @@ class CartService {
         tax: {
           currency,
           amount: Math.round((taxAmount + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         shipping: {
           currency,
@@ -818,7 +942,7 @@ class CartService {
         total: {
           currency,
           amount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
       },
       items: validatedItems,
@@ -1087,7 +1211,7 @@ class CartService {
             amount: cartPrice.amount,
             taxRate: cartPrice.taxRate,
             totalAmount: Math.round(
-              cartPrice.amount * (1 + cartPrice.taxRate) * 100
+              (cartPrice.amount + cartPrice.taxRate) * 100
             ) / 100,
             // Include selected plan information
             selectedPlan: selectedPlan.type !== "default" ? {
@@ -1101,7 +1225,7 @@ class CartService {
             amount: originalPrice.amount,
             taxRate: originalPrice.taxRate,
             totalAmount: Math.round(
-              originalPrice.amount * (1 + originalPrice.taxRate) * 100
+              (originalPrice.amount + originalPrice.taxRate) * 100
             ) / 100,
           },
           // Member price (only if user is a member)
@@ -1111,7 +1235,7 @@ class CartService {
                 amount: memberPrice.amount,
                 taxRate: memberPrice.taxRate,
                 totalAmount: Math.round(
-                  memberPrice.amount * (1 + memberPrice.taxRate) * 100
+                  (memberPrice.amount + memberPrice.taxRate) * 100
                 ) / 100,
               }
             : null,
@@ -1158,11 +1282,16 @@ class CartService {
 
     // Calculate totals
     const currency = cart.items[0]?.price?.currency || "EUR";
-    const taxRate = cart.items[0]?.price?.taxRate || 0;
 
     let originalSubtotal = 0;
     let memberSubtotal = 0;
     let membershipDiscountAmount = 0;
+    // Calculate tax by summing taxRate (direct amount) from all cart items
+    // taxRate is now a direct amount per item, so multiply by quantity
+    let taxAmount = 0;
+    cart.items.forEach((item: any) => {
+      taxAmount += (item.price.taxRate || 0) * item.quantity;
+    });
 
     validProducts.forEach((product: any) => {
       const originalItemTotal =
@@ -1187,8 +1316,6 @@ class CartService {
           product.quantity;
       }
     });
-
-    const taxAmount = memberSubtotal * taxRate;
     const shippingAmount = cart.shipping?.amount || 0;
     const totalAmount = memberSubtotal + taxAmount + shippingAmount;
 
@@ -1198,12 +1325,12 @@ class CartService {
         subtotal: {
           currency,
           amount: Math.round((memberSubtotal + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         originalSubtotal: {
           currency,
           amount: Math.round((originalSubtotal + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         membershipDiscount: {
           currency,
@@ -1214,7 +1341,7 @@ class CartService {
         tax: {
           currency,
           amount: Math.round((taxAmount + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
         shipping: {
           currency,
@@ -1224,7 +1351,7 @@ class CartService {
         total: {
           currency,
           amount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
-          taxRate,
+          taxRate: 0,
         },
       },
     };
