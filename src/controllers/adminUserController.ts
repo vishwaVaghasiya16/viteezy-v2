@@ -119,7 +119,8 @@ class AdminUserController {
 
           return {
             _id: user._id,
-            name: user.name,
+            firstName: user.firstName,
+            lastName: user.lastName,
             email: user.email,
             phone: user.phone || null,
             memberId: user.memberId || null,
@@ -169,7 +170,7 @@ class AdminUserController {
       // Get user basic info
       const user = await User.findById(id)
         .select(
-          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt language"
+          "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt language"
         )
         .lean();
 
@@ -360,7 +361,8 @@ class AdminUserController {
         {
           user: {
             // Basic Info
-            name: user.name,
+            firstName: user.firstName,
+            lastName: user.lastName,
             profileImage: user.profileImage || null,
 
             // Status
@@ -428,8 +430,9 @@ class AdminUserController {
 
       // Send email notification to user about status change
       if (user.email) {
+        const fullName = `${user.firstName} ${user.lastName}`.trim();
         emailService
-          .sendUserStatusChangeEmail(user.email, user.name, isActive)
+          .sendUserStatusChangeEmail(user.email, fullName, isActive)
           .catch((error) => {
             // Log error but don't break the API response
             logger.error("Failed to send user status change email:", {
@@ -444,7 +447,8 @@ class AdminUserController {
       res.apiSuccess(
         {
           user: {
-            name: user.name,
+            firstName: user.firstName,
+            lastName: user.lastName,
             email: user.email,
             phone: user.phone || null,
             memberId: user.memberId || null,

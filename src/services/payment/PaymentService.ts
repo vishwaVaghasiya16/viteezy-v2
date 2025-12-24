@@ -775,7 +775,7 @@ export class PaymentService {
           process.env.APP_BASE_URL || "http://localhost:8080"
         }/api/v1/payments/webhook/${data.paymentMethod}`,
         customerEmail: user.email,
-        customerName: user.name,
+        customerName: `${user.firstName} ${user.lastName}`.trim(),
         shippingCountry: orderCountry,
         shippingAddress,
         billingAddress,
@@ -1183,7 +1183,9 @@ export class PaymentService {
       }
 
       console.log("📧 [EMAIL] Step 1: Fetching user details");
-      const user = await User.findById(order.userId).select("name email");
+      const user = await User.findById(order.userId).select(
+        "firstName lastName email"
+      );
       if (!user?.email) {
         console.warn("⚠️ [EMAIL] - User email not found, skipping email");
         return;
@@ -1211,9 +1213,10 @@ export class PaymentService {
         ? this.convertAddressToSnapshot(order.shippingAddressId as any)
         : undefined;
 
+      const fullName = `${user.firstName} ${user.lastName}`.trim();
       const emailSent = await emailService.sendOrderConfirmationEmail({
         to: user.email,
-        userName: user.name,
+        userName: fullName,
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         paymentMethod: payment?.paymentMethod,

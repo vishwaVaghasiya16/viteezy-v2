@@ -30,7 +30,8 @@ class MemberController {
     childId: mongoose.Types.ObjectId;
     profile: {
       id: string;
-      name?: string;
+      firstName?: string;
+      lastName?: string;
       email?: string;
       memberId?: string;
       isActive?: boolean;
@@ -60,7 +61,7 @@ class MemberController {
     }
 
     const child = await User.findById(targetId)
-      .select("name email memberId isActive")
+      .select("firstName lastName email memberId isActive")
       .lean();
 
     if (!child) {
@@ -71,7 +72,8 @@ class MemberController {
       childId: targetId,
       profile: {
         id: child._id.toString(),
-        name: child.name,
+        firstName: child.firstName,
+        lastName: child.lastName,
         email: child.email,
         memberId: child.memberId,
         isActive: child.isActive,
@@ -87,7 +89,8 @@ class MemberController {
   registerWithMemberId = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const {
-        name,
+        firstName,
+        lastName,
         email,
         password,
         phone,
@@ -97,8 +100,11 @@ class MemberController {
       } = req.body;
 
       // Validate required fields
-      if (!name || !email || !password) {
-        throw new AppError("Name, email, and password are required", 400);
+      if (!firstName || !lastName || !email || !password) {
+        throw new AppError(
+          "First name, last name, email, and password are required",
+          400
+        );
       }
 
       // Check if user already exists
@@ -125,7 +131,8 @@ class MemberController {
 
       // Create new user
       const user = await User.create({
-        name,
+        firstName,
+        lastName,
         email: email.toLowerCase(),
         password,
         phone,
@@ -183,7 +190,7 @@ class MemberController {
       }
 
       const user = await User.findById(req.user._id).select(
-        "name email memberId isMember membershipStatus"
+        "firstName lastName email memberId isMember membershipStatus"
       );
 
       if (!user) {
@@ -196,7 +203,7 @@ class MemberController {
         isActive: true,
         isDeleted: false,
       })
-        .populate("parentUserId", "name email memberId")
+        .populate("parentUserId", "firstName lastName email memberId")
         .lean();
 
       // Get referrals made by this user (children)
@@ -205,7 +212,7 @@ class MemberController {
         isActive: true,
         isDeleted: false,
       })
-        .populate("childUserId", "name email memberId")
+        .populate("childUserId", "firstName lastName email memberId")
         .sort({ registeredAt: -1 })
         .lean();
 
@@ -251,7 +258,7 @@ class MemberController {
         isActive: true,
         isDeleted: false,
       })
-        .populate("childUserId", "name email memberId isActive")
+        .populate("childUserId", "firstName lastName email memberId isActive")
         .sort({ registeredAt: -1 })
         .lean();
 
@@ -261,7 +268,8 @@ class MemberController {
           const child = ref.childUserId as any;
           return {
             userId: child._id,
-            name: child.name,
+            firstName: child.firstName,
+            lastName: child.lastName,
             email: child.email,
             memberId: child.memberId,
             isActive: child.isActive,
@@ -385,7 +393,8 @@ class MemberController {
         data: {
           valid: !!user,
           memberId: user?.memberId || null,
-          name: user?.name || null,
+          firstName: user?.firstName || null,
+          lastName: user?.lastName || null,
         },
       });
     }

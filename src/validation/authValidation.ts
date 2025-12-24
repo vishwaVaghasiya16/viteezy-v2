@@ -69,18 +69,33 @@ const newPasswordSchema = Joi.string()
   });
 
 /**
- * Name validation schema
- * @constant {Joi.StringSchema} nameSchema
+ * First name validation schema
+ * @constant {Joi.StringSchema} firstNameSchema
  */
-const nameSchema = Joi.string()
-  .min(VALIDATION.NAME.MIN_LENGTH)
-  .max(VALIDATION.NAME.MAX_LENGTH)
+const firstNameSchema = Joi.string()
+  .min(VALIDATION.FIRST_NAME.MIN_LENGTH)
+  .max(VALIDATION.FIRST_NAME.MAX_LENGTH)
   .required()
-  .label("Name")
+  .label("First Name")
   .messages({
-    "string.min": `Name must be at least ${VALIDATION.NAME.MIN_LENGTH} characters long`,
-    "string.max": `Name cannot exceed ${VALIDATION.NAME.MAX_LENGTH} characters`,
-    "any.required": "Name is required",
+    "string.min": `First name must be at least ${VALIDATION.FIRST_NAME.MIN_LENGTH} character long`,
+    "string.max": `First name cannot exceed ${VALIDATION.FIRST_NAME.MAX_LENGTH} characters`,
+    "any.required": "First name is required",
+  });
+
+/**
+ * Last name validation schema
+ * @constant {Joi.StringSchema} lastNameSchema
+ */
+const lastNameSchema = Joi.string()
+  .min(VALIDATION.LAST_NAME.MIN_LENGTH)
+  .max(VALIDATION.LAST_NAME.MAX_LENGTH)
+  .required()
+  .label("Last Name")
+  .messages({
+    "string.min": `Last name must be at least ${VALIDATION.LAST_NAME.MIN_LENGTH} character long`,
+    "string.max": `Last name cannot exceed ${VALIDATION.LAST_NAME.MAX_LENGTH} characters`,
+    "any.required": "Last name is required",
   });
 
 /**
@@ -160,7 +175,8 @@ const otpTypeSchema = Joi.string()
  */
 export const registerSchema = Joi.object(
   withFieldLabels({
-    name: nameSchema,
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
     email: emailSchema,
     password: passwordSchema,
     phone: phoneSchema,
@@ -288,7 +304,8 @@ export const changePasswordSchema = Joi.object(
  */
 export const updateProfileSchema = Joi.object(
   withFieldLabels({
-    name: nameSchema.optional(),
+    firstName: firstNameSchema.optional(),
+    lastName: lastNameSchema.optional(),
     phone: phoneSchema,
     countryCode: countryCodeSchema,
     profileImage: Joi.string().uri().optional().allow(null, "").messages({

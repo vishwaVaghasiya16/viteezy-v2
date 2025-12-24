@@ -11,10 +11,7 @@ import {
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
 import { ProductVariant } from "../models/enums";
-import {
-  DEFAULT_LANGUAGE,
-  SupportedLanguage,
-} from "../models/common.model";
+import { DEFAULT_LANGUAGE, SupportedLanguage } from "../models/common.model";
 import { fetchAndEnrichProducts } from "./productEnrichmentService";
 
 interface AddCartItemData {
@@ -55,15 +52,23 @@ class CartService {
   /**
    * Calculate cart totals
    */
-  private calculateCartTotals(items: CartItemWithDetails[]): {
+  private calculateCartTotals(
+    items: CartItemWithDetails[],
+    shippingAmount: number = 0,
+    discountAmount: number = 0
+  ): {
     subtotal: { currency: string; amount: number; taxRate: number };
     tax: { currency: string; amount: number; taxRate: number };
+    shipping: { currency: string; amount: number; taxRate: number };
+    discount: { currency: string; amount: number; taxRate: number };
     total: { currency: string; amount: number; taxRate: number };
   } {
     if (items.length === 0) {
       return {
         subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
         tax: { currency: "EUR", amount: 0, taxRate: 0 },
+        shipping: { currency: "EUR", amount: 0, taxRate: 0 },
+        discount: { currency: "EUR", amount: 0, taxRate: 0 },
         total: { currency: "EUR", amount: 0, taxRate: 0 },
       };
     }
@@ -202,18 +207,38 @@ class CartService {
     userId: string,
     includeSuggested: boolean = true,
     userLang: SupportedLanguage = DEFAULT_LANGUAGE
-  ): Promise<{ cart: any; suggestedProducts?: any[] }> {
+  ): Promise<{ cart: any; suggestedProducts?: any[]; paymentDetails?: any }> {
     const cart = await this.getOrCreateCart(userId);
 
     if (!cart.items || cart.items.length === 0) {
-      const result: { cart: any; suggestedProducts?: any[] } = {
+      const emptyTotals = {
+        subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
+        tax: { currency: "EUR", amount: 0, taxRate: 0 },
+        shipping: { currency: "EUR", amount: 0, taxRate: 0 },
+        discount: { currency: "EUR", amount: 0, taxRate: 0 },
+        total: { currency: "EUR", amount: 0, taxRate: 0 },
+      };
+
+      const paymentDetails = {
+        subtotal: emptyTotals.subtotal,
+        discount: emptyTotals.discount,
+        shipping: emptyTotals.shipping,
+        tax: emptyTotals.tax,
+        grandTotal: emptyTotals.total,
+        couponCode: cart.couponCode || null,
+      };
+
+      const result: {
+        cart: any;
+        suggestedProducts?: any[];
+        paymentDetails?: any;
+      } = {
         cart: {
           ...cart,
           items: [],
-          subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-          tax: { currency: "EUR", amount: 0, taxRate: 0 },
-          total: { currency: "EUR", amount: 0, taxRate: 0 },
+          ...emptyTotals,
         },
+        paymentDetails,
       };
 
       if (includeSuggested) {
@@ -274,9 +299,7 @@ class CartService {
     const productMap = new Map(
       enrichedProducts.map((p: any) => [p._id.toString(), p])
     );
-    const variantMap = new Map(
-      variants.map((v: any) => [v._id.toString(), v])
-    );
+    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
 
     // Build items with full product details
     const itemsWithDetails = (cart.items || []).map((item: any) => {
@@ -315,14 +338,38 @@ class CartService {
       };
     });
 
-    const totals = this.calculateCartTotals(itemsWithDetails);
+    // Get shipping and discount from cart (if set)
+    const shippingAmount = cart.shipping?.amount || 0;
+    const discountAmount = cart.discount?.amount || 0;
 
-    const result: { cart: any; suggestedProducts?: any[] } = {
+    // Calculate totals including shipping and discount
+    const totals = this.calculateCartTotals(
+      itemsWithDetails,
+      shippingAmount,
+      discountAmount
+    );
+
+    // Build payment details
+    const paymentDetails = {
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      shipping: totals.shipping,
+      tax: totals.tax,
+      grandTotal: totals.total,
+      couponCode: cart.couponCode || null,
+    };
+
+    const result: {
+      cart: any;
+      suggestedProducts?: any[];
+      paymentDetails?: any;
+    } = {
       cart: {
         ...cart,
         items: itemsWithDetails,
         ...totals,
       },
+      paymentDetails,
     };
 
     // Include suggested products if requested
@@ -460,15 +507,28 @@ class CartService {
       });
     }
 
+    // Get existing shipping and discount from cart
+    const shippingAmount = cart.shipping?.amount || 0;
+    const discountAmount = cart.discount?.amount || 0;
+
     // Calculate totals
-    const totals = this.calculateCartTotals(updatedItems);
+    const totals = this.calculateCartTotals(
+      updatedItems,
+      shippingAmount,
+      discountAmount
+    );
 
     // Update cart
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
       {
         items: updatedItems,
-        ...totals,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        // Keep existing shipping and discount if they exist, otherwise update to 0
+        shipping: cart.shipping || totals.shipping,
+        discount: cart.discount || totals.discount,
         updatedAt: new Date(),
       },
       { new: true }
@@ -502,8 +562,8 @@ class CartService {
         item.productId.toString() === productId ||
         item.productId.toString() === productId.toString();
       const variantMatch = variantId
-        ? (item.variantId?.toString() === variantId ||
-           item.variantId?.toString() === variantId.toString())
+        ? item.variantId?.toString() === variantId ||
+          item.variantId?.toString() === variantId.toString()
         : !item.variantId; // If variantId not provided, match items without variantId
 
       return productMatch && variantMatch;
@@ -567,15 +627,28 @@ class CartService {
       price: item.price, // Keep existing price
     };
 
+    // Get existing shipping and discount from cart
+    const shippingAmount = cart.shipping?.amount || 0;
+    const discountAmount = cart.discount?.amount || 0;
+
     // Calculate totals
-    const totals = this.calculateCartTotals(updatedItems);
+    const totals = this.calculateCartTotals(
+      updatedItems,
+      shippingAmount,
+      discountAmount
+    );
 
     // Update cart
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
       {
         items: updatedItems,
-        ...totals,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        total: totals.total,
+        // Keep existing shipping and discount if they exist
+        shipping: cart.shipping || totals.shipping,
+        discount: cart.discount || totals.discount,
         updatedAt: new Date(),
       },
       { new: true }
@@ -608,8 +681,8 @@ class CartService {
         item.productId.toString() === productId ||
         item.productId.toString() === productId.toString();
       const variantMatch = variantId
-        ? (item.variantId?.toString() === variantId ||
-           item.variantId?.toString() === variantId.toString())
+        ? item.variantId?.toString() === variantId ||
+          item.variantId?.toString() === variantId.toString()
         : !item.variantId; // If variantId not provided, match items without variantId
 
       return productMatch && variantMatch;
@@ -658,15 +731,28 @@ class CartService {
       const updatedItems = [...(cart.items || [])];
       updatedItems.splice(itemIndex, 1);
 
+      // Get existing shipping and discount from cart
+      const shippingAmount = cart.shipping?.amount || 0;
+      const discountAmount = cart.discount?.amount || 0;
+
       // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems);
+      const totals = this.calculateCartTotals(
+        updatedItems,
+        shippingAmount,
+        discountAmount
+      );
 
       // Update cart
       const updatedCart = await Carts.findByIdAndUpdate(
         cart._id,
         {
           items: updatedItems,
-          ...totals,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          total: totals.total,
+          // Keep existing shipping and discount if they exist
+          shipping: cart.shipping || totals.shipping,
+          discount: cart.discount || totals.discount,
           updatedAt: new Date(),
         },
         { new: true }
@@ -688,15 +774,28 @@ class CartService {
         quantity: currentQuantity - removeQuantity,
       };
 
+      // Get existing shipping and discount from cart
+      const shippingAmount = cart.shipping?.amount || 0;
+      const discountAmount = cart.discount?.amount || 0;
+
       // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems);
+      const totals = this.calculateCartTotals(
+        updatedItems,
+        shippingAmount,
+        discountAmount
+      );
 
       // Update cart
       const updatedCart = await Carts.findByIdAndUpdate(
         cart._id,
         {
           items: updatedItems,
-          ...totals,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          total: totals.total,
+          // Keep existing shipping and discount if they exist
+          shipping: cart.shipping || totals.shipping,
+          discount: cart.discount || totals.discount,
           updatedAt: new Date(),
         },
         { new: true }
@@ -1010,10 +1109,15 @@ class CartService {
       if (product.ingredients && Array.isArray(product.ingredients)) {
         product.ingredients.forEach((ingredientId: any) => {
           // Handle both string IDs and ObjectId objects
-          const id = typeof ingredientId === "string" 
-            ? ingredientId 
-            : ingredientId?.toString();
-          if (id && mongoose.Types.ObjectId.isValid(id) && !allIngredientIds.includes(id)) {
+          const id =
+            typeof ingredientId === "string"
+              ? ingredientId
+              : ingredientId?.toString();
+          if (
+            id &&
+            mongoose.Types.ObjectId.isValid(id) &&
+            !allIngredientIds.includes(id)
+          ) {
             allIngredientIds.push(id);
           }
         });
@@ -1024,7 +1128,11 @@ class CartService {
     const ingredientDetailsMap = new Map();
     if (allIngredientIds.length > 0) {
       const ingredientDetails = await ProductIngredients.find({
-        _id: { $in: allIngredientIds.map((id: string) => new mongoose.Types.ObjectId(id)) },
+        _id: {
+          $in: allIngredientIds.map(
+            (id: string) => new mongoose.Types.ObjectId(id)
+          ),
+        },
       })
         .select("_id name description image")
         .lean();
@@ -1039,9 +1147,10 @@ class CartService {
       if (product.ingredients && Array.isArray(product.ingredients)) {
         product.ingredients = product.ingredients
           .map((ingredientId: any) => {
-            const id = typeof ingredientId === "string" 
-              ? ingredientId 
-              : ingredientId?.toString();
+            const id =
+              typeof ingredientId === "string"
+                ? ingredientId
+                : ingredientId?.toString();
             return ingredientDetailsMap.get(id);
           })
           .filter((ingredient: any) => ingredient !== undefined);
@@ -1049,12 +1158,8 @@ class CartService {
     });
 
     // Create maps for quick lookup
-    const productMap = new Map(
-      products.map((p: any) => [p._id.toString(), p])
-    );
-    const variantMap = new Map(
-      variants.map((v: any) => [v._id.toString(), v])
-    );
+    const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
+    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
 
     // Build products array with all pricing details
     const checkoutProductsPromises = cart.items.map(async (item: any) => {
@@ -1069,13 +1174,23 @@ class CartService {
 
       // Get pricing information
       const cartPrice = item.price;
-      const productPrice = product.price || { currency: "EUR", amount: 0, taxRate: 0 };
+      const productPrice = product.price || {
+        currency: "EUR",
+        amount: 0,
+        taxRate: 0,
+      };
       const variantPrice = variant?.price || null;
 
       // Identify which subscription plan was selected based on cart price
       let selectedPlan: {
         type: "subscription" | "oneTime" | "default";
-        plan?: "thirtyDays" | "sixtyDays" | "ninetyDays" | "oneEightyDays" | "count30" | "count60";
+        plan?:
+          | "thirtyDays"
+          | "sixtyDays"
+          | "ninetyDays"
+          | "oneEightyDays"
+          | "count30"
+          | "count60";
         price?: any;
       } = { type: "default" };
 
@@ -1110,7 +1225,9 @@ class CartService {
         // If not found in subscription, check oneTime options
         if (selectedPlan.type === "default" && sachetPrices.oneTime) {
           if (sachetPrices.oneTime.count30) {
-            const count30Price = sachetPrices.oneTime.count30.discountedPrice || sachetPrices.oneTime.count30.amount;
+            const count30Price =
+              sachetPrices.oneTime.count30.discountedPrice ||
+              sachetPrices.oneTime.count30.amount;
             if (Math.abs(cartAmount - count30Price) < 0.01) {
               selectedPlan = {
                 type: "oneTime",
@@ -1120,7 +1237,9 @@ class CartService {
             }
           }
           if (selectedPlan.type === "default" && sachetPrices.oneTime.count60) {
-            const count60Price = sachetPrices.oneTime.count60.discountedPrice || sachetPrices.oneTime.count60.amount;
+            const count60Price =
+              sachetPrices.oneTime.count60.discountedPrice ||
+              sachetPrices.oneTime.count60.amount;
             if (Math.abs(cartAmount - count60Price) < 0.01) {
               selectedPlan = {
                 type: "oneTime",
@@ -1133,9 +1252,15 @@ class CartService {
       }
 
       // Check standupPouchPrice if hasStandupPouch
-      if (selectedPlan.type === "default" && product.hasStandupPouch && product.standupPouchPrice) {
+      if (
+        selectedPlan.type === "default" &&
+        product.hasStandupPouch &&
+        product.standupPouchPrice
+      ) {
         if (product.standupPouchPrice.count30) {
-          const count30Price = product.standupPouchPrice.count30.discountedPrice || product.standupPouchPrice.count30.amount;
+          const count30Price =
+            product.standupPouchPrice.count30.discountedPrice ||
+            product.standupPouchPrice.count30.amount;
           if (Math.abs(cartPrice.amount - count30Price) < 0.01) {
             selectedPlan = {
               type: "oneTime",
@@ -1144,8 +1269,13 @@ class CartService {
             };
           }
         }
-        if (selectedPlan.type === "default" && product.standupPouchPrice.count60) {
-          const count60Price = product.standupPouchPrice.count60.discountedPrice || product.standupPouchPrice.count60.amount;
+        if (
+          selectedPlan.type === "default" &&
+          product.standupPouchPrice.count60
+        ) {
+          const count60Price =
+            product.standupPouchPrice.count60.discountedPrice ||
+            product.standupPouchPrice.count60.amount;
           if (Math.abs(cartPrice.amount - count60Price) < 0.01) {
             selectedPlan = {
               type: "oneTime",
@@ -1157,13 +1287,16 @@ class CartService {
       }
 
       // Use selected plan price for member pricing calculation if found
-      const priceForMemberCalculation = selectedPlan.price 
-        ? { 
-            currency: selectedPlan.price.currency || cartPrice.currency, 
-            amount: selectedPlan.price.discountedPrice || selectedPlan.price.amount || cartPrice.amount,
-            taxRate: selectedPlan.price.taxRate || cartPrice.taxRate 
+      const priceForMemberCalculation = selectedPlan.price
+        ? {
+            currency: selectedPlan.price.currency || cartPrice.currency,
+            amount:
+              selectedPlan.price.discountedPrice ||
+              selectedPlan.price.amount ||
+              cartPrice.amount,
+            taxRate: selectedPlan.price.taxRate || cartPrice.taxRate,
           }
-        : (variantPrice || productPrice);
+        : variantPrice || productPrice;
 
       // Calculate member pricing if applicable
       const priceSource: ProductPriceSource = {
@@ -1172,27 +1305,30 @@ class CartService {
         memberDiscountOverride: product.memberDiscountOverride,
       };
 
-      const memberPriceResult = await calculateMemberPrice(
-        priceSource,
-        userId
-      );
+      const memberPriceResult = await calculateMemberPrice(priceSource, userId);
 
-      const originalPrice = selectedPlan.price 
+      const originalPrice = selectedPlan.price
         ? {
             currency: selectedPlan.price.currency || cartPrice.currency,
-            amount: selectedPlan.price.amount || selectedPlan.price.discountedPrice || cartPrice.amount,
+            amount:
+              selectedPlan.price.amount ||
+              selectedPlan.price.discountedPrice ||
+              cartPrice.amount,
             taxRate: selectedPlan.price.taxRate || cartPrice.taxRate,
           }
-        : (variantPrice || productPrice);
-      
+        : variantPrice || productPrice;
+
       // Only use member price if user is actually a member
-      const memberPrice = memberPriceResult.isMember ? memberPriceResult.memberPrice : null;
+      const memberPrice = memberPriceResult.isMember
+        ? memberPriceResult.memberPrice
+        : null;
       const discountAmount = memberPriceResult.isMember
         ? originalPrice.amount - (memberPrice?.amount || originalPrice.amount)
         : 0;
-      const discountPercentage = memberPriceResult.isMember && originalPrice.amount > 0
-        ? (discountAmount / originalPrice.amount) * 100
-        : 0;
+      const discountPercentage =
+        memberPriceResult.isMember && originalPrice.amount > 0
+          ? (discountAmount / originalPrice.amount) * 100
+          : 0;
 
       return {
         _id: product._id,
@@ -1214,10 +1350,13 @@ class CartService {
               (cartPrice.amount + cartPrice.taxRate) * 100
             ) / 100,
             // Include selected plan information
-            selectedPlan: selectedPlan.type !== "default" ? {
-              type: selectedPlan.type,
-              plan: selectedPlan.plan,
-            } : null,
+            selectedPlan:
+              selectedPlan.type !== "default"
+                ? {
+                    type: selectedPlan.type,
+                    plan: selectedPlan.plan,
+                  }
+                : null,
           },
           // Original price (before any discounts) - from selected plan
           originalPrice: {
@@ -1300,8 +1439,9 @@ class CartService {
 
       // Only apply member pricing if user is actually a member
       // Check if memberPrice exists AND discount amount > 0 (indicating member discount was applied)
-      const hasMemberDiscount = product.pricing.memberPrice && 
-        product.pricing.discount && 
+      const hasMemberDiscount =
+        product.pricing.memberPrice &&
+        product.pricing.discount &&
         product.pricing.discount.amount > 0;
 
       const memberItemTotal = hasMemberDiscount
@@ -1394,7 +1534,9 @@ class CartService {
       const additionalProducts = await Products.find({
         _id: {
           $nin: [
-            ...cartProductIds.map((id: string) => new mongoose.Types.ObjectId(id)),
+            ...cartProductIds.map(
+              (id: string) => new mongoose.Types.ObjectId(id)
+            ),
             ...featuredProducts.map((p: any) => p._id),
           ],
         },
@@ -1414,10 +1556,15 @@ class CartService {
     featuredProducts.forEach((product: any) => {
       if (product.ingredients && Array.isArray(product.ingredients)) {
         product.ingredients.forEach((ingredientId: any) => {
-          const id = typeof ingredientId === "string" 
-            ? ingredientId 
-            : ingredientId?.toString();
-          if (id && mongoose.Types.ObjectId.isValid(id) && !featuredIngredientIds.includes(id)) {
+          const id =
+            typeof ingredientId === "string"
+              ? ingredientId
+              : ingredientId?.toString();
+          if (
+            id &&
+            mongoose.Types.ObjectId.isValid(id) &&
+            !featuredIngredientIds.includes(id)
+          ) {
             featuredIngredientIds.push(id);
           }
         });
@@ -1428,7 +1575,11 @@ class CartService {
     const featuredIngredientDetailsMap = new Map();
     if (featuredIngredientIds.length > 0) {
       const ingredientDetails = await ProductIngredients.find({
-        _id: { $in: featuredIngredientIds.map((id: string) => new mongoose.Types.ObjectId(id)) },
+        _id: {
+          $in: featuredIngredientIds.map(
+            (id: string) => new mongoose.Types.ObjectId(id)
+          ),
+        },
       })
         .select("_id name description image")
         .lean();
@@ -1443,9 +1594,10 @@ class CartService {
       if (product.ingredients && Array.isArray(product.ingredients)) {
         product.ingredients = product.ingredients
           .map((ingredientId: any) => {
-            const id = typeof ingredientId === "string" 
-              ? ingredientId 
-              : ingredientId?.toString();
+            const id =
+              typeof ingredientId === "string"
+                ? ingredientId
+                : ingredientId?.toString();
             return featuredIngredientDetailsMap.get(id);
           })
           .filter((ingredient: any) => ingredient !== undefined);
@@ -1526,9 +1678,7 @@ class CartService {
       .sort({ createdAt: -1 })
       .lean();
 
-    const suggestedProductIds = suggestedProductDocs.map(
-      (doc: any) => doc._id
-    );
+    const suggestedProductIds = suggestedProductDocs.map((doc: any) => doc._id);
 
     if (suggestedProductIds.length === 0) {
       return [];
