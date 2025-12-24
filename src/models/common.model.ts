@@ -138,7 +138,7 @@ export const PriceSchema = new Schema<PriceType>(
     },
     amount: { type: Number, min: 0, default: 0 },
     discountedPrice: { type: Number, min: 0, optional: true },
-    taxRate: { type: Number, min: 0, max: 1, default: 0 },
+    taxRate: { type: Number, min: 0, default: 0 },
   },
   { _id: false }
 );

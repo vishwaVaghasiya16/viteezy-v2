@@ -129,6 +129,7 @@ export class CartController {
 
   /**
    * Update cart item quantity by productId
+   * If quantity is not provided, removes the item from cart entirely
    */
   static async updateItem(
     req: AuthenticatedRequest,
@@ -147,7 +148,8 @@ export class CartController {
         throw new AppError("productId is required", 400);
       }
 
-      if (!quantity || quantity < 1) {
+      // Quantity is optional - if provided, must be at least 1
+      if (quantity !== undefined && quantity !== null && quantity < 1) {
         throw new AppError("quantity must be at least 1", 400);
       }
 
@@ -192,7 +194,7 @@ export class CartController {
       const result = await cartService.removeItem(userId, {
         productId,
         variantId,
-        quantity: quantity || 1, // Default to 1 if not provided
+        quantity, // If quantity is not provided, all quantities will be removed
       });
 
       res.status(200).json({
