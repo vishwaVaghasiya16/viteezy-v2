@@ -20,6 +20,7 @@ import {
   refreshTokenSchema,
   appleLoginSchema,
   googleLoginSchema,
+  registerFamilyMemberSchema,
 } from "@/validation/authValidation";
 import { authMiddleware } from "@/middleware/auth";
 
@@ -113,6 +114,16 @@ router.put(
   validateJoi(updateProfileSchema),
   authController.updateProfile
 );
+
+// Register family member endpoint
+router.post(
+  "/register-family-member",
+  validateJoi(registerFamilyMemberSchema),
+  authController.registerFamilyMember
+);
+
+// Get family members endpoint
+router.get("/family-members", authController.getFamilyMembers);
 
 /**
  * Admin Routes

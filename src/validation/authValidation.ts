@@ -392,3 +392,61 @@ export const googleLoginSchema = Joi.object(
     }),
   })
 ).label("GoogleLoginPayload");
+
+/**
+ * Relationship Type validation schema
+ * @constant {Joi.StringSchema} relationshipSchema
+ * @description Validates relationship to parent member
+ */
+const relationshipSchema = Joi.string()
+  .valid("Child", "Spouse", "Parent", "Sibling", "Other")
+  .required()
+  .label("Relationship")
+  .messages({
+    "any.only":
+      "Relationship must be one of: Child, Spouse, Parent, Sibling, Other",
+    "any.required": "Relationship to parent member is required",
+  });
+
+/**
+ * Family Member Registration Validation Schema
+ * @constant {Joi.ObjectSchema} registerFamilyMemberSchema
+ * @description Validates family member registration request data
+ * Email is optional for family members
+ */
+export const registerFamilyMemberSchema = Joi.object(
+  withFieldLabels({
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
+    email: Joi.string()
+      .email()
+      .optional()
+      .allow(null, "")
+      .label("Email")
+      .messages({
+        "string.email": "Please provide a valid email address",
+      }),
+    password: passwordSchema,
+    phone: phoneSchema,
+    countryCode: countryCodeSchema,
+    gender: Joi.string()
+      .valid(...GENDER_VALUES)
+      .optional()
+      .allow(null)
+      .messages({
+        "any.only": `Gender must be one of: ${GENDER_VALUES.join(", ")}`,
+      }),
+    age: Joi.number()
+      .integer()
+      .min(1)
+      .max(150)
+      .optional()
+      .allow(null)
+      .messages({
+        "number.min": "Age must be at least 1",
+        "number.max": "Age cannot exceed 150",
+        "number.integer": "Age must be an integer",
+      }),
+    relationshipToParent: relationshipSchema,
+  })
+).label("RegisterFamilyMemberPayload");

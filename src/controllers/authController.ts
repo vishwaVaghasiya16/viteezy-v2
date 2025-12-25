@@ -264,6 +264,10 @@ class AuthController {
             lastLogin: fullUser.lastLogin,
             registeredAt: registrationDate,
             createdAt: fullUser.createdAt,
+            // Family member fields
+            isSubMember: fullUser.isSubMember || false,
+            parentMemberId: fullUser.parentMemberId || null,
+            relationshipToParent: fullUser.relationshipToParent || null,
           },
         },
         "Profile retrieved successfully"
@@ -417,6 +421,77 @@ class AuthController {
           user: result.user,
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
+        },
+        result.message
+      );
+    }
+  );
+
+  /**
+   * Register Family Member
+   * Allows a parent/main member to register a family member (sub-member)
+   * Email is optional for family members
+   */
+  registerFamilyMember = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?._id || req.user?.id;
+
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const {
+        firstName,
+        lastName,
+        email,
+        password,
+        phone,
+        countryCode,
+        gender,
+        age,
+        relationshipToParent,
+      } = req.body;
+
+      const result = await authService.registerFamilyMember({
+        parentMemberId: userId,
+        firstName,
+        lastName,
+        email,
+        password,
+        phone,
+        countryCode,
+        gender,
+        age,
+        relationshipToParent,
+      });
+
+      res.apiCreated(
+        {
+          user: result.user,
+        },
+        result.message
+      );
+    }
+  );
+
+  /**
+   * Get Family Members
+   * Retrieves all family members (sub-members) for the authenticated parent member
+   */
+  getFamilyMembers = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const userId = req.userId || req.user?._id || req.user?.id;
+
+      if (!userId) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const result = await authService.getFamilyMembers(userId);
+
+      res.apiSuccess(
+        {
+          familyMembers: result.familyMembers,
+          count: result.familyMembers.length,
         },
         result.message
       );
