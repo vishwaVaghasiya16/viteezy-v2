@@ -3,7 +3,8 @@ import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductCategory } from "../models/commerce/categories.model";
 import { Orders } from "../models/commerce/orders.model";
-import { ProductStatus, ProductVariant, ReviewStatus, OrderStatus, PaymentStatus } from "../models/enums";
+import { ProductFAQs } from "../models/commerce/productFaqs.model";
+import { ProductStatus, ProductVariant, ReviewStatus, OrderStatus, PaymentStatus, FAQStatus } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
@@ -1035,10 +1036,12 @@ class ProductService {
       .lean();
 
     // Get ingredient details and replace ingredients array with populated data
+    // Include image field (not icon, as ProductIngredients model has image field)
+    // Always include image field even if null/empty for FE consistency
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: product.ingredients || [] },
     })
-      .select("sId slug name description sortOrder icon image")
+      .select("_id name description image")
       .lean();
 
     // Fetch product ingredients linked to this product (relationship is reversed)
@@ -1048,7 +1051,20 @@ class ProductService {
       isDeleted: { $ne: true },
       isActive: true,
     })
+      .select("_id name description image")
       .sort({ name: 1 })
+      .lean();
+
+    // Fetch product FAQs
+    // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
+    const productFAQs = await ProductFAQs.find({
+      productId: new mongoose.Types.ObjectId(productId),
+      isDeleted: { $ne: true },
+      isActive: true,
+      status: FAQStatus.ACTIVE, // "Active" with capital A
+    })
+      .select("_id question answer sortOrder")
+      .sort({ sortOrder: 1 })
       .lean();
 
     // Calculate monthly amount for subscription prices if totalAmount is provided
@@ -1057,6 +1073,7 @@ class ProductService {
       ingredients: ingredientDetails, // Replace IDs with populated data
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
+      faqs: productFAQs || [], // Add FAQs to product
     });
 
     return { product: enrichedProduct };
@@ -1080,17 +1097,54 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
+    // Fetch product variants
+    const variants = await ProductVariants.find({
+      productId: product._id,
+      isDeleted: { $ne: true },
+      isActive: true,
+    })
+      .sort({ sortOrder: 1 })
+      .lean();
+
     // Get ingredient details and replace ingredients array with populated data
+    // Include image field (not icon, as ProductIngredients model has image field)
+    // Always include image field even if null/empty for FE consistency
     const ingredientDetails = await ProductIngredients.find({
       _id: { $in: product.ingredients || [] },
     })
-      .select("sId slug name description sortOrder icon image")
+      .select("_id name description image")
+      .lean();
+
+    // Fetch product ingredients linked to this product (relationship is reversed)
+    let linkedProductIngredients: any[] = [];
+    linkedProductIngredients = await ProductIngredients.find({
+      products: product._id,
+      isDeleted: { $ne: true },
+      isActive: true,
+    })
+      .select("_id name description image")
+      .sort({ name: 1 })
+      .lean();
+
+    // Fetch product FAQs
+    // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
+    const productFAQs = await ProductFAQs.find({
+      productId: product._id,
+      isDeleted: { $ne: true },
+      isActive: true,
+      status: FAQStatus.ACTIVE, // "Active" with capital A
+    })
+      .select("_id question answer sortOrder")
+      .sort({ sortOrder: 1 })
       .lean();
 
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
       ingredients: ingredientDetails, // Replace IDs with populated data
+      variants: variants || [],
+      productIngredientDetails: linkedProductIngredients || [],
+      faqs: productFAQs || [], // Add FAQs to product
     });
 
     return { product: enrichedProduct };

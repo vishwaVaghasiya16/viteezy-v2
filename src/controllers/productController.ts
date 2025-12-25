@@ -112,12 +112,13 @@ const transformProductForLanguage = (
       product.variants ||
       [],
     // Transform populated ingredients for language
+    // Always include image field (null/empty if not present) for FE consistency
     ingredients:
       product.ingredients?.map((ingredient: any) => ({
-        ...ingredient,
+        _id: ingredient._id,
         name: getTranslatedString(ingredient.name, lang),
         description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || undefined,
+        image: ingredient.image || null, // Always include image field, null if not present
       })) || [],
     // Transform populated categories for language
     categories:
@@ -126,6 +127,14 @@ const transformProductForLanguage = (
         name: getTranslatedString(category.name, lang),
         description: getTranslatedText(category.description, lang),
         image: category.image || undefined,
+      })) || [],
+    // Transform FAQs for language (return empty array if no FAQs)
+    faqs:
+      product.faqs?.map((faq: any) => ({
+        _id: faq._id,
+        question: getTranslatedString(faq.question, lang),
+        answer: getTranslatedText(faq.answer, lang),
+        sortOrder: faq.sortOrder || 0,
       })) || [],
   };
 };
