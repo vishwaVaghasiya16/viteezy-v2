@@ -8,7 +8,8 @@
 // Note: Module aliases are handled by:
 // - Development: tsconfig-paths/register (via nodemon exec)
 // - Production: module-alias/register (via npm start script)
-import express, { Application } from "express";
+import express, { Application, Request, Response } from "express";
+import { IncomingMessage, ServerResponse } from "http";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -16,6 +17,7 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
+import { createProxyMiddleware, Options } from "http-proxy-middleware";
 
 // Internal imports
 import { connectDatabase, disconnectDatabase } from "@/config/database";
@@ -371,9 +373,83 @@ app.use(
 );
 
 /**
+ * Python FastAPI Proxy Middleware
+ * Proxies specific AI/chat routes to Python FastAPI server (port 8000)
+ * These routes are handled by Python FastAPI:
+ * - /api/v1/health (Python health check)
+ * - /api/v1/sessions (session management)
+ * - /api/v1/chat (chat messages)
+ * - /api/v1/useridLogin (user login verification)
+ * - /api/v1/sessions/* (session operations)
+ * - /api/v1/docs (Python FastAPI docs)
+ * - /api/v1/redoc (Python FastAPI ReDoc)
+ */
+const pythonApiProxyOptions: Options<Request, Response> = {
+  target: "http://localhost:8000",
+  changeOrigin: true,
+  pathFilter: (pathname: string, req: IncomingMessage) => {
+    // Proxy these specific Python routes
+    const pythonRoutes = [
+      "/api/v1/health",
+      "/api/v1/sessions",
+      "/api/v1/chat",
+      "/api/v1/useridLogin",
+      "/api/v1/docs",
+      "/api/v1/redoc",
+      "/api/v1/openapi.json",
+    ];
+    
+    // Check exact matches
+    if (pythonRoutes.includes(pathname)) {
+      return true;
+    }
+    
+    // Check if path starts with /api/v1/sessions/ (for session-specific routes)
+    if (pathname.startsWith("/api/v1/sessions/")) {
+      return true;
+    }
+    
+    return false;
+  },
+  onProxyReq: (proxyReq: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
+    const expressReq = req as Request;
+    console.log(`[Python Proxy] ${expressReq.method} ${expressReq.url} -> http://localhost:8000${expressReq.url}`);
+  },
+} as Options<Request, Response>;
+
+const pythonApiProxy = createProxyMiddleware(pythonApiProxyOptions);
+
+// Error handling wrapper for Python proxy
+const pythonApiProxyWithErrorHandling = (
+  req: Request,
+  res: Response,
+  next: express.NextFunction
+) => {
+  pythonApiProxy(req, res, (err: any) => {
+    if (err) {
+      console.error("Python API Proxy Error:", err.message);
+      if (!res.headersSent) {
+        res.status(503).json({
+          status: "error",
+          message: "Python API service is unavailable",
+          error_code: "SERVICE_UNAVAILABLE",
+        });
+      }
+    } else {
+      next();
+    }
+  });
+};
+
+// Register Python API proxy BEFORE Node.js routes
+// This ensures Python routes take precedence
+app.use(pythonApiProxyWithErrorHandling);
+
+/**
  * API Routes
  * All API endpoints are prefixed with /api/v1
  * Routes are organized in separate files for better maintainability
+ * Node.js routes (auth, users, products, payments, etc.) are handled here
  */
 app.use(API_VERSION, apiRoutes);
 

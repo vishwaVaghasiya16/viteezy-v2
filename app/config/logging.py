@@ -11,16 +11,20 @@ def configure_logging(level: str = "INFO") -> None:
     # Log file for general application logs
     log_file = log_dir / "app.log"
     
+    # Convert string level to uppercase and get logging constant
+    level_upper = level.upper()
+    numeric_level = getattr(logging, level_upper, logging.INFO)
+    
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
+    root_logger.setLevel(numeric_level)
     
     # Clear existing handlers
     root_logger.handlers.clear()
     
     # Console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
+    console_handler.setLevel(numeric_level)
     console_format = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
@@ -30,7 +34,7 @@ def configure_logging(level: str = "INFO") -> None:
     
     # File handler for general logs (append mode to preserve existing logs)
     file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
-    file_handler.setLevel(level)
+    file_handler.setLevel(numeric_level)
     file_format = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
