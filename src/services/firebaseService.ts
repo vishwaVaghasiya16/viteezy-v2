@@ -28,19 +28,19 @@ class FirebaseService {
       // Get Firebase credentials from environment variables
       const firebaseServiceAccount = {
         type: "service_account",
-        project_id: "viteezy-77d78",
-        private_key_id: "ae8580f796e7deee6a499a92ce4912cf65bbe0ad",
+        project_id: "viteezy-mobile",
+        private_key_id: "f012461131dd338e5a26e499d3cb6042eb464bca",
         private_key:
-          "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQClV1SqsmMnrX3e\ngpacOLuknKzVQoFiDq2AE0K7ZYi67Mjxrg69CWttcGLN1joR+17nxaMmv1Dwhzjw\nWvo7l6xsFOOnR1FMXpUf227VnfNE5hl+GTRReCEOqLdpvWRlhushQnBcH9r8QcK+\nIYzYCw22qqvZdL6JYlrgAzgEDp62ZxlIPvgY/tg9tJ3VKKRcv5jg0rva7/Xstyqi\nTrCOLjy/UAXRenMcyCoxm/Jr9p1sRw6tLoljijnMAm4owbzuVpo/pN29yBtv52Cr\n1tJtm2Zvd2rmlKowVszk3GfaumnGZAntu5nccgCUMZ2pinKKpTSqaaN3ShrGrT8n\nsR4G+PrRAgMBAAECggEAGocng3e5pv0UC+Zh6dDEcoXcyR6xiZ0XQ0xT0aNZy7wA\nBZ7KqJPhU57Li4EKsiXltUQliCr7/ouDnDTMn1EXjgPP/t/XcGxgessHPmjoRi6w\n+mVq2oNusl5phyKnAA8knKJ/Spil1wFqEH1rjqI/YgaCKhKsG3jXYcfCbgw2dMdV\npTQAMTTihzivahHmeMxl+FImMiZlA3Jrd/VacLV+fkHCChBAXj3wSX9dwSBkDteE\neqPyr23i4IaFfR4uBpzbJgVJv+uF/PyXUuIHQWsIEpkwRM3UlzHYiqxN7fXvTPP/\nQZvFRwgzlPp0n78jl8/odJiHfEEzYTkGSpWp5DKT3QKBgQDgvb2Ptu9OWAgybvvM\n+Xd7cIHetKPXu7+9rFRIhaSL/cJJZMmdgY6wW4jtfKxJWas6YAm+n1mcyQtf7y/m\nLtNtDB3+Gt9RpAYJq8WDgEVe/NdRMK8nnx2EmrnWFUleFgRXCWSAic3EaewpiJL+\nOM35c/o1uJikUg319XmBXAA1IwKBgQC8Vo8z0IqwJHUEOduDD10VKvmec2+cVSih\nnMcyWTkAl93s1ECWianYUCeJdppTT/Jx9ptmD7jfE7rY3eoXGZ7W8h9VvA1h/wqy\nSXA7DLxR29GfsA0QHYUmxtDGpQpGK9N1sf3feyqP75ibATNcrkVd6wLd/Gscdjge\nYXloeRlxewKBgQCGMUVq9rRVd0MNui8n6R1q23bwX7QlMLoAq1F4LDRgUpkb8c5g\n+ecVbtKH25WUBrKzHH01ETkU4QaltdBIBVXBGycdfzYxLVtdku9Q4dqKKTb4B7XO\nVrftYeXs6rDwOP1GaxlTlvUCfqzA8Ae1PH3goVuZkCu0kjo7zuNKVoDZOQKBgFgW\n8GHez491bdntKdPSEsp80EYhXfm0Bw4YIz9UZgn1/lHwMMl4WB2Z1/Q+qg3/nbla\nC/MftWt5cfJPUVc+n4GPu8JA8817Gcir+rdTzJ1JAHH9SQ7Zj9bENRBET1rk0sIA\n32pw1EaAXVNaq2hVBpLYAf5MOtkUHklvc/a+dX0TAoGBAJy/I99LP/c91Cgk98W/\nPvg/OnkcfdlJxgHukCedJshufn+LekmAh4gMnVT2RLTDunzpI40zXJgUq02+CccK\n++BvBxZDgngDAS5siXY+F//OunIEI2ujm6jWnhEJULObPx5rh6Ffs4ExFApvhqBx\nOzT4Lu/731LocD6cJcA2EG8H\n-----END PRIVATE KEY-----\n",
+          "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDCjUDGM8V137vf\ncFigGUzfkQ9QG4/UFVp4BS5aotVXpACCNP6Mrk4Y/a3hdUwXVXIF/RrYL5jpWYbh\n2SVsbjkJluhbEDvwSpgDXE1pMlaKzlobXYAbk+/i7Ws4mT40CAxYk3Ky0pW7Uctf\nz+UsjCIM4K/fhFxPnot7k6/4WizpMttG0q5DH8VllKWozihIneH6VpfNboA7nTSB\nhoDj85FWRiHdsL3L8nY0ycNoJxslimROAW9mlpUyFQ1qiKgGEbVbAylaIc1ebQ3V\nrkHa+1zLmw/FA7bgecUmp0Iesn96HstyssEoStPs7s/HKTY+dmrA3c6a/WP7Vhpd\nmgOTcX9rAgMBAAECggEATRVncUCI/7OmfhjG3KQ5m6kffpd1DMxrHHu9CodS7Vcb\nJnv10WqsoeU9NEPj4qjltS68KKTvOqHQugJt/ADOE5kZth8ACKydf1Nejow10uiA\nti/9NrAOT4TPQ00gYsA/mAbP3r9mOSJm6K73+AcL5LtPo8mPQ7KnRE7XXZjpC3n7\nkdJUl7svMZpfMGXifsyDS/e0aPohpDMxkl6GrDl4R9gpbr97661kbtzCkf/VG7cr\nZLWPs+z17iaf5tIni1K4eC6QnyyrYdU0K8d3WWDNcAkSfX0brkC4r7Gpo6oKN5nl\nzGA1ZZNgw7/fyJSkmWrr4ju/5Ypy/dVqlFRjEJeQ2QKBgQD5F5IXRZaAO0RJMTLh\nuYrVsdRekFiMmMnszT8+z5BJcUoD2ptpzpL99WZjMK1RvWs+yFiArI6j5jCOiNIe\nh3XoQatkA/P2aEzBWTj23XzQR2DFDcwe8hpspHRGhNLduz+tgh51wYvyus8uT7FY\nuwp+FtFmgFxUKVLJtI0msT/ruQKBgQDH8nkzQK1efqpneNLJdoVV+TQ7O7XEfNsF\nhCL3nj9rUHJqdWC7XPniCl2Hu748WIHm026S6oy+JwyqPxSuPmFmO47D9sHa5mfG\ng6sn0LqL+dL0vGqvciWaXxuojUChHPztGyylS+l7OrROkGHdDKWUvc8pgx/rmd9i\npTmv6aA+QwKBgQCo97w53RKCWbGwlJcXV20+GCsfGnt2pA4VfATy7onJx/eVNa1G\n0MIVU2nozxRC5mLha7XdUzBPLc6yYU1nOCxbKHDCn4vWElo+re9eRlBsWH7kLL/S\nHhieqc/WJjOEBYjkged3qZrtRJtVpul+byJm9cOF7Hy0+nMWMEuve30IwQKBgGLe\nHNwhARkWnQApGGGR/4Bxh0g60DhmXI6vtfKnB0jzMIA/piM/aDhDU9hIF1sTkLgo\nmCaBYDKucG7GXl2Cbvr0PDXeECFDiND6TmmTpoqMb6mgeUhjswBQQwbnQavo/4/m\nvf7GOJ88eefXMOzy0fVoncUzF1eScIkAljPL2/atAoGBANLpvuqjb6dBfpeLx9t0\n2ppe0o9GT/KTTIMAUDwKqOuF5SdpFBcN03gmc0Huh27pDek0CEfWa+6zUpNfZN0s\nrl6oSDdPf6X0jBfH9/gtMgWfh/ZOju1ELolpJPEuHiUA3VQdpADCbff7Xva7Hk9W\nNFUd2USw+FUPc6OOYVPhol7p\n-----END PRIVATE KEY-----\n",
         client_email:
-          "firebase-adminsdk-fbsvc@viteezy-77d78.iam.gserviceaccount.com",
-        client_id: "109751369357649093118",
+          "firebase-adminsdk-fbsvc@viteezy-mobile.iam.gserviceaccount.com",
+        client_id: "103588477876428010974",
         auth_uri: "https://accounts.google.com/o/oauth2/auth",
         token_uri: "https://oauth2.googleapis.com/token",
         auth_provider_x509_cert_url:
           "https://www.googleapis.com/oauth2/v1/certs",
         client_x509_cert_url:
-          "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40viteezy-77d78.iam.gserviceaccount.com",
+          "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40viteezy-mobile.iam.gserviceaccount.com",
         universe_domain: "googleapis.com",
       };
 
@@ -166,7 +166,8 @@ class FirebaseService {
       if (nameParts.length > 0) {
         name = nameParts
           .map(
-            (part: string) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+            (part: string) =>
+              part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
           )
           .join(" ");
       }
