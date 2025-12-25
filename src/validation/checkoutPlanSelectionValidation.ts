@@ -59,3 +59,69 @@ export const checkoutSummarySchema = Joi.object(
     couponCode: Joi.string().trim().uppercase().optional(),
   })
 ).label("CheckoutSummaryQuery");
+
+/**
+ * Joi schema for enhanced pricing API
+ * Used for POST /api/v1/checkout/enhanced-pricing endpoint
+ */
+export const enhancedPricingSchema = Joi.object(
+  withFieldLabels({
+    // Plan duration in days (e.g., 30, 60, 90, 180)
+    planDurationDays: Joi.number().integer().valid(30, 60, 90, 180).required(),
+
+    // Plan type: SACHET or STANDUP_POUCH
+    planType: Joi.string().valid("SACHET", "STANDUP_POUCH").required(),
+
+    // Capsule count (30 or 60) - optional, mainly for one-time purchases
+    capsuleCount: Joi.number().integer().valid(30, 60).optional(),
+
+    // Coupon code - optional
+    couponCode: Joi.string().trim().uppercase().optional(),
+  })
+).label("EnhancedPricingPayload");
+
+/**
+ * Joi schema for checkout page summary with plan selection
+ * Used for GET /api/v1/checkout/page-summary endpoint
+ */
+export const checkoutPageSummarySchema = Joi.object({
+  // Product variant type: SACHETS or STAND_UP_POUCH - defaults to SACHETS
+  variantType: Joi.string()
+    .valid("SACHETS", "STAND_UP_POUCH")
+    .default("SACHETS")
+    .messages({
+      "string.base": "Variant type must be a string",
+      "any.only": "Variant type must be SACHETS or STAND_UP_POUCH",
+    }),
+
+  // Plan duration in days - REQUIRED for SACHETS, NOT ALLOWED for STAND_UP_POUCH
+  planDurationDays: Joi.number()
+    .integer()
+    .valid(30, 60, 90, 180)
+    .when("variantType", {
+      is: "SACHETS",
+      then: Joi.number().integer().valid(30, 60, 90, 180).default(180),
+      otherwise: Joi.forbidden(),
+    })
+    .messages({
+      "number.base": "Plan duration must be a number",
+      "any.only": "Plan duration must be 30, 60, 90, or 180 days",
+      "any.unknown": "Plan duration is not allowed for STAND_UP_POUCH variant",
+    }),
+
+  // Capsule count - REQUIRED for STAND_UP_POUCH, NOT ALLOWED for SACHETS
+  capsuleCount: Joi.number()
+    .integer()
+    .valid(30, 60)
+    .when("variantType", {
+      is: "STAND_UP_POUCH",
+      then: Joi.required(),
+      otherwise: Joi.forbidden(),
+    })
+    .messages({
+      "number.base": "Capsule count must be a number",
+      "any.only": "Capsule count must be 30 or 60",
+      "any.required": "Capsule count is required for STAND_UP_POUCH variant",
+      "any.unknown": "Capsule count is not allowed for SACHETS variant",
+    }),
+}).label("CheckoutPageSummaryQuery");

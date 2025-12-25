@@ -61,9 +61,9 @@ const userSchema = new Schema<IUser>(
     },
     lastName: {
       type: String,
-      required: [true, "Last name is required"],
+      required: false, // Optional for social logins (Apple, Google)
       trim: true,
-      minlength: [1, "Last name must be at least 1 character long"],
+      default: "",
       maxlength: [50, "Last name cannot exceed 50 characters"],
     },
     email: {

@@ -397,9 +397,7 @@ class CheckoutController {
             is_liked: userWishlistProductIds.has(
               transformedProduct._id.toString()
             ),
-            isInCart: cartProductIds.has(
-              transformedProduct._id.toString()
-            ), // Check if product is in cart
+            isInCart: cartProductIds.has(transformedProduct._id.toString()), // Check if product is in cart
           };
 
           // Calculate monthly amounts for subscription pricing (same as getAllProducts)
@@ -884,6 +882,111 @@ class CheckoutController {
         message: "Checkout plan selection calculated successfully",
         data: result,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Enhanced plan selection & pricing calculation API
+   * @route POST /api/v1/checkout/enhanced-pricing
+   * @access Private
+   *
+   * Request body:
+   *  - planDurationDays: 30 | 60 | 90 | 180
+   *  - planType: "SACHET" | "STANDUP_POUCH"
+   *  - capsuleCount: 30 | 60 (optional, for one-time purchases)
+   *  - couponCode: string (optional)
+   *
+   * Response: Complete pricing breakdown with all discounts
+   */
+  static async getEnhancedPricing(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?._id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const { planDurationDays, planType, capsuleCount, couponCode } = req.body;
+
+      // Validate required fields
+      if (!planDurationDays || !planType) {
+        throw new AppError("planDurationDays and planType are required", 400);
+      }
+
+      if (![30, 60, 90, 180].includes(planDurationDays)) {
+        throw new AppError("planDurationDays must be 30, 60, 90, or 180", 400);
+      }
+
+      if (!["SACHET", "STANDUP_POUCH"].includes(planType)) {
+        throw new AppError("planType must be SACHET or STANDUP_POUCH", 400);
+      }
+
+      if (capsuleCount !== undefined && ![30, 60].includes(capsuleCount)) {
+        throw new AppError("capsuleCount must be 30 or 60", 400);
+      }
+
+      const result = await checkoutService.getEnhancedPlanPricing(userId, {
+        planDurationDays,
+        planType,
+        capsuleCount,
+        couponCode,
+      });
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get comprehensive checkout page summary
+   * @route GET /api/v1/checkout/page-summary
+   * @access Private
+   *
+   * Query parameters:
+   *  - planDurationDays: 30 | 60 | 90 | 180 (optional, defaults to 180)
+   *  - variantType: "SACHETS" | "STAND_UP_POUCH" (optional, defaults to "SACHETS")
+   *  - capsuleCount: 30 | 60 (optional, for STAND_UP_POUCH variant)
+   *
+   * Response includes:
+   *  - Product list added to cart (with selected plan price and membership discount)
+   *  - Subscription plans listing
+   *  - Total amount, discounted price, discount amount, save percentage
+   *  - Supplements count, per month amount
+   *  - Suggested products list (3-5)
+   */
+  static async getCheckoutPageSummary(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = req.user?._id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      // Extract query parameters (with defaults applied by Joi validation)
+      const planDurationDays = req.query.planDurationDays
+        ? parseInt(req.query.planDurationDays as string)
+        : 180;
+      const variantType = (req.query.variantType as string) || "SACHETS";
+      const capsuleCount = req.query.capsuleCount
+        ? parseInt(req.query.capsuleCount as string)
+        : undefined;
+
+      const result = await checkoutService.getCheckoutPageSummary(userId, {
+        planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
+        variantType: variantType as "SACHETS" | "STAND_UP_POUCH",
+        capsuleCount: capsuleCount as 30 | 60 | undefined,
+      });
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
