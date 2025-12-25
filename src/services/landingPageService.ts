@@ -2,6 +2,91 @@ import { LandingPages } from "../models/cms/landingPage.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
+import { ProductCategory } from "../models/commerce/categories.model";
+import { ProductTestimonials } from "../models/cms/productTestimonials.model";
+import { Blogs } from "../models/cms/blogs.model";
+import { FAQs } from "../models/cms/faqs.model";
+
+type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+
+/**
+ * Get translated string from I18nStringType
+ */
+const getTranslatedString = (
+  i18nString: any,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nString) return "";
+
+  // If it's already a plain string, return it
+  if (typeof i18nString === "string") {
+    return i18nString;
+  }
+
+  // If it's an object with language keys
+  if (typeof i18nString === "object" && !Array.isArray(i18nString) && i18nString !== null) {
+    // Try to get the requested language, fallback to English, then any available language
+    if (i18nString[lang]) {
+      return String(i18nString[lang]);
+    }
+    if (i18nString.en) {
+      return String(i18nString.en);
+    }
+    // Try to get any available language value
+    const availableLang = Object.keys(i18nString).find(key => i18nString[key]);
+    if (availableLang) {
+      return String(i18nString[availableLang]);
+    }
+    return "";
+  }
+
+  return "";
+};
+
+/**
+ * Get translated text from I18nTextType (can be string or object)
+ */
+const getTranslatedText = (
+  i18nText: any,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nText) return "";
+
+  // If it's already a plain string, return it
+  if (typeof i18nText === "string") {
+    return i18nText;
+  }
+
+  // If it's an object with language keys
+  if (typeof i18nText === "object" && !Array.isArray(i18nText) && i18nText !== null) {
+    // Try to get the requested language, fallback to English, then any available language
+    if (i18nText[lang]) {
+      return String(i18nText[lang]);
+    }
+    if (i18nText.en) {
+      return String(i18nText.en);
+    }
+    // Try to get any available language value
+    const availableLang = Object.keys(i18nText).find(key => i18nText[key]);
+    if (availableLang) {
+      return String(i18nText[availableLang]);
+    }
+    return "";
+  }
+
+  return "";
+};
+
+/**
+ * Transform I18n string array to single language array
+ */
+const transformI18nStringArray = (
+  i18nArray: any[],
+  lang: SupportedLanguage
+): string[] => {
+  if (!Array.isArray(i18nArray)) return [];
+  return i18nArray.map((item) => getTranslatedString(item, lang));
+};
 
 interface CreateLandingPageData {
   heroSection: {
@@ -402,8 +487,15 @@ class LandingPageService {
 
   /**
    * Get active landing page (for public use)
+   * Populates related data: product categories, testimonials, blogs, FAQs
+   * Filters sections by isEnabled and sorts by order
+   * Transforms all I18n fields to requested language
+   * @param lang - Language code (en, nl, de, fr, es). Defaults to "en"
    */
-  async getActiveLandingPage(): Promise<{ landingPage: any }> {
+  async getActiveLandingPage(lang: SupportedLanguage = "en"): Promise<{ landingPage: any }> {
+    // Debug: Log the language parameter
+    console.log(`[Landing Page Service] Processing with language: ${lang}`);
+    
     const landingPage = await LandingPages.findOne({
       isActive: true,
       isDeleted: { $ne: true },
@@ -415,7 +507,548 @@ class LandingPageService {
       throw new AppError("No active landing page found", 404);
     }
 
-    return { landingPage };
+    // Debug: Log sample data structure
+    if (landingPage.heroSection?.title) {
+      console.log(`[Landing Page Service] Sample title structure:`, JSON.stringify(landingPage.heroSection.title).substring(0, 100));
+    }
+
+    // Filter sections by isEnabled and prepare for sorting
+    const processedLandingPage: any = { ...landingPage };
+
+    // Filter and sort Hero Section
+    if (landingPage.heroSection && landingPage.heroSection.isEnabled !== false) {
+      // Sort primaryCTA by order
+      if (landingPage.heroSection.primaryCTA) {
+        processedLandingPage.heroSection = {
+          ...landingPage.heroSection,
+          primaryCTA: landingPage.heroSection.primaryCTA
+            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+            .slice(0, 3), // Max 3 CTAs
+        };
+      }
+    } else {
+      delete processedLandingPage.heroSection;
+    }
+
+    // Filter and process Membership Section
+    if (
+      landingPage.membershipSection &&
+      landingPage.membershipSection.isEnabled !== false
+    ) {
+      if (landingPage.membershipSection.benefits) {
+        processedLandingPage.membershipSection = {
+          ...landingPage.membershipSection,
+          benefits: landingPage.membershipSection.benefits
+            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+            .slice(0, 5), // Max 5 benefits
+        };
+      }
+    } else {
+      delete processedLandingPage.membershipSection;
+    }
+
+    // Filter and process How It Works Section
+    if (
+      landingPage.howItWorksSection &&
+      landingPage.howItWorksSection.isEnabled !== false
+    ) {
+      const stepsCount =
+        landingPage.howItWorksSection.stepsCount || 3; // Default 3
+      processedLandingPage.howItWorksSection = {
+        ...landingPage.howItWorksSection,
+        steps: landingPage.howItWorksSection.steps
+          .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+          .slice(0, stepsCount),
+      };
+    } else {
+      delete processedLandingPage.howItWorksSection;
+    }
+
+    // Filter and populate Product Category Section
+    if (
+      landingPage.productCategorySection &&
+      landingPage.productCategorySection.isEnabled !== false
+    ) {
+      if (
+        landingPage.productCategorySection.productCategoryIds &&
+        landingPage.productCategorySection.productCategoryIds.length > 0
+      ) {
+        const categories = await ProductCategory.find({
+          _id: { $in: landingPage.productCategorySection.productCategoryIds },
+          isActive: true,
+          isDeleted: { $ne: true },
+        })
+          .select("_id slug name description sortOrder icon image productCount")
+          .sort({ sortOrder: 1 })
+          .lean();
+
+        processedLandingPage.productCategorySection = {
+          ...landingPage.productCategorySection,
+          productCategories: categories,
+        };
+      }
+    } else {
+      delete processedLandingPage.productCategorySection;
+    }
+
+    // Filter and process Community Section
+    if (
+      landingPage.communitySection &&
+      landingPage.communitySection.isEnabled !== false
+    ) {
+      if (landingPage.communitySection.metrics) {
+        processedLandingPage.communitySection = {
+          ...landingPage.communitySection,
+          metrics: landingPage.communitySection.metrics
+            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+            .slice(0, 6), // Max 6 metrics
+        };
+      }
+    } else {
+      delete processedLandingPage.communitySection;
+    }
+
+    // Filter Mission Section
+    if (
+      landingPage.missionSection &&
+      landingPage.missionSection.isEnabled === false
+    ) {
+      delete processedLandingPage.missionSection;
+    }
+
+    // Filter and process Features Section (Why Choose Viteezy)
+    if (
+      landingPage.featuresSection &&
+      landingPage.featuresSection.isEnabled !== false
+    ) {
+      if (landingPage.featuresSection.features) {
+        processedLandingPage.featuresSection = {
+          ...landingPage.featuresSection,
+          features: landingPage.featuresSection.features
+            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+            .slice(0, 4), // Max 4 features
+        };
+      }
+    } else {
+      delete processedLandingPage.featuresSection;
+    }
+
+    // Filter and process Designed By Science Section
+    if (
+      landingPage.designedByScienceSection &&
+      landingPage.designedByScienceSection.isEnabled !== false
+    ) {
+      processedLandingPage.designedByScienceSection = {
+        ...landingPage.designedByScienceSection,
+        steps: landingPage.designedByScienceSection.steps
+          .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+          .slice(0, 4), // Max 4 pillars
+      };
+    } else {
+      delete processedLandingPage.designedByScienceSection;
+    }
+
+    // Filter and populate Testimonials Section
+    if (
+      landingPage.testimonialsSection &&
+      landingPage.testimonialsSection.isEnabled !== false
+    ) {
+      if (
+        landingPage.testimonialsSection.testimonialIds &&
+        landingPage.testimonialsSection.testimonialIds.length > 0
+      ) {
+        const testimonials = await ProductTestimonials.find({
+          _id: { $in: landingPage.testimonialsSection.testimonialIds },
+          isActive: true,
+          isDeleted: { $ne: true },
+        })
+          .populate("products", "_id name title slug")
+          .select(
+            "_id videoUrl videoThumbnail products isFeatured displayOrder"
+          )
+          .sort({ displayOrder: 1, createdAt: -1 })
+          .limit(10) // Max 10 testimonials
+          .lean();
+
+        processedLandingPage.testimonialsSection = {
+          ...landingPage.testimonialsSection,
+          testimonials: testimonials,
+        };
+      }
+    } else {
+      delete processedLandingPage.testimonialsSection;
+    }
+
+    // Filter Customer Results Section
+    if (
+      landingPage.customerResultsSection &&
+      landingPage.customerResultsSection.isEnabled === false
+    ) {
+      delete processedLandingPage.customerResultsSection;
+    }
+
+    // Filter and fetch Blogs Section
+    if (
+      landingPage.blogSection &&
+      landingPage.blogSection.isEnabled !== false
+    ) {
+      // Fetch recent blogs (max 3-4)
+      const blogs = await Blogs.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id title description coverImage seo createdAt viewCount")
+        .sort({ createdAt: -1 })
+        .limit(4) // Max 4 blogs
+        .lean();
+
+      processedLandingPage.blogSection = {
+        ...landingPage.blogSection,
+        blogs: blogs,
+      };
+    } else {
+      delete processedLandingPage.blogSection;
+    }
+
+    // Filter and fetch FAQs Section
+    if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
+      // If FAQs are stored in the section, use them
+      // Otherwise, fetch recent FAQs (max 6-8)
+      if (
+        landingPage.faqSection.faqs &&
+        landingPage.faqSection.faqs.length > 0
+      ) {
+        processedLandingPage.faqSection = {
+          ...landingPage.faqSection,
+          faqs: landingPage.faqSection.faqs
+            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+            .slice(0, 8), // Max 8 FAQs
+        };
+      } else {
+        // Fetch recent FAQs from FAQs collection
+        const recentFaqs = await FAQs.find({
+          isDeleted: { $ne: true },
+          $or: [
+            { status: "active" },
+            { status: { $exists: false }, isActive: { $ne: false } },
+          ],
+        })
+          .select("_id question answer sortOrder")
+          .sort({ sortOrder: 1, createdAt: -1 })
+          .limit(8) // Max 8 FAQs
+          .lean();
+
+        processedLandingPage.faqSection = {
+          ...landingPage.faqSection,
+          faqs: recentFaqs,
+        };
+      }
+    } else {
+      delete processedLandingPage.faqSection;
+    }
+
+    // Sort all sections by order
+    const sections: Array<{ name: string; order: number }> = [];
+    if (processedLandingPage.heroSection) {
+      sections.push({
+        name: "heroSection",
+        order: processedLandingPage.heroSection.order || 0,
+      });
+    }
+    if (processedLandingPage.membershipSection) {
+      sections.push({
+        name: "membershipSection",
+        order: processedLandingPage.membershipSection.order || 0,
+      });
+    }
+    if (processedLandingPage.howItWorksSection) {
+      sections.push({
+        name: "howItWorksSection",
+        order: processedLandingPage.howItWorksSection.order || 0,
+      });
+    }
+    if (processedLandingPage.productCategorySection) {
+      sections.push({
+        name: "productCategorySection",
+        order: processedLandingPage.productCategorySection.order || 0,
+      });
+    }
+    if (processedLandingPage.communitySection) {
+      sections.push({
+        name: "communitySection",
+        order: processedLandingPage.communitySection.order || 0,
+      });
+    }
+    if (processedLandingPage.missionSection) {
+      sections.push({
+        name: "missionSection",
+        order: processedLandingPage.missionSection.order || 0,
+      });
+    }
+    if (processedLandingPage.featuresSection) {
+      sections.push({
+        name: "featuresSection",
+        order: processedLandingPage.featuresSection.order || 0,
+      });
+    }
+    if (processedLandingPage.designedByScienceSection) {
+      sections.push({
+        name: "designedByScienceSection",
+        order: processedLandingPage.designedByScienceSection.order || 0,
+      });
+    }
+    if (processedLandingPage.testimonialsSection) {
+      sections.push({
+        name: "testimonialsSection",
+        order: processedLandingPage.testimonialsSection.order || 0,
+      });
+    }
+    if (processedLandingPage.customerResultsSection) {
+      sections.push({
+        name: "customerResultsSection",
+        order: processedLandingPage.customerResultsSection.order || 0,
+      });
+    }
+    if (processedLandingPage.blogSection) {
+      sections.push({
+        name: "blogSection",
+        order: processedLandingPage.blogSection.order || 0,
+      });
+    }
+    if (processedLandingPage.faqSection) {
+      sections.push({
+        name: "faqSection",
+        order: processedLandingPage.faqSection.order || 0,
+      });
+    }
+
+    // Sort sections by order
+    sections.sort((a, b) => a.order - b.order);
+
+    // Add sectionOrder array to indicate display order
+    processedLandingPage.sectionOrder = sections.map((s) => s.name);
+
+    // Transform all I18n fields to requested language
+    const transformedLandingPage = this.transformToLanguage(processedLandingPage, lang);
+
+    return { landingPage: transformedLandingPage };
+  }
+
+  /**
+   * Transform all I18n fields in landing page to single language
+   */
+  private transformToLanguage(landingPage: any, lang: SupportedLanguage): any {
+    // Debug: Log transformation start
+    console.log(`[Transform] Starting transformation to language: ${lang}`);
+    console.log(`[Transform] Sample heroSection.title before:`, JSON.stringify(landingPage.heroSection?.title).substring(0, 200));
+    
+    const transformed: any = {
+      _id: landingPage._id,
+      isActive: landingPage.isActive,
+      sectionOrder: landingPage.sectionOrder,
+      createdAt: landingPage.createdAt,
+      updatedAt: landingPage.updatedAt,
+    };
+
+    // Transform Hero Section
+    if (landingPage.heroSection) {
+      const heroTitle = getTranslatedString(landingPage.heroSection.title, lang);
+      console.log(`[Transform] Hero title after transformation:`, heroTitle);
+      
+      transformed.heroSection = {
+        media: landingPage.heroSection.media,
+        title: heroTitle,
+        highlightedText: transformI18nStringArray(
+          landingPage.heroSection.highlightedText || [],
+          lang
+        ),
+        subTitle: getTranslatedString(landingPage.heroSection.subTitle, lang),
+        description: getTranslatedText(landingPage.heroSection.description, lang),
+        primaryCTA: (landingPage.heroSection.primaryCTA || []).map((cta: any) => ({
+          label: getTranslatedString(cta.label, lang),
+          image: cta.image,
+          link: cta.link,
+          order: cta.order,
+        })),
+        isEnabled: landingPage.heroSection.isEnabled,
+        order: landingPage.heroSection.order,
+      };
+      
+      console.log(`[Transform] Hero section transformed title:`, transformed.heroSection.title);
+    }
+
+    // Transform Membership Section
+    if (landingPage.membershipSection) {
+      transformed.membershipSection = {
+        backgroundImage: landingPage.membershipSection.backgroundImage,
+        title: getTranslatedString(landingPage.membershipSection.title, lang),
+        description: getTranslatedText(landingPage.membershipSection.description, lang),
+        benefits: (landingPage.membershipSection.benefits || []).map((benefit: any) => ({
+          icon: benefit.icon,
+          title: getTranslatedString(benefit.title, lang),
+          description: getTranslatedText(benefit.description, lang),
+          order: benefit.order,
+        })),
+        isEnabled: landingPage.membershipSection.isEnabled,
+        order: landingPage.membershipSection.order,
+      };
+    }
+
+    // Transform How It Works Section
+    if (landingPage.howItWorksSection) {
+      transformed.howItWorksSection = {
+        title: getTranslatedString(landingPage.howItWorksSection.title, lang),
+        subTitle: getTranslatedString(landingPage.howItWorksSection.subTitle, lang),
+        stepsCount: landingPage.howItWorksSection.stepsCount,
+        steps: (landingPage.howItWorksSection.steps || []).map((step: any) => ({
+          image: step.image,
+          title: getTranslatedString(step.title, lang),
+          description: getTranslatedText(step.description, lang),
+          order: step.order,
+        })),
+        isEnabled: landingPage.howItWorksSection.isEnabled,
+        order: landingPage.howItWorksSection.order,
+      };
+    }
+
+    // Transform Product Category Section
+    if (landingPage.productCategorySection) {
+      transformed.productCategorySection = {
+        title: getTranslatedString(landingPage.productCategorySection.title, lang),
+        description: getTranslatedText(landingPage.productCategorySection.description, lang),
+        productCategories: (landingPage.productCategorySection.productCategories || []).map(
+          (cat: any) => ({
+            _id: cat._id,
+            slug: cat.slug,
+            name: getTranslatedString(cat.name, lang),
+            description: getTranslatedText(cat.description, lang),
+            sortOrder: cat.sortOrder,
+            icon: cat.icon,
+            image: cat.image,
+            productCount: cat.productCount,
+          })
+        ),
+        isEnabled: landingPage.productCategorySection.isEnabled,
+        order: landingPage.productCategorySection.order,
+      };
+    }
+
+    // Transform Community Section
+    if (landingPage.communitySection) {
+      transformed.communitySection = {
+        backgroundImage: landingPage.communitySection.backgroundImage,
+        title: getTranslatedString(landingPage.communitySection.title, lang),
+        subTitle: getTranslatedString(landingPage.communitySection.subTitle, lang),
+        metrics: (landingPage.communitySection.metrics || []).map((metric: any) => ({
+          label: getTranslatedString(metric.label, lang),
+          value: metric.value,
+          order: metric.order,
+        })),
+        isEnabled: landingPage.communitySection.isEnabled,
+        order: landingPage.communitySection.order,
+      };
+    }
+
+    // Transform Mission Section
+    if (landingPage.missionSection) {
+      transformed.missionSection = {
+        backgroundImage: landingPage.missionSection.backgroundImage,
+        title: getTranslatedString(landingPage.missionSection.title, lang),
+        description: getTranslatedText(landingPage.missionSection.description, lang),
+        isEnabled: landingPage.missionSection.isEnabled,
+        order: landingPage.missionSection.order,
+      };
+    }
+
+    // Transform Features Section
+    if (landingPage.featuresSection) {
+      transformed.featuresSection = {
+        title: getTranslatedString(landingPage.featuresSection.title, lang),
+        description: getTranslatedText(landingPage.featuresSection.description, lang),
+        features: (landingPage.featuresSection.features || []).map((feature: any) => ({
+          icon: feature.icon,
+          title: getTranslatedString(feature.title, lang),
+          description: getTranslatedText(feature.description, lang),
+          order: feature.order,
+        })),
+        isEnabled: landingPage.featuresSection.isEnabled,
+        order: landingPage.featuresSection.order,
+      };
+    }
+
+    // Transform Designed By Science Section
+    if (landingPage.designedByScienceSection) {
+      transformed.designedByScienceSection = {
+        title: getTranslatedString(landingPage.designedByScienceSection.title, lang),
+        description: getTranslatedText(landingPage.designedByScienceSection.description, lang),
+        steps: (landingPage.designedByScienceSection.steps || []).map((step: any) => ({
+          image: step.image,
+          title: getTranslatedString(step.title, lang),
+          description: getTranslatedText(step.description, lang),
+          order: step.order,
+        })),
+        isEnabled: landingPage.designedByScienceSection.isEnabled,
+        order: landingPage.designedByScienceSection.order,
+      };
+    }
+
+    // Transform Testimonials Section
+    if (landingPage.testimonialsSection) {
+      transformed.testimonialsSection = {
+        title: getTranslatedString(landingPage.testimonialsSection.title, lang),
+        subTitle: getTranslatedString(landingPage.testimonialsSection.subTitle, lang),
+        testimonials: landingPage.testimonialsSection.testimonials || [],
+        isEnabled: landingPage.testimonialsSection.isEnabled,
+        order: landingPage.testimonialsSection.order,
+      };
+    }
+
+    // Transform Customer Results Section
+    if (landingPage.customerResultsSection) {
+      transformed.customerResultsSection = {
+        title: getTranslatedString(landingPage.customerResultsSection.title, lang),
+        description: getTranslatedText(landingPage.customerResultsSection.description, lang),
+        isEnabled: landingPage.customerResultsSection.isEnabled,
+        order: landingPage.customerResultsSection.order,
+      };
+    }
+
+    // Transform Blog Section
+    if (landingPage.blogSection) {
+      transformed.blogSection = {
+        title: getTranslatedString(landingPage.blogSection.title, lang),
+        description: getTranslatedText(landingPage.blogSection.description, lang),
+        blogs: (landingPage.blogSection.blogs || []).map((blog: any) => ({
+          _id: blog._id,
+          title: getTranslatedString(blog.title, lang),
+          description: getTranslatedText(blog.description, lang),
+          coverImage: blog.coverImage,
+          seo: blog.seo,
+          createdAt: blog.createdAt,
+          viewCount: blog.viewCount,
+        })),
+        isEnabled: landingPage.blogSection.isEnabled,
+        order: landingPage.blogSection.order,
+      };
+    }
+
+    // Transform FAQ Section
+    if (landingPage.faqSection) {
+      transformed.faqSection = {
+        title: getTranslatedString(landingPage.faqSection.title, lang),
+        description: getTranslatedText(landingPage.faqSection.description, lang),
+        faqs: (landingPage.faqSection.faqs || []).map((faq: any) => ({
+          _id: faq._id,
+          question: getTranslatedString(faq.question, lang),
+          answer: getTranslatedText(faq.answer, lang),
+          order: faq.order,
+        })),
+        isEnabled: landingPage.faqSection.isEnabled,
+        order: landingPage.faqSection.order,
+      };
+    }
+
+    return transformed;
   }
 
   /**

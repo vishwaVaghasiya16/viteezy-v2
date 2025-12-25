@@ -1462,25 +1462,48 @@ class AuthService {
         throw error;
       }
 
+      // Handle "No pem found" error - this happens when token is invalid/expired/wrong
+      if (
+        error.message?.includes("No pem found") ||
+        error.message?.includes("No pem found for envelope")
+      ) {
+        throw new AppError("Please enter valid token", 400);
+      }
+
       // Handle Google Auth Library errors - check for invalid token format
       if (
         error.code === "auth/argument-error" ||
         error.message?.includes("Invalid token") ||
         error.message?.includes("malformed") ||
-        error.message?.includes("Invalid idToken")
+        error.message?.includes("Invalid idToken") ||
+        error.message?.includes("Token used too early") ||
+        error.message?.includes("Token used too late")
       ) {
-        throw new AppError("Invalid Google ID token format", 400);
+        throw new AppError("Please enter valid token", 400);
       }
 
       // Handle expired token
       if (
         error.code === "auth/id-token-expired" ||
-        error.message?.includes("expired")
+        error.message?.includes("expired") ||
+        error.message?.includes("Token expired")
       ) {
-        throw new AppError("Google ID token has expired", 401);
+        throw new AppError("Please enter valid token", 400);
       }
 
-      throw new AppError(error.message || "Google authentication failed", 401);
+      // Handle any other Google OAuth verification errors
+      if (
+        error.message?.includes("verifyIdToken") ||
+        error.message?.includes("JWT") ||
+        error.message?.includes("signature") ||
+        error.message?.includes("audience") ||
+        error.message?.includes("issuer")
+      ) {
+        throw new AppError("Please enter valid token", 400);
+      }
+
+      // Generic fallback for any other Google authentication errors
+      throw new AppError("Please enter valid token", 400);
     }
   }
 }

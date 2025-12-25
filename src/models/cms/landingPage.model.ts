@@ -10,10 +10,44 @@ import {
   MediaType,
 } from "../common.model";
 
+export interface PrimaryCTA {
+  label: I18nStringType;
+  image: string; // CTA image URL
+  link: string; // CTA link URL
+  order: number; // CTA order (1, 2, 3)
+}
+
+const PrimaryCTASchema = new Schema<PrimaryCTA>(
+  {
+    label: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    image: {
+      type: String,
+      trim: true,
+    },
+    link: {
+      type: String,
+      trim: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
 export interface HeroSection {
   media: MediaType; // Image or video
   title: I18nStringType;
+  highlightedText: I18nStringType[]; // Array of highlighted texts
+  subTitle: I18nStringType;
   description: I18nTextType;
+  primaryCTA: PrimaryCTA[]; // 3 CTAs with label, image, link
+  isEnabled: boolean;
+  order: number;
 }
 
 const HeroSectionSchema = new Schema<HeroSection>(
@@ -26,9 +60,52 @@ const HeroSectionSchema = new Schema<HeroSection>(
       type: I18nString,
       default: () => ({}),
     },
+    highlightedText: [I18nString],
+    subTitle: {
+      type: I18nString,
+      default: () => ({}),
+    },
     description: {
       type: I18nText,
       default: () => ({}),
+    },
+    primaryCTA: [PrimaryCTASchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
+export interface MembershipBenefit {
+  icon: string; // Icon URL or icon identifier
+  title: I18nStringType;
+  description: I18nTextType;
+  order: number;
+}
+
+const MembershipBenefitSchema = new Schema<MembershipBenefit>(
+  {
+    icon: {
+      type: String,
+      trim: true,
+    },
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    description: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    order: {
+      type: Number,
+      default: 0,
     },
   },
   { _id: false }
@@ -38,6 +115,9 @@ export interface MembershipSection {
   backgroundImage: string; // Background image URL
   title: I18nStringType;
   description: I18nTextType;
+  benefits: MembershipBenefit[]; // 3-5 max features/benefits
+  isEnabled: boolean;
+  order: number;
 }
 
 const MembershipSectionSchema = new Schema<MembershipSection>(
@@ -53,6 +133,15 @@ const MembershipSectionSchema = new Schema<MembershipSection>(
     description: {
       type: I18nText,
       default: () => ({}),
+    },
+    benefits: [MembershipBenefitSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
     },
   },
   { _id: false }
@@ -88,12 +177,37 @@ const HowItWorksStepSchema = new Schema<HowItWorksStep>(
 );
 
 export interface HowItWorksSection {
+  title: I18nStringType;
+  subTitle: I18nStringType;
+  stepsCount: number; // Default: 3
   steps: HowItWorksStep[];
+  isEnabled: boolean;
+  order: number;
 }
 
 const HowItWorksSectionSchema = new Schema<HowItWorksSection>(
   {
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    subTitle: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    stepsCount: {
+      type: Number,
+      default: 3,
+    },
     steps: [HowItWorksStepSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -101,6 +215,9 @@ const HowItWorksSectionSchema = new Schema<HowItWorksSection>(
 export interface ProductCategorySection {
   title: I18nStringType;
   description: I18nTextType;
+  productCategoryIds: mongoose.Types.ObjectId[]; // References to product categories
+  isEnabled: boolean;
+  order: number;
 }
 
 const ProductCategorySectionSchema = new Schema<ProductCategorySection>(
@@ -113,6 +230,20 @@ const ProductCategorySectionSchema = new Schema<ProductCategorySection>(
       type: I18nText,
       default: () => ({}),
     },
+    productCategoryIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "product_categories",
+      },
+    ],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -121,6 +252,8 @@ export interface MissionSection {
   backgroundImage: string; // Background image URL
   title: I18nStringType;
   description: I18nTextType;
+  isEnabled: boolean;
+  order: number;
 }
 
 const MissionSectionSchema = new Schema<MissionSection>(
@@ -136,6 +269,14 @@ const MissionSectionSchema = new Schema<MissionSection>(
     description: {
       type: I18nText,
       default: () => ({}),
+    },
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
     },
   },
   { _id: false }
@@ -173,7 +314,9 @@ const FeatureSchema = new Schema<Feature>(
 export interface FeaturesSection {
   title: I18nStringType; // Section title like "Why choose Viteezy?"
   description: I18nTextType; // Section description
-  features: Feature[]; // Array of features
+  features: Feature[]; // Array of features (4 max)
+  isEnabled: boolean;
+  order: number;
 }
 
 const FeaturesSectionSchema = new Schema<FeaturesSection>(
@@ -187,6 +330,14 @@ const FeaturesSectionSchema = new Schema<FeaturesSection>(
       default: () => ({}),
     },
     features: [FeatureSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -223,7 +374,9 @@ const DesignedByScienceStepSchema = new Schema<DesignedByScienceStep>(
 export interface DesignedByScienceSection {
   title: I18nStringType;
   description: I18nTextType;
-  steps: DesignedByScienceStep[];
+  steps: DesignedByScienceStep[]; // 3-4 max pillars
+  isEnabled: boolean;
+  order: number;
 }
 
 const DesignedByScienceSectionSchema = new Schema<DesignedByScienceSection>(
@@ -237,6 +390,112 @@ const DesignedByScienceSectionSchema = new Schema<DesignedByScienceSection>(
       default: () => ({}),
     },
     steps: [DesignedByScienceStepSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
+// Community/Social Proof Strip Section
+export interface CommunityMetric {
+  label: I18nStringType;
+  value: string | number; // Value/Count
+  order: number;
+}
+
+const CommunityMetricSchema = new Schema<CommunityMetric>(
+  {
+    label: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    value: {
+      type: Schema.Types.Mixed, // Can be string or number
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
+export interface CommunitySection {
+  backgroundImage: string; // Background image URL
+  title: I18nStringType;
+  subTitle: I18nStringType;
+  metrics: CommunityMetric[]; // 4-6 max metrics
+  isEnabled: boolean;
+  order: number;
+}
+
+const CommunitySectionSchema = new Schema<CommunitySection>(
+  {
+    backgroundImage: {
+      type: String,
+      trim: true,
+    },
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    subTitle: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    metrics: [CommunityMetricSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
+// Testimonials Section
+export interface TestimonialsSection {
+  title: I18nStringType;
+  subTitle: I18nStringType;
+  testimonialIds: mongoose.Types.ObjectId[]; // References to product_testimonials (max 6-10)
+  isEnabled: boolean;
+  order: number;
+  // Testimonials will be populated dynamically
+}
+
+const TestimonialsSectionSchema = new Schema<TestimonialsSection>(
+  {
+    title: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    subTitle: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    testimonialIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "product_testimonials",
+      },
+    ],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -244,6 +503,8 @@ const DesignedByScienceSectionSchema = new Schema<DesignedByScienceSection>(
 export interface CustomerResultsSection {
   title: I18nStringType;
   description: I18nTextType;
+  isEnabled: boolean;
+  order: number;
 }
 
 const CustomerResultsSectionSchema = new Schema<CustomerResultsSection>(
@@ -256,6 +517,14 @@ const CustomerResultsSectionSchema = new Schema<CustomerResultsSection>(
       type: I18nText,
       default: () => ({}),
     },
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -263,6 +532,9 @@ const CustomerResultsSectionSchema = new Schema<CustomerResultsSection>(
 export interface BlogSection {
   title: I18nStringType;
   description: I18nTextType;
+  isEnabled: boolean;
+  order: number;
+  // Blogs will be fetched dynamically (max 3-4 recent blogs)
 }
 
 const BlogSectionSchema = new Schema<BlogSection>(
@@ -274,6 +546,14 @@ const BlogSectionSchema = new Schema<BlogSection>(
     description: {
       type: I18nText,
       default: () => ({}),
+    },
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
     },
   },
   { _id: false }
@@ -306,7 +586,9 @@ const FAQItemSchema = new Schema<FAQItem>(
 export interface FAQSection {
   title: I18nStringType;
   description: I18nTextType;
-  faqs: FAQItem[];
+  faqs: FAQItem[]; // FAQs can be stored here or fetched dynamically (max 6-8)
+  isEnabled: boolean;
+  order: number;
 }
 
 const FAQSectionSchema = new Schema<FAQSection>(
@@ -320,6 +602,14 @@ const FAQSectionSchema = new Schema<FAQSection>(
       default: () => ({}),
     },
     faqs: [FAQItemSchema],
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    order: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );
@@ -329,9 +619,11 @@ export interface ILandingPage extends Document {
   membershipSection?: MembershipSection;
   howItWorksSection?: HowItWorksSection;
   productCategorySection?: ProductCategorySection;
+  communitySection?: CommunitySection; // Community/Social Proof Strip
   missionSection?: MissionSection;
-  featuresSection?: FeaturesSection;
+  featuresSection?: FeaturesSection; // Why Choose Viteezy
   designedByScienceSection?: DesignedByScienceSection;
+  testimonialsSection?: TestimonialsSection;
   customerResultsSection?: CustomerResultsSection;
   blogSection?: BlogSection;
   faqSection?: FAQSection;
@@ -355,6 +647,9 @@ const LandingPageSchema = new Schema<ILandingPage>(
     productCategorySection: {
       type: ProductCategorySectionSchema,
     },
+    communitySection: {
+      type: CommunitySectionSchema,
+    },
     missionSection: {
       type: MissionSectionSchema,
     },
@@ -363,6 +658,9 @@ const LandingPageSchema = new Schema<ILandingPage>(
     },
     designedByScienceSection: {
       type: DesignedByScienceSectionSchema,
+    },
+    testimonialsSection: {
+      type: TestimonialsSectionSchema,
     },
     customerResultsSection: {
       type: CustomerResultsSectionSchema,
