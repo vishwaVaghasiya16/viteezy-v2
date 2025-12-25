@@ -1,250 +1,343 @@
-# Viteezy Phase 2 - Node.js TypeScript Backend
+# Viteezy Supplement Chatbot API
 
-एक advanced और scalable Node.js TypeScript backend project MongoDB के साथ।
+Production-ready FastAPI application for a session-based supplement recommendation chatbot. The backend manages session history in MongoDB and uses OpenAI for intelligent product recommendations based on user health profiles.
 
 ## 🚀 Features
 
-- **TypeScript** - Type safety और better development experience
-- **Express.js** - Fast और flexible web framework
-- **MongoDB** - NoSQL database with Mongoose ODM
-- **JWT Authentication** - Secure authentication system
-- **Input Validation** - Request validation with express-validator
-- **Error Handling** - Centralized error handling
-- **Logging** - Winston logger with file rotation
-- **Rate Limiting** - API rate limiting
-- **Security** - Helmet, CORS, and other security middleware
-- **Testing** - Jest testing framework
-- **ESLint** - Code linting and formatting
+- **Session-based chat system** with persistent conversation history
+- **Intelligent product recommendations** based on user health profiles
+- **Onboarding flow** with personalized health assessment questions
+- **User authentication** and session management
+- **Medical treatment awareness** with appropriate disclaimers
+- **RESTful API** with comprehensive error handling
+- **Production-ready** logging, error handling, and health checks
 
-## 📁 Project Structure
+## 📋 Prerequisites
 
-```
-src/
-├── config/           # Configuration files
-│   ├── database.ts   # MongoDB connection
-│   └── index.ts      # App configuration
-├── controllers/      # Route controllers
-│   └── authController.ts
-├── middleware/       # Custom middleware
-│   ├── auth.ts       # Authentication middleware
-│   ├── errorHandler.ts
-│   ├── notFoundHandler.ts
-│   └── validation.ts
-├── models/           # Database models
-│   ├── User.ts
-│   └── index.ts
-├── routes/           # API routes
-│   ├── authRoutes.ts
-│   └── index.ts
-├── services/         # Business logic
-│   └── authService.ts
-├── types/            # TypeScript type definitions
-│   └── index.ts
-├── utils/            # Utility functions
-│   ├── AppError.ts
-│   ├── logger.ts
-│   └── index.ts
-├── constants/        # Application constants
-│   └── index.ts
-└── index.ts          # Application entry point
-```
+- **Python 3.10** (required - other versions may not be compatible)
+- **MongoDB** database (local or cloud instance)
+- **OpenAI API** account with API key
+- **pip** package manager
 
 ## 🛠️ Installation
 
-1. **Dependencies install करें:**
+### 1. Clone the Repository
+
 ```bash
-npm install
+git clone <repository-url>
+cd Viteezy-Bot
 ```
 
-2. **Environment variables setup करें:**
+### 2. Create Virtual Environment (Python 3.10)
+
 ```bash
-cp env.example .env
+# Using Python 3.10 specifically
+python3.10 -m venv venv
+
+# On macOS/Linux
+source venv/bin/activate
+
+# On Windows
+venv\Scripts\activate
 ```
 
-3. **Environment variables को edit करें:**
+**Important:** Ensure you're using Python 3.10. Verify with:
+
+```bash
+python --version  # Should show Python 3.10.x
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Environment Configuration
+
+Create a `.env` file in the root directory:
+
+```bash
+cp .env.example .env  # If .env.example exists
+# OR create .env manually
+```
+
+Add the following environment variables to `.env`:
+
 ```env
-NODE_ENV=development
-PORT=3000
-MONGODB_URI=mongodb://localhost:27017/viteezy-phase-2
-JWT_SECRET=your-super-secret-jwt-key-here
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017
+# OR for MongoDB Atlas:
+# MONGODB_URI=
+
+MONGODB_DB=
+
+# OpenAI Configuration
+OPENAI_API_KEY=
+
 ```
 
-## 🚀 Development
+**Security Note:**
 
-**Development server start करें:**
+- Never commit `.env` file to version control
+- Use environment-specific secrets management in production
+- Rotate API keys regularly
+- Use MongoDB connection strings with proper authentication
+
+### 5. Verify Installation
+
 ```bash
-npm run dev
+python -c "import fastapi, motor, openai; print('All dependencies installed successfully')"
 ```
 
-**Production build:**
+## 🏃 Running the Server
+
+### Development Mode
+
 ```bash
-npm run build
-npm start
+# Activate virtual environment first
+source venv/bin/activate  # On macOS/Linux
+# OR
+venv\Scripts\activate  # On Windows
+
+# Run with auto-reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 🧪 Testing
+The API will be available at:
 
-**Tests run करें:**
+- **API Base URL:** `http://localhost:8000/api/v1`
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
+
+### Production Mode
+
+For production, use a production ASGI server with multiple workers:
+
 ```bash
-npm test
+# Using Uvicorn with workers
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# OR using Gunicorn with Uvicorn workers
+gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 ```
 
-**Test coverage:**
-```bash
-npm run test:coverage
+**Production Recommendations:**
+
+- Use a process manager (systemd, supervisor, PM2)
+- Set up reverse proxy (Nginx, Traefik)
+- Enable HTTPS/TLS termination
+- Configure proper logging and monitoring
+- Set up health check endpoints for load balancers
+
+## 📚 API Documentation
+
+### Base URL
+
+```
+http://localhost:8000/api/v1
 ```
 
-## 📝 API Endpoints
+### Core Endpoints
 
-### Authentication
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/refresh-token` - Refresh access token
-- `GET /api/v1/auth/profile` - Get user profile
-- `PUT /api/v1/auth/profile` - Update user profile
-- `POST /api/v1/auth/logout` - User logout
+#### Health Check
 
-### User Management
-- `GET /api/v1/users` - Get all users (with pagination)
-- `GET /api/v1/users/stats` - Get user statistics
-- `GET /api/v1/users/:id` - Get user by ID
-- `PATCH /api/v1/users/:id/status` - Update user status
-- `DELETE /api/v1/users/:id` - Delete user
+```http
+GET /api/v1/health
+```
 
-### Examples (API Response Demo)
-- `GET /api/v1/examples/simple` - Simple success response
-- `GET /api/v1/examples/paginated` - Paginated response
-- `POST /api/v1/examples/create` - Created response
-- `GET /api/v1/examples/error?type=notfound` - Error responses
-- `GET /api/v1/examples/complex` - Complex response with metadata
-- `DELETE /api/v1/examples/:id` - No content response
+Returns service health status including MongoDB and OpenAI connectivity.
 
-### Health Check & Documentation
-- `GET /health` - Server health check
-- `GET /api-docs` - API documentation (Swagger UI)
+#### Create Session
 
-## 🔧 Scripts
+```http
+POST /api/v1/sessions
+Content-Type: application/json
 
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm start` - Start production server
-- `npm test` - Run tests
-- `npm run lint` - Run ESLint
-- `npm run clean` - Clean build directory
-
-## 🗄️ Database
-
-MongoDB database के साथ Mongoose ODM का use किया गया है। Models को `src/models/` directory में define किया गया है।
-
-## 🔐 Security
-
-- JWT authentication
-- Password hashing with bcrypt
-- Rate limiting
-- CORS protection
-- Helmet security headers
-- Input validation
-
-## 📊 API Response System
-
-यह project में एक comprehensive API response system है जो consistent और scalable responses provide करता है:
-
-### Response Structure
-```json
 {
-  "success": true,
-  "message": "Operation successful",
-  "data": { ... },
-  "pagination": {
-    "page": 1,
-    "limit": 10,
-    "total": 100,
-    "pages": 10,
-    "hasNext": true,
-    "hasPrev": false
+  "user_id": "optional_user_id",
+  "metadata": {
+    "quiz_version": "v2.0"
   }
 }
 ```
 
-### Response Methods
-- `res.apiSuccess(data, message)` - Success response
-- `res.apiCreated(data, message)` - Created response (201)
-- `res.apiNoContent(message)` - No content response (204)
-- `res.apiPaginated(data, pagination, message)` - Paginated response
-- `res.apiError(message, statusCode, error)` - Error response
-- `res.apiNotFound(message)` - Not found response (404)
-- `res.apiUnauthorized(message)` - Unauthorized response (401)
-- `res.apiForbidden(message)` - Forbidden response (403)
-- `res.apiConflict(message)` - Conflict response (409)
-- `res.apiBadRequest(message, errors)` - Bad request response (400)
-- `res.apiValidationError(message, errors)` - Validation error (422)
+#### Send Chat Message
 
-### Usage Examples
-```typescript
-// Success response
-res.apiSuccess({ user }, 'User retrieved successfully');
+```http
+POST /api/v1/chat
+Content-Type: application/json
 
-// Paginated response
-res.apiPaginated(users, pagination, 'Users retrieved successfully');
-
-// Error response
-res.apiNotFound('User not found');
-
-// Validation error
-res.apiValidationError('Validation failed', [
-  { field: 'email', message: 'Email is required' }
-]);
+{
+  "session_id": "session_id_here",
+  "message": "user message",
+  "context": {}
+}
 ```
 
-### Async Handler
-```typescript
-import { asyncHandler } from '@/utils';
+#### User Login Verification
 
-export const getUsers = asyncHandler(async (req, res) => {
-  const users = await userService.getAllUsers();
-  res.apiSuccess(users, 'Users retrieved successfully');
-});
+```http
+POST /api/v1/useridLogin
+Content-Type: application/json
+
+{
+  "user_id": "user_id_here",
+  "session_id": "session_id_here"
+}
 ```
+
+#### Get Session Information
+
+```http
+GET /api/v1/sessions/{session_id}
+```
+
+#### Get Current Question State
+
+```http
+GET /api/v1/sessions/{session_id}/question
+```
+
+#### Delete Session
+
+```http
+DELETE /api/v1/sessions/{session_id}?user_id={user_id}
+```
+
+## ⚙️ Configuration
+
+Configuration is managed through environment variables and `app/config/settings.py`. Key settings:
+
+### MongoDB Collections
+
+- `ai_conversations` - Session and message storage
+- `quiz_sessions` - Quiz session tracking
+- `temp_product` - Product catalog
+
+### OpenAI Settings
+
+- Model: `gpt-4o-mini` (configurable)
+- Temperature: `0.7`
+- Max Tokens: `600`
+- Max History Turns: `8`
+
+### Application Settings
+
+- Product Context Limit: `3`
+- Log Level: `INFO` (set via `LOG_LEVEL` env var)
+
+To modify settings, update environment variables or edit `app/config/settings.py`.
+
+## 🔒 Security Considerations
+
+1. **API Keys**: Never expose API keys in code or logs
+2. **MongoDB**: Use authenticated connections with SSL/TLS
+3. **CORS**: Configure `allow_origins` in production (currently set to `["*"]` for development)
+4. **Input Validation**: All inputs are validated and sanitized
+5. **Error Handling**: Sensitive information is not exposed in error messages
+6. **Environment Variables**: Use secure secret management in production
 
 ## 📊 Logging
 
-Winston logger का use किया गया है जो logs को files में store करता है:
-- `logs/error.log` - Error logs
-- `logs/combined.log` - All logs
+Logs are written to:
+
+- Console (stdout)
+- File: `logs/app.log`
+
+Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+
+Set log level via `LOG_LEVEL` environment variable.
 
 ## 🧪 Testing
 
-Jest testing framework का use किया गया है। Tests को `tests/` directory में organize किया गया है।
+### Manual Testing
 
-## 📦 Dependencies
+Use the Swagger UI at `http://localhost:8000/docs` for interactive API testing.
 
-### Production
-- express
-- mongoose
-- cors
-- helmet
-- morgan
-- dotenv
-- bcryptjs
-- jsonwebtoken
-- joi
-- express-rate-limit
-- compression
-- express-validator
-- multer
-- nodemailer
-- winston
-- swagger-jsdoc
-- swagger-ui-express
+### Health Check
 
-### Development
-- typescript
-- nodemon
-- ts-node
-- jest
-- ts-jest
-- supertest
-- eslint
-- @typescript-eslint/eslint-plugin
-- @typescript-eslint/parser
-- rimraf
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+### Create Session
+
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+## 🚢 Production Deployment
+
+### Recommended Setup
+
+1. **Process Manager**: Use systemd, supervisor, or PM2
+2. **Reverse Proxy**: Nginx or Traefik for SSL termination
+3. **Database**: MongoDB Atlas or managed MongoDB service
+4. **Monitoring**: Set up application monitoring and alerting
+5. **Logging**: Centralized logging (ELK, CloudWatch, etc.)
+
+### Environment Variables for Production
+
+```env
+ENVIRONMENT=production
+LOG_LEVEL=WARNING
+MONGODB_URI=<production_mongodb_uri>
+OPENAI_API_KEY=<production_openai_key>
+```
+
+### Docker Deployment (Optional)
+
+Create a `Dockerfile`:
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Python Version Mismatch**
+
+   - Ensure Python 3.10 is installed and used
+   - Verify with `python --version`
+
+2. **MongoDB Connection Failed**
+
+   - Check `MONGODB_URI` in `.env`
+   - Verify MongoDB is running and accessible
+   - Check network connectivity and firewall rules
+
+3. **OpenAI API Errors**
+
+   - Verify `OPENAI_API_KEY` is set correctly
+   - Check API key validity and quota
+   - Review OpenAI API status
+
+4. **Import Errors**
+
+   - Ensure virtual environment is activated
+   - Reinstall dependencies: `pip install -r requirements.txt`
+
+5. **Port Already in Use**
+   - Change port in `.env` or use different port: `--port 8001`
+
+
+---
+
+**Note:** This is a production-ready application. Ensure all security best practices are followed before deploying to production environments.
