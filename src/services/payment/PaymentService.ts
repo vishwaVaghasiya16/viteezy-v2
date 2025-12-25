@@ -17,12 +17,14 @@ import {
 import { Payments } from "../../models/commerce/payments.model";
 import { Orders } from "../../models/commerce/orders.model";
 import { Memberships } from "../../models/commerce/memberships.model";
+import { Coupons } from "../../models/commerce/coupons.model";
 import { User } from "../../models/index.model";
 import { logger } from "../../utils/logger";
 import { AppError } from "../../utils/AppError";
 import mongoose from "mongoose";
 import { membershipService } from "../membershipService";
 import { emailService } from "../emailService";
+import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { AddressSnapshotType } from "../../models/common.model";
 
 /**
@@ -407,6 +409,42 @@ export class PaymentService {
           logger.info(
             `Order ${order.orderNumber} confirmed via webhook after payment completion`
           );
+
+          // Track coupon usage if a coupon was applied
+          if (order.couponCode && order.couponDiscount?.amount > 0) {
+            console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
+            try {
+              // Find the coupon by code
+              const coupon = await Coupons.findOne({
+                code: order.couponCode.toUpperCase(),
+              });
+              if (coupon) {
+                await couponUsageHistoryService.trackCouponUsage({
+                  couponId: coupon._id as mongoose.Types.ObjectId,
+                  userId: order.userId as mongoose.Types.ObjectId,
+                  orderId: order._id as mongoose.Types.ObjectId,
+                  discountAmount: order.couponDiscount,
+                  couponCode: order.couponCode,
+                  orderNumber: order.orderNumber,
+                });
+                console.log(
+                  "✅ [PAYMENT SERVICE] - Coupon usage tracked successfully"
+                );
+              } else {
+                console.warn(
+                  `⚠️ [PAYMENT SERVICE] - Coupon not found: ${order.couponCode}`
+                );
+              }
+            } catch (couponError: any) {
+              // Log error but don't fail the entire webhook processing
+              console.error(
+                "❌ [PAYMENT SERVICE] - Failed to track coupon usage:",
+                couponError.message
+              );
+              logger.error("Failed to track coupon usage:", couponError);
+            }
+          }
+
           console.log(
             "🟢 [PAYMENT SERVICE] Step 9: Sending order confirmation email"
           );

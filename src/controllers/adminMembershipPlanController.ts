@@ -104,7 +104,7 @@ class AdminMembershipPlanController {
         isActive,
         isAutoRenew,
         metadata,
-        // New: universal discount % for products
+        // Universal discount % for products
         discountPercentage,
       } = req.body;
 
@@ -154,6 +154,10 @@ class AdminMembershipPlanController {
         benefits: benefits || [],
         isActive: isActive !== undefined ? isActive : true,
         isAutoRenew: isAutoRenew !== undefined ? isAutoRenew : true,
+        discountPercentage:
+          discountPercentage !== undefined
+            ? Number(discountPercentage)
+            : undefined,
         metadata: {
           ...(metadata || {}),
           ...(discountPercentage !== undefined
@@ -273,7 +277,7 @@ class AdminMembershipPlanController {
         isActive,
         isAutoRenew,
         metadata,
-        // New: universal discount % for products
+        // Universal discount % for products
         discountPercentage,
       } = req.body;
 
@@ -346,6 +350,7 @@ class AdminMembershipPlanController {
       if (isAutoRenew !== undefined) updateData.isAutoRenew = isAutoRenew;
       if (metadata !== undefined) updateData.metadata = metadata;
       if (discountPercentage !== undefined) {
+        updateData.discountPercentage = Number(discountPercentage);
         updateData.metadata = {
           ...(updateData.metadata || plan.metadata || {}),
           discountPercentage: Number(discountPercentage),

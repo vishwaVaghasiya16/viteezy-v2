@@ -209,3 +209,45 @@ export const validateParams = (schema: ObjectSchema) => {
     next();
   };
 };
+
+/**
+ * Combined Joi validation middleware for params, query, and body
+ * @function validate
+ * @description Validates request params, query, and body using a combined Joi schema
+ * @param {ObjectSchema} schema - Joi validation schema with params, query, and/or body properties
+ * @returns {Function} Express middleware function
+ * @example
+ * ```typescript
+ * const schema = Joi.object({
+ *   params: Joi.object({ id: Joi.string().required() }),
+ *   query: Joi.object({ page: Joi.number().optional() }),
+ *   body: Joi.object({ name: Joi.string().required() })
+ * });
+ * router.post('/users/:id', validate(schema), userController.update);
+ * ```
+ */
+export const validate = (schema: ObjectSchema) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    // Validate entire request object (params, query, body)
+    const { error, value } = schema.validate(
+      {
+        params: req.params,
+        query: req.query,
+        body: req.body,
+      },
+      VALIDATION_OPTIONS
+    );
+
+    // If validation fails, throw error
+    if (error) {
+      throw createValidationError(error);
+    }
+
+    // Replace request properties with validated and sanitized data
+    if (value.params) req.params = value.params;
+    if (value.query) req.query = value.query;
+    if (value.body) req.body = value.body;
+
+    next();
+  };
+};
