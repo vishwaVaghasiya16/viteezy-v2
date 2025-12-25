@@ -971,19 +971,21 @@ class CheckoutController {
         throw new AppError("User authentication required", 401);
       }
 
-      // Extract query parameters (with defaults applied by Joi validation)
-      const planDurationDays = req.query.planDurationDays
-        ? parseInt(req.query.planDurationDays as string)
-        : 180;
-      const variantType = (req.query.variantType as string) || "SACHETS";
-      const capsuleCount = req.query.capsuleCount
-        ? parseInt(req.query.capsuleCount as string)
-        : undefined;
+      // Extract body parameters (with defaults applied by Joi validation)
+      const {
+        planDurationDays = 180,
+        variantType = "SACHETS",
+        capsuleCount,
+        couponCode,
+        isOneTime,
+      } = req.body;
 
       const result = await checkoutService.getCheckoutPageSummary(userId, {
         planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
         variantType: variantType as "SACHETS" | "STAND_UP_POUCH",
         capsuleCount: capsuleCount as 30 | 60 | undefined,
+        couponCode: couponCode || undefined,
+        isOneTime: isOneTime || false,
       });
 
       res.status(200).json(result);

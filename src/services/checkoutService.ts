@@ -1612,6 +1612,8 @@ class CheckoutService {
       planDurationDays?: 30 | 60 | 90 | 180;
       variantType?: "SACHETS" | "STAND_UP_POUCH";
       capsuleCount?: 30 | 60;
+      couponCode?: string;
+      isOneTime?: boolean; // true for one-time purchase, false/undefined for subscription
     } = {}
   ): Promise<{
     success: boolean;
@@ -1646,15 +1648,23 @@ class CheckoutService {
         features: string[];
         isRecommended: boolean;
         isSelected: boolean;
+        isSubscription: boolean;
       }>;
       pricing: {
-        totalAmount: number;
-        totalDiscountedPrice: number;
-        totalDiscountAmount: number;
-        membershipDiscountTotal: number;
-        savePercentage: number;
+        subTotal: number;
+        discountedPrice: number;
+        couponDiscountAmount: number;
+        membershipDiscountAmount: number;
+        subscriptionPlanDiscountAmount: number;
+        taxAmount: number;
         grandTotal: number;
         currency: string;
+      };
+      coupon?: {
+        code: string;
+        isValid: boolean;
+        discountAmount: number;
+        message?: string;
       };
       suggestedProducts: Array<{
         productId: string;
@@ -1669,6 +1679,7 @@ class CheckoutService {
     const selectedPlanDays = options.planDurationDays || 180;
     const selectedVariant = options.variantType || "SACHETS";
     const selectedCapsuleCount = options.capsuleCount || 60; // Default to 60 for standup pouch
+    const isOneTimePurchase = options.isOneTime || false; // Default to subscription
 
     // Get user's cart
     const cart = await Carts.findOne({
@@ -1830,6 +1841,7 @@ class CheckoutService {
         capsuleCount: number;
         supplementsCount: number;
         features: Set<string>;
+        isSubscription: boolean;
       }
     >();
 
@@ -1844,22 +1856,76 @@ class CheckoutService {
           const quantity = cartItem?.quantity || 1;
 
           const plans = [
-            { key: "thirtyDays", label: "30 Day Plan", days: 30 },
-            { key: "sixtyDays", label: "60 Day Plan", days: 60 },
-            { key: "ninetyDays", label: "90 Day Plan", days: 90 },
-            { key: "oneEightyDays", label: "180 Day Plan", days: 180 },
+            {
+              key: "thirtyDays",
+              label: "30 Day Plan",
+              days: 30,
+              isSubscription: true,
+            },
+            {
+              key: "sixtyDays",
+              label: "60 Day Plan",
+              days: 60,
+              isSubscription: true,
+            },
+            {
+              key: "ninetyDays",
+              label: "90 Day Plan",
+              days: 90,
+              isSubscription: true,
+            },
+            {
+              key: "oneEightyDays",
+              label: "180 Day Plan",
+              days: 180,
+              isSubscription: true,
+            },
           ];
 
+          // Add oneTime plans if available
+          if (sachetPrices.oneTime) {
+            const oneTimeData = sachetPrices.oneTime;
+            if (oneTimeData.count30) {
+              plans.push({
+                key: "oneTime30",
+                label: "One-Time (30 count)",
+                days: 30,
+                isSubscription: false,
+              });
+            }
+            if (oneTimeData.count60) {
+              plans.push({
+                key: "oneTime60",
+                label: "One-Time (60 count)",
+                days: 60,
+                isSubscription: false,
+              });
+            }
+          }
+
           for (const planInfo of plans) {
-            const planData = sachetPrices[planInfo.key];
+            let planData: any = null;
+
+            // Handle oneTime plans differently
+            if (planInfo.key.startsWith("oneTime")) {
+              const oneTimeData = sachetPrices.oneTime;
+              if (planInfo.key === "oneTime30" && oneTimeData?.count30) {
+                planData = oneTimeData.count30;
+              } else if (planInfo.key === "oneTime60" && oneTimeData?.count60) {
+                planData = oneTimeData.count60;
+              }
+            } else {
+              planData = sachetPrices[planInfo.key];
+            }
+
             if (planData) {
               const existing = subscriptionPlansMap.get(planInfo.key);
 
               let planPrice = planData.totalAmount || planData.amount || 0;
               let discountedPrice = planData.discountedPrice || planPrice;
 
-              // Apply 90-day bonus discount
-              if (planInfo.days === 90) {
+              // Apply 90-day bonus discount only for subscription plans
+              if (planInfo.isSubscription && planInfo.days === 90) {
                 discountedPrice = planPrice * 0.85; // 15% discount
               } else if (planData.discountedPrice) {
                 discountedPrice = planData.discountedPrice;
@@ -1894,6 +1960,7 @@ class CheckoutService {
                   capsuleCount,
                   supplementsCount: capsuleCount,
                   features: featuresSet,
+                  isSubscription: planInfo.isSubscription,
                 });
               }
             }
@@ -1941,6 +2008,7 @@ class CheckoutService {
                   capsuleCount,
                   supplementsCount: capsuleCount,
                   features: new Set<string>(),
+                  isSubscription: false, // Stand-up pouch is one-time purchase
                 });
               }
             }
@@ -1973,8 +2041,16 @@ class CheckoutService {
         // Determine if this plan is selected
         let isSelected = false;
         if (selectedVariant === "SACHETS") {
-          // For SACHETS, check if durationDays matches
-          isSelected = plan.durationDays === selectedPlanDays;
+          // For SACHETS, check if durationDays matches AND subscription type matches
+          if (isOneTimePurchase) {
+            // OneTime plan selected: match by days and isSubscription=false
+            isSelected =
+              plan.durationDays === selectedPlanDays && !plan.isSubscription;
+          } else {
+            // Subscription plan selected: match by days and isSubscription=true
+            isSelected =
+              plan.durationDays === selectedPlanDays && plan.isSubscription;
+          }
         } else if (selectedVariant === "STAND_UP_POUCH") {
           // For STAND_UP_POUCH, check if capsuleCount matches
           const planCapsuleCount =
@@ -2000,6 +2076,7 @@ class CheckoutService {
           features: Array.from(plan.features),
           isRecommended: plan.planKey === "ninetyDays", // 90-day is recommended
           isSelected, // Mark if this plan is currently selected
+          isSubscription: plan.isSubscription, // Mark if this is a subscription or one-time plan
         };
       }
     );
@@ -2008,24 +2085,99 @@ class CheckoutService {
     subscriptionPlans.sort((a, b) => a.durationDays - b.durationDays);
 
     // Calculate overall pricing based on selected plan
-    const selectedPlan =
-      subscriptionPlans.find((p) => p.durationDays === selectedPlanDays) ||
-      subscriptionPlans.find((p) => p.planKey === "oneEightyDays") ||
-      subscriptionPlans[0];
+    const selectedPlan = isOneTimePurchase
+      ? subscriptionPlans.find(
+          (p) => p.durationDays === selectedPlanDays && !p.isSubscription
+        ) ||
+        subscriptionPlans.find((p) => p.planKey === "oneTime60") ||
+        subscriptionPlans[0]
+      : subscriptionPlans.find(
+          (p) => p.durationDays === selectedPlanDays && p.isSubscription
+        ) ||
+        subscriptionPlans.find((p) => p.planKey === "oneEightyDays") ||
+        subscriptionPlans[0];
 
-    const totalAmount = selectedPlan ? selectedPlan.totalAmount : 0;
+    const subtotal = selectedPlan ? selectedPlan.totalAmount : 0;
     const totalDiscountedPrice = selectedPlan
       ? selectedPlan.discountedPrice
       : 0;
     const savePercentage = selectedPlan ? selectedPlan.savePercentage : 0;
 
-    // Calculate grand total (discounted price - membership discount)
-    const grandTotal = this.roundAmount(
+    // Calculate plan discount (difference between subtotal and discounted price)
+    const planDiscount = this.roundAmount(subtotal - totalDiscountedPrice);
+
+    // Calculate plan discount percentage
+    const planDiscountPercentage = selectedPlanDays === 90 ? 15 : 0;
+
+    // Calculate subtotal after plan discount and membership discount
+    const subtotalAfterDiscounts = this.roundAmount(
       totalDiscountedPrice - membershipDiscountTotal
     );
 
-    // Calculate total discount amount (plan discount + membership discount)
-    const totalDiscountAmount = this.roundAmount(totalAmount - grandTotal);
+    // Validate and apply coupon if provided
+    let couponDiscountAmount = 0;
+    let couponInfo:
+      | {
+          code: string;
+          isValid: boolean;
+          discountAmount: number;
+          message?: string;
+        }
+      | undefined;
+
+    if (options.couponCode && options.couponCode.trim()) {
+      try {
+        // Get product IDs and category IDs for coupon validation
+        const productIdsArray = products.map((p) => p._id.toString());
+        const categoryIdsArray = products
+          .map((p) => (p as any).category?.toString())
+          .filter((c) => c) as string[];
+
+        const couponResult = await this.validateCouponForSummary({
+          couponCode: options.couponCode,
+          userId,
+          orderAmount: subtotalAfterDiscounts,
+          productIds: productIdsArray,
+          categoryIds: categoryIdsArray,
+        });
+
+        couponDiscountAmount = couponResult.discountAmount;
+        couponInfo = {
+          code: options.couponCode.toUpperCase(),
+          isValid: true,
+          discountAmount: this.roundAmount(couponDiscountAmount),
+          message: "Coupon applied successfully",
+        };
+      } catch (error: any) {
+        // Coupon validation failed, but don't throw error
+        couponInfo = {
+          code: options.couponCode.toUpperCase(),
+          isValid: false,
+          discountAmount: 0,
+          message: error.message || "Invalid coupon code",
+        };
+        logger.warn(
+          `Coupon validation failed for ${options.couponCode}: ${error.message}`
+        );
+      }
+    }
+
+    // Calculate subtotal after coupon
+    const subtotalAfterCoupon = this.roundAmount(
+      subtotalAfterDiscounts - couponDiscountAmount
+    );
+
+    // Calculate tax (21% VAT for Netherlands/EU)
+    const taxRate = 0.21; // 21% VAT
+    const taxAmount = this.roundAmount(subtotalAfterCoupon * taxRate);
+
+    // Calculate grand total (subtotal after all discounts + tax)
+    const grandTotal = this.roundAmount(subtotalAfterCoupon + taxAmount);
+
+    // Calculate total discount amount (plan discount + membership discount + coupon discount)
+    const totalDiscountAmount = this.roundAmount(
+      planDiscount + membershipDiscountTotal + couponDiscountAmount
+    );
 
     // Get suggested products (3-5 products not in cart)
     const suggestedProducts = await this.getSuggestedProductsForCheckout(
@@ -2035,7 +2187,7 @@ class CheckoutService {
       5
     );
 
-    return {
+    const result: any = {
       success: true,
       data: {
         cart: {
@@ -2043,17 +2195,25 @@ class CheckoutService {
         },
         subscriptionPlans,
         pricing: {
-          totalAmount: this.roundAmount(totalAmount),
-          totalDiscountedPrice: this.roundAmount(totalDiscountedPrice),
-          totalDiscountAmount,
-          membershipDiscountTotal: this.roundAmount(membershipDiscountTotal),
-          savePercentage,
-          grandTotal,
+          subTotal: this.roundAmount(subtotal),
+          discountedPrice: this.roundAmount(totalDiscountedPrice),
+          couponDiscountAmount: this.roundAmount(couponDiscountAmount),
+          membershipDiscountAmount: this.roundAmount(membershipDiscountTotal),
+          subscriptionPlanDiscountAmount: this.roundAmount(planDiscount),
+          taxAmount: this.roundAmount(taxAmount),
+          grandTotal: this.roundAmount(grandTotal),
           currency,
         },
         suggestedProducts,
       },
     };
+
+    // Add coupon info if coupon was provided
+    if (couponInfo) {
+      result.data.coupon = couponInfo;
+    }
+
+    return result;
   }
 
   /**
