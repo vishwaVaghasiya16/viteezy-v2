@@ -1614,6 +1614,8 @@ class CheckoutService {
       capsuleCount?: 30 | 60;
       couponCode?: string;
       isOneTime?: boolean; // true for one-time purchase, false/undefined for subscription
+      shippingAddressId?: string | null;
+      billingAddressId?: string | null;
     } = {}
   ): Promise<{
     success: boolean;
@@ -2204,6 +2206,8 @@ class CheckoutService {
           grandTotal: this.roundAmount(grandTotal),
           currency,
         },
+        shippingAddressId: options.shippingAddressId || null,
+        billingAddressId: options.billingAddressId || null,
         suggestedProducts,
       },
     };

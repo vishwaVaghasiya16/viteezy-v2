@@ -193,5 +193,29 @@ export const checkoutPageSummaryBodySchema = Joi.object(
     isOneTime: Joi.boolean().optional().default(false).messages({
       "boolean.base": "isOneTime must be a boolean",
     }),
+
+    // Shipping Address ID - OPTIONAL
+    shippingAddressId: Joi.string()
+      .trim()
+      .pattern(/^[0-9a-fA-F]{24}$/)
+      .optional()
+      .allow(null, "")
+      .messages({
+        "string.base": "Shipping address ID must be a string",
+        "string.pattern.base":
+          "Shipping address ID must be a valid MongoDB ObjectId",
+      }),
+
+    // Billing Address ID - OPTIONAL
+    billingAddressId: Joi.string()
+      .trim()
+      .pattern(/^[0-9a-fA-F]{24}$/)
+      .optional()
+      .allow(null, "")
+      .messages({
+        "string.base": "Billing address ID must be a string",
+        "string.pattern.base":
+          "Billing address ID must be a valid MongoDB ObjectId",
+      }),
   })
 ).label("CheckoutPageSummaryBody");

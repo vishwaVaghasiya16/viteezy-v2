@@ -978,6 +978,8 @@ class CheckoutController {
         capsuleCount,
         couponCode,
         isOneTime,
+        shippingAddressId,
+        billingAddressId,
       } = req.body;
 
       const result = await checkoutService.getCheckoutPageSummary(userId, {
@@ -986,6 +988,8 @@ class CheckoutController {
         capsuleCount: capsuleCount as 30 | 60 | undefined,
         couponCode: couponCode || undefined,
         isOneTime: isOneTime || false,
+        shippingAddressId: shippingAddressId || null,
+        billingAddressId: billingAddressId || null,
       });
 
       res.status(200).json(result);
