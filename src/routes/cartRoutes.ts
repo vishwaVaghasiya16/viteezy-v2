@@ -6,6 +6,7 @@ import {
   updateCartItemSchema,
 } from "../validation/cartValidation";
 import { authMiddleware } from "../middleware/auth";
+import { validateJoi } from "@/middleware/joiValidation";
 
 const router = Router();
 
@@ -16,9 +17,9 @@ router.use(authMiddleware);
 router.get("/", CartController.getCart);
 
 // Add item to cart
-router.post("/items", validateCart(addCartItemSchema), CartController.addItem);
+router.post("/items", validateJoi(addCartItemSchema), CartController.addItem);
 
-// Update cart item quantity (by productId)
+// Update cart item (by productId)
 router.put(
   "/items",
   validateCart(updateCartItemSchema),
@@ -36,5 +37,11 @@ router.post("/validate", CartController.validateCart);
 
 // Get suggested products (non-included products) for cart
 router.get("/suggested-products", CartController.getSuggestedProducts);
+
+// Apply coupon to cart
+router.post("/coupon", CartController.applyCoupon);
+
+// Remove coupon from cart
+router.delete("/coupon", CartController.removeCoupon);
 
 export default router;

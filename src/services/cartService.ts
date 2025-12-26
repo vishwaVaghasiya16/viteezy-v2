@@ -1,8 +1,8 @@
 import { type ICart, Carts } from "../models/commerce/carts.model";
 import { Products } from "../models/commerce/products.model";
-import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { Wishlists } from "../models/commerce/wishlists.model";
+import { Coupons } from "../models/commerce/coupons.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import {
@@ -10,32 +10,25 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
-import { ProductVariant } from "../models/enums";
+import { ProductVariant, CouponType } from "../models/enums";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "../models/common.model";
 import { fetchAndEnrichProducts } from "./productEnrichmentService";
 
 interface AddCartItemData {
   productId: string;
-  variantId?: string;
-  quantity: number;
+  variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
 }
 
 interface UpdateCartItemData {
   productId: string;
-  variantId?: string;
-  quantity?: number;
 }
 
 interface RemoveCartItemData {
   productId: string;
-  variantId?: string;
-  quantity?: number; // Optional, defaults to 1 if not provided
 }
 
 interface CartItemWithDetails {
   productId: mongoose.Types.ObjectId;
-  variantId?: mongoose.Types.ObjectId;
-  quantity: number;
   price: {
     currency: string;
     amount: number;
@@ -48,6 +41,127 @@ interface CartItemWithDetails {
 
 class CartService {
   private readonly LOW_STOCK_THRESHOLD = 10; // Warn if stock < 10
+
+  /**
+   * Calculate cart totals based on variantType pricing
+   * Returns numbers for all price fields and currency separately
+   */
+  private async calculateCartTotalsWithVariantType(
+    items: any[],
+    variantType: ProductVariant,
+    couponDiscountAmount: number = 0
+  ): Promise<{
+    subtotal: number; // Sum of all product amounts
+    tax: number; // Sum of all taxRate values (converted to amount)
+    discount: number; // Sum of (amount - discountedPrice) for all products
+    total: number; // subtotal + tax - discount - couponDiscountAmount
+    currency: string;
+  }> {
+    if (items.length === 0) {
+      return {
+        subtotal: 0,
+        tax: 0,
+        discount: 0,
+        total: 0,
+        currency: "EUR",
+      };
+    }
+
+    // Fetch all products to get pricing information
+    const productIds = items.map((item: any) => item.productId);
+    const products = await Products.find({
+      _id: { $in: productIds },
+      isDeleted: false,
+      status: true,
+    }).lean();
+
+    const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
+
+    // Calculate subtotal, tax, and discount based on variantType
+    let subtotalAmount = 0;
+    let totalTaxAmount = 0;
+    let totalDiscount = 0; // Sum of (amount - discountedPrice) for all products
+    const currency = "EUR";
+
+    items.forEach((item: any) => {
+      const product = productMap.get(item.productId.toString());
+      if (!product) return;
+
+      let originalAmount = 0;
+      let discountedPrice = 0;
+      let taxRate = 0;
+
+      if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
+        // Use 30 days plan price for SACHETS
+        const thirtyDaysPlan = product.sachetPrices.thirtyDays;
+        if (thirtyDaysPlan) {
+          originalAmount =
+            thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
+          discountedPrice =
+            thirtyDaysPlan.discountedPrice ||
+            thirtyDaysPlan.amount ||
+            thirtyDaysPlan.totalAmount ||
+            0;
+          taxRate = thirtyDaysPlan.taxRate || 0;
+        }
+      } else if (
+        variantType === ProductVariant.STAND_UP_POUCH &&
+        product.standupPouchPrice
+      ) {
+        // Use count30 price for STAND_UP_POUCH
+        const standupPrice = product.standupPouchPrice as any;
+        if (standupPrice.count30) {
+          originalAmount = standupPrice.count30.amount || 0;
+          discountedPrice =
+            standupPrice.count30.discountedPrice ||
+            standupPrice.count30.amount ||
+            0;
+          taxRate = standupPrice.count30.taxRate || 0;
+        } else if (standupPrice.amount) {
+          originalAmount = standupPrice.amount || 0;
+          discountedPrice =
+            standupPrice.discountedPrice || standupPrice.amount || 0;
+          taxRate = standupPrice.taxRate || 0;
+        }
+      } else {
+        // Fallback to item price
+        originalAmount = item.price?.amount || 0;
+        discountedPrice = item.price?.amount || 0;
+        taxRate = item.price?.taxRate || 0;
+      }
+
+      subtotalAmount += originalAmount;
+      totalTaxAmount += taxRate; // taxRate is already an amount, not percentage
+      // Calculate discount as difference: amount - discountedPrice
+      const itemDiscount = originalAmount - discountedPrice;
+      totalDiscount += itemDiscount;
+    });
+
+    // Round all amounts to 2 decimal places
+    subtotalAmount = Math.round(subtotalAmount * 100) / 100;
+    totalTaxAmount = Math.round(totalTaxAmount * 100) / 100;
+    totalDiscount = Math.round(totalDiscount * 100) / 100;
+    couponDiscountAmount = Math.round(couponDiscountAmount * 100) / 100;
+
+    // Calculate total: subtotal + tax - discount - couponDiscountAmount
+    // Note: discount is the sum of (amount - discountedPrice) differences
+    const total =
+      Math.round(
+        (subtotalAmount +
+          totalTaxAmount -
+          totalDiscount -
+          couponDiscountAmount) *
+          100
+      ) / 100;
+
+    return {
+      subtotal: subtotalAmount,
+      tax: totalTaxAmount,
+      discount: totalDiscount, // Sum of (amount - discountedPrice) for all products
+      total: Math.max(0, total), // Ensure total is not negative
+      currency,
+    };
+  }
 
   /**
    * Calculate cart totals
@@ -78,16 +192,16 @@ class CartService {
 
     let subtotalAmount = 0;
     let totalTaxAmount = 0;
-    
+
     items.forEach((item) => {
-      subtotalAmount += item.price.amount * item.quantity;
+      subtotalAmount += item.price.amount;
       // Tax rate is now a direct amount (not percentage), so add it directly
-      // Multiply by quantity because tax is per item
-      totalTaxAmount += (item.price.taxRate || 0) * item.quantity;
+      totalTaxAmount += item.price.taxRate || 0;
     });
 
     const taxAmount = totalTaxAmount;
-    const totalAmount = subtotalAmount + taxAmount + shippingAmount - discountAmount;
+    const totalAmount =
+      subtotalAmount + taxAmount + shippingAmount - discountAmount;
 
     // Since taxRate is now a direct amount (not percentage), we use 0 as taxRate in totals
     // The actual tax amount is stored in tax.amount
@@ -98,9 +212,21 @@ class CartService {
         taxRate: 0,
       },
       tax: { currency, amount: Math.round(taxAmount * 100) / 100, taxRate: 0 },
-      shipping: { currency, amount: Math.round(shippingAmount * 100) / 100, taxRate: 0 },
-      discount: { currency, amount: Math.round(discountAmount * 100) / 100, taxRate: 0 },
-      total: { currency, amount: Math.round(totalAmount * 100) / 100, taxRate: 0 },
+      shipping: {
+        currency,
+        amount: Math.round(shippingAmount * 100) / 100,
+        taxRate: 0,
+      },
+      discount: {
+        currency,
+        amount: Math.round(discountAmount * 100) / 100,
+        taxRate: 0,
+      },
+      total: {
+        currency,
+        amount: Math.round(totalAmount * 100) / 100,
+        taxRate: 0,
+      },
     };
   }
 
@@ -117,11 +243,13 @@ class CartService {
       const newCart = await Carts.create({
         userId: new mongoose.Types.ObjectId(userId),
         items: [],
-        subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-        tax: { currency: "EUR", amount: 0, taxRate: 0 },
-        shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-        discount: { currency: "EUR", amount: 0, taxRate: 0 },
-        total: { currency: "EUR", amount: 0, taxRate: 0 },
+        subtotal: 0,
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: 0,
+        currency: "EUR",
+        couponDiscountAmount: 0,
       });
       cart = newCart.toObject();
     }
@@ -130,22 +258,11 @@ class CartService {
   }
 
   /**
-   * Validate product and variant, get pricing and stock
+   * Validate product and get pricing
    */
-  private async validateAndGetPricing(
-    productId: string,
-    variantId: string | undefined,
-    requestedQuantity: number
-  ): Promise<{
+  private async validateAndGetPricing(productId: string): Promise<{
     product: any;
-    variant?: any;
     price: { currency: string; amount: number; taxRate: number };
-    stockWarning?: {
-      available: number;
-      requested: number;
-      isLowStock: boolean;
-      message: string;
-    };
   }> {
     // Validate product exists and is active
     const product = await Products.findOne({
@@ -158,46 +275,10 @@ class CartService {
       throw new AppError("Product not found or not available", 404);
     }
 
-    let variant: any = null;
-    let price = product.price;
-
-    // If variant is provided, validate it
-    if (variantId) {
-      variant = await ProductVariants.findOne({
-        _id: new mongoose.Types.ObjectId(variantId),
-        productId: new mongoose.Types.ObjectId(productId),
-        isDeleted: { $ne: true },
-        isActive: true,
-      }).lean();
-
-      if (!variant) {
-        throw new AppError("Product variant not found or not available", 404);
-      }
-
-      // Use variant price
-      price = variant.price;
-
-      // Check stock if tracking is enabled
-      if (variant.inventory.trackQuantity) {
-        const availableQuantity =
-          variant.inventory.quantity - variant.inventory.reserved;
-
-        // Validate quantity doesn't exceed available stock
-        if (
-          !variant.inventory.allowBackorder &&
-          requestedQuantity > availableQuantity
-        ) {
-          throw new AppError(
-            `Insufficient stock. Available: ${availableQuantity}, Requested: ${requestedQuantity}`,
-            400
-          );
-        }
-      }
-    }
+    const price = product.price;
 
     return {
       product,
-      variant: variant || undefined,
       price,
     };
   }
@@ -209,38 +290,18 @@ class CartService {
     userId: string,
     includeSuggested: boolean = true,
     userLang: SupportedLanguage = DEFAULT_LANGUAGE
-  ): Promise<{ cart: any; suggestedProducts?: any[]; paymentDetails?: any }> {
+  ): Promise<{ cart: any; suggestedProducts?: any[] }> {
     const cart = await this.getOrCreateCart(userId);
 
     if (!cart.items || cart.items.length === 0) {
-      const emptyTotals = {
-        subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-        tax: { currency: "EUR", amount: 0, taxRate: 0 },
-        shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-        discount: { currency: "EUR", amount: 0, taxRate: 0 },
-        total: { currency: "EUR", amount: 0, taxRate: 0 },
-      };
-
-      const paymentDetails = {
-        subtotal: emptyTotals.subtotal,
-        discount: emptyTotals.discount,
-        shipping: emptyTotals.shipping,
-        tax: emptyTotals.tax,
-        grandTotal: emptyTotals.total,
-        couponCode: cart.couponCode || null,
-      };
-
       const result: {
         cart: any;
         suggestedProducts?: any[];
-        paymentDetails?: any;
       } = {
         cart: {
           ...cart,
           items: [],
-          ...emptyTotals,
         },
-        paymentDetails,
       };
 
       if (includeSuggested) {
@@ -255,11 +316,8 @@ class CartService {
       return result;
     }
 
-    // Get product IDs and variant IDs
+    // Get product IDs
     const productIds = cart.items.map((item: any) => item.productId);
-    const variantIds = cart.items
-      .map((item: any) => item.variantId)
-      .filter((id: any) => id);
 
     // Get user's wishlist product IDs for is_liked field
     let wishlistProductIds: Set<string> = new Set();
@@ -287,96 +345,107 @@ class CartService {
       }
     );
 
-    // Fetch variants
-    const variants =
-      variantIds.length > 0
-        ? await ProductVariants.find({
-            _id: { $in: variantIds },
-            isDeleted: { $ne: true },
-            isActive: true,
-          }).lean()
-        : [];
-
     // Create maps for quick lookup
     const productMap = new Map(
       enrichedProducts.map((p: any) => [p._id.toString(), p])
     );
-    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
 
-    // Build items with full product details
+    // Get cart variantType
+    const cartVariantType = cart.variantType as ProductVariant;
+
+    // Build items with full product details and calculate prices based on variantType
     const itemsWithDetails = (cart.items || []).map((item: any) => {
       const product = productMap.get(item.productId.toString());
       if (!product) {
         return {
           ...item,
           product: null,
-          variant: item.variantId
-            ? variantMap.get(item.variantId.toString()) || undefined
-            : undefined,
         };
       }
 
-      const variant = item.variantId
-        ? variantMap.get(item.variantId.toString())
-        : null;
+      // Calculate price based on cart variantType
+      let originalAmount = 0;
+      let discountedPrice = 0;
+      let currency = "EUR";
+      let taxRate = 0;
 
-      // Add variant info if exists
-      let variantInfo = null;
-      if (variant) {
-        variantInfo = {
-          _id: variant._id,
-          name: variant.name,
-          sku: variant.sku,
-          attributes: variant.attributes,
-          price: variant.price,
-          compareAtPrice: variant.compareAtPrice,
-        };
+      if (cartVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+        // Use 30 days plan price for SACHETS
+        const thirtyDaysPlan = product.sachetPrices.thirtyDays;
+        if (thirtyDaysPlan) {
+          currency = thirtyDaysPlan.currency || "EUR";
+          taxRate = thirtyDaysPlan.taxRate || 0;
+          // Original amount (for subtotal) - use amount field
+          originalAmount =
+            thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
+          // Discounted price (for discount field) - use discountedPrice field
+          discountedPrice =
+            thirtyDaysPlan.discountedPrice ||
+            thirtyDaysPlan.amount ||
+            thirtyDaysPlan.totalAmount ||
+            0;
+        }
+      } else if (
+        cartVariantType === ProductVariant.STAND_UP_POUCH &&
+        product.standupPouchPrice
+      ) {
+        // Use count30 price for STAND_UP_POUCH
+        const standupPrice = product.standupPouchPrice as any;
+        if (standupPrice.count30) {
+          currency = standupPrice.count30.currency || "EUR";
+          taxRate = standupPrice.count30.taxRate || 0;
+          // Original amount (for subtotal) - use amount field
+          originalAmount = standupPrice.count30.amount || 0;
+          // Discounted price (for discount field) - use discountedPrice field
+          discountedPrice =
+            standupPrice.count30.discountedPrice ||
+            standupPrice.count30.amount ||
+            0;
+        } else if (standupPrice.amount) {
+          // Fallback to simple price structure
+          currency = standupPrice.currency || "EUR";
+          taxRate = standupPrice.taxRate || 0;
+          originalAmount = standupPrice.amount || 0;
+          discountedPrice =
+            standupPrice.discountedPrice || standupPrice.amount || 0;
+        }
+      } else {
+        // Fallback to item price if no variantType match
+        currency = item.price?.currency || "EUR";
+        taxRate = item.price?.taxRate || 0;
+        originalAmount = item.price?.amount || 0;
+        discountedPrice = item.price?.amount || 0;
       }
+
+      const calculatedPrice = {
+        currency,
+        amount: discountedPrice, // Use discounted price for display
+        taxRate,
+      };
 
       // Add isInCart: true since this product is in the cart
       const productWithCartFlag = product
         ? { ...product, isInCart: true }
         : null;
 
+      // Build item object
       return {
-        ...item,
+        productId: item.productId,
+        price: calculatedPrice, // Update with calculated price
+        addedAt: item.addedAt,
+        _id: item._id,
         product: productWithCartFlag, // Already enriched with full details from common service
-        variant: variantInfo || undefined,
       };
     });
-
-    // Get shipping and discount from cart (if set)
-    const shippingAmount = cart.shipping?.amount || 0;
-    const discountAmount = cart.discount?.amount || 0;
-
-    // Calculate totals including shipping and discount
-    const totals = this.calculateCartTotals(
-      itemsWithDetails,
-      shippingAmount,
-      discountAmount
-    );
-
-    // Build payment details
-    const paymentDetails = {
-      subtotal: totals.subtotal,
-      discount: totals.discount,
-      shipping: totals.shipping,
-      tax: totals.tax,
-      grandTotal: totals.total,
-      couponCode: cart.couponCode || null,
-    };
 
     const result: {
       cart: any;
       suggestedProducts?: any[];
-      paymentDetails?: any;
     } = {
       cart: {
         ...cart,
         items: itemsWithDetails,
-        ...totals,
       },
-      paymentDetails,
     };
 
     // Include suggested products if requested
@@ -394,13 +463,9 @@ class CartService {
 
   /**
    * Check if a product is in user's cart
-   * Returns true if product (with optional variantId) exists in cart
+   * Returns true if product exists in cart
    */
-  async isProductInCart(
-    userId: string,
-    productId: string,
-    variantId?: string | null
-  ): Promise<boolean> {
+  async isProductInCart(userId: string, productId: string): Promise<boolean> {
     try {
       const cart = await this.getOrCreateCart(userId);
       if (!cart.items || cart.items.length === 0) {
@@ -408,19 +473,10 @@ class CartService {
       }
 
       const productObjectId = productId.toString();
-      const variantObjectId = variantId ? variantId.toString() : null;
 
-      const itemExists = cart.items.some((item: any) => {
-        const productMatch =
-          item.productId.toString() === productObjectId ||
-          item.productId.toString() === productObjectId.toString();
-        const variantMatch = variantObjectId
-          ? (item.variantId?.toString() === variantObjectId ||
-             item.variantId?.toString() === variantObjectId.toString())
-          : !item.variantId; // If variantId not provided, match items without variantId
-
-        return productMatch && variantMatch;
-      });
+      const itemExists = cart.items.some(
+        (item: any) => item.productId.toString() === productObjectId
+      );
 
       return itemExists;
     } catch (error) {
@@ -441,9 +497,7 @@ class CartService {
         return new Set();
       }
 
-      return new Set(
-        cart.items.map((item: any) => item.productId.toString())
-      );
+      return new Set(cart.items.map((item: any) => item.productId.toString()));
     } catch (error) {
       logger.error(`Error getting cart product IDs for user ${userId}:`, error);
       return new Set();
@@ -457,85 +511,213 @@ class CartService {
     userId: string,
     data: AddCartItemData
   ): Promise<{ cart: any; message: string }> {
-    const { productId, variantId, quantity } = data;
+    const { productId, variantType } = data;
 
     // Validate and get pricing
-    const { product, variant, price } = await this.validateAndGetPricing(
-      productId,
-      variantId,
-      quantity
-    );
+    const { product, price } = await this.validateAndGetPricing(productId);
 
     const cart = await this.getOrCreateCart(userId);
     const productObjectId = new mongoose.Types.ObjectId(productId);
-    const variantObjectId = variantId
-      ? new mongoose.Types.ObjectId(variantId)
-      : null;
+
+    // Get product variant type
+    const productVariantType = product.variant as ProductVariant;
+
+    // Validate that product supports the requested variantType
+    // A product supports STAND_UP_POUCH if:
+    // 1. product.variant === "STAND_UP_POUCH", OR
+    // 2. product.variant === "SACHETS" AND product.hasStandupPouch === true
+    // A product supports SACHETS if:
+    // 1. product.variant === "SACHETS"
+    let isVariantSupported = false;
+
+    if (variantType === ProductVariant.STAND_UP_POUCH) {
+      // Check if product supports STAND_UP_POUCH
+      isVariantSupported =
+        productVariantType === ProductVariant.STAND_UP_POUCH ||
+        (productVariantType === ProductVariant.SACHETS &&
+          product.hasStandupPouch === true);
+    } else if (variantType === ProductVariant.SACHETS) {
+      // Check if product supports SACHETS
+      isVariantSupported = productVariantType === ProductVariant.SACHETS;
+    }
+
+    if (!isVariantSupported) {
+      throw new AppError(
+        `Product does not support variant type "${variantType}". Product has variant type "${productVariantType}"${
+          product.hasStandupPouch ? " with stand-up pouch support" : ""
+        }.`,
+        400
+      );
+    }
 
     // Check if item already exists in cart
     const existingItemIndex = cart.items.findIndex(
-      (item: any) =>
-        item.productId.toString() === productId &&
-        (variantId ? item.variantId?.toString() === variantId : !item.variantId)
+      (item: any) => item.productId.toString() === productId
     );
 
     let updatedItems = [...(cart.items || [])];
+    let updatedVariantType: ProductVariant;
+
+    // Manage variantType based on cart state
+    if (cart.items && cart.items.length > 0) {
+      // Cart already has items, validate that new item's variantType matches cart's variantType
+      if (cart.variantType && cart.variantType !== variantType) {
+        throw new AppError(
+          `You can only add ${
+            cart.variantType === ProductVariant.SACHETS
+              ? "sachets"
+              : "stand-up pouch"
+          } products to this cart. Please clear your cart or remove existing items to add different variant types.`,
+          400
+        );
+      }
+      // Keep existing variantType (should always exist if cart has items)
+      updatedVariantType = cart.variantType || variantType;
+    } else {
+      // Cart is empty, set variantType from first item being added
+      updatedVariantType = variantType;
+    }
+
+    // Calculate price based on variantType (same as getCart)
+    let calculatedPrice = price; // Default to validated price
+    let currency = "EUR";
+    let taxRate = 0;
+
+    if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
+      // Use 30 days plan price for SACHETS
+      const thirtyDaysPlan = product.sachetPrices.thirtyDays;
+      if (thirtyDaysPlan) {
+        currency = thirtyDaysPlan.currency || "EUR";
+        taxRate = thirtyDaysPlan.taxRate || 0;
+        calculatedPrice = {
+          currency,
+          amount:
+            thirtyDaysPlan.discountedPrice ||
+            thirtyDaysPlan.totalAmount ||
+            thirtyDaysPlan.amount ||
+            0,
+          taxRate,
+        };
+      }
+    } else if (
+      variantType === ProductVariant.STAND_UP_POUCH &&
+      product.standupPouchPrice
+    ) {
+      // Use count30 price for STAND_UP_POUCH
+      const standupPrice = product.standupPouchPrice as any;
+      if (standupPrice.count30) {
+        currency = standupPrice.count30.currency || "EUR";
+        taxRate = standupPrice.count30.taxRate || 0;
+        calculatedPrice = {
+          currency,
+          amount:
+            standupPrice.count30.discountedPrice ||
+            standupPrice.count30.amount ||
+            0,
+          taxRate,
+        };
+      } else if (standupPrice.amount) {
+        currency = standupPrice.currency || "EUR";
+        taxRate = standupPrice.taxRate || 0;
+        calculatedPrice = {
+          currency,
+          amount: standupPrice.discountedPrice || standupPrice.amount || 0,
+          taxRate,
+        };
+      }
+    }
 
     if (existingItemIndex >= 0) {
-      // Update existing item quantity
-      const existingItem = updatedItems[existingItemIndex];
-      const newQuantity = existingItem.quantity + quantity;
-
-      // Re-validate stock with new total quantity
-      if (variant && variant.inventory.trackQuantity) {
-        const available =
-          variant.inventory.quantity - variant.inventory.reserved;
-        if (!variant.inventory.allowBackorder && newQuantity > available) {
-          throw new AppError(
-            `Cannot add more items. Available: ${available}, Current in cart: ${existingItem.quantity}, Requested additional: ${quantity}`,
-            400
-          );
-        }
-      }
-
+      // Item already exists, update price with calculated price
       updatedItems[existingItemIndex] = {
-        ...existingItem,
-        quantity: newQuantity,
-        price, // Update price in case it changed
+        ...updatedItems[existingItemIndex],
+        price: calculatedPrice, // Update with calculated price based on variantType
       };
     } else {
-      // Add new item
+      // Add new item with calculated price
       updatedItems.push({
         productId: productObjectId,
-        variantId: variantObjectId,
-        quantity,
-        price,
+        price: calculatedPrice,
         addedAt: new Date(),
       });
     }
 
-    // Get existing shipping and discount from cart
-    const shippingAmount = cart.shipping?.amount || 0;
-    const discountAmount = cart.discount?.amount || 0;
-
-    // Calculate totals
-    const totals = this.calculateCartTotals(
+    // Calculate totals first without coupon to get order amount
+    const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      shippingAmount,
-      discountAmount
+      updatedVariantType,
+      0 // Calculate without coupon first
     );
 
-    // Update cart
+    // Recalculate coupon discount if coupon code exists
+    let couponDiscountAmount = 0;
+    if (cart.couponCode && updatedItems.length > 0) {
+      try {
+        const coupon = await Coupons.findOne({
+          code: cart.couponCode,
+          isDeleted: false,
+          isActive: true,
+        }).lean();
+
+        if (coupon) {
+          const now = new Date();
+          const isValidDate =
+            (!coupon.validFrom || now >= coupon.validFrom) &&
+            (!coupon.validUntil || now <= coupon.validUntil);
+
+          if (isValidDate) {
+            const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+
+            if (
+              !coupon.minOrderAmount ||
+              orderAmount >= coupon.minOrderAmount
+            ) {
+              if (coupon.type === CouponType.PERCENTAGE) {
+                couponDiscountAmount = (orderAmount * coupon.value) / 100;
+                if (coupon.maxDiscountAmount) {
+                  couponDiscountAmount = Math.min(
+                    couponDiscountAmount,
+                    coupon.maxDiscountAmount
+                  );
+                }
+              } else if (coupon.type === CouponType.FIXED) {
+                couponDiscountAmount = Math.min(coupon.value, orderAmount);
+              }
+              couponDiscountAmount = Math.min(
+                couponDiscountAmount,
+                orderAmount
+              );
+              couponDiscountAmount =
+                Math.round(couponDiscountAmount * 100) / 100;
+            }
+          }
+        }
+      } catch (error) {
+        // If coupon validation fails, set discount to 0
+        logger.warn(`Failed to recalculate coupon discount: ${error}`);
+        couponDiscountAmount = 0;
+      }
+    }
+
+    // Calculate final totals with coupon discount
+    const totals = await this.calculateCartTotalsWithVariantType(
+      updatedItems,
+      updatedVariantType,
+      couponDiscountAmount
+    );
+
+    // Update cart with calculated values (all as numbers)
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
       {
         items: updatedItems,
+        variantType: updatedVariantType,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        discount: totals.discount,
         total: totals.total,
-        // Keep existing shipping and discount if they exist, otherwise update to 0
-        shipping: cart.shipping || totals.shipping,
-        discount: cart.discount || totals.discount,
+        currency: totals.currency,
+        couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date(),
       },
       { new: true }
@@ -546,35 +728,24 @@ class CartService {
     return {
       cart: updatedCart,
       message:
-        existingItemIndex >= 0
-          ? "Cart item quantity updated"
-          : "Item added to cart",
+        existingItemIndex >= 0 ? "Cart item updated" : "Item added to cart",
     };
   }
 
   /**
-   * Update cart item quantity by productId
-   * If quantity is not provided, removes the item from cart entirely
+   * Update cart item by productId (updates price if changed)
    */
   async updateItem(
     userId: string,
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantId, quantity } = data;
+    const { productId } = data;
 
-    // Find the item in cart by productId and variantId (if provided)
-    const itemIndex = cart.items.findIndex((item: any) => {
-      const productMatch =
-        item.productId.toString() === productId ||
-        item.productId.toString() === productId.toString();
-      const variantMatch = variantId
-        ? item.variantId?.toString() === variantId ||
-          item.variantId?.toString() === variantId.toString()
-        : !item.variantId; // If variantId not provided, match items without variantId
-
-      return productMatch && variantMatch;
-    });
+    // Find the item in cart by productId
+    const itemIndex = cart.items.findIndex(
+      (item: any) => item.productId.toString() === productId
+    );
 
     if (itemIndex === -1) {
       throw new AppError("Cart item not found", 404);
@@ -582,87 +753,139 @@ class CartService {
 
     const item = cart.items[itemIndex];
 
-    // If quantity is not provided, remove the item entirely
-    if (quantity === undefined || quantity === null) {
-      const updatedItems = [...(cart.items || [])];
-      updatedItems.splice(itemIndex, 1);
+    // Validate and get updated pricing
+    const { product, price } = await this.validateAndGetPricing(productId);
 
-      // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems, 0, 0);
+    // Get cart variantType
+    const cartVariantType = cart.variantType as ProductVariant;
 
-      // Update cart
-      const updatedCart = await Carts.findByIdAndUpdate(
-        cart._id,
-        {
-          items: updatedItems,
-          ...totals,
-          updatedAt: new Date(),
-        },
-        { new: true }
-      ).lean();
-
-      logger.info(
-        `Cart item removed for user ${userId} (productId: ${productId})`
-      );
-
-      return {
-        cart: updatedCart,
-        message: "Cart item removed successfully",
-      };
-    }
-
-    // Validate stock if variant exists
-    if (item.variantId) {
-      const variant = await ProductVariants.findById(item.variantId).lean();
-      if (variant && variant.inventory.trackQuantity) {
-        const available =
-          variant.inventory.quantity - variant.inventory.reserved;
-        if (!variant.inventory.allowBackorder && quantity > available) {
-          throw new AppError(
-            `Insufficient stock. Available: ${available}, Requested: ${quantity}`,
-            400
-          );
-        }
+    // Calculate price based on variantType (same as getCart)
+    let calculatedPrice = price;
+    if (cartVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+      const thirtyDaysPlan = product.sachetPrices.thirtyDays;
+      if (thirtyDaysPlan) {
+        calculatedPrice = {
+          currency: thirtyDaysPlan.currency || "EUR",
+          amount:
+            thirtyDaysPlan.discountedPrice ||
+            thirtyDaysPlan.totalAmount ||
+            thirtyDaysPlan.amount ||
+            0,
+          taxRate: thirtyDaysPlan.taxRate || 0,
+        };
+      }
+    } else if (
+      cartVariantType === ProductVariant.STAND_UP_POUCH &&
+      product.standupPouchPrice
+    ) {
+      const standupPrice = product.standupPouchPrice as any;
+      if (standupPrice.count30) {
+        calculatedPrice = {
+          currency: standupPrice.count30.currency || "EUR",
+          amount:
+            standupPrice.count30.discountedPrice ||
+            standupPrice.count30.amount ||
+            0,
+          taxRate: standupPrice.count30.taxRate || 0,
+        };
+      } else if (standupPrice.amount) {
+        calculatedPrice = {
+          currency: standupPrice.currency || "EUR",
+          amount: standupPrice.discountedPrice || standupPrice.amount || 0,
+          taxRate: standupPrice.taxRate || 0,
+        };
       }
     }
 
-    // Update item quantity
+    // Update item price
     const updatedItems = [...(cart.items || [])];
     updatedItems[itemIndex] = {
       ...item,
-      quantity,
-      price: item.price, // Keep existing price
+      price: calculatedPrice, // Update with calculated price based on variantType
     };
 
-    // Get existing shipping and discount from cart
-    const shippingAmount = cart.shipping?.amount || 0;
-    const discountAmount = cart.discount?.amount || 0;
-
-    // Calculate totals
-    const totals = this.calculateCartTotals(
+    // Calculate totals first without coupon to get order amount
+    const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      shippingAmount,
-      discountAmount
+      cartVariantType,
+      0 // Calculate without coupon first
     );
 
-    // Update cart
+    // Recalculate coupon discount if coupon code exists
+    let couponDiscountAmount = 0;
+    if (cart.couponCode && updatedItems.length > 0) {
+      try {
+        const coupon = await Coupons.findOne({
+          code: cart.couponCode,
+          isDeleted: false,
+          isActive: true,
+        }).lean();
+
+        if (coupon) {
+          const now = new Date();
+          const isValidDate =
+            (!coupon.validFrom || now >= coupon.validFrom) &&
+            (!coupon.validUntil || now <= coupon.validUntil);
+
+          if (isValidDate) {
+            const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+
+            if (
+              !coupon.minOrderAmount ||
+              orderAmount >= coupon.minOrderAmount
+            ) {
+              if (coupon.type === CouponType.PERCENTAGE) {
+                couponDiscountAmount = (orderAmount * coupon.value) / 100;
+                if (coupon.maxDiscountAmount) {
+                  couponDiscountAmount = Math.min(
+                    couponDiscountAmount,
+                    coupon.maxDiscountAmount
+                  );
+                }
+              } else if (coupon.type === CouponType.FIXED) {
+                couponDiscountAmount = Math.min(coupon.value, orderAmount);
+              }
+              couponDiscountAmount = Math.min(
+                couponDiscountAmount,
+                orderAmount
+              );
+              couponDiscountAmount =
+                Math.round(couponDiscountAmount * 100) / 100;
+            }
+          }
+        }
+      } catch (error) {
+        // If coupon validation fails, set discount to 0
+        logger.warn(`Failed to recalculate coupon discount: ${error}`);
+        couponDiscountAmount = 0;
+      }
+    }
+
+    // Calculate final totals with coupon discount
+    const totals = await this.calculateCartTotalsWithVariantType(
+      updatedItems,
+      cartVariantType,
+      couponDiscountAmount
+    );
+
+    // Update cart with calculated values (all as numbers)
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
       {
         items: updatedItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        discount: totals.discount,
         total: totals.total,
-        // Keep existing shipping and discount if they exist
-        shipping: cart.shipping || totals.shipping,
-        discount: cart.discount || totals.discount,
+        currency: totals.currency,
+        couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date(),
       },
       { new: true }
     ).lean();
 
     logger.info(
-      `Cart item updated for user ${userId} (productId: ${productId}, quantity: ${quantity})`
+      `Cart item updated for user ${userId} (productId: ${productId})`
     );
 
     return {
@@ -673,150 +896,345 @@ class CartService {
 
   /**
    * Remove item from cart
-   * If quantity is not provided, removes the entire item from cart
    */
   async removeItem(
     userId: string,
     data: RemoveCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantId, quantity } = data;
+    const { productId } = data;
 
-    // Find the item in cart by productId and variantId (if provided)
-    const itemIndex = cart.items.findIndex((item: any) => {
-      const productMatch =
-        item.productId.toString() === productId ||
-        item.productId.toString() === productId.toString();
-      const variantMatch = variantId
-        ? item.variantId?.toString() === variantId ||
-          item.variantId?.toString() === variantId.toString()
-        : !item.variantId; // If variantId not provided, match items without variantId
-
-      return productMatch && variantMatch;
-    });
+    // Find the item in cart by productId
+    const itemIndex = cart.items.findIndex(
+      (item: any) => item.productId.toString() === productId
+    );
 
     if (itemIndex === -1) {
       throw new AppError("Cart item not found", 404);
     }
 
-    const item = cart.items[itemIndex];
-    const currentQuantity = item.quantity;
+    // Remove the item
+    const updatedItems = [...(cart.items || [])];
+    updatedItems.splice(itemIndex, 1);
 
-    // If quantity is not provided, remove the entire item
-    if (quantity === undefined || quantity === null) {
-      const updatedItems = [...(cart.items || [])];
-      updatedItems.splice(itemIndex, 1);
-
-      // Calculate totals
-      const totals = this.calculateCartTotals(updatedItems, 0, 0);
-
-      // Update cart
-      const updatedCart = await Carts.findByIdAndUpdate(
-        cart._id,
-        {
-          items: updatedItems,
-          ...totals,
-          updatedAt: new Date(),
-        },
-        { new: true }
-      ).lean();
-
-      logger.info(
-        `Item removed from cart for user ${userId} (productId: ${productId})`
-      );
-
-      return {
-        cart: updatedCart,
-        message: "Item removed from cart",
-      };
+    // If cart is empty, clear variantType
+    let updatedVariantType = cart.variantType;
+    if (updatedItems.length === 0) {
+      updatedVariantType = undefined;
     }
 
-    const removeQuantity = quantity;
+    // Calculate totals first without coupon to get order amount
+    let totals;
+    let couponDiscountAmount = 0;
 
-    // If removing all or more than available, remove the entire item
-    if (removeQuantity >= currentQuantity) {
-      const updatedItems = [...(cart.items || [])];
-      updatedItems.splice(itemIndex, 1);
-
-      // Get existing shipping and discount from cart
-      const shippingAmount = cart.shipping?.amount || 0;
-      const discountAmount = cart.discount?.amount || 0;
-
-      // Calculate totals
-      const totals = this.calculateCartTotals(
-        updatedItems,
-        shippingAmount,
-        discountAmount
-      );
-
-      // Update cart
-      const updatedCart = await Carts.findByIdAndUpdate(
-        cart._id,
-        {
-          items: updatedItems,
-          subtotal: totals.subtotal,
-          tax: totals.tax,
-          total: totals.total,
-          // Keep existing shipping and discount if they exist
-          shipping: cart.shipping || totals.shipping,
-          discount: cart.discount || totals.discount,
-          updatedAt: new Date(),
-        },
-        { new: true }
-      ).lean();
-
-      logger.info(
-        `Item removed from cart for user ${userId} (productId: ${productId})`
-      );
-
-      return {
-        cart: updatedCart,
-        message: "Item removed from cart",
+    if (updatedItems.length === 0) {
+      totals = {
+        subtotal: 0,
+        tax: 0,
+        discount: 0,
+        total: 0,
+        currency: "EUR",
       };
     } else {
-      // Reduce quantity
-      const updatedItems = [...(cart.items || [])];
-      updatedItems[itemIndex] = {
-        ...item,
-        quantity: currentQuantity - removeQuantity,
-      };
-
-      // Get existing shipping and discount from cart
-      const shippingAmount = cart.shipping?.amount || 0;
-      const discountAmount = cart.discount?.amount || 0;
-
-      // Calculate totals
-      const totals = this.calculateCartTotals(
+      const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
         updatedItems,
-        shippingAmount,
-        discountAmount
+        updatedVariantType as ProductVariant,
+        0 // Calculate without coupon first
       );
 
-      // Update cart
-      const updatedCart = await Carts.findByIdAndUpdate(
-        cart._id,
-        {
-          items: updatedItems,
-          subtotal: totals.subtotal,
-          tax: totals.tax,
-          total: totals.total,
-          // Keep existing shipping and discount if they exist
-          shipping: cart.shipping || totals.shipping,
-          discount: cart.discount || totals.discount,
-          updatedAt: new Date(),
-        },
-        { new: true }
-      ).lean();
+      // Recalculate coupon discount if coupon code exists
+      if (cart.couponCode) {
+        try {
+          const coupon = await Coupons.findOne({
+            code: cart.couponCode,
+            isDeleted: false,
+            isActive: true,
+          }).lean();
 
-      logger.info(
-        `Item quantity reduced in cart for user ${userId} (productId: ${productId}, removed: ${removeQuantity})`
+          if (coupon) {
+            const now = new Date();
+            const isValidDate =
+              (!coupon.validFrom || now >= coupon.validFrom) &&
+              (!coupon.validUntil || now <= coupon.validUntil);
+
+            if (isValidDate) {
+              const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+
+              if (
+                !coupon.minOrderAmount ||
+                orderAmount >= coupon.minOrderAmount
+              ) {
+                if (coupon.type === CouponType.PERCENTAGE) {
+                  couponDiscountAmount = (orderAmount * coupon.value) / 100;
+                  if (coupon.maxDiscountAmount) {
+                    couponDiscountAmount = Math.min(
+                      couponDiscountAmount,
+                      coupon.maxDiscountAmount
+                    );
+                  }
+                } else if (coupon.type === CouponType.FIXED) {
+                  couponDiscountAmount = Math.min(coupon.value, orderAmount);
+                }
+                couponDiscountAmount = Math.min(
+                  couponDiscountAmount,
+                  orderAmount
+                );
+                couponDiscountAmount =
+                  Math.round(couponDiscountAmount * 100) / 100;
+              }
+            }
+          }
+        } catch (error) {
+          // If coupon validation fails, set discount to 0
+          logger.warn(`Failed to recalculate coupon discount: ${error}`);
+          couponDiscountAmount = 0;
+        }
+      }
+
+      // Calculate final totals with coupon discount
+      totals = await this.calculateCartTotalsWithVariantType(
+        updatedItems,
+        updatedVariantType as ProductVariant,
+        couponDiscountAmount
       );
-
-      return {
-        cart: updatedCart,
-        message: `Removed ${removeQuantity} item(s) from cart`,
-      };
     }
+
+    // Update cart with calculated values (all as numbers)
+    const updatedCart = await Carts.findByIdAndUpdate(
+      cart._id,
+      {
+        items: updatedItems,
+        variantType: updatedVariantType,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        currency: totals.currency,
+        couponDiscountAmount: couponDiscountAmount,
+        updatedAt: new Date(),
+      },
+      { new: true }
+    ).lean();
+
+    logger.info(
+      `Item removed from cart for user ${userId} (productId: ${productId})`
+    );
+
+    return {
+      cart: updatedCart,
+      message: "Item removed from cart",
+    };
+  }
+
+  /**
+   * Apply or update coupon code in cart
+   */
+  async applyCoupon(
+    userId: string,
+    couponCode: string
+  ): Promise<{ cart: any; message: string; couponDiscountAmount: number }> {
+    const cart = await this.getOrCreateCart(userId);
+
+    if (!cart.items || cart.items.length === 0) {
+      throw new AppError("Cannot apply coupon to empty cart", 400);
+    }
+
+    // Normalize coupon code (uppercase)
+    const normalizedCouponCode = couponCode.toUpperCase().trim();
+
+    // Find coupon
+    const coupon = await Coupons.findOne({
+      code: normalizedCouponCode,
+      isDeleted: false,
+    }).lean();
+
+    if (!coupon) {
+      throw new AppError("Invalid coupon code", 404);
+    }
+
+    if (!coupon.isActive) {
+      throw new AppError("This coupon is not active", 400);
+    }
+
+    // Check validity dates
+    const now = new Date();
+    if (coupon.validFrom && now < coupon.validFrom) {
+      throw new AppError("This coupon is not yet valid", 400);
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      throw new AppError("This coupon has expired", 400);
+    }
+
+    // Get product IDs and category IDs from cart
+    const productIds = cart.items.map((item: any) => item.productId.toString());
+    const products = await Products.find({
+      _id: { $in: cart.items.map((item: any) => item.productId) },
+      isDeleted: false,
+    })
+      .select("categories")
+      .lean();
+    const categoryIds = new Set<string>();
+    products.forEach((product: any) => {
+      if (product.categories && Array.isArray(product.categories)) {
+        product.categories.forEach(
+          (catId: mongoose.Types.ObjectId | string) => {
+            categoryIds.add(catId.toString());
+          }
+        );
+      }
+    });
+
+    // Validate coupon applicability
+    if (coupon.applicableProducts && coupon.applicableProducts.length > 0) {
+      const applicableProductIds = coupon.applicableProducts.map(
+        (id: mongoose.Types.ObjectId) => id.toString()
+      );
+      if (!productIds.some((id: string) => applicableProductIds.includes(id))) {
+        throw new AppError(
+          "This coupon is not applicable to the selected products",
+          400
+        );
+      }
+    }
+
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+      const applicableCategoryIds = coupon.applicableCategories.map((id: any) =>
+        id.toString()
+      );
+      if (
+        !Array.from(categoryIds).some((id: string) =>
+          applicableCategoryIds.includes(id)
+        )
+      ) {
+        throw new AppError(
+          "This coupon is not applicable to the selected categories",
+          400
+        );
+      }
+    }
+
+    if (coupon.excludedProducts && coupon.excludedProducts.length > 0) {
+      const excludedProductIds = coupon.excludedProducts.map(
+        (id: mongoose.Types.ObjectId) => id.toString()
+      );
+      if (productIds.some((id: string) => excludedProductIds.includes(id))) {
+        throw new AppError(
+          "This coupon cannot be applied to one or more selected products",
+          400
+        );
+      }
+    }
+
+    // Calculate order amount (discounted price total before coupon)
+    const totals = await this.calculateCartTotalsWithVariantType(
+      cart.items,
+      cart.variantType as ProductVariant,
+      0 // Calculate without coupon first
+    );
+
+    // Order amount is the discounted price total (subtotal - discount + tax)
+    // This represents the amount before coupon is applied
+    const orderAmount = totals.subtotal - totals.discount + totals.tax;
+
+    // Check minimum order amount
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+      throw new AppError(
+        `Minimum order amount of ${coupon.minOrderAmount} ${totals.currency} is required for this coupon`,
+        400
+      );
+    }
+
+    // Calculate coupon discount
+    let couponDiscountAmount = 0;
+
+    if (coupon.type === CouponType.PERCENTAGE) {
+      couponDiscountAmount = (orderAmount * coupon.value) / 100;
+      if (coupon.maxDiscountAmount) {
+        couponDiscountAmount = Math.min(
+          couponDiscountAmount,
+          coupon.maxDiscountAmount
+        );
+      }
+    } else if (coupon.type === CouponType.FIXED) {
+      couponDiscountAmount = Math.min(coupon.value, orderAmount);
+    } else if (coupon.type === CouponType.FREE_SHIPPING) {
+      // Free shipping discount is handled separately in checkout
+      couponDiscountAmount = 0;
+    }
+
+    // Ensure discount doesn't exceed order amount
+    couponDiscountAmount = Math.min(couponDiscountAmount, orderAmount);
+    couponDiscountAmount = Math.round(couponDiscountAmount * 100) / 100;
+
+    // Recalculate totals with coupon discount
+    const finalTotals = await this.calculateCartTotalsWithVariantType(
+      cart.items,
+      cart.variantType as ProductVariant,
+      couponDiscountAmount
+    );
+
+    // Update cart with coupon and recalculated totals
+    const updatedCart = await Carts.findByIdAndUpdate(
+      cart._id,
+      {
+        couponCode: normalizedCouponCode,
+        couponDiscountAmount: couponDiscountAmount,
+        subtotal: finalTotals.subtotal,
+        tax: finalTotals.tax,
+        discount: finalTotals.discount,
+        total: finalTotals.total,
+        currency: finalTotals.currency,
+        updatedAt: new Date(),
+      },
+      { new: true }
+    ).lean();
+
+    logger.info(
+      `Coupon ${normalizedCouponCode} applied to cart for user ${userId}`
+    );
+
+    return {
+      cart: updatedCart,
+      message: "Coupon applied successfully",
+      couponDiscountAmount,
+    };
+  }
+
+  /**
+   * Remove coupon from cart
+   */
+  async removeCoupon(userId: string): Promise<{ cart: any; message: string }> {
+    const cart = await this.getOrCreateCart(userId);
+
+    // Recalculate totals without coupon
+    const totals = await this.calculateCartTotalsWithVariantType(
+      cart.items,
+      cart.variantType as ProductVariant,
+      0 // No coupon discount
+    );
+
+    // Update cart to remove coupon
+    const updatedCart = await Carts.findByIdAndUpdate(
+      cart._id,
+      {
+        couponCode: undefined,
+        couponDiscountAmount: 0,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        currency: totals.currency,
+        updatedAt: new Date(),
+      },
+      { new: true }
+    ).lean();
+
+    logger.info(`Coupon removed from cart for user ${userId}`);
+
+    return {
+      cart: updatedCart,
+      message: "Coupon removed successfully",
+    };
   }
 
   /**
@@ -827,11 +1245,14 @@ class CartService {
 
     await Carts.findByIdAndUpdate(cart._id, {
       items: [],
-      subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-      tax: { currency: "EUR", amount: 0, taxRate: 0 },
-      shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-      discount: { currency: "EUR", amount: 0, taxRate: 0 },
-      total: { currency: "EUR", amount: 0, taxRate: 0 },
+      variantType: undefined,
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      currency: "EUR",
+      couponCode: undefined,
+      couponDiscountAmount: 0,
       updatedAt: new Date(),
     });
 
@@ -859,8 +1280,6 @@ class CartService {
     };
     items: Array<{
       productId: string;
-      variantId?: string;
-      quantity: number;
       originalPrice: { currency: string; amount: number; taxRate: number };
       memberPrice?: { currency: string; amount: number; taxRate: number };
       discount?: { amount: number; percentage: number };
@@ -894,59 +1313,33 @@ class CartService {
     let memberSubtotal = 0;
     let currency = cart.items[0]?.price?.currency || "EUR";
 
-    // Batch fetch all products and variants at once for better performance
+    // Batch fetch all products at once for better performance
     const productIds = cart.items.map((item: any) => item.productId);
-    const variantIds = cart.items
-      .map((item: any) => item.variantId)
-      .filter((id: any) => id);
 
-    const [products, variants] = await Promise.all([
-      Products.find({
-        _id: { $in: productIds },
-        isDeleted: false,
-        status: true,
-      }).lean(),
-      variantIds.length > 0
-        ? ProductVariants.find({
-            _id: { $in: variantIds },
-            isDeleted: { $ne: true },
-            isActive: true,
-          }).lean()
-        : Promise.resolve([]),
-    ]);
+    const products = await Products.find({
+      _id: { $in: productIds },
+      isDeleted: false,
+      status: true,
+    }).lean();
 
     // Create maps for O(1) lookup
     const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
-    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
 
     // Process all items and calculate member prices in parallel
     const itemProcessingPromises = cart.items.map(async (item: any) => {
-      const product = productMap.get(item.productId.toString());
+      const product: any = productMap.get(item.productId.toString());
       if (!product) {
         errors.push(`Product ${item.productId} is not available`);
         return null;
       }
 
-      let variant: any = null;
-      if (item.variantId) {
-        variant = variantMap.get(item.variantId.toString());
-        if (!variant) {
-          errors.push(`Variant ${item.variantId} is not available`);
-          return null;
-        }
-      }
-
-      // Get price source (variant price takes precedence)
-      const productMetadata = (product as any).metadata || {};
-      const variantMetadata = variant ? (variant as any).metadata || {} : {};
+      // Get price source from product
+      const productMetadata = product.metadata || {};
 
       const priceSource: ProductPriceSource = {
-        price: variant?.price || product.price,
-        memberPrice:
-          variantMetadata?.memberPrice || productMetadata?.memberPrice,
-        memberDiscountOverride:
-          variantMetadata?.memberDiscountOverride ||
-          productMetadata?.memberDiscountOverride,
+        price: product.price,
+        memberPrice: productMetadata?.memberPrice,
+        memberDiscountOverride: productMetadata?.memberDiscountOverride,
       };
 
       // Calculate member price
@@ -954,13 +1347,11 @@ class CartService {
 
       const originalItemPrice = priceSource.price.amount;
       const memberItemPrice = memberPriceResult.memberPrice.amount;
-      const originalItemTotal = originalItemPrice * item.quantity;
-      const memberItemTotal = memberItemPrice * item.quantity;
+      const originalItemTotal = originalItemPrice;
+      const memberItemTotal = memberItemPrice;
 
       return {
         productId: item.productId.toString(),
-        variantId: item.variantId?.toString(),
-        quantity: item.quantity,
         originalPrice: { ...priceSource.price },
         memberPrice: memberPriceResult.isMember
           ? memberPriceResult.memberPrice
@@ -990,8 +1381,6 @@ class CartService {
         memberSubtotal += processedItem.memberItemTotal;
         validatedItems.push({
           productId: processedItem.productId,
-          variantId: processedItem.variantId,
-          quantity: processedItem.quantity,
           originalPrice: processedItem.originalPrice,
           memberPrice: processedItem.memberPrice,
           discount: processedItem.discount,
@@ -1010,8 +1399,8 @@ class CartService {
     const finalSubtotal = memberSubtotal;
 
     // Use existing cart tax and shipping (or calculate if needed)
-    const taxAmount = cart.tax?.amount || 0;
-    const shippingAmount = cart.shipping?.amount || 0;
+    const taxAmount = cart.tax || 0;
+    const shippingAmount = cart.shipping || 0;
     const totalAmount = finalSubtotal + taxAmount + shippingAmount;
 
     return {
@@ -1086,29 +1475,17 @@ class CartService {
       };
     }
 
-    // Get product IDs and variant IDs
+    // Get product IDs
     const productIds = cart.items.map((item: any) => item.productId);
-    const variantIds = cart.items
-      .map((item: any) => item.variantId)
-      .filter((id: any) => id);
 
-    // Fetch products and variants with full details
-    const [products, variants] = await Promise.all([
-      Products.find({
-        _id: { $in: productIds },
-        isDeleted: false,
-        status: true,
-      })
-        .populate("categories", "name slug description image")
-        .lean(),
-      variantIds.length > 0
-        ? ProductVariants.find({
-            _id: { $in: variantIds },
-            isDeleted: { $ne: true },
-            isActive: true,
-          }).lean()
-        : Promise.resolve([]),
-    ]);
+    // Fetch products with full details
+    const products = await Products.find({
+      _id: { $in: productIds },
+      isDeleted: false,
+      status: true,
+    })
+      .populate("categories", "name slug description image")
+      .lean();
 
     // Manually populate ingredients for all products (since ingredients is String array, not ObjectId ref)
     const allIngredientIds: string[] = [];
@@ -1166,14 +1543,10 @@ class CartService {
 
     // Create maps for quick lookup
     const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
-    const variantMap = new Map(variants.map((v: any) => [v._id.toString(), v]));
 
     // Build products array with all pricing details
     const checkoutProductsPromises = cart.items.map(async (item: any) => {
-      const product = productMap.get(item.productId.toString());
-      const variant = item.variantId
-        ? variantMap.get(item.variantId.toString())
-        : null;
+      const product: any = productMap.get(item.productId.toString());
 
       if (!product) {
         return null;
@@ -1186,7 +1559,6 @@ class CartService {
         amount: 0,
         taxRate: 0,
       };
-      const variantPrice = variant?.price || null;
 
       // Identify which subscription plan was selected based on cart price
       let selectedPlan: {
@@ -1303,13 +1675,14 @@ class CartService {
               cartPrice.amount,
             taxRate: selectedPlan.price.taxRate || cartPrice.taxRate,
           }
-        : variantPrice || productPrice;
+        : productPrice;
 
       // Calculate member pricing if applicable
       const priceSource: ProductPriceSource = {
         price: priceForMemberCalculation,
-        memberPrice: product.memberPrice,
-        memberDiscountOverride: product.memberDiscountOverride,
+        memberPrice: (product as any).metadata?.memberPrice,
+        memberDiscountOverride: (product as any).metadata
+          ?.memberDiscountOverride,
       };
 
       const memberPriceResult = await calculateMemberPrice(priceSource, userId);
@@ -1323,7 +1696,7 @@ class CartService {
               cartPrice.amount,
             taxRate: selectedPlan.price.taxRate || cartPrice.taxRate,
           }
-        : variantPrice || productPrice;
+        : productPrice;
 
       // Only use member price if user is actually a member
       const memberPrice = memberPriceResult.isMember
@@ -1345,7 +1718,6 @@ class CartService {
         shortDescription: product.shortDescription,
         productVariant: product.variant,
         hasStandupPouch: product.hasStandupPouch,
-        quantity: item.quantity,
         isInCart: true, // This product is in cart
         // Pricing details
         pricing: {
@@ -1354,9 +1726,8 @@ class CartService {
             currency: cartPrice.currency,
             amount: cartPrice.amount,
             taxRate: cartPrice.taxRate,
-            totalAmount: Math.round(
-              (cartPrice.amount + cartPrice.taxRate) * 100
-            ) / 100,
+            totalAmount:
+              Math.round((cartPrice.amount + cartPrice.taxRate) * 100) / 100,
             // Include selected plan information
             selectedPlan:
               selectedPlan.type !== "default"
@@ -1371,9 +1742,9 @@ class CartService {
             currency: originalPrice.currency,
             amount: originalPrice.amount,
             taxRate: originalPrice.taxRate,
-            totalAmount: Math.round(
-              (originalPrice.amount + originalPrice.taxRate) * 100
-            ) / 100,
+            totalAmount:
+              Math.round((originalPrice.amount + originalPrice.taxRate) * 100) /
+              100,
           },
           // Member price (only if user is a member)
           memberPrice: memberPrice
@@ -1381,9 +1752,9 @@ class CartService {
                 currency: memberPrice.currency,
                 amount: memberPrice.amount,
                 taxRate: memberPrice.taxRate,
-                totalAmount: Math.round(
-                  (memberPrice.amount + memberPrice.taxRate) * 100
-                ) / 100,
+                totalAmount:
+                  Math.round((memberPrice.amount + memberPrice.taxRate) * 100) /
+                  100,
               }
             : null,
           // Discount information (only if user is a member)
@@ -1397,26 +1768,10 @@ class CartService {
             sachetPrices: product.sachetPrices,
             standupPouchPrice: product.standupPouchPrice,
           },
-          // Variant pricing (if applicable)
-          variantPricing: variant
-            ? {
-                price: variant.price,
-                compareAtPrice: variant.compareAtPrice,
-                costPrice: variant.costPrice,
-              }
-            : null,
         },
         // Product details
         categories: product.categories || [],
         ingredients: product.ingredients || [],
-        variant: variant
-          ? {
-              _id: variant._id,
-              name: variant.name,
-              sku: variant.sku,
-              attributes: variant.attributes,
-            }
-          : null,
         addedAt: item.addedAt,
       };
     });
@@ -1434,15 +1789,13 @@ class CartService {
     let memberSubtotal = 0;
     let membershipDiscountAmount = 0;
     // Calculate tax by summing taxRate (direct amount) from all cart items
-    // taxRate is now a direct amount per item, so multiply by quantity
     let taxAmount = 0;
     cart.items.forEach((item: any) => {
-      taxAmount += (item.price.taxRate || 0) * item.quantity;
+      taxAmount += item.price.taxRate || 0;
     });
 
     validProducts.forEach((product: any) => {
-      const originalItemTotal =
-        product.pricing.originalPrice.amount * product.quantity;
+      const originalItemTotal = product.pricing.originalPrice.amount;
       originalSubtotal += originalItemTotal;
 
       // Only apply member pricing if user is actually a member
@@ -1453,18 +1806,17 @@ class CartService {
         product.pricing.discount.amount > 0;
 
       const memberItemTotal = hasMemberDiscount
-        ? product.pricing.memberPrice.amount * product.quantity
+        ? product.pricing.memberPrice.amount
         : originalItemTotal;
       memberSubtotal += memberItemTotal;
 
       if (hasMemberDiscount) {
         membershipDiscountAmount +=
-          (product.pricing.originalPrice.amount -
-            product.pricing.memberPrice.amount) *
-          product.quantity;
+          product.pricing.originalPrice.amount -
+          product.pricing.memberPrice.amount;
       }
     });
-    const shippingAmount = cart.shipping?.amount || 0;
+    const shippingAmount = cart.shipping || 0;
     const totalAmount = memberSubtotal + taxAmount + shippingAmount;
 
     return {

@@ -16,7 +16,6 @@ import {
   SupportedLanguage,
 } from "../models/common.model";
 import { Products } from "../models/commerce/products.model";
-import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 
 /**
@@ -286,7 +285,7 @@ class CheckoutController {
             categories: transformedProduct.categories || [],
             ingredients: transformedProduct.ingredients || [],
             variants: transformedProduct.variants || [],
-            quantity: product.quantity,
+            quantity: 1, // Quantity removed from cart, each item is 1
             cartPrice: product.pricing?.cartPrice,
             variantInfo: product.variant,
             is_liked: userWishlistProductIds.has(
@@ -552,32 +551,19 @@ class CheckoutController {
         (item) => item.isMember === true
       );
 
-      // Get product IDs and variant IDs from cart items
+      // Get product IDs from cart items
       const productIds = cartValidation.items.map(
         (item) => new mongoose.Types.ObjectId(item.productId)
       );
-      const variantIds = cartValidation.items
-        .map((item) => item.variantId)
-        .filter((id) => id)
-        .map((id) => new mongoose.Types.ObjectId(id));
 
-      // Fetch products and variants with full details
-      const [products, variants] = await Promise.all([
-        Products.find({
-          _id: { $in: productIds },
-          isDeleted: false,
-          status: true,
-        })
-          .populate("categories", "name slug description image")
-          .lean(),
-        variantIds.length > 0
-          ? ProductVariants.find({
-              _id: { $in: variantIds },
-              isDeleted: { $ne: true },
-              isActive: true,
-            }).lean()
-          : Promise.resolve([]),
-      ]);
+      // Fetch products with full details
+      const products = await Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      })
+        .populate("categories", "name slug description image")
+        .lean();
 
       // Manually populate ingredients for all products
       const allIngredientIds: string[] = [];
@@ -636,9 +622,6 @@ class CheckoutController {
       const productMap = new Map(
         products.map((p: any) => [p._id.toString(), p])
       );
-      const variantMap = new Map(
-        variants.map((v: any) => [v._id.toString(), v])
-      );
 
       // Build items with full product details
       const itemsWithProducts = await Promise.all(
@@ -647,10 +630,6 @@ class CheckoutController {
           if (!product) {
             return null;
           }
-
-          const variant = item.variantId
-            ? variantMap.get(item.variantId)
-            : null;
 
           // Transform product for language
           const transformedProduct = transformProductForLanguage(
@@ -693,23 +672,10 @@ class CheckoutController {
             isInCart: true, // Products in checkout summary are in cart
           };
 
-          // Add variant info if exists
-          if (variant) {
-            fullProduct.variantInfo = {
-              _id: variant._id,
-              name: variant.name,
-              sku: variant.sku,
-              attributes: variant.attributes,
-              price: variant.price,
-              compareAtPrice: variant.compareAtPrice,
-            };
-          }
-
           return {
             product: fullProduct,
             productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
+            quantity: 1, // Quantity removed from cart, each item is 1
             originalPrice: item.originalPrice,
             memberPrice: item.memberPrice,
             discount: item.discount,

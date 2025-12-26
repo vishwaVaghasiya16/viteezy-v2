@@ -471,7 +471,7 @@ class CheckoutService {
           : plans[0];
 
         if (planToUse) {
-          const itemQuantity = cartItem.quantity;
+          const itemQuantity = 1; // Quantity removed from cart, each item is 1
           const itemPrice = planToUse.price.totalAmount || 0;
           const itemSubtotal = itemPrice * itemQuantity;
           const itemTax = itemSubtotal * (planToUse.price.taxRate || 0);
@@ -518,7 +518,7 @@ class CheckoutService {
       );
       if (!cartItem) continue;
 
-      const quantity = cartItem.quantity;
+      const quantity = 1; // Quantity removed from cart, each item is 1
       const variant = product.variant as ProductVariant;
 
       if (variant === ProductVariant.SACHETS && product.sachetPrices) {
@@ -812,7 +812,7 @@ class CheckoutService {
         (item: any) => item.productId.toString() === product.productId
       );
 
-      const quantity = cartItem?.quantity || 1;
+      const quantity = 1; // Quantity removed from cart, each item is 1
 
       // Get the price after 90-day discount (if applicable)
       // For 90-day plans, totalAmount is already the discounted price
@@ -1174,14 +1174,14 @@ class CheckoutService {
               taxRate: memberPriceResult.memberPrice.taxRate,
             };
             membershipDiscountAmount = this.roundAmount(
-              memberPriceResult.discountAmount * product.quantity
+              memberPriceResult.discountAmount // Quantity removed from cart, each item is 1
             );
             membershipDiscountPercentage = memberPriceResult.discountPercentage;
           }
 
           // Recalculate line totals with member price if applicable
           const lineSubtotal = memberUnitPrice
-            ? memberUnitPrice.amount * product.quantity
+            ? memberUnitPrice.amount // Quantity removed from cart, each item is 1
             : product.lineSubtotal;
           const lineTotal = lineSubtotal;
 
@@ -1376,7 +1376,7 @@ class CheckoutService {
 
       if (!cartItem) continue;
 
-      const quantity = cartItem.quantity;
+      const quantity = 1; // Quantity removed from cart, each item is 1
       const productTitle =
         typeof product.title === "string"
           ? product.title
@@ -1491,7 +1491,7 @@ class CheckoutService {
 
     // Calculate subtotal (sum of final prices)
     let subtotal = cartItems.reduce(
-      (sum, item) => sum + item.finalPrice * item.quantity,
+      (sum, item) => sum + item.finalPrice, // Quantity removed from cart, each item is 1
       0
     );
 
@@ -1728,7 +1728,9 @@ class CheckoutService {
         currency,
         amount: 0,
         discountedPrice: 0,
+        totalAmount: 0, // Total amount from product pricing
         planType: `${selectedPlanDays} Day Plan`,
+        taxRate: 0, // Store taxRate from product pricing
       };
 
       if (selectedVariant === "SACHETS" && product.sachetPrices) {
@@ -1739,17 +1741,20 @@ class CheckoutService {
           let discountedPrice =
             selectedPlanData.discountedPrice || selectedPlanData.amount || 0;
 
-          // Apply 90-day bonus discount (15% extra)
+          // Apply 90-day bonus discount (15% extra) on discountedPrice
           if (selectedPlanDays === 90) {
-            const originalAmount = selectedPlanData.amount || 0;
-            discountedPrice = originalAmount * 0.85; // 15% discount
+            // Apply 15% discount on the existing discountedPrice
+            discountedPrice = discountedPrice * 0.85; // 15% discount on discountedPrice
           }
 
           basePlanPrice = {
             currency: selectedPlanData.currency || currency,
             amount: selectedPlanData.amount || 0,
             discountedPrice,
+            totalAmount:
+              selectedPlanData.totalAmount || selectedPlanData.amount || 0, // Get totalAmount from plan data
             planType: `${selectedPlanDays} Day Plan`,
+            taxRate: selectedPlanData.taxRate || 0, // Get taxRate from plan data
           };
         }
       } else if (
@@ -1774,7 +1779,12 @@ class CheckoutService {
                 selectedCountPrice.discountedPrice ||
                 selectedCountPrice.amount ||
                 0,
+              totalAmount:
+                selectedCountPrice.totalAmount ||
+                selectedCountPrice.amount ||
+                0, // Get totalAmount from plan data
               planType: `Stand-up Pouch (${selectedCapsuleCount} count)`,
+              taxRate: selectedCountPrice.taxRate || 0, // Get taxRate from plan data
             };
           }
         } else {
@@ -1784,7 +1794,9 @@ class CheckoutService {
             amount: standupPrice.amount || 0,
             discountedPrice:
               standupPrice.discountedPrice || standupPrice.amount || 0,
+            totalAmount: standupPrice.totalAmount || standupPrice.amount || 0, // Get totalAmount from price object
             planType: "Stand-up Pouch",
+            taxRate: standupPrice.taxRate || 0, // Get taxRate from price object
           };
         }
       }
@@ -1807,7 +1819,7 @@ class CheckoutService {
       );
 
       const membershipDiscount = memberPriceResult.isMember
-        ? memberPriceResult.discountAmount * item.quantity
+        ? memberPriceResult.discountAmount // Quantity removed from cart, each item is 1
         : 0;
 
       return {
@@ -1815,9 +1827,10 @@ class CheckoutService {
         title: productTitle,
         image: product.productImage || "",
         variant: product.variant || "SACHETS",
-        quantity: item.quantity,
+        quantity: 1, // Quantity removed from cart, each item is 1
         basePlanPrice,
         membershipDiscount: this.roundAmount(membershipDiscount),
+        taxRate: basePlanPrice.taxRate || 0, // Include taxRate in cart item
       };
     });
 
@@ -1855,7 +1868,7 @@ class CheckoutService {
           const cartItem = cart.items.find(
             (item: any) => item.productId.toString() === product._id.toString()
           );
-          const quantity = cartItem?.quantity || 1;
+          const quantity = 1; // Quantity removed from cart, each item is 1
 
           const plans = [
             {
@@ -1927,8 +1940,9 @@ class CheckoutService {
               let discountedPrice = planData.discountedPrice || planPrice;
 
               // Apply 90-day bonus discount only for subscription plans
+              // Apply 15% discount on the existing discountedPrice
               if (planInfo.isSubscription && planInfo.days === 90) {
-                discountedPrice = planPrice * 0.85; // 15% discount
+                discountedPrice = discountedPrice * 0.85; // 15% discount on discountedPrice
               } else if (planData.discountedPrice) {
                 discountedPrice = planData.discountedPrice;
               }
@@ -1982,7 +1996,7 @@ class CheckoutService {
           const cartItem = cart.items.find(
             (item: any) => item.productId.toString() === product._id.toString()
           );
-          const quantity = cartItem?.quantity || 1;
+          const quantity = 1; // Quantity removed from cart, each item is 1
 
           for (const planInfo of standupPouchPlans) {
             const planData = standupPrice[planInfo.key];
@@ -2105,7 +2119,26 @@ class CheckoutService {
       : 0;
     const savePercentage = selectedPlan ? selectedPlan.savePercentage : 0;
 
+    // Calculate subscription plan discount amount
+    // Only apply 15% discount for 90-day SACHETS subscription plan
+    let subscriptionPlanDiscountAmount = 0;
+
+    if (
+      selectedPlanDays === 90 &&
+      selectedVariant === "SACHETS" &&
+      !isOneTimePurchase &&
+      totalDiscountedPrice > 0
+    ) {
+      // Calculate 15% discount on the discountedPrice (not original amount)
+      // This is the discount amount that will be shown in subscriptionPlanDiscountAmount
+      subscriptionPlanDiscountAmount = this.roundAmount(
+        totalDiscountedPrice * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100)
+      );
+    }
+    // For all other plans (30, 60, 180 days, STAND_UP_POUCH, one-time), subscriptionPlanDiscountAmount = 0
+
     // Calculate plan discount (difference between subtotal and discounted price)
+    // This includes all plan-level discounts
     const planDiscount = this.roundAmount(subtotal - totalDiscountedPrice);
 
     // Calculate plan discount percentage
@@ -2114,6 +2147,20 @@ class CheckoutService {
     // Calculate subtotal after plan discount and membership discount
     const subtotalAfterDiscounts = this.roundAmount(
       totalDiscountedPrice - membershipDiscountTotal
+    );
+
+    // Calculate tax by summing taxRate from all products in cart
+    // taxRate is already an amount (not percentage) from product pricing
+    const totalTaxAmount = cartItems.reduce(
+      (sum, item: any) => sum + (item.taxRate || 0),
+      0
+    );
+    const taxAmount = this.roundAmount(totalTaxAmount);
+
+    // Calculate order amount for coupon validation (before coupon, after all discounts + tax)
+    // This should match the grandTotal before coupon is applied
+    const orderAmountForCoupon = this.roundAmount(
+      subtotalAfterDiscounts + taxAmount
     );
 
     // Validate and apply coupon if provided
@@ -2138,7 +2185,7 @@ class CheckoutService {
         const couponResult = await this.validateCouponForSummary({
           couponCode: options.couponCode,
           userId,
-          orderAmount: subtotalAfterDiscounts,
+          orderAmount: orderAmountForCoupon, // Use amount with tax for validation
           productIds: productIdsArray,
           categoryIds: categoryIdsArray,
         });
@@ -2165,16 +2212,17 @@ class CheckoutService {
     }
 
     // Calculate subtotal after coupon
+    // Note: couponDiscountAmount is calculated on orderAmountForCoupon (which includes tax)
+    // So we subtract it from subtotalAfterDiscounts (before tax)
     const subtotalAfterCoupon = this.roundAmount(
       subtotalAfterDiscounts - couponDiscountAmount
     );
 
-    // Calculate tax (21% VAT for Netherlands/EU)
-    const taxRate = 0.21; // 21% VAT
-    const taxAmount = this.roundAmount(subtotalAfterCoupon * taxRate);
+    // Ensure subtotalAfterCoupon doesn't go negative
+    const finalSubtotalAfterCoupon = Math.max(0, subtotalAfterCoupon);
 
     // Calculate grand total (subtotal after all discounts + tax)
-    const grandTotal = this.roundAmount(subtotalAfterCoupon + taxAmount);
+    const grandTotal = this.roundAmount(finalSubtotalAfterCoupon + taxAmount);
 
     // Calculate total discount amount (plan discount + membership discount + coupon discount)
     const totalDiscountAmount = this.roundAmount(
@@ -2201,7 +2249,9 @@ class CheckoutService {
           discountedPrice: this.roundAmount(totalDiscountedPrice),
           couponDiscountAmount: this.roundAmount(couponDiscountAmount),
           membershipDiscountAmount: this.roundAmount(membershipDiscountTotal),
-          subscriptionPlanDiscountAmount: this.roundAmount(planDiscount),
+          subscriptionPlanDiscountAmount: this.roundAmount(
+            subscriptionPlanDiscountAmount
+          ), // 15% discount for 90-day sachets, 0 for others
           taxAmount: this.roundAmount(taxAmount),
           grandTotal: this.roundAmount(grandTotal),
           currency,
