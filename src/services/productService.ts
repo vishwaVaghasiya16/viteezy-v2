@@ -880,9 +880,14 @@ class ProductService {
       }
     );
 
+    // Store base pipeline before adding trending stages
+    const basePipeline = [...pipeline];
+    
     // Add trending score calculation if sortBy is "trending"
+    let useTrendingSort = false;
     if (sortBy === "trending") {
       pipeline.push(...this.buildTrendingScoreStages());
+      useTrendingSort = true;
     }
 
     const sortStage = this.buildSortStage(sortBy, sort, hasSearch);
@@ -895,9 +900,31 @@ class ProductService {
       },
     });
 
-    const [aggregationResult] = await Products.aggregate(pipeline);
-    const products = aggregationResult?.data ?? [];
-    const total = aggregationResult?.total?.[0]?.value ?? 0;
+    let [aggregationResult] = await Products.aggregate(pipeline);
+    let products = aggregationResult?.data ?? [];
+    let total = aggregationResult?.total?.[0]?.value ?? 0;
+
+    // If trending sort was applied but no products found, fallback to all products sorted by createdAt
+    if (useTrendingSort && products.length === 0) {
+      // Rebuild pipeline without trending stages - use base pipeline
+      const fallbackPipeline = [...basePipeline];
+      
+      // Add sort by createdAt descending
+      fallbackPipeline.push({ $sort: { createdAt: -1 } });
+      
+      // Add facet for pagination
+      fallbackPipeline.push({
+        $facet: {
+          data: [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: "value" }],
+        },
+      });
+      
+      // Run aggregation again
+      [aggregationResult] = await Products.aggregate(fallbackPipeline);
+      products = aggregationResult?.data ?? [];
+      total = aggregationResult?.total?.[0]?.value ?? 0;
+    }
 
     // Calculate monthly amounts for all products
     const productsWithMonthlyAmounts = products.map((product: any) =>
