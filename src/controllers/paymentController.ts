@@ -152,7 +152,10 @@ class PaymentController {
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
-            total: result.order.total,
+            total: {
+              amount: result.order.grandTotal,
+              currency: result.order.currency,
+            },
           },
           gateway: {
             redirectUrl: result.result.redirectUrl,
@@ -208,7 +211,10 @@ class PaymentController {
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
-            total: result.order.total,
+            total: {
+              amount: result.order.grandTotal,
+              currency: result.order.currency,
+            },
           },
           updated: result.updated,
         },

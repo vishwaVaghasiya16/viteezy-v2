@@ -114,16 +114,20 @@ class SubscriptionController {
 
       // Get subscription plan discount from order if it's a 90-day plan
       let subscriptionPlanDiscount = null;
-      if (cycleDays === 90 && order.subscriptionPlanDiscount) {
-        subscriptionPlanDiscount = order.subscriptionPlanDiscount;
+      if (cycleDays === 90 && order.subscriptionPlanDiscountAmount > 0) {
+        subscriptionPlanDiscount = {
+          amount: order.subscriptionPlanDiscountAmount,
+          currency: order.currency,
+          taxRate: 0,
+        };
       } else if (cycleDays === 90 && order.metadata?.subscriptionPlanDiscount) {
         // Fallback: calculate from order metadata if discount field not set
         const discountMetadata = order.metadata.subscriptionPlanDiscount;
         if (discountMetadata && discountMetadata.discountPercentage === 15) {
-          // Calculate discount amount from order subtotal
-          const discountAmount = (order.subtotal.amount * 15) / 100;
+          // Calculate discount amount from order subTotal
+          const discountAmount = (order.subTotal * 15) / 100;
           subscriptionPlanDiscount = {
-            currency: order.subtotal.currency,
+            currency: order.currency,
             amount: Math.round((discountAmount + Number.EPSILON) * 100) / 100,
             taxRate: 0,
           };
@@ -188,9 +192,10 @@ class SubscriptionController {
           // Use provided amount or order total as fallback
           if (!recurringAmount) {
             recurringAmount = {
-              currency: order.subtotal.currency,
-              amount: order.subtotal.amount,
-              taxRate: order.subtotal.taxRate,
+              currency: order.currency,
+              amount: order.subTotal,
+              taxRate:
+                order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
             };
           }
         }

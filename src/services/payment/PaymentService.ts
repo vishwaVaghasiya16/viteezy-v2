@@ -411,7 +411,7 @@ export class PaymentService {
           );
 
           // Track coupon usage if a coupon was applied
-          if (order.couponCode && order.couponDiscount?.amount > 0) {
+          if (order.couponCode && order.couponDiscountAmount > 0) {
             console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
             try {
               // Find the coupon by code
@@ -423,7 +423,11 @@ export class PaymentService {
                   couponId: coupon._id as mongoose.Types.ObjectId,
                   userId: order.userId as mongoose.Types.ObjectId,
                   orderId: order._id as mongoose.Types.ObjectId,
-                  discountAmount: order.couponDiscount,
+                  discountAmount: {
+                    amount: order.couponDiscountAmount,
+                    currency: order.currency,
+                    taxRate: 0,
+                  },
                   couponCode: order.couponCode,
                   orderNumber: order.orderNumber,
                 });
@@ -786,7 +790,7 @@ export class PaymentService {
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(order.total.amount);
+      const amountInMinorUnits = this.toMinorUnits(order.grandTotal);
 
       // Convert populated addresses to AddressSnapshotType format
       const shippingAddress = order.shippingAddressId
@@ -799,7 +803,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: order.total.currency,
+        currency: order.currency,
         orderId: orderId,
         userId: data.userId,
         description: `Order ${order.orderNumber}`,
@@ -837,11 +841,11 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: order.total.amount,
-          currency: order.total.currency,
-          taxRate: order.tax.amount / order.subtotal.amount || 0,
+          amount: order.grandTotal,
+          currency: order.currency,
+          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
         },
-        currency: order.total.currency,
+        currency: order.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -1184,11 +1188,11 @@ export class PaymentService {
   }
 
   private buildOrderCheckoutLineItems(order: any): PaymentLineItem[] {
-    const currency = order?.total?.currency || "EUR";
+    const currency = order?.currency || "EUR";
     return [
       {
         name: `Order ${order?.orderNumber || ""}`.trim(),
-        amount: this.toMinorUnits(order?.total?.amount || 0),
+        amount: this.toMinorUnits(order?.grandTotal || 0),
         currency,
         quantity: 1,
         description: `${order?.items?.length || 0} item(s)`,
@@ -1235,14 +1239,14 @@ export class PaymentService {
       const items = Array.isArray(order.items)
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
-            quantity: item.quantity || 1,
+            quantity: 1, // Quantity removed from order items
             unitAmount: item.price?.amount || 0,
-            currency: item.price?.currency || order.total?.currency || "EUR",
+            currency: item.price?.currency || order.currency || "EUR",
           }))
         : [];
 
       console.log("📧 [EMAIL] - Items count:", items.length);
-      console.log("📧 [EMAIL] - Total amount:", order.total?.amount);
+      console.log("📧 [EMAIL] - Total amount:", order.grandTotal);
 
       console.log("📧 [EMAIL] Step 3: Sending order confirmation email");
 
@@ -1258,11 +1262,26 @@ export class PaymentService {
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         paymentMethod: payment?.paymentMethod,
-        subtotal: order.subtotal || order.total,
-        tax: order.tax,
-        shipping: order.shipping,
-        discount: order.discount,
-        total: order.total,
+        subtotal: {
+          amount: order.subTotal,
+          currency: order.currency,
+        },
+        tax: {
+          amount: order.taxAmount,
+          currency: order.currency,
+        },
+        shipping: {
+          amount: 0, // Shipping not stored separately in new model
+          currency: order.currency,
+        },
+        discount: {
+          amount: order.subTotal - order.discountedPrice,
+          currency: order.currency,
+        },
+        total: {
+          amount: order.grandTotal,
+          currency: order.currency,
+        },
         items,
         shippingAddress: shippingAddressSnapshot,
       });

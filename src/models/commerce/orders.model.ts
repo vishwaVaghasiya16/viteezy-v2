@@ -9,6 +9,7 @@ import {
   OrderStatus,
   PaymentStatus,
   OrderPlanType,
+  ProductVariant,
   ORDER_STATUS_VALUES,
   PAYMENT_STATUS_VALUES,
   ORDER_PLAN_TYPE_VALUES,
@@ -19,21 +20,25 @@ export interface IOrder extends Document {
   userId: mongoose.Types.ObjectId;
   status: OrderStatus;
   planType: OrderPlanType;
+  variantType?: ProductVariant; // Variant type selected by user (SACHETS or STAND_UP_POUCH)
+  selectedPlanDays?: number; // Selected plan days (30, 60, 90, 180 for subscription)
+  selectedCapsuleCount?: number; // Selected capsule count (30, 60 for one-time/stand-up pouch)
   items: Array<{
     productId: mongoose.Types.ObjectId;
-    variantId?: mongoose.Types.ObjectId;
-    quantity: number;
     price: PriceType;
     name: string;
+    planDays?: number; // Plan days for this specific item
+    capsuleCount?: number; // Capsule count for this specific item
   }>;
-  subtotal: PriceType;
-  tax: PriceType;
-  shipping: PriceType;
-  discount: PriceType;
-  couponDiscount: PriceType;
-  membershipDiscount: PriceType;
-  subscriptionPlanDiscount: PriceType;
-  total: PriceType;
+  // Pricing stored as numbers with separate currency field
+  subTotal: number; // Sum of all product amounts
+  discountedPrice: number; // Discounted price after plan discounts
+  couponDiscountAmount: number; // Coupon discount amount
+  membershipDiscountAmount: number; // Membership discount amount
+  subscriptionPlanDiscountAmount: number; // Subscription plan discount (e.g., 90-day 15% discount)
+  taxAmount: number; // Tax amount
+  grandTotal: number; // Final total after all discounts and tax
+  currency: string; // Currency code (e.g., "EUR")
   shippingAddressId: mongoose.Types.ObjectId; // Reference to Address model
   billingAddressId?: mongoose.Types.ObjectId; // Reference to Address model
   paymentMethod: string;
@@ -72,19 +77,24 @@ const OrderSchema = new Schema<IOrder>(
       enum: ORDER_PLAN_TYPE_VALUES,
       default: OrderPlanType.ONE_TIME,
     },
+    variantType: {
+      type: String,
+      enum: Object.values(ProductVariant),
+      default: null,
+    },
+    selectedPlanDays: {
+      type: Number,
+      default: null,
+    },
+    selectedCapsuleCount: {
+      type: Number,
+      default: null,
+    },
     items: [
       {
         productId: {
           type: Schema.Types.ObjectId,
           ref: "products",
-        },
-        variantId: {
-          type: Schema.Types.ObjectId,
-          ref: "product_variants",
-        },
-        quantity: {
-          type: Number,
-          min: 1,
         },
         price: {
           type: PriceSchema,
@@ -94,39 +104,49 @@ const OrderSchema = new Schema<IOrder>(
           trim: true,
           default: null,
         },
+        planDays: {
+          type: Number,
+          default: null,
+        },
+        capsuleCount: {
+          type: Number,
+          default: null,
+        },
       },
     ],
-    subtotal: {
-      type: PriceSchema,
-      default: null,
+    // Pricing stored as numbers with separate currency field
+    subTotal: {
+      type: Number,
+      default: 0,
     },
-    tax: {
-      type: PriceSchema,
-      default: null,
+    discountedPrice: {
+      type: Number,
+      default: 0,
     },
-    shipping: {
-      type: PriceSchema,
-      default: null,
+    couponDiscountAmount: {
+      type: Number,
+      default: 0,
     },
-    discount: {
-      type: PriceSchema,
-      default: null,
+    membershipDiscountAmount: {
+      type: Number,
+      default: 0,
     },
-    couponDiscount: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    subscriptionPlanDiscountAmount: {
+      type: Number,
+      default: 0,
     },
-    membershipDiscount: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    taxAmount: {
+      type: Number,
+      default: 0,
     },
-    subscriptionPlanDiscount: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+    grandTotal: {
+      type: Number,
+      default: 0,
     },
-    total: {
-      type: PriceSchema,
-      default: null,
+    currency: {
+      type: String,
+      default: "EUR",
+      trim: true,
     },
     shippingAddressId: {
       type: Schema.Types.ObjectId,

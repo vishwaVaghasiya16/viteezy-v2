@@ -6,6 +6,8 @@ import {
   PAYMENT_METHOD_VALUES,
   ORDER_PLAN_TYPE_VALUES,
   DISCOUNT_TYPE_VALUES,
+  ProductVariant,
+  PRODUCT_VARIANT_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
@@ -71,8 +73,6 @@ const addressSchema = Joi.object(
 const orderItemSchema = Joi.object(
   withFieldLabels({
     productId: objectIdSchema.required(),
-    variantId: objectIdSchema.optional(),
-    quantity: Joi.number().integer().min(1).required(),
     price: priceSchema.required(),
     name: Joi.string().trim().optional(),
   })
@@ -110,6 +110,24 @@ const planSchema = Joi.object(
     interval: Joi.string().trim().optional(),
     startDate: Joi.date().optional(),
     trialDays: Joi.number().integer().min(0).optional(),
+    planDays: Joi.number()
+      .integer()
+      .valid(30, 60, 90, 180)
+      .when("type", {
+        is: "Subscription",
+        then: Joi.required(),
+        otherwise: Joi.optional(),
+      })
+      .label("Plan Days"),
+    capsuleCount: Joi.number()
+      .integer()
+      .valid(30, 60)
+      .when("type", {
+        is: "One-Time",
+        then: Joi.optional(),
+        otherwise: Joi.optional(),
+      })
+      .label("Capsule Count"),
     metadata: Joi.object().unknown(true).default({}),
   })
 ).default({
@@ -121,22 +139,58 @@ const planSchema = Joi.object(
  */
 export const createOrderSchema = Joi.object(
   withFieldLabels({
-    items: Joi.array().items(orderItemSchema).min(1).label("Items").required(),
+    cartId: objectIdSchema.required().label("Cart ID"),
+    variantType: Joi.string()
+      .valid(...PRODUCT_VARIANT_VALUES)
+      .required()
+      .label("Variant Type"),
+    planDurationDays: Joi.number()
+      .integer()
+      .valid(30, 60, 90, 180)
+      .when("isOneTime", {
+        is: true,
+        then: Joi.valid(30, 60).required(),
+        otherwise: Joi.valid(30, 60, 90, 180).required(),
+      })
+      .label("Plan Duration Days"),
+    isOneTime: Joi.boolean().default(false).label("Is One Time Purchase"),
+    capsuleCount: Joi.number()
+      .integer()
+      .valid(30, 60)
+      .when("variantType", {
+        is: "STAND_UP_POUCH",
+        then: Joi.required(),
+        otherwise: Joi.optional(),
+      })
+      .label("Capsule Count"),
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
-    shippingAmount: priceSchema.default({
-      currency: "EUR",
-      amount: 0,
-      taxRate: 0,
-    }),
-    taxAmount: priceSchema.default({
-      currency: "EUR",
-      amount: 0,
-      taxRate: 0,
-    }),
+    // Pricing fields as numbers with separate currency
+    subTotal: Joi.number().min(0).required().label("Sub Total"),
+    discountedPrice: Joi.number().min(0).required().label("Discounted Price"),
+    couponDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Coupon Discount Amount"),
+    membershipDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Membership Discount Amount"),
+    subscriptionPlanDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Subscription Plan Discount Amount"),
+    taxAmount: Joi.number().min(0).default(0).label("Tax Amount"),
+    grandTotal: Joi.number().min(0).required().label("Grand Total"),
+    currency: Joi.string()
+      .trim()
+      .uppercase()
+      .min(3)
+      .max(5)
+      .default("EUR")
+      .label("Currency"),
     couponCode: Joi.string().trim().uppercase().optional(),
     membership: membershipSchema,
-    plan: planSchema,
     metadata: Joi.object().unknown(true).default({}),
     paymentMethod: Joi.string()
       .valid(...PAYMENT_METHOD_VALUES)

@@ -2174,7 +2174,13 @@ class CheckoutService {
         }
       | undefined;
 
-    if (options.couponCode && options.couponCode.trim()) {
+    // Determine coupon code to use (normalize empty strings to null)
+    const couponCodeToProcess =
+      options.couponCode && options.couponCode.trim()
+        ? options.couponCode.trim().toUpperCase()
+        : null;
+
+    if (couponCodeToProcess) {
       try {
         // Get product IDs and category IDs for coupon validation
         const productIdsArray = products.map((p) => p._id.toString());
@@ -2183,7 +2189,7 @@ class CheckoutService {
           .filter((c) => c) as string[];
 
         const couponResult = await this.validateCouponForSummary({
-          couponCode: options.couponCode,
+          couponCode: couponCodeToProcess,
           userId,
           orderAmount: orderAmountForCoupon, // Use amount with tax for validation
           productIds: productIdsArray,
@@ -2192,23 +2198,57 @@ class CheckoutService {
 
         couponDiscountAmount = couponResult.discountAmount;
         couponInfo = {
-          code: options.couponCode.toUpperCase(),
+          code: couponCodeToProcess,
           isValid: true,
           discountAmount: this.roundAmount(couponDiscountAmount),
           message: "Coupon applied successfully",
         };
+
+        // Update cart with valid coupon
+        await Carts.findByIdAndUpdate(
+          cart._id,
+          {
+            couponCode: couponCodeToProcess,
+            couponDiscountAmount: this.roundAmount(couponDiscountAmount),
+            updatedAt: new Date(),
+          },
+          { new: true }
+        );
       } catch (error: any) {
         // Coupon validation failed, but don't throw error
         couponInfo = {
-          code: options.couponCode.toUpperCase(),
+          code: couponCodeToProcess,
           isValid: false,
           discountAmount: 0,
           message: error.message || "Invalid coupon code",
         };
         logger.warn(
-          `Coupon validation failed for ${options.couponCode}: ${error.message}`
+          `Coupon validation failed for ${couponCodeToProcess}: ${error.message}`
+        );
+
+        // Update cart to remove invalid coupon
+        await Carts.findByIdAndUpdate(
+          cart._id,
+          {
+            couponCode: null,
+            couponDiscountAmount: 0,
+            updatedAt: new Date(),
+          },
+          { new: true }
         );
       }
+    } else {
+      // No coupon code provided (null or empty string)
+      // Update cart to remove coupon
+      await Carts.findByIdAndUpdate(
+        cart._id,
+        {
+          couponCode: null,
+          couponDiscountAmount: 0,
+          updatedAt: new Date(),
+        },
+        { new: true }
+      );
     }
 
     // Calculate subtotal after coupon

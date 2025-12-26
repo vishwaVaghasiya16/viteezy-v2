@@ -348,7 +348,7 @@ class AdminUserController {
           orderNumber: order.orderNumber,
           paymentMethod: paymentMethod, // Mollie, Stripe, etc.
           orderCreatedDate: order.createdAt,
-          orderTotalAmount: order.total || null,
+          orderTotalAmount: order.grandTotal || null,
           items: orderItems,
           paymentStatus: order.paymentStatus,
         };

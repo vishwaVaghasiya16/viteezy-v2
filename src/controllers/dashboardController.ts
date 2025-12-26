@@ -22,7 +22,6 @@ class DashboardController {
    * @access Private
    */
   getStats = asyncHandler(
-
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.user?._id || req.userId;
       if (!userId) {
@@ -119,7 +118,9 @@ class DashboardController {
 
       const products = productIds.length
         ? await Products.find({
-            _id: { $in: productIds.map((id) => new mongoose.Types.ObjectId(id)) },
+            _id: {
+              $in: productIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
           })
             .select("_id productImage title slug")
             .lean()
@@ -130,7 +131,9 @@ class DashboardController {
       );
 
       const orderItems = (lastOrder.items || []).map((item: any) => {
-        const productData = productImageMap.get(item.productId?.toString() || "");
+        const productData = productImageMap.get(
+          item.productId?.toString() || ""
+        );
         return {
           productId: item.productId,
           variantId: item.variantId,
@@ -156,11 +159,15 @@ class DashboardController {
             createdAt: lastOrder.createdAt,
             items: orderItems,
             totals: {
-              subtotal: lastOrder.subtotal,
-              tax: lastOrder.tax,
-              shipping: lastOrder.shipping,
-              discount: lastOrder.discount,
-              total: lastOrder.total,
+              subTotal: lastOrder.subTotal,
+              discountedPrice: lastOrder.discountedPrice,
+              couponDiscountAmount: lastOrder.couponDiscountAmount,
+              membershipDiscountAmount: lastOrder.membershipDiscountAmount,
+              subscriptionPlanDiscountAmount:
+                lastOrder.subscriptionPlanDiscountAmount,
+              taxAmount: lastOrder.taxAmount,
+              grandTotal: lastOrder.grandTotal,
+              currency: lastOrder.currency,
             },
             tracking: {
               trackingNumber: lastOrder.trackingNumber || null,
@@ -179,4 +186,3 @@ class DashboardController {
 }
 
 export const dashboardController = new DashboardController();
-
