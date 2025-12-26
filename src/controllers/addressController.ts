@@ -115,31 +115,25 @@ class AddressController {
         city,
       });
 
-      // Validate with PostNL for NL, BE, and LU addresses
-      const validationOutcome = await this.validateDutchAddressOrRespond({
+      // Validate with PostNL for NL, BE, and LU addresses (validation only, don't use normalized data)
+      await this.validateDutchAddressOrRespond({
         country,
         postcode: postalCode,
         houseNumber,
         houseNumberAddition,
       });
 
-      const normalizedAddress = validationOutcome.normalized;
-      const cityToSave = normalizedAddress?.city || city;
-      const postalCodeToSave = normalizedAddress?.postcode || postalCode;
-      const streetNameToSave = normalizedAddress?.street || streetName;
+      // Store exactly what's in the request body, not normalized data
       const houseNumberToSave =
-        normalizedAddress?.houseNumber ??
-        (houseNumber !== undefined && houseNumber !== null
+        houseNumber !== undefined && houseNumber !== null
           ? String(houseNumber)
-          : undefined);
-      const additionToSave =
-        normalizedAddress?.houseNumberAddition ?? houseNumberAddition;
+          : undefined;
 
-      // Build full address string
+      // Build full address string from body data
       const addressParts = [
-        streetNameToSave,
+        streetName,
         houseNumberToSave,
-        additionToSave,
+        houseNumberAddition,
       ].filter(Boolean);
       const fullAddress = addressParts.join(" ") || address;
 
@@ -154,19 +148,19 @@ class AddressController {
         );
       }
 
-      // Create new address
+      // Create new address with exact body data
       const createdAddress = await Addresses.create({
         userId: new mongoose.Types.ObjectId(userId),
         firstName,
         lastName,
-        streetName: streetNameToSave,
+        streetName,
         ...(houseNumberToSave && { houseNumber: houseNumberToSave }),
-        ...(additionToSave && { houseNumberAddition: additionToSave }),
-        postalCode: postalCodeToSave,
-        address: fullAddress,
+        ...(houseNumberAddition && { houseNumberAddition }),
+        postalCode,
+        address: address || fullAddress, // Use address from body if provided, otherwise build from parts
         ...(phone && { phone }),
         country,
-        ...(cityToSave && { city: cityToSave }),
+        ...(city && { city }),
         isDefault: isDefault || false,
         ...(note && { note }),
         createdBy: new mongoose.Types.ObjectId(userId),
@@ -303,26 +297,22 @@ class AddressController {
           houseNumberAddition ?? existingAddress.houseNumberAddition,
       });
 
-      const normalizedAddress = validationOutcome.normalized;
-      const cityToSave = normalizedAddress?.city || finalCity;
-      const postalCodeToSave = normalizedAddress?.postcode || finalPostalCode;
-      const streetNameToSave = normalizedAddress?.street || finalStreetName;
+      // Store exactly what's in the request body, not normalized data
       const houseNumberToSave =
-        normalizedAddress?.houseNumber ?? finalHouseNumber;
-      const additionToSave =
-        normalizedAddress?.houseNumberAddition ??
-        (houseNumberAddition !== undefined
-          ? houseNumberAddition
-          : existingAddress.houseNumberAddition);
+        houseNumber !== undefined && houseNumber !== null
+          ? String(houseNumber)
+          : finalHouseNumber;
 
-      // Build full address string
+      // Build full address string from body data
       const addressParts = [
-        streetNameToSave,
+        finalStreetName,
         houseNumberToSave,
-        additionToSave,
+        houseNumberAddition !== undefined
+          ? houseNumberAddition
+          : existingAddress.houseNumberAddition,
       ].filter(Boolean);
       const fullAddress =
-        addressParts.join(" ") || address || existingAddress.address;
+        address || addressParts.join(" ") || existingAddress.address;
 
       // If setting as default, unset other default addresses for this user
       if (isDefault === true && existingAddress.isDefault !== true) {
@@ -339,16 +329,16 @@ class AddressController {
       const updatePayload: Partial<IAddress> = {
         ...(firstName !== undefined && { firstName }),
         ...(lastName !== undefined && { lastName }),
-        ...(streetNameToSave && { streetName: streetNameToSave }),
+        ...(finalStreetName && { streetName: finalStreetName }),
         ...(houseNumberToSave && { houseNumber: houseNumberToSave }),
-        ...(additionToSave !== undefined && {
-          houseNumberAddition: additionToSave,
+        ...(houseNumberAddition !== undefined && {
+          houseNumberAddition: houseNumberAddition || null,
         }),
-        ...(postalCodeToSave && { postalCode: postalCodeToSave }),
+        ...(finalPostalCode && { postalCode: finalPostalCode }),
         ...(fullAddress && { address: fullAddress }),
         ...(phone !== undefined && { phone: phone || null }),
         ...(finalCountry && { country: finalCountry }),
-        ...(cityToSave !== undefined && { city: cityToSave || null }),
+        ...(finalCity !== undefined && { city: finalCity || null }),
         ...(isDefault !== undefined && { isDefault }),
         ...(note !== undefined && { note: note || null }),
         updatedBy: new mongoose.Types.ObjectId(userId),
