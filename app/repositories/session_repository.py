@@ -23,6 +23,33 @@ class SessionRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.collection: AsyncIOMotorCollection = db[settings.mongo_sessions_collection]
 
+    @staticmethod
+    def _session_id_to_str(session_id: str | ObjectId | None) -> str:
+        """Serialize session_id to string for consistent comparisons/responses."""
+        if isinstance(session_id, ObjectId):
+            return str(session_id)
+        return str(session_id) if session_id is not None else ""
+
+    @staticmethod
+    def _session_id_variants(session_id: str | ObjectId | None) -> list:
+        """
+        Build variants to match either ObjectId or legacy string session_ids.
+        """
+        if session_id is None:
+            return []
+        variants: list = []
+        if isinstance(session_id, ObjectId):
+            variants.append(session_id)
+            variants.append(str(session_id))
+            return variants
+        session_str = str(session_id)
+        try:
+            variants.append(ObjectId(session_str))
+        except Exception:
+            pass
+        variants.append(session_str)
+        return variants
+
     @handle_database_errors
     async def create(self, metadata: dict | None = None, user_id: str | None = None) -> Session:
         """
@@ -478,8 +505,15 @@ class SessionRepository:
             return None
         
         # Extract session data from legacy document
+        session_id_value = legacy_doc.get("_id", session_id)
+        if not isinstance(session_id_value, ObjectId):
+            try:
+                session_id_value = ObjectId(session_id_value)
+            except Exception:
+                pass
+
         session_data = {
-            "session_id": session_id,
+            "session_id": session_id_value,
             "session_name": legacy_doc.get("session_name"),  # Preserve existing session_name if any
             "messages": legacy_doc.get("messages", []),
             "metadata": legacy_doc.get("metadata", {}),
@@ -515,11 +549,11 @@ class SessionRepository:
             })
         
         # Delete the legacy document
-        await self.collection.delete_one({"_id": session_id})
+        await self.collection.delete_one({"_id": {"$in": self._session_id_variants(session_id_value)}})
         
         # Return the session
         return Session(
-            id=session_id,
+            id=self._session_id_to_str(session_id_value),
             messages=[ChatMessage(**msg) for msg in session_data["messages"]],
             metadata=session_data["metadata"],
             created_at=session_data["created_at"],
@@ -535,9 +569,13 @@ class SessionRepository:
             if "created_at" not in msg:
                 msg["created_at"] = session_doc.get("created_at")
             messages.append(ChatMessage(**msg))
-        
+        session_id_value = session_doc.get("session_id", session_id)
+        if isinstance(session_id_value, ObjectId):
+            session_id_value = str(session_id_value)
+        else:
+            session_id_value = str(session_id_value) if session_id_value is not None else str(session_id)
         return Session(
-            id=session_id,
+            id=session_id_value,
             messages=messages,
             metadata=session_doc.get("metadata", {}),
             created_at=session_doc.get("created_at"),
@@ -561,9 +599,9 @@ class SessionRepository:
             - session_name: The session name if available
             - date: The session created_at date
             - messages: Array of message objects with:
-              - message_index: The index in the messages array where the word was found
-              - role: The role of the message (user/assistant)
-              - content: The message content containing the word
+            - message_index: The index in the messages array where the word was found
+            - role: The role of the message (user/assistant)
+            - content: The message content containing the word
         """
         from bson import ObjectId
         
@@ -659,6 +697,28 @@ class SessionRepository:
         return results
 
     @handle_database_errors
+    async def get_sessions_for_user(self, user_id: str) -> list[dict] | None:
+        """
+        Return lightweight session info (id/name/timestamps) for a user.
+        """
+        user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+        doc = await self.collection.find_one({"_id": user_oid}, {"sessions": 1})
+        if not doc:
+            return None
+        sessions = doc.get("sessions", []) or []
+        normalized = []
+        for session in sessions:
+            normalized.append(
+                {
+                    "session_id": self._session_id_to_str(session.get("session_id")),
+                    "session_name": session.get("session_name"),
+                    "created_at": session.get("created_at"),
+                    "updated_at": session.get("updated_at"),
+                }
+            )
+        return normalized
+
+    @handle_database_errors
     async def update_token_usage(
         self, session_id: str, usage_info: dict, user_id: str | None = None
     ) -> Session | None:
@@ -674,6 +734,8 @@ class SessionRepository:
         from datetime import datetime, timezone
         
         now = datetime.now(timezone.utc)
+        session_id_variants = self._session_id_variants(session_id)
+        session_id_str = self._session_id_to_str(session_id)
         
         # Try nested format first if user_id is provided
         if user_id:
@@ -684,7 +746,7 @@ class SessionRepository:
                 
                 # Get current session to retrieve existing token usage
                 user_doc = await self.collection.find_one(
-                    {"_id": user_oid, "sessions.session_id": session_id},
+                    {"_id": user_oid, "sessions.session_id": {"$in": session_id_variants}},
                     {"sessions.$": 1}
                 )
                 
@@ -723,7 +785,7 @@ class SessionRepository:
                     updated_metadata = {**current_metadata, "token_usage": updated_usage}
                     
                     updated = await self.collection.find_one_and_update(
-                        {"_id": user_oid, "sessions.session_id": session_id},
+                        {"_id": user_oid, "sessions.session_id": {"$in": session_id_variants}},
                         {
                             "$set": {
                                 "sessions.$.metadata": updated_metadata,
@@ -736,13 +798,14 @@ class SessionRepository:
                     
                     if updated:
                         for session in updated.get("sessions", []):
-                            if session.get("session_id") == session_id:
+                            if self._session_id_to_str(session.get("session_id")) == session_id_str:
                                 logger.info(
                                     f"✅ Token usage updated successfully for session {session_id} with user_id {user_id}: "
                                     f"input={updated_usage['input_tokens']}, output={updated_usage['output_tokens']}, "
                                     f"cost=${updated_usage['cost']:.6f}, api_calls={updated_usage['api_calls']}"
                                 )
                                 return self._nested_session_to_session(session, session_id)
+                        logger.warning(f"find_one_and_update returned None for session {session_id} with user_id {user_id}")
                     else:
                         logger.warning(f"find_one_and_update returned None for session {session_id} with user_id {user_id}")
                 else:
@@ -758,7 +821,7 @@ class SessionRepository:
         if not user_id:
             logger.debug(f"user_id not provided, searching for session {session_id} in nested format")
             user_doc = await self.collection.find_one(
-                {"sessions.session_id": session_id},
+                {"sessions.session_id": {"$in": session_id_variants}},
                 {"_id": 1, "sessions.$": 1}
             )
             if user_doc and user_doc.get("sessions"):
@@ -770,7 +833,7 @@ class SessionRepository:
         # Try legacy format: update in flat document
         logger.debug(f"Attempting to update token usage in legacy format for session {session_id}")
         try:
-            session_doc = await self.collection.find_one({"_id": session_id})
+            session_doc = await self.collection.find_one({"_id": {"$in": session_id_variants}})
             if session_doc:
                 current_metadata = session_doc.get("metadata", {})
                 current_usage = current_metadata.get("token_usage", {
@@ -797,7 +860,7 @@ class SessionRepository:
                 updated_metadata = {**current_metadata, "token_usage": updated_usage}
                 
                 updated = await self.collection.find_one_and_update(
-                    {"_id": session_id},
+                    {"_id": {"$in": session_id_variants}},
                     {
                         "$set": {
                             "metadata": updated_metadata,
@@ -841,22 +904,23 @@ class SessionRepository:
         Returns:
             True if session was found and deleted, False otherwise
         """
+        session_id_variants = self._session_id_variants(session_id)
         if user_id:
             # New format: remove session from nested sessions array
             user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
             
             # Check if session exists in user's sessions
             user_doc = await self.collection.find_one(
-                {"_id": user_oid, "sessions.session_id": session_id},
+                {"_id": user_oid, "sessions.session_id": {"$in": session_id_variants}},
                 {"sessions.$": 1}
             )
             
             if user_doc and user_doc.get("sessions"):
                 # Remove the session from the array
                 result = await self.collection.update_one(
-                    {"_id": user_oid, "sessions.session_id": session_id},
+                    {"_id": user_oid, "sessions.session_id": {"$in": session_id_variants}},
                     {
-                        "$pull": {"sessions": {"session_id": session_id}},
+                        "$pull": {"sessions": {"session_id": {"$in": session_id_variants}}},
                         "$set": {"updated_at": datetime.now(timezone.utc)}
                     }
                 )
@@ -864,23 +928,23 @@ class SessionRepository:
             return False
         else:
             # Legacy format: delete document directly
-            result = await self.collection.delete_one({"_id": session_id})
+            result = await self.collection.delete_one({"_id": {"$in": session_id_variants}})
             if result.deleted_count > 0:
                 return True
             
             # If not found in legacy format, try to find in nested format
             # Search across all users for this session_id
             user_doc = await self.collection.find_one(
-                {"sessions.session_id": session_id},
+                {"sessions.session_id": {"$in": session_id_variants}},
                 {"_id": 1, "sessions.$": 1}
             )
             
             if user_doc:
                 user_oid = user_doc["_id"]
                 result = await self.collection.update_one(
-                    {"_id": user_oid, "sessions.session_id": session_id},
+                    {"_id": user_oid, "sessions.session_id": {"$in": session_id_variants}},
                     {
-                        "$pull": {"sessions": {"session_id": session_id}},
+                        "$pull": {"sessions": {"session_id": {"$in": session_id_variants}}},
                         "$set": {"updated_at": datetime.now(timezone.utc)}
                     }
                 )

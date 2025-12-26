@@ -3,8 +3,6 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
-from pymongo import ReturnDocument
-
 from app.config.settings import settings
 from app.utils.error_handler import handle_database_errors
 
@@ -18,6 +16,40 @@ class QuizSessionRepository:
     """
     def __init__(self, db: AsyncIOMotorDatabase):
         self.collection: AsyncIOMotorCollection = db[settings.mongo_quiz_sessions_collection]
+
+    @staticmethod
+    def _session_id_variants(session_id: str | ObjectId) -> list:
+        """
+        Build variants to match both ObjectId-based session_ids and legacy string ids.
+        """
+        variants: list = []
+        if isinstance(session_id, ObjectId):
+            variants.append(session_id)
+            variants.append(str(session_id))
+            return variants
+        session_id_str = str(session_id)
+        try:
+            variants.append(ObjectId(session_id_str))
+        except Exception:
+            pass
+        variants.append(session_id_str)
+        return variants
+
+    @staticmethod
+    def _session_id_to_store(session_id: str | ObjectId) -> ObjectId | str:
+        """Convert incoming session_id to ObjectId when possible for storage."""
+        if isinstance(session_id, ObjectId):
+            return session_id
+        try:
+            return ObjectId(session_id)
+        except Exception:
+            return str(session_id)
+
+    @staticmethod
+    def _session_id_to_str(session_id: str | ObjectId | None) -> str:
+        if isinstance(session_id, ObjectId):
+            return str(session_id)
+        return str(session_id) if session_id is not None else ""
 
     @handle_database_errors
     async def add_session(self, user_id: str, session_id: str) -> bool:
@@ -34,12 +66,13 @@ class QuizSessionRepository:
         """
         now = datetime.now(timezone.utc)
         user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+        session_id_value = self._session_id_to_store(session_id)
         
         # Try to find existing document for this user
         existing = await self.collection.find_one({"_id": user_oid})
         
         session_entry = {
-            "session_id": session_id,
+            "session_id": session_id_value,
             "session_name": None  # Will be updated later when session_name is generated
         }
         
@@ -82,7 +115,17 @@ class QuizSessionRepository:
         if not doc:
             return None
         
-        return doc.get("session_data", [])
+        sessions = doc.get("session_data", [])
+        # Normalize session_id to string for API consumers
+        normalized = []
+        for session in sessions:
+            normalized.append(
+                {
+                    **session,
+                    "session_id": self._session_id_to_str(session.get("session_id"))
+                }
+            )
+        return normalized
 
     @handle_database_errors
     async def delete_session(self, user_id: str, session_id: str) -> bool:
@@ -98,12 +141,13 @@ class QuizSessionRepository:
             True if session was found and deleted, False otherwise
         """
         user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+        session_id_variants = self._session_id_variants(session_id)
         
         # Remove session from session_data array
         result = await self.collection.update_one(
             {"_id": user_oid},
             {
-                "$pull": {"session_data": {"session_id": session_id}},
+                "$pull": {"session_data": {"session_id": {"$in": session_id_variants}}},
                 "$set": {"updated_at": datetime.now(timezone.utc)}
             }
         )
@@ -126,10 +170,12 @@ class QuizSessionRepository:
         """
         user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
         now = datetime.now(timezone.utc)
+        session_id_variants = self._session_id_variants(session_id)
+        session_id_value = self._session_id_to_store(session_id)
         
         # First, try to update existing session
         result = await self.collection.update_one(
-            {"_id": user_oid, "session_data.session_id": session_id},
+            {"_id": user_oid, "session_data.session_id": {"$in": session_id_variants}},
             {
                 "$set": {
                     "session_data.$.session_name": session_name,
@@ -148,7 +194,7 @@ class QuizSessionRepository:
         if user_doc:
             # User exists but session doesn't - add the session with session_name
             session_entry = {
-                "session_id": session_id,
+                "session_id": session_id_value,
                 "session_name": session_name
             }
             await self.collection.update_one(
@@ -163,7 +209,7 @@ class QuizSessionRepository:
         else:
             # User doesn't exist - create new document with session
             session_entry = {
-                "session_id": session_id,
+                "session_id": session_id_value,
                 "session_name": session_name
             }
             await self.collection.insert_one({
@@ -175,4 +221,3 @@ class QuizSessionRepository:
             })
             logger.info(f"Created new quiz_sessions document for user {user_id} with session {session_id} and session_name")
             return True
-

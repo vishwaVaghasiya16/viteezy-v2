@@ -29,11 +29,10 @@ def validate_session_id(session_id: str) -> str:
     if not session_id:
         raise ValidationError("Session ID cannot be empty", field="session_id")
     
-    # Session IDs are hex strings (32 chars from uuid4().hex)
-    # Allow both uppercase and lowercase hex characters
-    if not re.match(r"^[a-fA-F0-9]{32}$", session_id):
+    # Allow ObjectId (24 hex) for new sessions and legacy 32-char hex ids
+    if not re.match(r"^[a-fA-F0-9]{24}$", session_id) and not re.match(r"^[a-fA-F0-9]{32}$", session_id):
         raise ValidationError(
-            "Invalid session ID format. Must be a 32-character hexadecimal string.",
+            "Invalid session ID format. Must be a 24 or 32-character hexadecimal string.",
             field="session_id",
             details={"session_id": session_id[:20] + "..." if len(session_id) > 20 else session_id}
         )
@@ -167,4 +166,3 @@ def validate_search_word(word: str, min_length: int = 1, max_length: int = 100) 
     word = re.sub(r"[^\w\s-]", "", word)
     
     return word
-
