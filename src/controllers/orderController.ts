@@ -272,7 +272,7 @@ class OrderController {
         cartId,
         variantType,
         planDurationDays,
-        isOneTime = false,
+        isOneTime,
         capsuleCount,
         shippingAddressId,
         billingAddressId,
@@ -882,6 +882,7 @@ class OrderController {
         orderNumber: generateOrderNumber(),
         userId,
         planType: orderPlanType,
+        isOneTime,
         variantType: variantType as ProductVariant,
         selectedPlanDays: !isOneTime ? planDurationDays : undefined,
         items: orderItems,
@@ -971,7 +972,7 @@ class OrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
+          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
         )
         .populate(
           "items.productId",
@@ -987,6 +988,7 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
+        isOneTime: order.isOneTime,
         variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,
@@ -1158,6 +1160,7 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
+        isOneTime: order.isOneTime,
         variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,

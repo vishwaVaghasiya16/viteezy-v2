@@ -153,7 +153,7 @@ export const createOrderSchema = Joi.object(
         otherwise: Joi.valid(30, 60, 90, 180).required(),
       })
       .label("Plan Duration Days"),
-    isOneTime: Joi.boolean().default(false).label("Is One Time Purchase"),
+    isOneTime: Joi.boolean().required().label("Is One Time Purchase"),
     capsuleCount: Joi.number()
       .integer()
       .valid(30, 60)

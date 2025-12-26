@@ -20,6 +20,7 @@ export interface IOrder extends Document {
   userId: mongoose.Types.ObjectId;
   status: OrderStatus;
   planType: OrderPlanType;
+  isOneTime: boolean; // Whether this is a one-time purchase or subscription
   variantType?: ProductVariant; // Variant type selected by user (SACHETS or STAND_UP_POUCH)
   selectedPlanDays?: number; // Selected plan days (30, 60, 90, 180 for subscription)
   items: Array<{
@@ -82,6 +83,10 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       enum: ORDER_PLAN_TYPE_VALUES,
       default: OrderPlanType.ONE_TIME,
+    },
+    isOneTime: {
+      type: Boolean,
+      required: true,
     },
     variantType: {
       type: String,
