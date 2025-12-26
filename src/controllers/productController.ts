@@ -97,20 +97,38 @@ const transformProductForLanguage = (
   product: any,
   lang: SupportedLanguage
 ): any => {
+  // Remove variants from product before spreading to avoid conflicts
+  const { variants: _, ...productWithoutVariants } = product;
+  
+  // Determine variants - keep string arrays as-is, transform objects
+  let variantsValue: any[] = [];
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    if (typeof product.variants[0] === 'string') {
+      // It's a string array - keep as-is
+      variantsValue = product.variants;
+    } else {
+      // It's an object array - transform
+      variantsValue = product.variants.map((variant: any) => {
+        if (typeof variant === 'string') {
+          return variant;
+        }
+        return {
+          ...variant,
+          name: getTranslatedString(variant.name, lang),
+        };
+      });
+    }
+  } else if (product.variants) {
+    variantsValue = product.variants;
+  }
+
   return {
-    ...product,
+    ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
-    // Transform variants if they exist
-    variants:
-      product.variants?.map((variant: any) => ({
-        ...variant,
-        name: getTranslatedString(variant.name, lang),
-      })) ||
-      product.variants ||
-      [],
+    variants: variantsValue,
     // Transform populated ingredients for language
     // Always include image field (null/empty if not present) for FE consistency
     ingredients:
@@ -291,12 +309,20 @@ export class ProductController {
             userId || ""
           );
 
+          // Remove variants before spreading to avoid conflicts
+          const { variants: __, ...transformedWithoutVariants } = transformedProduct;
+
           // Keep transformed product structure intact, only add member pricing fields at product level
           const enrichedProduct: any = {
-            ...transformedProduct,
+            ...transformedWithoutVariants,
             // Keep price object exactly as it was - don't modify it
             price: transformedProduct.price,
           };
+
+          // Add variants array explicitly based on hasStandupPouch
+          enrichedProduct.variants = transformedProduct.hasStandupPouch === true
+            ? ["sachets", "stand_up_pouch"]
+            : ["sachets"];
 
           // Only add member pricing fields if user is a member
           if (memberPriceResult.isMember) {
@@ -395,10 +421,18 @@ export class ProductController {
             userId || ""
           );
 
+          // Remove variants before spreading to avoid conflicts
+          const { variants: ____, ...transformedWithoutVariants3 } = transformedProduct;
+
           const enrichedProduct: any = {
-            ...transformedProduct,
+            ...transformedWithoutVariants3,
             price: transformedProduct.price,
           };
+
+          // Add variants array explicitly based on hasStandupPouch
+          enrichedProduct.variants = transformedProduct.hasStandupPouch === true
+            ? ["sachets", "stand_up_pouch"]
+            : ["sachets"];
 
           // Only add member pricing fields if user is a member
           if (memberPriceResult.isMember) {
@@ -519,53 +553,21 @@ export class ProductController {
         userId || ""
       );
 
-      // Variants are already transformed in transformProductForLanguage
-      let variantsWithMemberPrices = transformedProduct.variants;
-      if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
-        variantsWithMemberPrices = await Promise.all(
-          variantsWithMemberPrices.map(async (variant: any) => {
-            const variantPriceSource: ProductPriceSource = {
-              price: variant.price,
-              memberPrice: variant.metadata?.memberPrice,
-              memberDiscountOverride: variant.metadata?.memberDiscountOverride,
-            };
+      // Remove variants before spreading to avoid conflicts
+      const { variants: _______, ...transformedWithoutVariants6 } = transformedProduct;
 
-            const variantMemberPrice = await calculateMemberPrice(
-              variantPriceSource,
-              userId || ""
-            );
-
-            const enrichedVariant: any = {
-              ...variant,
-              // Keep price object exactly as it was - don't modify it
-              price: variant.price,
-            };
-
-            // Add member pricing fields at variant level
-            if (variantMemberPrice.isMember) {
-              enrichedVariant.memberPrice = variantMemberPrice.memberPrice;
-              enrichedVariant.originalPrice = variantMemberPrice.originalPrice;
-              enrichedVariant.discount = {
-                amount: variantMemberPrice.discountAmount,
-                percentage: variantMemberPrice.discountPercentage,
-                type: variantMemberPrice.appliedDiscount?.type,
-              };
-              enrichedVariant.isMember = true;
-            } else {
-              enrichedVariant.isMember = false;
-            }
-
-            return enrichedVariant;
-          })
-        );
-      }
+      // Variants are now string arrays, not objects - skip member price processing
+      // Add variants array explicitly based on hasStandupPouch
+      const variantsArray3 = transformedProduct.hasStandupPouch === true
+        ? ["sachets", "stand_up_pouch"]
+        : ["sachets"];
 
       // Keep transformed product structure intact
       const enrichedProduct: any = {
-        ...transformedProduct,
+        ...transformedWithoutVariants6,
         // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
-        variants: variantsWithMemberPrices || transformedProduct.variants || [],
+        variants: variantsArray3,
       };
 
       // Add member pricing fields at product level
@@ -651,53 +653,21 @@ export class ProductController {
         userId || ""
       );
 
-      // Variants are already transformed in transformProductForLanguage
-      let variantsWithMemberPrices = transformedProduct.variants;
-      if (variantsWithMemberPrices && Array.isArray(variantsWithMemberPrices)) {
-        variantsWithMemberPrices = await Promise.all(
-          variantsWithMemberPrices.map(async (variant: any) => {
-            const variantPriceSource: ProductPriceSource = {
-              price: variant.price,
-              memberPrice: variant.metadata?.memberPrice,
-              memberDiscountOverride: variant.metadata?.memberDiscountOverride,
-            };
+      // Remove variants before spreading to avoid conflicts
+      const { variants: ________, ...transformedWithoutVariants7 } = transformedProduct;
 
-            const variantMemberPrice = await calculateMemberPrice(
-              variantPriceSource,
-              userId || ""
-            );
-
-            const enrichedVariant: any = {
-              ...variant,
-              // Keep price object exactly as it was - don't modify it
-              price: variant.price,
-            };
-
-            // Add member pricing fields at variant level
-            if (variantMemberPrice.isMember) {
-              enrichedVariant.memberPrice = variantMemberPrice.memberPrice;
-              enrichedVariant.originalPrice = variantMemberPrice.originalPrice;
-              enrichedVariant.discount = {
-                amount: variantMemberPrice.discountAmount,
-                percentage: variantMemberPrice.discountPercentage,
-                type: variantMemberPrice.appliedDiscount?.type,
-              };
-              enrichedVariant.isMember = true;
-            } else {
-              enrichedVariant.isMember = false;
-            }
-
-            return enrichedVariant;
-          })
-        );
-      }
+      // Variants are now string arrays, not objects - skip member price processing
+      // Add variants array explicitly based on hasStandupPouch
+      const variantsArray4 = transformedProduct.hasStandupPouch === true
+        ? ["sachets", "stand_up_pouch"]
+        : ["sachets"];
 
       // Keep transformed product structure intact
       const enrichedProduct: any = {
-        ...transformedProduct,
+        ...transformedWithoutVariants7,
         // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
-        variants: variantsWithMemberPrices || transformedProduct.variants || [],
+        variants: variantsArray4,
       };
 
       // Add member pricing fields at product level

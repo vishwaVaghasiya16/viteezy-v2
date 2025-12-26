@@ -54,19 +54,38 @@ const transformProductForLanguage = (
   product: any,
   lang: SupportedLanguage
 ): any => {
+  // Remove variants from product before spreading to avoid conflicts
+  const { variants: _, ...productWithoutVariants } = product;
+  
+  // Determine variants - keep string arrays as-is, transform objects
+  let variantsValue: any[] = [];
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    if (typeof product.variants[0] === 'string') {
+      // It's a string array - keep as-is
+      variantsValue = product.variants;
+    } else {
+      // It's an object array - transform
+      variantsValue = product.variants.map((variant: any) => {
+        if (typeof variant === 'string') {
+          return variant;
+        }
+        return {
+          ...variant,
+          name: getTranslatedString(variant.name, lang),
+        };
+      });
+    }
+  } else if (product.variants) {
+    variantsValue = product.variants;
+  }
+
   return {
-    ...product,
+    ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
-    variants:
-      product.variants?.map((variant: any) => ({
-        ...variant,
-        name: getTranslatedString(variant.name, lang),
-      })) ||
-      product.variants ||
-      [],
+    variants: variantsValue,
     ingredients:
       product.ingredients?.map((ingredient: any) => ({
         ...ingredient,
@@ -205,7 +224,6 @@ export async function enrichProduct(
     standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
     categories: productWithMonthlyAmounts.categories || [],
     ingredients: productWithMonthlyAmounts.ingredients || [],
-    variants: productWithMonthlyAmounts.variants || [],
     metadata: productWithMonthlyAmounts.metadata,
     skuRoot: productWithMonthlyAmounts.skuRoot,
     galleryImages: productWithMonthlyAmounts.galleryImages,
@@ -229,6 +247,11 @@ export async function enrichProduct(
         : 0,
     is_liked: isLiked,
   };
+
+  // Add variants array explicitly based on hasStandupPouch
+  enrichedProduct.variants = productWithMonthlyAmounts.hasStandupPouch === true
+    ? ["sachets", "stand_up_pouch"]
+    : ["sachets"];
 
   // Add member pricing if user is a member
   if (memberPriceResult.isMember) {

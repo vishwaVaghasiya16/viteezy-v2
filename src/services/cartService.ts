@@ -334,10 +334,22 @@ class CartService {
         };
       }
 
-      // Add isInCart: true since this product is in the cart
-      const productWithCartFlag = product
-        ? { ...product, isInCart: true }
-        : null;
+      // Add isInCart: true and variants array since this product is in the cart
+      let productWithCartFlag = null;
+      if (product) {
+        // Add variants array based on hasStandupPouch
+        const variantsArray = product.hasStandupPouch === true
+          ? ["sachets", "stand_up_pouch"]
+          : ["sachets"];
+        
+        // Remove existing variants if any and add fresh array
+        const { variants: _, ...productWithoutVariants } = product;
+        productWithCartFlag = {
+          ...productWithoutVariants,
+          variants: variantsArray,
+          isInCart: true,
+        };
+      }
 
       return {
         ...item,
@@ -1657,9 +1669,24 @@ class CartService {
       });
     }
 
+    // Add variants array to all featured products
+    const featuredProductsWithVariants = featuredProducts.slice(0, maxCount).map((product: any) => {
+      // Add variants array based on hasStandupPouch
+      const variantsArray = product.hasStandupPouch === true
+        ? ["sachets", "stand_up_pouch"]
+        : ["sachets"];
+      
+      // Remove existing variants if any and add fresh array
+      const { variants: _, ...productWithoutVariants } = product;
+      return {
+        ...productWithoutVariants,
+        variants: variantsArray,
+      };
+    });
+
     // Limit to maxCount and return full product objects
     // Note: isInCart will be set by the controller after checking cart
-    return featuredProducts.slice(0, maxCount);
+    return featuredProductsWithVariants;
   }
 
   /**
@@ -1764,11 +1791,21 @@ class CartService {
       }
     );
 
-    // Add isInCart: false since these are suggested products (not in cart)
-    return enrichedProducts.map((product: any) => ({
-      ...product,
-      isInCart: false,
-    }));
+    // Add isInCart: false and variants array since these are suggested products (not in cart)
+    return enrichedProducts.map((product: any) => {
+      // Add variants array based on hasStandupPouch
+      const variantsArray = product.hasStandupPouch === true
+        ? ["sachets", "stand_up_pouch"]
+        : ["sachets"];
+      
+      // Remove existing variants if any and add fresh array
+      const { variants: _, ...productWithoutVariants } = product;
+      return {
+        ...productWithoutVariants,
+        variants: variantsArray,
+        isInCart: false,
+      };
+    });
   }
 }
 

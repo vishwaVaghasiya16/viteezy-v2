@@ -876,6 +876,7 @@ class ProductService {
       {
         $project: {
           ratingSummary: 0,
+          variants: 0, // Remove variants field from aggregation if it exists
         },
       }
     );
@@ -931,7 +932,42 @@ class ProductService {
       this.calculateMonthlyAmounts(product)
     );
 
-    return { products: productsWithMonthlyAmounts, total };
+    // Add variants array to all products
+    const productsWithVariants = productsWithMonthlyAmounts.map((product: any) => {
+      // Step 1: Deep clone product to avoid any reference issues
+      const productJson = JSON.stringify(product);
+      const clonedProduct = JSON.parse(productJson);
+      
+      // Step 2: Remove variants field if it exists (to avoid conflicts)
+      delete clonedProduct.variants;
+      
+      // Step 3: Create variants array using Array.from() with explicit values
+      // This ensures it's a proper array instance
+      const variantsArray: string[] = Array.from(
+        product.hasStandupPouch === true 
+          ? (["sachets", "stand_up_pouch"] as string[])
+          : (["sachets"] as string[])
+      );
+      
+      // Step 4: Assign variants using direct property assignment
+      clonedProduct.variants = variantsArray;
+      
+      // Step 5: Final verification - ensure variants is an array
+      // If not, recreate it using Array constructor
+      if (!Array.isArray(clonedProduct.variants)) {
+        clonedProduct.variants = new Array<string>();
+        if (product.hasStandupPouch === true) {
+          clonedProduct.variants.push("sachets");
+          clonedProduct.variants.push("stand_up_pouch");
+        } else {
+          clonedProduct.variants.push("sachets");
+        }
+      }
+      
+      return clonedProduct;
+    });
+
+    return { products: productsWithVariants, total };
   }
 
   /**
@@ -979,7 +1015,8 @@ class ProductService {
             ingredients: ingredientDetails,
           });
 
-          return enrichedProduct;
+          // Add variants array to product
+          return this.addVariantsToSingleProduct(enrichedProduct);
         })
       );
       
@@ -1020,7 +1057,8 @@ class ProductService {
             ingredients: ingredientDetails,
           });
 
-          return enrichedProduct;
+          // Add variants array to product
+          return this.addVariantsToSingleProduct(enrichedProduct);
         })
       );
 
@@ -1103,7 +1141,10 @@ class ProductService {
       faqs: productFAQs || [], // Add FAQs to product
     });
 
-    return { product: enrichedProduct };
+    // Add variants array to product
+    const productWithVariants = this.addVariantsToSingleProduct(enrichedProduct);
+
+    return { product: productWithVariants };
   }
 
   /**
@@ -1174,7 +1215,10 @@ class ProductService {
       faqs: productFAQs || [], // Add FAQs to product
     });
 
-    return { product: enrichedProduct };
+    // Add variants array to product
+    const productWithVariants = this.addVariantsToSingleProduct(enrichedProduct);
+
+    return { product: productWithVariants };
   }
 
   /**
@@ -1625,6 +1669,37 @@ class ProductService {
       inactive,
       sachets,
       standupPouch,
+    };
+  }
+
+  /**
+   * Get variants array based on hasStandupPouch
+   * Returns proper string array: ["sachets"] or ["sachets", "stand_up_pouch"]
+   */
+  private getVariantsArray(hasStandupPouch: boolean): string[] {
+    const arr: string[] = [];
+    arr[0] = "sachets";
+    if (hasStandupPouch === true) {
+      arr[1] = "stand_up_pouch";
+    }
+    return arr;
+  }
+
+  /**
+   * Add variants array to a single product
+   * Common function to be used across all product APIs
+   */
+  private addVariantsToSingleProduct(product: any): any {
+    // Create variants array
+    const variantsArray = this.getVariantsArray(product.hasStandupPouch === true);
+    
+    // Create new product object without existing variants
+    const { variants: _, ...productWithoutVariants } = product;
+    
+    // Return product with variants array
+    return {
+      ...productWithoutVariants,
+      variants: variantsArray,
     };
   }
 

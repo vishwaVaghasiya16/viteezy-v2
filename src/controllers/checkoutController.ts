@@ -172,20 +172,38 @@ const transformProductForLanguage = (
   product: any,
   lang: SupportedLanguage
 ): any => {
+  // Remove variants from product before spreading to avoid conflicts
+  const { variants: _, ...productWithoutVariants } = product;
+  
+  // Determine variants - keep string arrays as-is, transform objects
+  let variantsValue: any[] = [];
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    if (typeof product.variants[0] === 'string') {
+      // It's a string array - keep as-is
+      variantsValue = product.variants;
+    } else {
+      // It's an object array - transform
+      variantsValue = product.variants.map((variant: any) => {
+        if (typeof variant === 'string') {
+          return variant;
+        }
+        return {
+          ...variant,
+          name: getTranslatedString(variant.name, lang),
+        };
+      });
+    }
+  } else if (product.variants) {
+    variantsValue = product.variants;
+  }
+
   return {
-    ...product,
+    ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
-    // Transform variants if they exist
-    variants:
-      product.variants?.map((variant: any) => ({
-        ...variant,
-        name: getTranslatedString(variant.name, lang),
-      })) ||
-      product.variants ||
-      [],
+    variants: variantsValue,
     // Transform populated ingredients for language
     // Always include image field (null/empty if not present) for FE consistency
     ingredients:
@@ -280,6 +298,11 @@ class CheckoutController {
             userId
           );
 
+          // Add variants array based on hasStandupPouch
+          const variantsArray = transformedProduct.hasStandupPouch === true
+            ? ["sachets", "stand_up_pouch"]
+            : ["sachets"];
+
           // Build product in getAllProducts format
           let enrichedProduct: any = {
             _id: transformedProduct._id,
@@ -297,7 +320,7 @@ class CheckoutController {
             standupPouchPrice: transformedProduct.standupPouchPrice,
             categories: transformedProduct.categories || [],
             ingredients: transformedProduct.ingredients || [],
-            variants: transformedProduct.variants || [],
+            variants: variantsArray,
             quantity: product.quantity,
             cartPrice: product.pricing?.cartPrice,
             variantInfo: product.variant,
@@ -402,12 +425,20 @@ class CheckoutController {
             userId || ""
           );
 
+          // Remove variants before spreading to avoid conflicts
+          const { variants: __, ...transformedWithoutVariants } = transformedProduct;
+
           // Build product in getAllProducts format (same structure)
           const enrichedProduct: any = {
-            ...transformedProduct,
+            ...transformedWithoutVariants,
             // Keep price object exactly as it was - don't modify it (same as getAllProducts)
             price: transformedProduct.price,
           };
+
+          // Add variants array explicitly based on hasStandupPouch
+          enrichedProduct.variants = transformedProduct.hasStandupPouch === true
+            ? ["sachets", "stand_up_pouch"]
+            : ["sachets"];
 
           // Only add member pricing fields if user is a member (same as getAllProducts)
           if (memberPriceResult.isMember) {
@@ -679,6 +710,11 @@ class CheckoutController {
           const productWithMonthlyAmounts =
             calculateMonthlyAmounts(transformedProduct);
 
+          // Add variants array based on hasStandupPouch
+          const variantsArray = productWithMonthlyAmounts.hasStandupPouch === true
+            ? ["sachets", "stand_up_pouch"]
+            : ["sachets"];
+
           // Build full product object similar to getAllProducts format
           const fullProduct: any = {
             _id: productWithMonthlyAmounts._id,
@@ -696,7 +732,7 @@ class CheckoutController {
             standupPouchPrice: productWithMonthlyAmounts.standupPouchPrice,
             categories: productWithMonthlyAmounts.categories || [],
             ingredients: productWithMonthlyAmounts.ingredients || [],
-            variants: productWithMonthlyAmounts.variants || [],
+            variants: variantsArray,
             metadata: productWithMonthlyAmounts.metadata,
             skuRoot: productWithMonthlyAmounts.skuRoot,
             galleryImages: productWithMonthlyAmounts.galleryImages,
