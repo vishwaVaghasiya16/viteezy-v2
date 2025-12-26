@@ -9,7 +9,7 @@ import {
 
 export interface IAIConversation extends Document {
   userId: mongoose.Types.ObjectId;
-  sessionId: mongoose.Types.ObjectId;
+  sessionId: string;
   messages: Array<{
     role: MessageRole;
     content: string;
@@ -34,7 +34,7 @@ const AIConversationSchema = new Schema<IAIConversation>(
       ref: "User",
     },
     sessionId: {
-      type: Schema.Types.ObjectId,
+      type: String,
     },
     messages: [
       {
