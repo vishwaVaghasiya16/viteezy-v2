@@ -136,10 +136,15 @@ class DashboardController {
         );
         return {
           productId: item.productId,
-          variantId: item.variantId,
           name: item.name,
-          quantity: item.quantity,
-          price: item.price,
+          amount: item.amount,
+          discountedPrice: item.discountedPrice,
+          taxRate: item.taxRate,
+          totalAmount: item.totalAmount,
+          durationDays: item.durationDays,
+          capsuleCount: item.capsuleCount,
+          savingsPercentage: item.savingsPercentage,
+          features: item.features,
           productImage: productData?.productImage || null,
           productTitle: productData?.title || item.name || "",
           productSlug: productData?.slug,

@@ -10,6 +10,8 @@ import {
   OrderPlanType,
   SubscriptionCycle,
   ProductVariant,
+  OrderStatus,
+  PaymentStatus,
 } from "@/models/enums";
 import { PriceType } from "@/models/common.model";
 import {
@@ -291,6 +293,53 @@ class OrderController {
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
 
+      // Delete any existing pending orders with pending payment status
+      // This ensures only one pending order exists at a time
+      const pendingOrders = await Orders.find({
+        userId: userId,
+        status: OrderStatus.PENDING,
+        paymentStatus: PaymentStatus.PENDING,
+        isDeleted: false,
+      })
+        .select("_id")
+        .lean();
+
+      if (pendingOrders.length > 0) {
+        const orderIds = pendingOrders.map((order: any) => order._id);
+
+        // Soft delete pending orders
+        const deletedOrders = await Orders.updateMany(
+          {
+            _id: { $in: orderIds },
+          },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt: new Date(),
+            },
+          }
+        );
+
+        // Soft delete associated pending payments
+        const deletedPayments = await Payments.updateMany(
+          {
+            orderId: { $in: orderIds },
+            status: PaymentStatus.PENDING,
+            isDeleted: false,
+          },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt: new Date(),
+            },
+          }
+        );
+
+        logger.info(
+          `Deleted ${deletedOrders.modifiedCount} pending order(s) and ${deletedPayments.modifiedCount} associated payment(s) for user ${userId} before creating new order`
+        );
+      }
+
       // Validate cartId
       if (!cartId) {
         throw new AppError("Cart ID is required", 400);
@@ -492,14 +541,15 @@ class OrderController {
           throw new AppError("Invalid product in cart", 400);
         }
 
-        let itemPrice: PriceType = {
-          amount: 0,
-          currency: normalizedCurrency,
-          taxRate: 0,
-        };
-
         let itemPlanDays: number | undefined;
         let itemCapsuleCount: number | undefined;
+        let itemAmount: number = 0;
+        let itemDiscountedPrice: number = 0;
+        let itemTaxRate: number = 0;
+        let itemTotalAmount: number = 0;
+        let itemDurationDays: number | undefined;
+        let itemSavingsPercentage: number | undefined;
+        let itemFeatures: string[] = [];
 
         // Calculate price based on variantType and planType with proper validations
         if (variantType === ProductVariant.SACHETS) {
@@ -557,11 +607,24 @@ class OrderController {
               );
             }
 
-            itemPrice = {
-              amount: selectedPlan.amount || selectedPlan.totalAmount || 0,
-              currency: selectedPlan.currency || normalizedCurrency,
-              taxRate: selectedPlan.taxRate || 0,
-            };
+            // Extract all pricing and plan details
+            itemAmount = selectedPlan.amount || selectedPlan.totalAmount || 0;
+            itemDiscountedPrice =
+              selectedPlan.discountedPrice ||
+              selectedPlan.totalAmount ||
+              itemAmount;
+            itemTaxRate = selectedPlan.taxRate || 0;
+            itemTotalAmount =
+              selectedPlan.totalAmount ||
+              selectedPlan.discountedPrice ||
+              itemAmount;
+            itemDurationDays = selectedPlan.durationDays || planDays;
+            // Get capsuleCount from product DB for subscription plans
+            itemCapsuleCount = selectedPlan.capsuleCount || undefined;
+            itemSavingsPercentage = selectedPlan.savingsPercentage || undefined;
+            itemFeatures = Array.isArray(selectedPlan.features)
+              ? selectedPlan.features
+              : [];
           } else {
             // Use one-time pricing based on effectiveCapsuleCount (which is planDurationDays for SACHETS one-time)
             itemCapsuleCount = effectiveCapsuleCount || 30; // Default to 30 if not provided
@@ -585,11 +648,18 @@ class OrderController {
                   400
                 );
               }
-              itemPrice = {
-                amount: oneTimePlan.count60.amount || 0,
-                currency: oneTimePlan.count60.currency || normalizedCurrency,
-                taxRate: oneTimePlan.count60.taxRate || 0,
-              };
+              // Extract all pricing details for count60
+              const count60Plan = oneTimePlan.count60;
+              itemAmount = count60Plan.amount || 0;
+              itemDiscountedPrice = count60Plan.discountedPrice || itemAmount;
+              itemTaxRate = count60Plan.taxRate || 0;
+              itemTotalAmount = count60Plan.discountedPrice || itemAmount;
+              itemCapsuleCount = count60Plan.capsuleCount || 60;
+              itemSavingsPercentage =
+                count60Plan.savingsPercentage || undefined;
+              itemFeatures = Array.isArray(count60Plan.features)
+                ? count60Plan.features
+                : [];
             } else {
               if (!oneTimePlan.count30) {
                 throw new AppError(
@@ -599,12 +669,18 @@ class OrderController {
                   400
                 );
               }
-              itemPrice = {
-                amount: oneTimePlan.count30.amount || 0,
-                currency: oneTimePlan.count30.currency || normalizedCurrency,
-                taxRate: oneTimePlan.count30.taxRate || 0,
-              };
-              itemCapsuleCount = 30;
+              // Extract all pricing details for count30
+              const count30Plan = oneTimePlan.count30;
+              itemAmount = count30Plan.amount || 0;
+              itemDiscountedPrice = count30Plan.discountedPrice || itemAmount;
+              itemTaxRate = count30Plan.taxRate || 0;
+              itemTotalAmount = count30Plan.discountedPrice || itemAmount;
+              itemCapsuleCount = count30Plan.capsuleCount || 30;
+              itemSavingsPercentage =
+                count30Plan.savingsPercentage || undefined;
+              itemFeatures = Array.isArray(count30Plan.features)
+                ? count30Plan.features
+                : [];
             }
           }
         } else if (variantType === ProductVariant.STAND_UP_POUCH) {
@@ -638,20 +714,37 @@ class OrderController {
                 400
               );
             }
-            itemPrice = {
-              amount: standupPrice.count60.amount || 0,
-              currency: standupPrice.count60.currency || normalizedCurrency,
-              taxRate: standupPrice.count60.taxRate || 0,
-            };
+            // Extract all pricing details for count60
+            itemAmount = standupPrice.count60.amount || 0;
+            itemDiscountedPrice =
+              standupPrice.count60.discountedPrice || itemAmount;
+            itemTaxRate = standupPrice.count60.taxRate || 0;
+            itemTotalAmount =
+              standupPrice.count60.totalAmount ||
+              standupPrice.count60.discountedPrice ||
+              itemAmount;
+            itemCapsuleCount = standupPrice.count60.capsuleCount || 60;
+            itemSavingsPercentage =
+              standupPrice.count60.savingsPercentage || undefined;
+            itemFeatures = Array.isArray(standupPrice.count60.features)
+              ? standupPrice.count60.features
+              : [];
           } else {
             if (!standupPrice.count30) {
               // Fallback to simple price object if count30 structure doesn't exist
               if (standupPrice.amount) {
-                itemPrice = {
-                  amount: standupPrice.amount || 0,
-                  currency: standupPrice.currency || normalizedCurrency,
-                  taxRate: standupPrice.taxRate || 0,
-                };
+                itemAmount = standupPrice.amount || 0;
+                itemDiscountedPrice =
+                  standupPrice.discountedPrice || itemAmount;
+                itemTaxRate = standupPrice.taxRate || 0;
+                itemTotalAmount =
+                  standupPrice.totalAmount ||
+                  standupPrice.discountedPrice ||
+                  itemAmount;
+                itemCapsuleCount = 30;
+                itemFeatures = Array.isArray(standupPrice.features)
+                  ? standupPrice.features
+                  : [];
               } else {
                 throw new AppError(
                   `Product ${
@@ -661,11 +754,21 @@ class OrderController {
                 );
               }
             } else {
-              itemPrice = {
-                amount: standupPrice.count30.amount || 0,
-                currency: standupPrice.count30.currency || normalizedCurrency,
-                taxRate: standupPrice.count30.taxRate || 0,
-              };
+              // Extract all pricing details for count30
+              itemAmount = standupPrice.count30.amount || 0;
+              itemDiscountedPrice =
+                standupPrice.count30.discountedPrice || itemAmount;
+              itemTaxRate = standupPrice.count30.taxRate || 0;
+              itemTotalAmount =
+                standupPrice.count30.totalAmount ||
+                standupPrice.count30.discountedPrice ||
+                itemAmount;
+              itemCapsuleCount = standupPrice.count30.capsuleCount || 30;
+              itemSavingsPercentage =
+                standupPrice.count30.savingsPercentage || undefined;
+              itemFeatures = Array.isArray(standupPrice.count30.features)
+                ? standupPrice.count30.features
+                : [];
             }
           }
         } else {
@@ -677,11 +780,18 @@ class OrderController {
 
         return {
           productId: new mongoose.Types.ObjectId(cartItem.productId),
-          price: itemPrice,
           name:
             product.title?.en || product.title?.nl || product.slug || "Product",
           planDays: itemPlanDays,
           capsuleCount: itemCapsuleCount,
+          // Additional pricing and plan details
+          amount: roundAmount(itemAmount),
+          discountedPrice: roundAmount(itemDiscountedPrice),
+          taxRate: roundAmount(itemTaxRate),
+          totalAmount: roundAmount(itemTotalAmount),
+          durationDays: itemDurationDays,
+          savingsPercentage: itemSavingsPercentage,
+          features: itemFeatures,
         };
       });
 
@@ -774,7 +884,6 @@ class OrderController {
         planType: orderPlanType,
         variantType: variantType as ProductVariant,
         selectedPlanDays: !isOneTime ? planDurationDays : undefined,
-        selectedCapsuleCount: effectiveCapsuleCount || undefined,
         items: orderItems,
         subTotal: roundAmount(subTotal),
         discountedPrice: roundAmount(discountedPrice),
@@ -802,27 +911,7 @@ class OrderController {
 
       res.apiCreated(
         {
-          order: {
-            id: orderData._id,
-            orderNumber: orderData.orderNumber,
-            planType: orderData.planType,
-            variantType: orderData.variantType,
-            couponCode: orderData.couponCode,
-            pricing: {
-              subTotal: orderData.subTotal,
-              discountedPrice: orderData.discountedPrice,
-              couponDiscountAmount: orderData.couponDiscountAmount,
-              membershipDiscountAmount: orderData.membershipDiscountAmount,
-              subscriptionPlanDiscountAmount:
-                orderData.subscriptionPlanDiscountAmount,
-              taxAmount: orderData.taxAmount,
-              grandTotal: orderData.grandTotal,
-              currency: orderData.currency,
-            },
-            metadata: orderData.metadata,
-            couponMetadata: orderData.couponMetadata,
-            membershipMetadata: orderData.membershipMetadata,
-          },
+          order: orderData,
         },
         "Order created successfully"
       );
@@ -904,7 +993,14 @@ class OrderController {
         items: order.items.map((item: any) => ({
           productId: item.productId,
           name: item.name,
-          price: item.price,
+          amount: item.amount,
+          discountedPrice: item.discountedPrice,
+          taxRate: item.taxRate,
+          totalAmount: item.totalAmount,
+          durationDays: item.durationDays,
+          capsuleCount: item.capsuleCount,
+          savingsPercentage: item.savingsPercentage,
+          features: item.features,
         })),
         pricing: {
           subTotal: order.subTotal,
@@ -1032,7 +1128,14 @@ class OrderController {
         return {
           productId: item.productId,
           name: item.name,
-          price: item.price,
+          amount: item.amount,
+          discountedPrice: item.discountedPrice,
+          taxRate: item.taxRate,
+          totalAmount: item.totalAmount,
+          durationDays: item.durationDays,
+          capsuleCount: item.capsuleCount,
+          savingsPercentage: item.savingsPercentage,
+          features: item.features,
           product: product
             ? {
                 id: product._id,

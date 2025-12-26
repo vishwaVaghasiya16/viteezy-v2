@@ -1240,8 +1240,8 @@ export class PaymentService {
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
             quantity: 1, // Quantity removed from order items
-            unitAmount: item.price?.amount || 0,
-            currency: item.price?.currency || order.currency || "EUR",
+            unitAmount: item.amount || item.totalAmount || 0,
+            currency: order.currency || "EUR",
           }))
         : [];
 

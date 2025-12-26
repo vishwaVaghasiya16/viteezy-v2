@@ -338,8 +338,13 @@ class AdminUserController {
           return {
             productName: item.name || product.title || "Unknown Product",
             productImage: product.productImage || null,
-            productPrice: item.price || null,
-            quantity: item.quantity || 1,
+            productPrice: {
+              amount: item.amount || 0,
+              discountedPrice: item.discountedPrice || 0,
+              taxRate: item.taxRate || 0,
+              totalAmount: item.totalAmount || 0,
+              currency: order.currency || "EUR",
+            },
           };
         });
 

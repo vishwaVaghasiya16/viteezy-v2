@@ -22,13 +22,19 @@ export interface IOrder extends Document {
   planType: OrderPlanType;
   variantType?: ProductVariant; // Variant type selected by user (SACHETS or STAND_UP_POUCH)
   selectedPlanDays?: number; // Selected plan days (30, 60, 90, 180 for subscription)
-  selectedCapsuleCount?: number; // Selected capsule count (30, 60 for one-time/stand-up pouch)
   items: Array<{
     productId: mongoose.Types.ObjectId;
-    price: PriceType;
     name: string;
     planDays?: number; // Plan days for this specific item
     capsuleCount?: number; // Capsule count for this specific item
+    // Additional pricing and plan details
+    amount: number; // Original amount
+    discountedPrice: number; // Discounted price
+    taxRate: number; // Tax rate
+    totalAmount: number; // Total amount
+    durationDays?: number; // Duration in days (for subscription plans)
+    savingsPercentage?: number; // Savings percentage
+    features?: string[]; // Plan features
   }>;
   // Pricing stored as numbers with separate currency field
   subTotal: number; // Sum of all product amounts
@@ -86,18 +92,11 @@ const OrderSchema = new Schema<IOrder>(
       type: Number,
       default: null,
     },
-    selectedCapsuleCount: {
-      type: Number,
-      default: null,
-    },
     items: [
       {
         productId: {
           type: Schema.Types.ObjectId,
           ref: "products",
-        },
-        price: {
-          type: PriceSchema,
         },
         name: {
           type: String,
@@ -111,6 +110,35 @@ const OrderSchema = new Schema<IOrder>(
         capsuleCount: {
           type: Number,
           default: null,
+        },
+        // Additional pricing and plan details
+        amount: {
+          type: Number,
+          default: 0,
+        },
+        discountedPrice: {
+          type: Number,
+          default: 0,
+        },
+        taxRate: {
+          type: Number,
+          default: 0,
+        },
+        totalAmount: {
+          type: Number,
+          default: 0,
+        },
+        durationDays: {
+          type: Number,
+          default: null,
+        },
+        savingsPercentage: {
+          type: Number,
+          default: null,
+        },
+        features: {
+          type: [String],
+          default: [],
         },
       },
     ],
