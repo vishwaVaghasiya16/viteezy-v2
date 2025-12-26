@@ -3,6 +3,7 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { Wishlists } from "../models/commerce/wishlists.model";
+import { Reviews } from "../models/cms/reviews.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import {
@@ -10,7 +11,7 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
-import { ProductVariant } from "../models/enums";
+import { ProductVariant, ReviewStatus } from "../models/enums";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "../models/common.model";
 import { fetchAndEnrichProducts } from "./productEnrichmentService";
 
@@ -1532,7 +1533,7 @@ class CartService {
       status: true, // Active products
       isFeatured: true,
     })
-      .populate("categories", "name slug description image")
+      .populate("categories", "sId slug name description sortOrder icon image productCount")
       .limit(maxCount)
       .sort({ createdAt: -1 })
       .lean();
@@ -1551,7 +1552,7 @@ class CartService {
         isDeleted: false,
         status: true,
       })
-        .populate("categories", "name slug description image")
+        .populate("categories", "sId slug name description sortOrder icon image productCount")
         .limit(minCount - featuredProducts.length)
         .sort({ createdAt: -1 })
         .lean();
@@ -1611,6 +1612,50 @@ class CartService {
           .filter((ingredient: any) => ingredient !== undefined);
       }
     });
+
+    // Calculate averageRating and ratingCount for featured products (same as getAllProducts)
+    const productIds = featuredProducts.map((p: any) => p._id);
+    if (productIds.length > 0) {
+      const ratingAggregation = await Reviews.aggregate([
+        {
+          $match: {
+            productId: { $in: productIds },
+            isDeleted: { $ne: true },
+            isPublic: true,
+            status: ReviewStatus.APPROVED,
+          },
+        },
+        {
+          $group: {
+            _id: "$productId",
+            averageRating: { $avg: "$rating" },
+            ratingCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      // Create a map of productId -> rating data
+      const ratingMap = new Map();
+      ratingAggregation.forEach((item: any) => {
+        ratingMap.set(item._id.toString(), {
+          averageRating: Math.round(item.averageRating * 100) / 100,
+          ratingCount: item.ratingCount,
+        });
+      });
+
+      // Add rating fields to each product
+      featuredProducts.forEach((product: any) => {
+        const ratingData = ratingMap.get(product._id.toString());
+        product.averageRating = ratingData?.averageRating || 0;
+        product.ratingCount = ratingData?.ratingCount || 0;
+      });
+    } else {
+      // If no products, set default ratings
+      featuredProducts.forEach((product: any) => {
+        product.averageRating = 0;
+        product.ratingCount = 0;
+      });
+    }
 
     // Limit to maxCount and return full product objects
     // Note: isInCart will be set by the controller after checking cart

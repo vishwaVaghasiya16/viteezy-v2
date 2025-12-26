@@ -178,6 +178,7 @@ const transformProductForLanguage = (
     description: getTranslatedText(product.description, lang),
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
+    // Transform variants if they exist
     variants:
       product.variants?.map((variant: any) => ({
         ...variant,
@@ -185,19 +186,30 @@ const transformProductForLanguage = (
       })) ||
       product.variants ||
       [],
+    // Transform populated ingredients for language
+    // Always include image field (null/empty if not present) for FE consistency
     ingredients:
       product.ingredients?.map((ingredient: any) => ({
-        ...ingredient,
+        _id: ingredient._id,
         name: getTranslatedString(ingredient.name, lang),
         description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || undefined,
+        image: ingredient.image || null, // Always include image field, null if not present
       })) || [],
+    // Transform populated categories for language
     categories:
       product.categories?.map((category: any) => ({
         ...category,
         name: getTranslatedString(category.name, lang),
         description: getTranslatedText(category.description, lang),
         image: category.image || undefined,
+      })) || [],
+    // Transform FAQs for language (return empty array if no FAQs)
+    faqs:
+      product.faqs?.map((faq: any) => ({
+        _id: faq._id,
+        question: getTranslatedString(faq.question, lang),
+        answer: getTranslatedText(faq.answer, lang),
+        sortOrder: faq.sortOrder || 0,
       })) || [],
   };
 };
@@ -368,16 +380,16 @@ class CheckoutController {
         maxCount
       );
 
-      // Transform products to match getAllProducts format
+      // Transform products to match getAllProducts format exactly
       const transformedProducts = await Promise.all(
         featuredProducts.map(async (product: any) => {
-          // Transform product for language
+          // First transform product for user's language (same as getAllProducts)
           const transformedProduct = transformProductForLanguage(
             product,
             userLang
           );
 
-          // Calculate member price
+          // Calculate member price (same as getAllProducts)
           const productPriceSource: ProductPriceSource = {
             price: transformedProduct.price,
             memberPrice: transformedProduct.metadata?.memberPrice,
@@ -387,23 +399,17 @@ class CheckoutController {
 
           const memberPriceResult = await calculateMemberPrice(
             productPriceSource,
-            userId
+            userId || ""
           );
 
-          // Build product in getAllProducts format
-          let enrichedProduct: any = {
+          // Build product in getAllProducts format (same structure)
+          const enrichedProduct: any = {
             ...transformedProduct,
+            // Keep price object exactly as it was - don't modify it (same as getAllProducts)
             price: transformedProduct.price,
-            is_liked: userWishlistProductIds.has(
-              transformedProduct._id.toString()
-            ),
-            isInCart: cartProductIds.has(transformedProduct._id.toString()), // Check if product is in cart
           };
 
-          // Calculate monthly amounts for subscription pricing (same as getAllProducts)
-          enrichedProduct = calculateMonthlyAmounts(enrichedProduct);
-
-          // Add member pricing if user is a member
+          // Only add member pricing fields if user is a member (same as getAllProducts)
           if (memberPriceResult.isMember) {
             enrichedProduct.memberPrice = memberPriceResult.memberPrice;
             enrichedProduct.originalPrice = memberPriceResult.originalPrice;
@@ -417,10 +423,21 @@ class CheckoutController {
             enrichedProduct.isMember = false;
           }
 
+          // Add is_liked field if user is authenticated (same as getAllProducts)
+          enrichedProduct.is_liked = userWishlistProductIds.has(
+            transformedProduct._id.toString()
+          );
+
+          // Add isInCart field (same as getAllProducts)
+          enrichedProduct.isInCart = cartProductIds.has(
+            transformedProduct._id.toString()
+          );
+
           return enrichedProduct;
         })
       );
 
+      // Return response in same format as getAllProducts (without pagination)
       res.status(200).json({
         success: true,
         message: "Featured products retrieved successfully",
