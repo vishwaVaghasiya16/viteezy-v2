@@ -1317,7 +1317,7 @@ class AuthService {
 
   /**
    * Google OAuth Login
-   * Verifies Google ID token and creates/updates user
+   * Verifies Google ID token (Firebase or Google OAuth) and creates/updates user
    */
   async googleLogin(data: GoogleLoginData): Promise<LoginResult> {
     const { idToken, deviceInfo } = data;
@@ -1338,18 +1338,71 @@ class AuthService {
         throw new AppError("Invalid Google ID token format", 400);
       }
 
-      // Verify the Google ID token
-      const ticket = await this.googleOAuthClient.verifyIdToken({
-        idToken,
-        audience: config.google.clientId,
-      });
-
-      const payload = ticket.getPayload();
-      if (!payload) {
+      // Decode JWT header to check issuer (without verification)
+      let decodedHeader: any;
+      try {
+        decodedHeader = JSON.parse(
+          Buffer.from(tokenParts[0], "base64").toString("utf-8")
+        );
+      } catch (e) {
         throw new AppError("Invalid Google ID token format", 400);
       }
 
-      const { sub: googleId, email, name, picture } = payload;
+      // Decode JWT payload to check issuer (without verification)
+      let decodedPayload: any;
+      try {
+        decodedPayload = JSON.parse(
+          Buffer.from(tokenParts[1], "base64").toString("utf-8")
+        );
+      } catch (e) {
+        throw new AppError("Invalid Google ID token format", 400);
+      }
+
+      // Check if token is from Firebase (Firebase ID token)
+      const isFirebaseToken =
+        decodedPayload.iss?.includes("securetoken.google.com") ||
+        decodedPayload.aud === "viteezy-mobile";
+
+      let email: string | undefined;
+      let name: string | undefined;
+      let picture: string | undefined;
+      let googleId: string | undefined;
+
+      if (isFirebaseToken) {
+        // Verify Firebase ID token
+        const decodedToken = await firebaseService.verifyFirebaseIdToken(idToken);
+
+        // Check if the token is from Google provider
+        if (decodedToken.firebase.sign_in_provider !== "google.com") {
+          throw new AppError("Invalid token provider. Expected Google.", 400);
+        }
+
+        // Extract user info from Firebase token
+        const userInfo = firebaseService.getUserInfoFromToken(decodedToken);
+        email = userInfo.email;
+        name = userInfo.name;
+        googleId = userInfo.uid;
+
+        // Try to get picture from Firebase token or decoded payload
+        picture =
+          decodedToken.picture ||
+          decodedPayload.picture ||
+          (decodedToken.firebase as any)?.picture ||
+          null;
+      } else {
+        // Verify the Google OAuth ID token
+        const ticket = await this.googleOAuthClient.verifyIdToken({
+          idToken,
+          audience: config.google.clientId,
+        });
+
+        const payload = ticket.getPayload();
+        if (!payload) {
+          throw new AppError("Invalid Google ID token format", 400);
+        }
+
+        ({ sub: googleId, email, name, picture } = payload);
+      }
 
       if (!email) {
         throw new AppError("Email not provided by Google", 400);
@@ -1363,50 +1416,56 @@ class AuthService {
       let user = await User.findOne({ email: email.toLowerCase() });
 
       if (!user) {
-        // Create new user
-        const newUserData: any = {
+        // Create new user for Google login (Register) - same pattern as Apple login
+        const memberId = await generateMemberId();
+        user = await User.create({
           firstName,
           lastName,
           email: email.toLowerCase(),
+          password: crypto.randomBytes(32).toString("hex"), // Random password since Google handles auth
           isEmailVerified: true, // Google emails are verified
           avatar: picture || null,
-          registeredAt: new Date(),
-        };
+          memberId,
+        });
 
-        // Generate member ID
-        newUserData.memberId = await generateMemberId();
-
-        user = await User.create(newUserData);
-
-        logger.info(`New user created via Google OAuth: ${user._id}`);
+        logger.info(`New user registered via Google login: ${user.email}`);
 
         // Send welcome email asynchronously
         this.sendWelcomeEmailAsync(email, firstName, lastName);
       } else {
-        // Update existing user
-        // Update avatar if provided and user doesn't have one
-        if (picture && !user.avatar) {
-          user.avatar = picture;
+        // User exists, login - same pattern as Apple login
+        // Check if user is active
+        if (!user.isActive) {
+          throw new AppError(
+            "Account is deactivated. Please contact support.",
+            403
+          );
         }
+
         // Mark email as verified if not already
         if (!user.isEmailVerified) {
           user.isEmailVerified = true;
         }
-        // Update name if changed
+
+        // Update avatar if provided and user doesn't have one
+        if (picture && !user.avatar) {
+          user.avatar = picture;
+        }
+
+        // Update name if it was changed or empty
         const currentFullName = `${user.firstName} ${user.lastName}`.trim();
-        if (name && currentFullName !== fullName.trim()) {
+        if (
+          !currentFullName ||
+          currentFullName === "Google User" ||
+          currentFullName === "User" ||
+          (name && currentFullName !== fullName.trim())
+        ) {
           user.firstName = firstName;
           user.lastName = lastName;
         }
         await user.save();
-      }
 
-      // Check if user is active
-      if (!user.isActive) {
-        throw new AppError(
-          "Account is deactivated. Please contact support.",
-          403
-        );
+        logger.info(`Existing user logged in via Google: ${user.email}`);
       }
 
       // Generate session and tokens (following existing login flow)
@@ -1424,35 +1483,37 @@ class AuthService {
 
       const tokens = this.generateTokens(user._id.toString(), sessionId);
 
-      // Update last login and track session
-      await User.findByIdAndUpdate(user._id, {
-        lastLogin: new Date(),
-        $push: {
-          sessionIds: {
-            sessionId: sessionId,
-            status: SessionStatus.ACTIVE,
-            revoked: false,
-            deviceInfo: deviceInfoString,
+      // Update last login and track session - same pattern as Apple login
+      const updatedUser = await User.findByIdAndUpdate(
+        user._id,
+        {
+          lastLogin: new Date(),
+          $push: {
+            sessionIds: {
+              sessionId: sessionId,
+              status: SessionStatus.ACTIVE,
+              revoked: false,
+              deviceInfo: deviceInfoString,
+            },
           },
         },
-      });
+        { new: true }
+      ).select("-password");
 
-      // Fetch updated user to get latest lastLogin value
-      const updatedUser = await User.findById(user._id);
-
+      // Return same response format for both login and register - same as Apple login
       return {
         user: {
           _id: updatedUser!._id,
           firstName: updatedUser!.firstName,
           lastName: updatedUser!.lastName,
           email: updatedUser!.email,
-          phone: updatedUser!.phone,
+          phone: updatedUser!.phone || null,
           isEmailVerified: updatedUser!.isEmailVerified,
           lastLogin: updatedUser!.lastLogin,
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        message: "Google login successful",
+        message: "Login successful", // Same message as Apple login
       };
     } catch (error: any) {
       logger.error("Google OAuth error:", error);

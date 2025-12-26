@@ -78,11 +78,11 @@ class FirebaseService {
   }
 
   /**
-   * Verify Apple ID token
-   * @param idToken - Apple ID token from client
+   * Verify Firebase ID token (generic method for any provider)
+   * @param idToken - Firebase ID token from client
    * @returns Decoded token with user information
    */
-  async verifyAppleIdToken(
+  async verifyFirebaseIdToken(
     idToken: string
   ): Promise<admin.auth.DecodedIdToken> {
     if (!this.app) {
@@ -96,36 +96,49 @@ class FirebaseService {
       // Verify the ID token
       const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-      // Check if the token is from Apple provider
-      if (decodedToken.firebase.sign_in_provider !== "apple.com") {
-        throw new AppError("Invalid token provider. Expected Apple.", 400);
-      }
-
       logger.info(
-        `Apple ID token verified successfully for user: ${decodedToken.uid}`
+        `Firebase ID token verified successfully for user: ${decodedToken.uid}`
       );
 
       return decodedToken;
     } catch (error: any) {
-      logger.error("Failed to verify Apple ID token:", error);
+      logger.error("Failed to verify Firebase ID token:", error);
 
       if (error.code === "auth/id-token-expired") {
-        throw new AppError("Apple ID token has expired", 401);
+        throw new AppError("ID token has expired", 401);
       }
 
       if (error.code === "auth/id-token-revoked") {
-        throw new AppError("Apple ID token has been revoked", 401);
+        throw new AppError("ID token has been revoked", 401);
       }
 
       if (error.code === "auth/argument-error") {
-        throw new AppError("Invalid Apple ID token format", 400);
+        throw new AppError("Invalid ID token format", 400);
       }
 
       throw new AppError(
-        error.message || "Failed to verify Apple ID token",
+        error.message || "Failed to verify ID token",
         401
       );
     }
+  }
+
+  /**
+   * Verify Apple ID token
+   * @param idToken - Apple ID token from client
+   * @returns Decoded token with user information
+   */
+  async verifyAppleIdToken(
+    idToken: string
+  ): Promise<admin.auth.DecodedIdToken> {
+    const decodedToken = await this.verifyFirebaseIdToken(idToken);
+
+    // Check if the token is from Apple provider
+    if (decodedToken.firebase.sign_in_provider !== "apple.com") {
+      throw new AppError("Invalid token provider. Expected Apple.", 400);
+    }
+
+    return decodedToken;
   }
 
   /**
@@ -180,9 +193,16 @@ class FirebaseService {
       }
     }
 
-    // Final fallback
+    // Final fallback - check provider to set appropriate default
     if (!name || name.trim() === "") {
-      name = "Apple User";
+      const provider = (decodedToken.firebase as any)?.sign_in_provider;
+      if (provider === "google.com") {
+        name = "Google User";
+      } else if (provider === "apple.com") {
+        name = "Apple User";
+      } else {
+        name = "User";
+      }
     }
 
     return {
