@@ -10,7 +10,7 @@ from pathlib import Path
 MODEL_PRICING = {
     "gpt-4o-mini": {
         "input": 0.15 / 1_000_000,  # $0.15 per 1M tokens
-        "output": 0.60 / 1_000_000,  # $0.60 per 1M tokens
+        "output": 0.075 / 1_000_000,  # $0.075 per 1M tokens
     },
     "gpt-4o": {
         "input": 2.50 / 1_000_000,  # $2.50 per 1M tokens

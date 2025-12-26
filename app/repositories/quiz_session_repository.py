@@ -39,8 +39,8 @@ class QuizSessionRepository:
         existing = await self.collection.find_one({"_id": user_oid})
         
         session_entry = {
-            "date": now,
-            "session_id": session_id
+            "session_id": session_id,
+            "session_name": None  # Will be updated later when session_name is generated
         }
         
         if existing:
@@ -109,4 +109,70 @@ class QuizSessionRepository:
         )
         
         return result.modified_count > 0
+
+    @handle_database_errors
+    async def update_session_name(self, user_id: str, session_id: str, session_name: str) -> bool:
+        """
+        Update session_name for a specific session in quiz_sessions collection.
+        If the session doesn't exist, it will be added.
+        
+        Args:
+            user_id: User ObjectId as string
+            session_id: Session ID to update
+            session_name: The session name to set
+            
+        Returns:
+            True if session was found and updated or added, False otherwise
+        """
+        user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+        now = datetime.now(timezone.utc)
+        
+        # First, try to update existing session
+        result = await self.collection.update_one(
+            {"_id": user_oid, "session_data.session_id": session_id},
+            {
+                "$set": {
+                    "session_data.$.session_name": session_name,
+                    "updated_at": now
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"Updated session_name for session {session_id} in quiz_sessions for user {user_id}")
+            return True
+        
+        # If session doesn't exist, check if user document exists
+        user_doc = await self.collection.find_one({"_id": user_oid})
+        
+        if user_doc:
+            # User exists but session doesn't - add the session with session_name
+            session_entry = {
+                "session_id": session_id,
+                "session_name": session_name
+            }
+            await self.collection.update_one(
+                {"_id": user_oid},
+                {
+                    "$push": {"session_data": session_entry},
+                    "$set": {"updated_at": now}
+                }
+            )
+            logger.info(f"Added session {session_id} with session_name to quiz_sessions for user {user_id}")
+            return True
+        else:
+            # User doesn't exist - create new document with session
+            session_entry = {
+                "session_id": session_id,
+                "session_name": session_name
+            }
+            await self.collection.insert_one({
+                "_id": user_oid,
+                "user_id": user_oid,
+                "session_data": [session_entry],
+                "created_at": now,
+                "updated_at": now
+            })
+            logger.info(f"Created new quiz_sessions document for user {user_id} with session {session_id} and session_name")
+            return True
 

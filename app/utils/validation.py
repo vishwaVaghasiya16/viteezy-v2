@@ -23,15 +23,23 @@ def validate_session_id(session_id: str) -> str:
     if not session_id:
         raise ValidationError("Session ID cannot be empty", field="session_id")
     
+    # Strip whitespace first
+    session_id = session_id.strip()
+    
+    if not session_id:
+        raise ValidationError("Session ID cannot be empty", field="session_id")
+    
     # Session IDs are hex strings (32 chars from uuid4().hex)
-    if not re.match(r"^[a-f0-9]{32}$", session_id):
+    # Allow both uppercase and lowercase hex characters
+    if not re.match(r"^[a-fA-F0-9]{32}$", session_id):
         raise ValidationError(
-            "Invalid session ID format",
+            "Invalid session ID format. Must be a 32-character hexadecimal string.",
             field="session_id",
             details={"session_id": session_id[:20] + "..." if len(session_id) > 20 else session_id}
         )
     
-    return session_id.strip()
+    # Convert to lowercase for consistency
+    return session_id.lower()
 
 
 def validate_user_id(user_id: str) -> str:
@@ -53,12 +61,38 @@ def validate_user_id(user_id: str) -> str:
     user_id = user_id.strip()
     
     # ObjectId is 24 hex characters
-    if not re.match(r"^[a-f0-9]{24}$", user_id, re.IGNORECASE):
+    if not re.match(r"^[a-fA-F0-9]{24}$", user_id):
         raise ValidationError(
             "Invalid user ID format. Must be a valid ObjectId.",
             field="user_id",
             details={"user_id": user_id}
         )
+    
+    # Normalize to lowercase for consistency
+    return user_id.lower()
+
+
+def normalize_user_id(user_id: str | None) -> str | None:
+    """
+    Normalize user_id to ensure consistent format (lowercase string).
+    Used when storing user_id in metadata or returning in responses.
+    
+    Args:
+        user_id: User ID to normalize (can be string or None)
+        
+    Returns:
+        Normalized user_id as lowercase string, or None if input is None/empty
+    """
+    if not user_id:
+        return None
+    
+    user_id = str(user_id).strip()
+    if not user_id:
+        return None
+    
+    # If it's already an ObjectId string, normalize to lowercase
+    if re.match(r"^[a-fA-F0-9]{24}$", user_id):
+        return user_id.lower()
     
     return user_id
 

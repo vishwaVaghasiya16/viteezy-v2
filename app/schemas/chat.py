@@ -31,7 +31,6 @@ class ChatResponse(BaseModel):
         default=None,
         description="Assistant reply message. Can be None if conversation ended."
     )
-    session_created: bool = False
     options: list[QuestionOption] | None = Field(
         default=None,
         description="Available options for the current question (if applicable)"

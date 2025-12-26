@@ -57,6 +57,7 @@ class SessionRepository:
             
             new_session = {
                 "session_id": session_id,
+                "session_name": None,  # Will be set later when generated
                 "messages": [],
                 "metadata": metadata or {},
                 "created_at": now,
@@ -85,6 +86,7 @@ class SessionRepository:
             # Legacy format: one document per session (for backward compatibility)
             payload = {
                 "_id": session_id,
+                "session_name": None,  # Will be set later when generated
                 "messages": [],
                 "metadata": metadata or {},
                 "created_at": now,
@@ -251,6 +253,87 @@ class SessionRepository:
             
             return None
 
+    @handle_database_errors
+    async def update_session_name(self, session_id: str, session_name: str, user_id: str | None = None) -> Session | None:
+        """
+        Update session_name for a session.
+        If user_id is provided, updates in new format (nested sessions).
+        Otherwise, tries legacy format first, then searches across all users.
+        """
+        now = datetime.now(timezone.utc)
+        
+        # If user_id not provided, try to find it by searching for the session
+        if not user_id:
+            user_doc = await self.collection.find_one(
+                {"sessions.session_id": session_id},
+                {"_id": 1, "sessions.$": 1}
+            )
+            if user_doc:
+                user_id = str(user_doc["_id"])
+        
+        if user_id:
+            # New format: update session_name within nested session
+            user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+            
+            updated = await self.collection.find_one_and_update(
+                {"_id": user_oid, "sessions.session_id": session_id},
+                {
+                    "$set": {
+                        "sessions.$.session_name": session_name,
+                        "sessions.$.updated_at": now,
+                        "updated_at": now
+                    }
+                },
+                return_document=ReturnDocument.AFTER
+            )
+            
+            if not updated:
+                return None
+            
+            # Find the updated session
+            for session in updated.get("sessions", []):
+                if session.get("session_id") == session_id:
+                    return self._nested_session_to_session(session, session_id)
+            return None
+        else:
+            # Try legacy format first: direct update
+            updated = await self.collection.find_one_and_update(
+                {"_id": session_id},
+                {"$set": {"session_name": session_name, "updated_at": now}},
+                return_document=ReturnDocument.AFTER
+            )
+            
+            if updated:
+                return self._document_to_session(updated)
+            
+            # If not found, search across all user documents for nested sessions
+            user_doc = await self.collection.find_one(
+                {"sessions.session_id": session_id},
+                {"_id": 1, "sessions.$": 1}
+            )
+            if user_doc and user_doc.get("sessions"):
+                user_id = str(user_doc["_id"])
+                user_oid = ObjectId(user_id)
+                
+                updated = await self.collection.find_one_and_update(
+                    {"_id": user_oid, "sessions.session_id": session_id},
+                    {
+                        "$set": {
+                            "sessions.$.session_name": session_name,
+                            "sessions.$.updated_at": now,
+                            "updated_at": now
+                        }
+                    },
+                    return_document=ReturnDocument.AFTER
+                )
+                
+                if updated:
+                    for session in updated.get("sessions", []):
+                        if session.get("session_id") == session_id:
+                            return self._nested_session_to_session(session, session_id)
+            
+            return None
+
     async def update_metadata(self, session_id: str, metadata: dict, user_id: str | None = None) -> Session | None:
         """
         Update session metadata.
@@ -378,7 +461,9 @@ class SessionRepository:
                 session_doc = user_doc["sessions"][0]
                 current_metadata = session_doc.get("metadata", {})
                 if "user_id" not in current_metadata:
-                    current_metadata["user_id"] = user_id
+                    # Normalize user_id to string for consistent storage in metadata
+                    from app.utils.validation import normalize_user_id
+                    current_metadata["user_id"] = normalize_user_id(user_id)
                     await self.collection.find_one_and_update(
                         {"_id": user_oid, "sessions.session_id": session_id},
                         {
@@ -395,15 +480,17 @@ class SessionRepository:
         # Extract session data from legacy document
         session_data = {
             "session_id": session_id,
+            "session_name": legacy_doc.get("session_name"),  # Preserve existing session_name if any
             "messages": legacy_doc.get("messages", []),
             "metadata": legacy_doc.get("metadata", {}),
             "created_at": legacy_doc.get("created_at", now),
             "updated_at": legacy_doc.get("updated_at", now)
         }
         
-        # Add user_id to metadata
+        # Add user_id to metadata (normalized to string for consistency)
         if "user_id" not in session_data["metadata"]:
-            session_data["metadata"]["user_id"] = user_id
+            from app.utils.validation import normalize_user_id
+            session_data["metadata"]["user_id"] = normalize_user_id(user_id)
         
         # Check if user document exists
         user_doc = await self.collection.find_one({"_id": user_oid})
@@ -462,18 +549,21 @@ class SessionRepository:
     ) -> list[dict]:
         """
         Search for a word in all messages across all sessions for a given user.
-        Returns a list of matches with session_id and message index.
+        Returns a list of matches grouped by session_id, sorted by session created_at (latest first).
         
         Args:
             user_id: The user ID to search for
             search_word: The word to search for (case-insensitive)
             
         Returns:
-            List of dicts with:
+            List of dicts grouped by session_id, each containing:
             - session_id: The session ID where the word was found
-            - message_index: The index in the messages array where the word was found
-            - role: The role of the message (user/assistant)
-            - content: The message content containing the word
+            - session_name: The session name if available
+            - date: The session created_at date
+            - messages: Array of message objects with:
+              - message_index: The index in the messages array where the word was found
+              - role: The role of the message (user/assistant)
+              - content: The message content containing the word
         """
         from bson import ObjectId
         
@@ -485,25 +575,86 @@ class SessionRepository:
         if not user_doc:
             return []
         
-        results = []
+        # Dictionary to group results by session_id
+        session_results = {}
         search_word_lower = search_word.lower()
         
         # Search through all sessions
         sessions = user_doc.get("sessions", [])
         for session in sessions:
             session_id = session.get("session_id")
+            session_name = session.get("session_name")
+            created_at = session.get("created_at")
             messages = session.get("messages", [])
             
+            # Format date as ISO string if available
+            date_str = None
+            if created_at:
+                if isinstance(created_at, datetime):
+                    date_str = created_at.isoformat()
+                else:
+                    date_str = str(created_at)
+            
             # Search through all messages in this session
+            session_messages = []
             for index, message in enumerate(messages):
                 content = message.get("content", "")
                 if search_word_lower in content.lower():
-                    results.append({
-                        "session_id": session_id,
+                    session_messages.append({
                         "message_index": index,
                         "role": message.get("role", "unknown"),
                         "content": content
                     })
+            
+            # Only add session if it has matching messages
+            if session_messages:
+                session_results[session_id] = {
+                    "session_id": session_id,
+                    "session_name": session_name,
+                    "date": date_str,
+                    "messages": session_messages
+                }
+        
+        # Sort sessions by created_at (latest first)
+        session_dates = {}
+        for session in sessions:
+            session_id = session.get("session_id")
+            created_at = session.get("created_at")
+            if created_at:
+                if isinstance(created_at, datetime):
+                    session_dates[session_id] = created_at
+                elif isinstance(created_at, str):
+                    try:
+                        # Try parsing ISO format string
+                        session_dates[session_id] = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    except:
+                        try:
+                            from dateutil import parser
+                            session_dates[session_id] = parser.parse(created_at)
+                        except:
+                            session_dates[session_id] = datetime.min
+                else:
+                    session_dates[session_id] = datetime.min
+            else:
+                session_dates[session_id] = datetime.min
+        
+        # Convert to list and sort by session created_at (latest first)
+        results = list(session_results.values())
+        
+        def sort_key(x):
+            session_date = session_dates.get(x["session_id"], datetime.min)
+            if isinstance(session_date, datetime) and session_date != datetime.min:
+                # Use negative timestamp for reverse sort (latest first)
+                timestamp = -session_date.timestamp()
+            else:
+                timestamp = 0
+            return timestamp
+        
+        results.sort(key=sort_key)
+        
+        # Sort messages within each session by message_index (chronological order)
+        for result in results:
+            result["messages"].sort(key=lambda x: x["message_index"])
         
         return results
 
@@ -524,60 +675,101 @@ class SessionRepository:
         
         now = datetime.now(timezone.utc)
         
+        # Try nested format first if user_id is provided
         if user_id:
-            # New format: update in nested sessions
-            user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
-            
-            # Get current session to retrieve existing token usage
-            user_doc = await self.collection.find_one(
-                {"_id": user_oid, "sessions.session_id": session_id},
-                {"sessions.$": 1}
-            )
-            
-            if user_doc and user_doc.get("sessions"):
-                session = user_doc["sessions"][0]
-                current_metadata = session.get("metadata", {})
-                current_usage = current_metadata.get("token_usage", {
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "total_tokens": 0,
-                    "cost": 0.0,
-                    "model": usage_info.get("model", "unknown"),
-                    "api_calls": 0
-                })
+            try:
+                user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
                 
-                # Accumulate token usage
-                updated_usage = {
-                    "input_tokens": current_usage.get("input_tokens", 0) + usage_info.get("input_tokens", 0),
-                    "output_tokens": current_usage.get("output_tokens", 0) + usage_info.get("output_tokens", 0),
-                    "total_tokens": current_usage.get("total_tokens", 0) + usage_info.get("total_tokens", 0),
-                    "cost": current_usage.get("cost", 0.0) + usage_info.get("cost", 0.0),
-                    "model": usage_info.get("model", current_usage.get("model", "unknown")),
-                    "api_calls": current_usage.get("api_calls", 0) + 1,
-                    "last_updated": now.isoformat()
-                }
+                logger.debug(f"Attempting to update token usage in nested format: user_id={user_id}, session_id={session_id}")
                 
-                # Update metadata with accumulated token usage
-                updated_metadata = {**current_metadata, "token_usage": updated_usage}
-                
-                updated = await self.collection.find_one_and_update(
+                # Get current session to retrieve existing token usage
+                user_doc = await self.collection.find_one(
                     {"_id": user_oid, "sessions.session_id": session_id},
-                    {
-                        "$set": {
-                            "sessions.$.metadata": updated_metadata,
-                            "sessions.$.updated_at": now,
-                            "updated_at": now
-                        }
-                    },
-                    return_document=ReturnDocument.AFTER
+                    {"sessions.$": 1}
                 )
                 
-                if updated:
-                    for session in updated.get("sessions", []):
-                        if session.get("session_id") == session_id:
-                            return self._nested_session_to_session(session, session_id)
-        else:
-            # Legacy format: update in flat document
+                if user_doc and user_doc.get("sessions"):
+                    session = user_doc["sessions"][0]
+                    current_metadata = session.get("metadata", {})
+                    current_usage = current_metadata.get("token_usage", {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": 0,
+                        "cost": 0.0,
+                        "model": usage_info.get("model", "unknown"),
+                        "api_calls": 0
+                    })
+                    
+                    logger.debug(
+                        f"Current token usage: {current_usage}, "
+                        f"New usage: input={usage_info.get('input_tokens')}, "
+                        f"output={usage_info.get('output_tokens')}, cost=${usage_info.get('cost', 0):.6f}"
+                    )
+                    
+                    # Accumulate token usage
+                    updated_usage = {
+                        "input_tokens": current_usage.get("input_tokens", 0) + usage_info.get("input_tokens", 0),
+                        "output_tokens": current_usage.get("output_tokens", 0) + usage_info.get("output_tokens", 0),
+                        "total_tokens": current_usage.get("total_tokens", 0) + usage_info.get("total_tokens", 0),
+                        "cost": current_usage.get("cost", 0.0) + usage_info.get("cost", 0.0),
+                        "model": usage_info.get("model", current_usage.get("model", "unknown")),
+                        "api_calls": current_usage.get("api_calls", 0) + 1,
+                        "last_updated": now.isoformat()
+                    }
+                    
+                    logger.debug(f"Updated token usage will be: {updated_usage}")
+                    
+                    # Update metadata with accumulated token usage
+                    updated_metadata = {**current_metadata, "token_usage": updated_usage}
+                    
+                    updated = await self.collection.find_one_and_update(
+                        {"_id": user_oid, "sessions.session_id": session_id},
+                        {
+                            "$set": {
+                                "sessions.$.metadata": updated_metadata,
+                                "sessions.$.updated_at": now,
+                                "updated_at": now
+                            }
+                        },
+                        return_document=ReturnDocument.AFTER
+                    )
+                    
+                    if updated:
+                        for session in updated.get("sessions", []):
+                            if session.get("session_id") == session_id:
+                                logger.info(
+                                    f"✅ Token usage updated successfully for session {session_id} with user_id {user_id}: "
+                                    f"input={updated_usage['input_tokens']}, output={updated_usage['output_tokens']}, "
+                                    f"cost=${updated_usage['cost']:.6f}, api_calls={updated_usage['api_calls']}"
+                                )
+                                return self._nested_session_to_session(session, session_id)
+                    else:
+                        logger.warning(f"find_one_and_update returned None for session {session_id} with user_id {user_id}")
+                else:
+                    logger.warning(
+                        f"Session {session_id} not found in nested format for user_id {user_id}. "
+                        f"user_doc exists: {user_doc is not None}, sessions found: {user_doc.get('sessions') if user_doc else None}"
+                    )
+            except Exception as e:
+                logger.error(f"Exception updating token usage in nested format for session {session_id} with user_id {user_id}: {e}", exc_info=True)
+                # Fall through to try legacy format or search
+        
+        # Try to find session in nested format by searching (if user_id wasn't provided or nested update failed)
+        if not user_id:
+            logger.debug(f"user_id not provided, searching for session {session_id} in nested format")
+            user_doc = await self.collection.find_one(
+                {"sessions.session_id": session_id},
+                {"_id": 1, "sessions.$": 1}
+            )
+            if user_doc and user_doc.get("sessions"):
+                user_id = str(user_doc["_id"])
+                logger.info(f"Found session {session_id} in nested format for user_id {user_id}, retrying update")
+                # Retry with found user_id
+                return await self.update_token_usage(session_id, usage_info, user_id)
+        
+        # Try legacy format: update in flat document
+        logger.debug(f"Attempting to update token usage in legacy format for session {session_id}")
+        try:
             session_doc = await self.collection.find_one({"_id": session_id})
             if session_doc:
                 current_metadata = session_doc.get("metadata", {})
@@ -616,8 +808,23 @@ class SessionRepository:
                 )
                 
                 if updated:
+                    logger.info(
+                        f"✅ Token usage updated successfully for legacy session {session_id}: "
+                        f"input={updated_usage['input_tokens']}, output={updated_usage['output_tokens']}, "
+                        f"cost=${updated_usage['cost']:.6f}, api_calls={updated_usage['api_calls']}"
+                    )
                     return self._document_to_session(updated)
+                else:
+                    logger.warning(f"find_one_and_update returned None for legacy session {session_id}")
+            else:
+                logger.warning(f"Legacy session document not found for session_id {session_id}")
+        except Exception as e:
+            logger.error(f"Exception updating token usage in legacy format for session {session_id}: {e}", exc_info=True)
         
+        logger.error(
+            f"❌ Failed to update token usage: session {session_id} not found in any format. "
+            f"user_id was: {user_id}"
+        )
         return None
 
     @handle_database_errors

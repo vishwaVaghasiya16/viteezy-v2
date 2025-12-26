@@ -82,6 +82,22 @@ class SearchMessagesResponse(BaseModel):
     matches: list[dict[str, Any]]
 
 
+class SearchMessagesResponseCustom(BaseModel):
+    """Custom response model for search-messages endpoint with success boolean, data, and pagination."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: dict[str, Any] | None = Field(default=None, description="Search results data")
+    pagination: dict[str, Any] | None = Field(default=None, description="Pagination information")
+
+
+class SessionHistoryResponse(BaseModel):
+    """Custom response model for session history endpoint with success boolean, full message history, and pagination."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: dict[str, Any] | None = Field(default=None, description="Session history data including messages")
+    pagination: dict[str, Any] | None = Field(default=None, description="Pagination information for messages")
+
+
 class DeleteSessionResponse(BaseModel):
     """Delete session response model."""
     status: str = Field(..., description="Response status: 'success' or 'fail'")
@@ -112,4 +128,39 @@ class ChatResponseWrapper(SuccessResponse):
 class QuestionStateResponseWrapper(SuccessResponse):
     """Response model for question state endpoint."""
     data: dict[str, Any] | None = Field(default=None, description="Question state data (QuestionStateResponse)")
+
+
+class SessionCreateResponse(BaseModel):
+    """Custom response model for session creation endpoint with success boolean and no timestamp."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: dict[str, Any] | None = Field(default=None, description="Session data containing session_id and created_at")
+
+
+class FirstQuestionResponse(BaseModel):
+    """Custom response model for first-question endpoint with success boolean, timestamp in data, and no outer timestamp."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: dict[str, Any] | None = Field(default=None, description="First question data with timestamp included inside")
+
+
+class ChatResponseCustom(BaseModel):
+    """Custom response model for chat endpoint with success boolean, timestamp in data, and no outer timestamp."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: dict[str, Any] | None = Field(default=None, description="Chat response data with timestamp included inside")
+
+
+class UserLoginResponseCustom(BaseModel):
+    """Custom response model for useridLogin endpoint with success boolean, timestamp in data, and no outer timestamp."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message (e.g., 'Recommendation Shown successfully' or 'User must be registered first')")
+    data: dict[str, Any] | None = Field(default=None, description="Login data containing isLogin, showRecommendation, message, and timestamp")
+
+
+class LinkSessionResponseCustom(BaseModel):
+    """Custom response model for link-user endpoint with success boolean, timestamp in data, and no outer timestamp."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message (e.g., 'Session Linked Successfully' or error message)")
+    data: dict[str, Any] | None = Field(default=None, description="Link session data containing session_id, user_id, message, and error")
 

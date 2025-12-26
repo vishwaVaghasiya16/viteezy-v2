@@ -276,11 +276,38 @@ class ChatService:
             return session.metadata.get("user_id")
         return None
 
-    async def _update_session_token_usage(self, session_id: str, usage_info: dict, user_id: str | None = None) -> None:
-        """Update token usage statistics in session metadata."""
+    async def _update_session_token_usage(self, session_id: str, usage_info: dict, user_id: str | None = None) -> bool:
+        """
+        Update token usage statistics in session metadata.
+        
+        Returns:
+            True if update was successful, False otherwise
+        """
+        print(f"[_update_session_token_usage] Called with session_id={session_id}, user_id={user_id}")
+        print(f"[_update_session_token_usage] usage_info: {usage_info}")
         try:
-            await self.session_repo.update_token_usage(session_id, usage_info, user_id)
+            logger.debug(
+                f"Calling update_token_usage: session_id={session_id}, "
+                f"user_id={user_id}, usage_info={usage_info}"
+            )
+            print(f"[_update_session_token_usage] Calling session_repo.update_token_usage...")
+            result = await self.session_repo.update_token_usage(session_id, usage_info, user_id)
+            print(f"[_update_session_token_usage] session_repo.update_token_usage returned: {result}")
+            if result:
+                success_msg = f"Token usage updated successfully for session {session_id}"
+                print(f"[_update_session_token_usage] SUCCESS: {success_msg}")
+                logger.info(success_msg)
+                return True
+            else:
+                warning_msg = f"update_token_usage returned None for session {session_id}, user_id: {user_id}"
+                print(f"[_update_session_token_usage] WARNING: {warning_msg}")
+                logger.warning(warning_msg)
+                return False
         except Exception as e:
+            error_msg = f"Exception in _update_session_token_usage: {e}"
+            print(f"[_update_session_token_usage] EXCEPTION: {error_msg}")
+            import traceback
+            print(f"[_update_session_token_usage] Traceback: {traceback.format_exc()}")
             log_error_with_context(
                 e,
                 context={
@@ -289,8 +316,10 @@ class ChatService:
                     "operation": "update_token_usage",
                     "usage_info": usage_info,
                 },
-                level=logging.WARNING
+                level=logging.ERROR
             )
+            logger.error(error_msg, exc_info=True)
+            return False
 
     async def _get_previous_session_data(self, user_id: str) -> dict:
         """
@@ -543,7 +572,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=first_reply,
-                        session_created=False,
                         options=options,
                         question_type=question_type,
                         isRegistered=is_registered,
@@ -562,7 +590,6 @@ class ChatService:
             return ChatResponse(
                 session_id=session.id,
                 reply=end_message,
-                session_created=False,
                 options=None,
                 question_type=None,
                 isRegistered=is_registered,
@@ -597,7 +624,6 @@ class ChatService:
                 return ChatResponse(
                     session_id=session.id,
                     reply=reply,
-                    session_created=False,
                     redirect_url="https://viteezy.nl/login",
                     isRegistered=is_registered,
                 )
@@ -637,7 +663,6 @@ class ChatService:
                 return ChatResponse(
                     session_id=session.id,
                     reply=error_reply,
-                    session_created=False,
                     options=options,
                     question_type="yes_no",
                     isRegistered=is_registered,
@@ -667,7 +692,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=reply,
-                        session_created=False,
                         options=options,
                         question_type=question_type,
                         isRegistered=is_registered,
@@ -713,7 +737,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=reply,
-                        session_created=False,
                         options=options,
                         question_type="yes_no",
                     )
@@ -803,7 +826,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=None,  # No message/content in response
-                        session_created=False,
                         options=None,
                         question_type=None,
                         isRegistered=is_registered,
@@ -850,7 +872,6 @@ class ChatService:
                 return ChatResponse(
                     session_id=session.id,
                     reply=reply,
-                    session_created=False,
                     options=options,
                     question_type=question_type,
                     isRegistered=is_registered,
@@ -937,7 +958,6 @@ class ChatService:
                         return ChatResponse(
                             session_id=session.id,
                             reply=question_reply,
-                            session_created=False,
                             options=options,
                             question_type="yes_no",
                             isRegistered=is_registered,
@@ -979,7 +999,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=question_reply,
-                        session_created=False,
                         options=options,
                         question_type="yes_no",
                         isRegistered=is_registered,
@@ -1020,7 +1039,6 @@ class ChatService:
                     return ChatResponse(
                         session_id=session.id,
                         reply=error_reply,
-                        session_created=False,
                         options=options,
                         question_type="yes_no",
                         isRegistered=is_registered,
@@ -1106,7 +1124,6 @@ class ChatService:
             return ChatResponse(
                 session_id=session.id,
                 reply=recommendation_reply,
-                session_created=False,
                 options=None,
                 question_type=None,
                 isRegistered=is_registered,
@@ -1174,24 +1191,74 @@ class ChatService:
             logger.warning(f"Failed to save messages to database: {e}")
         
         # Update token usage in session metadata (non-blocking)
-        try:
-            await self._update_session_token_usage(session.id, usage_info, user_id)
-        except Exception as e:
-            log_error_with_context(
-                e,
-                context={
-                    "session_id": session.id,
-                    "user_id": user_id,
-                    "operation": "update_token_usage",
-                }
+        # Always log to ensure we can see what's happening
+        print(f"[TOKEN_USAGE] Starting update for session {session.id}, user_id: {user_id}")
+        print(f"[TOKEN_USAGE] usage_info type: {type(usage_info)}, value: {usage_info}")
+        
+        # Validate usage_info has required fields
+        if not usage_info or not isinstance(usage_info, dict):
+            error_msg = f"Invalid usage_info for session {session.id}: {usage_info}"
+            print(f"[TOKEN_USAGE] ERROR: {error_msg}")
+            logger.error(error_msg)
+        elif usage_info.get("input_tokens", 0) == 0 and usage_info.get("output_tokens", 0) == 0:
+            warning_msg = (
+                f"usage_info has zero tokens for session {session.id}: {usage_info}. "
+                f"This might indicate the OpenAI API didn't return usage data."
             )
-            # Log but don't fail the request
-            logger.warning(f"Failed to update token usage: {e}")
+            print(f"[TOKEN_USAGE] WARNING: {warning_msg}")
+            logger.warning(warning_msg)
+        else:
+            info_msg = (
+                f"Updating token usage for session {session.id}, user_id: {user_id}, "
+                f"usage_info: input={usage_info.get('input_tokens')}, "
+                f"output={usage_info.get('output_tokens')}, "
+                f"total={usage_info.get('total_tokens')}, "
+                f"cost=${usage_info.get('cost', 0):.6f}, "
+                f"model={usage_info.get('model', 'unknown')}"
+            )
+            print(f"[TOKEN_USAGE] {info_msg}")
+            logger.info(info_msg)
+            try:
+                print(f"[TOKEN_USAGE] Calling _update_session_token_usage...")
+                result = await self._update_session_token_usage(session.id, usage_info, user_id)
+                print(f"[TOKEN_USAGE] _update_session_token_usage returned: {result}")
+                if result:
+                    success_msg = (
+                        f"✅ Successfully updated token usage for session {session.id}: "
+                        f"input={usage_info.get('input_tokens')}, "
+                        f"output={usage_info.get('output_tokens')}, "
+                        f"cost=${usage_info.get('cost', 0):.6f}"
+                    )
+                    print(f"[TOKEN_USAGE] SUCCESS: {success_msg}")
+                    logger.info(success_msg)
+                else:
+                    warning_msg = (
+                        f"⚠️ Token usage update returned False/None for session {session.id}, user_id: {user_id}. "
+                        f"Check logs above for details."
+                    )
+                    print(f"[TOKEN_USAGE] WARNING: {warning_msg}")
+                    logger.warning(warning_msg)
+            except Exception as e:
+                error_msg = f"❌ Failed to update token usage for session {session.id}: {e}"
+                print(f"[TOKEN_USAGE] EXCEPTION: {error_msg}")
+                print(f"[TOKEN_USAGE] Exception details: {type(e).__name__}: {str(e)}")
+                import traceback
+                print(f"[TOKEN_USAGE] Traceback: {traceback.format_exc()}")
+                log_error_with_context(
+                    e,
+                    context={
+                        "session_id": session.id,
+                        "user_id": user_id,
+                        "operation": "update_token_usage",
+                        "usage_info": usage_info,
+                    }
+                )
+                # Log but don't fail the request
+                logger.error(error_msg, exc_info=True)
 
         return ChatResponse(
             session_id=session.id,
             reply=assistant_message,
-            session_created=False,
             options=None,
             question_type=None,
             isRegistered=is_registered,
@@ -3260,6 +3327,47 @@ class ChatService:
         # Default: no options (free text)
         return None, "text"
     
+    async def generate_session_name(self, concern: str) -> str:
+        """
+        Generate a creative session name based on the user's concern using OpenAI.
+        Returns a unique, creative name like "Stress concerns supplements" or similar.
+        """
+        try:
+            system_prompt = (
+                "You are a helpful assistant that creates creative, concise session names for wellness conversations. "
+                "Generate a short, descriptive session name (2-5 words) based on the user's health concern. "
+                "Make it natural and conversational, like ChatGPT session names. "
+                "Examples: 'Stress relief supplements', 'Sleep support journey', 'Energy boost plan', 'Gut health solutions'. "
+                "Return ONLY the session name, nothing else. Keep it under 40 characters."
+            )
+            
+            user_message = f"Create a creative session name for a user with this concern: {concern}"
+            
+            reply_text, _ = await self.ai_service.generate_reply(
+                system_prompt=system_prompt,
+                history=[],
+                user_message=user_message,
+                context=None,
+                products=None,
+            )
+            
+            # Clean up the response - remove quotes, extra whitespace, etc.
+            session_name = reply_text.strip().strip('"').strip("'").strip()
+            
+            # Fallback if OpenAI returns something too long or empty
+            if not session_name or len(session_name) > 50:
+                # Use a simple fallback format
+                concern_label = concern.replace("_", " ").title()
+                session_name = f"{concern_label} Support"
+            
+            return session_name
+        except Exception as e:
+            # Fallback to simple format if OpenAI fails
+            import logging
+            logging.warning(f"Failed to generate session name with OpenAI: {e}")
+            concern_label = concern.replace("_", " ").title()
+            return f"{concern_label} Support"
+
     async def get_first_question(self, session_id: str) -> ChatResponse:
         """
         Get the first question from the bot without requiring a user message.
@@ -3292,7 +3400,6 @@ class ChatService:
                     role="assistant",
                     content="You have already completed the onboarding. Your recommendations have been provided."
                 ),
-                session_created=False,
                 options=None,
                 question_type=None,
                 isRegistered=self._get_is_registered_from_session(session),
@@ -3346,7 +3453,6 @@ class ChatService:
         return ChatResponse(
             session_id=session_id,
             reply=first_reply,
-            session_created=False,
             options=options,
             question_type=question_type,
             isRegistered=self._get_is_registered_from_session(session),
@@ -3373,7 +3479,6 @@ class ChatService:
             return ChatResponse(
                 session_id=session_id,
                 reply=ChatMessage(role="assistant", content=question_text),
-                session_created=False,
                 options=options,
                 question_type=question_type,
                 isRegistered=self._get_is_registered_from_session(session),
@@ -3386,7 +3491,6 @@ class ChatService:
                 role="assistant",
                 content="Onboarding is complete. Your recommendations have been provided."
             ),
-            session_created=False,
             options=None,
             question_type=None,
             isRegistered=self._get_is_registered_from_session(session),
