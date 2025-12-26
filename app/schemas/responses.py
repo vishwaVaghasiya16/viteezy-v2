@@ -98,6 +98,13 @@ class SessionHistoryResponse(BaseModel):
     pagination: dict[str, Any] | None = Field(default=None, description="Pagination information for messages")
 
 
+class UserSessionsResponse(BaseModel):
+    """Custom response model for listing sessions by user_id."""
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: list[dict[str, Any]] | None = Field(default=None, description="Array of session objects (session_id, session_name, timestamps)")
+
+
 class DeleteSessionResponse(BaseModel):
     """Delete session response model."""
     status: str = Field(..., description="Response status: 'success' or 'fail'")
@@ -163,4 +170,3 @@ class LinkSessionResponseCustom(BaseModel):
     success: bool = Field(..., description="Whether the operation was successful")
     message: str = Field(..., description="Response message (e.g., 'Session Linked Successfully' or error message)")
     data: dict[str, Any] | None = Field(default=None, description="Link session data containing session_id, user_id, message, and error")
-

@@ -394,9 +394,10 @@ class ChatService:
             
             # Look through sessions in reverse order (most recent first)
             for session in reversed(sessions):
-                session_id = session.get("session_id")
+                session_id_raw = session.get("session_id")
+                session_id = str(session_id_raw) if session_id_raw is not None else None
                 # Skip current session
-                if session_id == current_session_id:
+                if session_id == str(current_session_id):
                     continue
                 
                 session_metadata = session.get("metadata", {})
@@ -3367,7 +3368,7 @@ class ChatService:
             logging.warning(f"Failed to generate session name with OpenAI: {e}")
             concern_label = concern.replace("_", " ").title()
             return f"{concern_label} Support"
-
+    
     async def get_first_question(self, session_id: str) -> ChatResponse:
         """
         Get the first question from the bot without requiring a user message.

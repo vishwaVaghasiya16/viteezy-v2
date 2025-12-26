@@ -21,7 +21,6 @@ from app.schemas.responses import (
     ErrorResponse,
     FirstQuestionResponse,
     GetSessionResponse,
-    HealthCheckResponse,
     LinkSessionResponse,
     LinkSessionResponseCustom,
     QuestionStateResponseWrapper,
@@ -32,6 +31,7 @@ from app.schemas.responses import (
     SessionInfoResponse,
     UserLoginResponse,
     UserLoginResponseCustom,
+    UserSessionsResponse,
 )
 from app.schemas.session import SessionCreate, SessionResponse
 from app.services.chat_service import ChatService, SessionNotFoundError
@@ -66,31 +66,29 @@ async def get_chat_service(
 
 @router.get(
     "/health",
-    response_model=HealthCheckResponse,
     status_code=status.HTTP_200_OK,
-    responses={
-        503: {"model": HealthCheckResponse, "description": "Service unhealthy"}
-    }
 )
 async def health_check(
     db: AsyncIOMotorDatabase = Depends(get_database),
     openai_client: AsyncOpenAI = Depends(get_openai_client),
-) -> HealthCheckResponse | Response:
+) -> dict:
     """
-    Production-ready health check endpoint.
-    Verifies connectivity to MongoDB and OpenAI API.
-    Returns 200 if all services are healthy, 503 if any service is unhealthy.
+    Health check endpoint.
+    Always returns 200 with the shape:
+    {
+        "success": bool,
+        "message": "All server running" | "Server is not running",
+        "data": {
+            "status": "healthy" | "unhealthy",
+            "timestamp": "...",
+            "services": { ... }
+        }
+    }
     """
     import time
     from datetime import datetime, timezone
-    import json
     
-    health_status = HealthCheckResponse(
-        status="healthy",
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        services={}
-    )
-    
+    timestamp = datetime.now(timezone.utc).isoformat()
     overall_healthy = True
     
     # Check MongoDB connection
@@ -105,12 +103,10 @@ async def health_check(
         await db.command("ping")
         response_time = (time.time() - start_time) * 1000
         mongodb_status["response_time_ms"] = round(response_time, 2)
-    except Exception as e:
+    except Exception:
         mongodb_status["status"] = "unhealthy"
         mongodb_status["error"] = "Database connection failed"
         overall_healthy = False
-    
-    health_status.services["mongodb"] = mongodb_status
     
     # Check OpenAI API connection
     openai_status = {
@@ -124,23 +120,68 @@ async def health_check(
         await openai_client.models.list()
         response_time = (time.time() - start_time) * 1000
         openai_status["response_time_ms"] = round(response_time, 2)
-    except Exception as e:
+    except Exception:
         openai_status["status"] = "unhealthy"
         openai_status["error"] = "OpenAI API connection failed"
         overall_healthy = False
     
-    health_status.services["openai"] = openai_status
+    data = {
+        "status": "healthy" if overall_healthy else "unhealthy",
+        "timestamp": timestamp,
+        "services": {
+            "mongodb": mongodb_status,
+            "openai": openai_status
+        }
+    }
     
-    # Set overall status
-    if not overall_healthy:
-        health_status.status = "unhealthy"
-        return Response(
-            content=health_status.model_dump_json(),
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            media_type="application/json"
+    return {
+        "success": overall_healthy,
+        "message": "All server running" if overall_healthy else "Server is not running",
+        "data": data
+    }
+
+
+@router.get(
+    "/sessions/by-user",
+    response_model=UserSessionsResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": UserSessionsResponse, "description": "Invalid user_id format"},
+        404: {"model": UserSessionsResponse, "description": "User not found"},
+    },
+)
+async def get_sessions_by_user(
+    user_id: str = Query(..., description="User ID to fetch sessions for"),
+    chat_service: ChatService = Depends(get_chat_service),
+) -> UserSessionsResponse:
+    """
+    Get session_id and session_name list for a given user_id from ai_conversations.
+    """
+    try:
+        user_id = validate_user_id(user_id)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=UserSessionsResponse(
+                success=False,
+                message=exc.message,
+                data=None
+            ).model_dump()
+        ) from exc
+    
+    sessions = await chat_service.session_repo.get_sessions_for_user(user_id)
+    if sessions is None:
+        return UserSessionsResponse(
+            success=False,
+            message="User not found or no sessions",
+            data=[]
         )
     
-    return health_status
+    return UserSessionsResponse(
+        success=True,
+        message="Sessions fetched successfully",
+        data=sessions
+    )
 
 
 @router.post(
@@ -662,7 +703,7 @@ async def check_user_login(
     """
     from datetime import datetime, timezone
     from bson import ObjectId
-    
+        
     try:
         # Check if user_id is null or empty
         if not request.user_id or request.user_id.strip() == "":
