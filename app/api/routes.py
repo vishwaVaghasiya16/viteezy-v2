@@ -254,20 +254,17 @@ async def create_session(
 
 @router.get(
     "/sessions/history",
-    response_model=SessionHistoryResponse,
     responses={
-        400: {"model": SessionHistoryResponse, "description": "Invalid user_id or session_id format"},
-        404: {"model": SessionHistoryResponse, "description": "Session not found"},
-        500: {"model": SessionHistoryResponse, "description": "Internal server error"}
+        400: {"description": "Invalid user_id or session_id format"},
+        404: {"description": "Session not found"},
+        500: {"description": "Internal server error"}
     }
 )
 async def get_session_history(
     user_id: str = Query(..., description="User ID to get session history for"),
     session_id: str = Query(..., description="Session ID to get message history for"),
-    page: int = Query(1, ge=1, description="Page number for messages (starts from 1)"),
-    limit: int = Query(50, ge=1, le=100, description="Number of messages per page"),
     chat_service: ChatService = Depends(get_chat_service),
-) -> SessionHistoryResponse:
+) -> dict:
     """
     Get the full message history of a session including all messages.
     
@@ -288,12 +285,11 @@ async def get_session_history(
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=SessionHistoryResponse(
-                    success=False,
-                    message="Invalid user_id format. Must be a valid ObjectId.",
-                    data=None,
-                    pagination=None
-                ).model_dump()
+                detail={
+                    "success": False,
+                    "message": "Invalid user_id format. Must be a valid ObjectId.",
+                    "data": None
+                }
             )
         
         # Validate session_id
@@ -302,12 +298,11 @@ async def get_session_history(
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=SessionHistoryResponse(
-                    success=False,
-                    message=exc.message,
-                    data=None,
-                    pagination=None
-                ).model_dump()
+                detail={
+                    "success": False,
+                    "message": exc.message,
+                    "data": None
+                }
             ) from exc
         
         # Get session with user_id
@@ -315,12 +310,11 @@ async def get_session_history(
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=SessionHistoryResponse(
-                    success=False,
-                    message="Session not found",
-                    data=None,
-                    pagination=None
-                ).model_dump()
+                detail={
+                    "success": False,
+                    "message": "Session not found",
+                    "data": None
+                }
             )
         
         # Get session_name from database document (it's stored at session level, not in metadata)
@@ -342,17 +336,13 @@ async def get_session_history(
             except Exception:
                 pass  # session_name will remain None
         
-        # Serialize messages to dict format
+        # Serialize messages to dict format - return all messages without pagination
         all_messages = []
         for msg in session.messages:
             msg_dict = msg.model_dump(mode='json')
             all_messages.append(msg_dict)
         
-        # Calculate pagination for messages
         total_messages = len(all_messages)
-        total_pages = (total_messages + limit - 1) // limit if total_messages > 0 else 0
-        offset = (page - 1) * limit
-        paginated_messages = all_messages[offset:offset + limit]
         
         # Build session history data (without metadata)
         # Normalize user_id to ensure consistent format
@@ -366,25 +356,15 @@ async def get_session_history(
             "updated_at": session.updated_at.isoformat() if session.updated_at else None,
             "user_id": normalized_user_id,
             "message_count": total_messages,
-            "messages": paginated_messages
+            "messages": all_messages  # Return all messages in single response
         }
         
-        # Build pagination info
-        pagination_info = {
-            "page": page,
-            "limit": limit,
-            "total_pages": total_pages,
-            "total_messages": total_messages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1
+        # Return response without pagination field - all messages in single response
+        return {
+            "success": True,
+            "message": "Session history retrieved successfully",
+            "data": session_data
         }
-        
-        return SessionHistoryResponse(
-            success=True,
-            message="Session history retrieved successfully",
-            data=session_data,
-            pagination=pagination_info
-        )
     except HTTPException:
         raise
     except Exception as e:
@@ -394,12 +374,11 @@ async def get_session_history(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=SessionHistoryResponse(
-                success=False,
-                message="Failed to retrieve session history",
-                data=None,
-                pagination=None
-            ).model_dump()
+            detail={
+                "success": False,
+                "message": "Failed to retrieve session history",
+                "data": None
+            }
         ) from e
 
 
@@ -839,7 +818,11 @@ async def check_user_login(
                                 
                                 # Generate creative session name using OpenAI
                                 try:
-                                    session_name = await chat_service.generate_session_name(concern_label)
+                                    session_name = await chat_service.generate_session_name(
+                                        concern_label,
+                                        session_id=request.session_id,
+                                        user_id=request.user_id
+                                    )
                                     import logging
                                     logging.info(f"Generated session_name: {session_name} for session {request.session_id}")
                                     
@@ -912,6 +895,9 @@ async def check_user_login(
                                 
                                 # Format product data
                                 for product_doc in product_docs:
+                                    # Extract product _id
+                                    product_id = str(product_doc.get("_id", ""))
+                                    
                                     # Extract title.en
                                     title_obj = product_doc.get("title", {})
                                     if isinstance(title_obj, dict):
@@ -928,6 +914,7 @@ async def check_user_login(
                                     product_image = product_doc.get("productImage", "")
                                     
                                     products_data.append({
+                                        "id": product_id,
                                         "title": title_en,  # Return as string (en value), not object
                                         "shortDescription": short_description,
                                         "productImage": product_image
@@ -1215,8 +1202,7 @@ async def search_messages(
                 detail=SearchMessagesResponseCustom(
                     success=False,
                     message="Invalid user_id format. Must be a valid ObjectId.",
-                    data=None,
-                    pagination=None
+                    data=None
                 ).model_dump()
             )
         
@@ -1229,8 +1215,7 @@ async def search_messages(
                 detail=SearchMessagesResponseCustom(
                     success=False,
                     message=exc.message,
-                    data=None,
-                    pagination=None
+                    data=None
                 ).model_dump()
             ) from exc
         

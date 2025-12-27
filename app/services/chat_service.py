@@ -3333,10 +3333,15 @@ class ChatService:
         # Default: no options (free text)
         return None, "text"
     
-    async def generate_session_name(self, concern: str) -> str:
+    async def generate_session_name(self, concern: str, session_id: str | None = None, user_id: str | None = None) -> str:
         """
         Generate a creative session name based on the user's concern using OpenAI.
         Returns a unique, creative name like "Stress concerns supplements" or similar.
+        
+        Args:
+            concern: The user's health concern
+            session_id: Optional session ID to store token usage
+            user_id: Optional user ID to store token usage
         """
         try:
             system_prompt = (
@@ -3349,13 +3354,21 @@ class ChatService:
             
             user_message = f"Create a creative session name for a user with this concern: {concern}"
             
-            reply_text, _ = await self.ai_service.generate_reply(
+            reply_text, usage_info = await self.ai_service.generate_reply(
                 system_prompt=system_prompt,
                 history=[],
                 user_message=user_message,
                 context=None,
                 products=None,
             )
+            
+            # Store token usage if session_id is provided
+            if session_id and usage_info and usage_info.get("input_tokens", 0) > 0:
+                try:
+                    await self._update_session_token_usage(session_id, usage_info, user_id)
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Failed to store token usage for session name generation: {e}")
             
             # Clean up the response - remove quotes, extra whitespace, etc.
             session_name = reply_text.strip().strip('"').strip("'").strip()
