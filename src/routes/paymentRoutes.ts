@@ -29,6 +29,14 @@ router.get("/methods", paymentController.getAvailableMethods);
 router.get("/method", paymentController.getAvailableMethods); // Alias for singular
 
 /**
+ * @route   GET /api/v1/payments/track?orderId=xxx or ?membershipId=xxx
+ * @desc    Track payment status by order ID or membership ID (Public API for Mobile App)
+ * @access  Public
+ * @query   orderId or membershipId (one is required)
+ */
+router.get("/track", paymentController.trackPaymentStatus);
+
+/**
  * @route   GET /api/v1/payments/user/me
  * @desc    Get payments by current user
  * @access  Private
@@ -158,6 +166,7 @@ router.get(
       "webhook",
       "order",
       "user",
+      "track",
     ];
 
     if (reservedPaths.includes(req.params.paymentId)) {
