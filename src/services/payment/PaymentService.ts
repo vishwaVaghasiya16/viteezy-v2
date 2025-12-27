@@ -100,20 +100,23 @@ export class PaymentService {
   }
 
   /**
-   * Create payment intent and save to database
+   * Create payment intent and save to database (Order-based with full details)
+   * This method is now aligned with createPaymentIntentForOrder for consistency
    */
   async createPayment(data: {
     orderId: string;
     userId: string;
     paymentMethod: PaymentMethod;
-    amount: { value: number; currency: string };
+    amount?: { value: number; currency: string }; // Optional, will use order amount if not provided
     description?: string;
     metadata?: Record<string, string>;
     returnUrl?: string;
+    cancelUrl?: string;
     webhookUrl?: string;
   }): Promise<{
     payment: any;
     result: PaymentResult;
+    order: any;
   }> {
     try {
       // Validate ObjectId formats
@@ -124,34 +127,91 @@ export class PaymentService {
         throw new AppError("Invalid user ID format", 400);
       }
 
-      // Check if order exists
-      const order = await Orders.findById(data.orderId);
+      // Get order details with populated addresses
+      const order = await Orders.findById(data.orderId)
+        .populate("shippingAddressId")
+        .populate("billingAddressId");
       if (!order) {
         throw new AppError("Order not found", 404);
+      }
+
+      // Verify order belongs to user
+      if (order.userId.toString() !== data.userId) {
+        throw new AppError("Order does not belong to user", 403);
+      }
+
+      const user = await User.findById(data.userId).select("name email");
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Check if order is in a valid state for payment
+      if (
+        order.status !== OrderStatus.PENDING &&
+        order.status !== OrderStatus.CONFIRMED
+      ) {
+        throw new AppError(
+          `Order cannot be paid. Current status: ${order.status}`,
+          400
+        );
+      }
+
+      // Check if order already has a completed payment
+      const existingPayment = await Payments.findOne({
+        orderId: order._id,
+        status: PaymentStatus.COMPLETED,
+      });
+
+      if (existingPayment) {
+        throw new AppError("Order already has a completed payment", 400);
       }
 
       const orderCountry = this.getOrderCountry(order);
       this.ensurePaymentMethodAllowed(data.paymentMethod, orderCountry);
 
-      // Check if user exists
-      const user = await User.findById(data.userId);
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
       // Get the appropriate gateway
       const gateway = this.getGateway(data.paymentMethod);
 
+      // Get order ID
+      const orderId = (order._id as mongoose.Types.ObjectId).toString();
+      const lineItems = this.buildOrderCheckoutLineItems(order);
+      const amountInMinorUnits = this.toMinorUnits(
+        data.amount?.value || order.grandTotal
+      );
+
+      // Convert populated addresses to AddressSnapshotType format
+      const shippingAddress = order.shippingAddressId
+        ? this.convertAddressToSnapshot(order.shippingAddressId as any)
+        : undefined;
+      const billingAddress = order.billingAddressId
+        ? this.convertAddressToSnapshot(order.billingAddressId as any)
+        : shippingAddress;
+
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
-        amount: Math.round(data.amount.value * 100), // Convert to cents
-        currency: data.amount.currency,
-        orderId: data.orderId,
+        amount: amountInMinorUnits,
+        currency: data.amount?.currency || order.currency,
+        orderId: orderId,
         userId: data.userId,
-        description: data.description,
-        metadata: data.metadata,
+        description: data.description || `Order ${order.orderNumber}`,
+        metadata: {
+          orderNumber: order.orderNumber,
+          orderId: orderId,
+          ...(data.metadata || {}),
+        },
         returnUrl: data.returnUrl,
-        webhookUrl: data.webhookUrl,
+        cancelUrl: data.cancelUrl,
+        webhookUrl:
+          data.webhookUrl ||
+          `${
+            process.env.APP_BASE_URL || "http://localhost:8080"
+          }/api/v1/payments/webhook/${data.paymentMethod}`,
+        customerEmail: user.email,
+        customerName: `${user.firstName} ${user.lastName}`.trim(),
+        shippingCountry: orderCountry,
+        shippingAddress,
+        billingAddress,
+        lineItems,
       };
 
       // Create payment intent via gateway
@@ -166,26 +226,91 @@ export class PaymentService {
 
       // Save payment to database
       const payment = await Payments.create({
-        orderId: new mongoose.Types.ObjectId(data.orderId),
+        orderId: order._id,
         userId: new mongoose.Types.ObjectId(data.userId),
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: data.amount.value,
-          currency: data.amount.currency,
-          taxRate: 0, // Default tax rate, can be passed in metadata if needed
+          amount: data.amount?.value || order.grandTotal,
+          currency: data.amount?.currency || order.currency,
+          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
         },
-        currency: data.amount.currency,
+        currency: data.amount?.currency || order.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
       });
 
-      logger.info(`Payment created: ${payment._id} via ${data.paymentMethod}`);
+      // Get payment ID
+      const paymentId = (payment._id as mongoose.Types.ObjectId).toString();
+
+      // Update order payment status
+      order.paymentStatus = result.status;
+      order.paymentMethod = data.paymentMethod;
+      order.paymentId = paymentId;
+      if (result.sessionId) {
+        order.metadata = {
+          ...(order.metadata || {}),
+          paymentSessionId: result.sessionId,
+        };
+      }
+      await order.save();
+
+      logger.info(
+        `Payment created for order ${order.orderNumber}: ${paymentId} via ${data.paymentMethod}`
+      );
+
+      // ========== DEVELOPMENT/TEST MODE: Immediate Subscription Check ==========
+      // In development, optionally create subscription immediately for testing
+      // In production, subscription is created via webhook after payment completion
+      if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
+        console.log(
+          "🟡 [DEV MODE] Attempting immediate subscription creation for testing..."
+        );
+        try {
+          const freshOrder = await Orders.findById(order._id)
+            .select(
+              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+            )
+            .lean();
+
+          if (freshOrder) {
+            const paymentData = payment.toObject ? payment.toObject() : payment;
+            const subscription = await this.createSubscriptionFromOrder(
+              freshOrder,
+              paymentData
+            );
+
+            if (subscription) {
+              console.log(
+                "✅ [DEV MODE] Subscription created immediately:",
+                subscription.subscriptionNumber
+              );
+              logger.info(
+                `[DEV MODE] Subscription ${subscription.subscriptionNumber} created immediately for testing`
+              );
+            } else {
+              console.log(
+                "ℹ️ [DEV MODE] Order not eligible for subscription or already exists"
+              );
+            }
+          }
+        } catch (subError: any) {
+          console.error(
+            "⚠️ [DEV MODE] Immediate subscription creation failed:",
+            subError.message
+          );
+          logger.warn(
+            `[DEV MODE] Immediate subscription creation failed: ${subError.message}`
+          );
+          // Don't throw error - this is just for testing convenience
+        }
+      }
 
       return {
         payment,
         result,
+        order,
       };
     } catch (error: any) {
       logger.error("Payment creation failed:", error);
@@ -928,6 +1053,56 @@ export class PaymentService {
       logger.info(
         `Payment intent created for order ${order.orderNumber}: ${paymentId} via ${data.paymentMethod}`
       );
+
+      // ========== DEVELOPMENT/TEST MODE: Immediate Subscription Check ==========
+      // In development, optionally create subscription immediately for testing
+      // In production, subscription is created via webhook after payment completion
+      if (
+        process.env.NODE_ENV === "development" &&
+        process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true"
+      ) {
+        console.log(
+          "🟡 [DEV MODE] Attempting immediate subscription creation for testing..."
+        );
+        try {
+          const freshOrder = await Orders.findById(order._id)
+            .select(
+              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+            )
+            .lean();
+
+          if (freshOrder) {
+            const paymentData = payment.toObject ? payment.toObject() : payment;
+            const subscription = await this.createSubscriptionFromOrder(
+              freshOrder,
+              paymentData
+            );
+
+            if (subscription) {
+              console.log(
+                "✅ [DEV MODE] Subscription created immediately:",
+                subscription.subscriptionNumber
+              );
+              logger.info(
+                `[DEV MODE] Subscription ${subscription.subscriptionNumber} created immediately for testing`
+              );
+            } else {
+              console.log(
+                "ℹ️ [DEV MODE] Order not eligible for subscription or already exists"
+              );
+            }
+          }
+        } catch (subError: any) {
+          console.error(
+            "⚠️ [DEV MODE] Immediate subscription creation failed:",
+            subError.message
+          );
+          logger.warn(
+            `[DEV MODE] Immediate subscription creation failed: ${subError.message}`
+          );
+          // Don't throw error - this is just for testing convenience
+        }
+      }
 
       return {
         payment,

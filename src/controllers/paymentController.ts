@@ -41,7 +41,7 @@ class PaymentController {
   );
 
   /**
-   * Create payment
+   * Create payment (aligned with createPaymentIntent for consistency)
    */
   createPayment = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -57,6 +57,7 @@ class PaymentController {
         description,
         metadata,
         returnUrl,
+        cancelUrl,
       } = req.body;
 
       const result = await paymentService.createPayment({
@@ -67,6 +68,7 @@ class PaymentController {
         description,
         metadata,
         returnUrl,
+        cancelUrl,
       });
 
       res.apiCreated(
@@ -77,6 +79,17 @@ class PaymentController {
             status: result.payment.status,
             amount: result.payment.amount,
             paymentMethod: result.payment.paymentMethod,
+            gatewayTransactionId: result.payment.gatewayTransactionId,
+          },
+          order: {
+            _id: result.order._id,
+            orderNumber: result.order.orderNumber,
+            status: result.order.status,
+            paymentStatus: result.order.paymentStatus,
+            total: {
+              amount: result.order.grandTotal,
+              currency: result.order.currency,
+            },
           },
           gateway: {
             redirectUrl: result.result.redirectUrl,

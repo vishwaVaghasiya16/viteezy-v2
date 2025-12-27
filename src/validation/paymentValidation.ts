@@ -103,10 +103,20 @@ export const createPaymentSchema = Joi.object(
       "any.required": "Order ID is required",
     }),
     paymentMethod: paymentMethodSchema,
-    amount: amountSchema,
+    amount: Joi.object(
+      withFieldLabels({
+        value: amountValueSchema,
+        currency: currencySchema,
+      })
+    )
+      .optional()
+      .messages({
+        "object.base": "Amount must be an object with value and currency",
+      }),
     description: descriptionSchema,
     metadata: metadataSchema,
     returnUrl: urlSchema,
+    cancelUrl: urlSchema,
     webhookUrl: urlSchema,
   })
 ).label("CreatePaymentPayload");
