@@ -928,7 +928,7 @@ async def check_user_login(
                                     product_image = product_doc.get("productImage", "")
                                     
                                     products_data.append({
-                                        "title": {"en": title_en},
+                                        "title": title_en,  # Return as string (en value), not object
                                         "shortDescription": short_description,
                                         "productImage": product_image
                                     })
