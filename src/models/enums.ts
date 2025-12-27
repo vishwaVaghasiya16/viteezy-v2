@@ -302,6 +302,7 @@ export enum SubscriptionStatus {
 
 // Subscription Cycle Intervals (in days)
 export enum SubscriptionCycle {
+  DAYS_30 = 30,
   DAYS_60 = 60,
   DAYS_90 = 90,
   DAYS_180 = 180,
@@ -355,6 +356,7 @@ export const MEMBERSHIP_STATUS_VALUES = Object.values(MembershipStatus);
 export const MEMBERSHIP_INTERVAL_VALUES = Object.values(MembershipInterval);
 export const SUBSCRIPTION_STATUS_VALUES = Object.values(SubscriptionStatus);
 export const SUBSCRIPTION_CYCLE_VALUES = [
+  SubscriptionCycle.DAYS_30,
   SubscriptionCycle.DAYS_60,
   SubscriptionCycle.DAYS_90,
   SubscriptionCycle.DAYS_180,

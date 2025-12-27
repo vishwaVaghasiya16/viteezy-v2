@@ -45,6 +45,10 @@ export interface IUser extends Document {
   passwordResetToken?: string;
   passwordResetTokenExpires?: Date;
   registeredAt?: Date;
+  // Family member fields
+  isSubMember?: boolean; // Indicates if this is a family/sub-member
+  parentMemberId?: Schema.Types.ObjectId; // Reference to parent/main member
+  relationshipToParent?: string; // e.g., "Child", "Spouse", "Parent", "Sibling", "Other"
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -68,13 +72,17 @@ const userSchema = new Schema<IUser>(
     },
     email: {
       type: String,
-      required: [true, "Email is required"],
+      required: function (this: IUser) {
+        // Email is not required for sub-members (family members)
+        return !this.isSubMember;
+      },
       lowercase: true,
       trim: true,
       match: [
         /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
         "Please enter a valid email",
       ],
+      default: null,
     },
     phone: {
       type: String,
@@ -196,6 +204,21 @@ const userSchema = new Schema<IUser>(
       type: Date,
       select: false,
     },
+    // Family member fields
+    isSubMember: {
+      type: Boolean,
+      default: false,
+    },
+    parentMemberId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    relationshipToParent: {
+      type: String,
+      enum: ["Child", "Spouse", "Parent", "Sibling", "Other"],
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -208,6 +231,7 @@ const userSchema = new Schema<IUser>(
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ parentMemberId: 1 }); // Index for family member queries
 
 // Set registeredAt to createdAt if not already set (for new users)
 userSchema.pre("save", function (next) {

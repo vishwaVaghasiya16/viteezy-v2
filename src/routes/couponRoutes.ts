@@ -19,9 +19,9 @@ router.use(authenticate);
 
 /**
  * @route   POST /api/coupons/validate
- * @desc    Validate a discount coupon applied at checkout
+ * @desc    Validate and apply/remove coupon from cart
  * @access  Private
- * @body    couponCode (required), orderAmount (optional), productIds (optional), categoryIds (optional)
+ * @body    cartId (required), couponCode (optional, null to remove), language (optional, default: "en")
  */
 router.post(
   "/validate",

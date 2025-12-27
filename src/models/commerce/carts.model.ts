@@ -5,23 +5,25 @@ import {
   SoftDelete,
   PriceType,
 } from "../common.model";
+import { ProductVariant } from "../enums";
 
 export interface ICart extends Document {
   userId: mongoose.Types.ObjectId;
   sessionId?: string;
+  variantType?: ProductVariant; // Variant type for all items in cart (SACHETS or STAND_UP_POUCH)
   items: Array<{
     productId: mongoose.Types.ObjectId;
-    variantId?: mongoose.Types.ObjectId;
-    quantity: number;
     price: PriceType;
     addedAt: Date;
   }>;
-  subtotal: PriceType;
-  tax: PriceType;
-  shipping: PriceType;
-  discount: PriceType;
-  total: PriceType;
+  subtotal: number; // Sum of all product amounts
+  tax: number; // Sum of all taxRate values converted to amount
+  shipping: number;
+  discount: number; // Sum of all discountedPrice values
+  total: number; // subtotal + tax - discount - couponDiscountAmount
+  currency: string; // Currency code (e.g., "EUR")
   couponCode?: string;
+  couponDiscountAmount: number; // Calculated coupon discount (fixed or percentage)
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -37,19 +39,16 @@ const CartSchema = new Schema<ICart>(
       type: String,
       trim: true,
     },
+    variantType: {
+      type: String,
+      enum: Object.values(ProductVariant),
+      default: null,
+    },
     items: [
       {
         productId: {
           type: Schema.Types.ObjectId,
           ref: "products",
-        },
-        variantId: {
-          type: Schema.Types.ObjectId,
-          ref: "product_variants",
-        },
-        quantity: {
-          type: Number,
-          min: 1,
         },
         price: {
           type: PriceSchema,
@@ -61,28 +60,38 @@ const CartSchema = new Schema<ICart>(
       },
     ],
     subtotal: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      type: Number,
+      default: 0,
     },
     tax: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      type: Number,
+      default: 0,
     },
     shipping: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      type: Number,
+      default: 0,
     },
     discount: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      type: Number,
+      default: 0,
     },
     total: {
-      type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      type: Number,
+      default: 0,
+    },
+    currency: {
+      type: String,
+      default: "EUR",
+      trim: true,
     },
     couponCode: {
       type: String,
       trim: true,
+      default: null,
+    },
+    couponDiscountAmount: {
+      type: Number,
+      default: 0,
     },
     expiresAt: {
       type: Date,

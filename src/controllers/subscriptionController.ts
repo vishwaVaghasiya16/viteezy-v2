@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Subscriptions, Orders, Products } from "@/models/commerce";
+import { Subscriptions, Orders } from "@/models/commerce";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
@@ -10,7 +10,6 @@ import {
 } from "@/models/enums";
 import { logger } from "@/utils/logger";
 import { computeSubscriptionMetrics } from "@/services/subscriptionService";
-import { calculateRecurringBillingAmount } from "@/utils/productSubscriptionPrice";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -35,12 +34,8 @@ class SubscriptionController {
       const {
         orderId,
         cycleDays,
-        items,
-        amount,
-        paymentMethod,
-        gatewaySubscriptionId,
-        gatewayCustomerId,
-        gatewayPaymentMethodId,
+        subscriptionStartDate,
+        subscriptionEndDate,
         initialDeliveryDate,
         nextDeliveryDate,
         nextBillingDate,
@@ -68,9 +63,26 @@ class SubscriptionController {
         );
       }
 
-      // Validate cycle days (only 60, 90, or 180 allowed)
-      if (![60, 90, 180].includes(cycleDays)) {
-        throw new AppError("Cycle days must be 60, 90, or 180 days", 400);
+      // Validate cycle days (30, 60, 90, or 180 allowed)
+      if (![30, 60, 90, 180].includes(cycleDays)) {
+        throw new AppError("Cycle days must be 30, 60, 90, or 180 days", 400);
+      }
+
+      // Validate subscription start date
+      const startDate = subscriptionStartDate
+        ? new Date(subscriptionStartDate)
+        : new Date();
+      if (isNaN(startDate.getTime())) {
+        throw new AppError("Invalid subscription start date", 400);
+      }
+
+      // Validate subscription end date if provided
+      let endDate: Date | undefined;
+      if (subscriptionEndDate) {
+        endDate = new Date(subscriptionEndDate);
+        if (isNaN(endDate.getTime())) {
+          throw new AppError("Invalid subscription end date", 400);
+        }
       }
 
       // Validate dates
@@ -100,137 +112,36 @@ class SubscriptionController {
         throw new AppError("Subscription already exists for this order", 400);
       }
 
-      // Check if gateway subscription ID already exists (if provided)
-      if (gatewaySubscriptionId) {
-        const existingGatewaySub = await Subscriptions.findOne({
-          gatewaySubscriptionId,
-          isDeleted: false,
-        }).lean();
-
-        if (existingGatewaySub) {
-          throw new AppError("Gateway subscription ID already exists", 400);
-        }
-      }
-
-      // Get subscription plan discount from order if it's a 90-day plan
-      let subscriptionPlanDiscount = null;
-      if (cycleDays === 90 && order.subscriptionPlanDiscount) {
-        subscriptionPlanDiscount = order.subscriptionPlanDiscount;
-      } else if (cycleDays === 90 && order.metadata?.subscriptionPlanDiscount) {
-        // Fallback: calculate from order metadata if discount field not set
-        const discountMetadata = order.metadata.subscriptionPlanDiscount;
-        if (discountMetadata && discountMetadata.discountPercentage === 15) {
-          // Calculate discount amount from order subtotal
-          const discountAmount = (order.subtotal.amount * 15) / 100;
-          subscriptionPlanDiscount = {
-            currency: order.subtotal.currency,
-            amount: Math.round((discountAmount + Number.EPSILON) * 100) / 100,
-            taxRate: 0,
-          };
-        }
-      }
-
-      // If amount is not provided or needs recalculation, calculate from product's sachetPrices
-      let recurringAmount = amount;
-      if (!recurringAmount || recurringAmount.amount === 0) {
-        try {
-          // Fetch products to get sachetPrices
-          const productIds = items.map(
-            (item: any) => new mongoose.Types.ObjectId(item.productId)
-          );
-          const products = await Products.find({
-            _id: { $in: productIds },
-            isDeleted: false,
-          })
-            .select("sachetPrices price")
-            .lean();
-
-          const productMap = new Map(
-            products.map((p: any) => [p._id.toString(), p])
-          );
-
-          // Calculate total recurring amount from all items
-          let totalRecurringAmount = 0;
-          let currency = "EUR";
-          let taxRate = 0;
-
-          for (const item of items) {
-            const product = productMap.get(item.productId);
-            if (product && product.sachetPrices) {
-              const itemAmount = calculateRecurringBillingAmount(
-                product,
-                cycleDays as SubscriptionCycle,
-                item.quantity
-              );
-              totalRecurringAmount += itemAmount.amount;
-              currency = itemAmount.currency;
-              taxRate = itemAmount.taxRate;
-            } else if (product && product.price) {
-              // Fallback to base price if sachetPrices not available
-              totalRecurringAmount += product.price.amount * item.quantity;
-              currency = product.price.currency || currency;
-              taxRate = product.price.taxRate || taxRate;
-            }
-          }
-
-          if (totalRecurringAmount > 0) {
-            recurringAmount = {
-              currency,
-              amount:
-                Math.round((totalRecurringAmount + Number.EPSILON) * 100) / 100,
-              taxRate,
-            };
-          }
-        } catch (error: any) {
-          logger.warn(
-            `Failed to calculate recurring amount from product prices: ${error.message}`
-          );
-          // Use provided amount or order total as fallback
-          if (!recurringAmount) {
-            recurringAmount = {
-              currency: order.subtotal.currency,
-              amount: order.subtotal.amount,
-              taxRate: order.subtotal.taxRate,
-            };
-          }
-        }
-      }
+      // Use order items directly (they already have the correct structure)
+      const subscriptionItems = order.items.map((item: any) => ({
+        productId: new mongoose.Types.ObjectId(item.productId),
+        name: item.name,
+        planDays: item.planDays,
+        capsuleCount: item.capsuleCount,
+        amount: item.amount,
+        discountedPrice: item.discountedPrice,
+        taxRate: item.taxRate,
+        totalAmount: item.totalAmount,
+        durationDays: item.durationDays,
+        savingsPercentage: item.savingsPercentage,
+        features: item.features || [],
+      }));
 
       // Create subscription
       const subscription = await Subscriptions.create({
         userId,
         orderId: new mongoose.Types.ObjectId(orderId),
+        planType: order.planType,
         cycleDays,
-        items: items.map((item: any) => ({
-          productId: new mongoose.Types.ObjectId(item.productId),
-          variantId: item.variantId
-            ? new mongoose.Types.ObjectId(item.variantId)
-            : undefined,
-          quantity: item.quantity,
-          price: item.price,
-          name: item.name,
-          sku: item.sku,
-        })),
-        amount: recurringAmount,
-        subscriptionPlanDiscount,
-        paymentMethod,
-        gatewaySubscriptionId: gatewaySubscriptionId?.trim(),
-        gatewayCustomerId: gatewayCustomerId?.trim(),
-        gatewayPaymentMethodId: gatewayPaymentMethodId?.trim(),
+        subscriptionStartDate: startDate,
+        subscriptionEndDate: endDate,
+        items: subscriptionItems,
         initialDeliveryDate: initialDate,
         nextDeliveryDate: nextDelDate,
         nextBillingDate: nextBillDate,
         status: SubscriptionStatus.ACTIVE,
         metadata: {
           ...(metadata || {}),
-          // Store discount info in metadata for reference
-          ...(subscriptionPlanDiscount
-            ? {
-                has90DayDiscount: true,
-                discountPercentage: 15,
-                discountAppliedTo: "subtotal",
-              }
-            : {}),
         },
       });
 
@@ -249,9 +160,11 @@ class SubscriptionController {
             subscriptionNumber: subscription.subscriptionNumber,
             orderId: subscription.orderId,
             status: subscription.status,
+            planType: subscription.planType,
             cycleDays: subscription.cycleDays,
-            amount: subscription.amount,
-            paymentMethod: subscription.paymentMethod,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
+            items: subscription.items,
             initialDeliveryDate: subscription.initialDeliveryDate,
             nextDeliveryDate: subscription.nextDeliveryDate,
             nextBillingDate: subscription.nextBillingDate,
@@ -330,10 +243,11 @@ class SubscriptionController {
           subscriptionNumber: sub.subscriptionNumber,
           orderId: sub.orderId,
           status: sub.status,
+          planType: sub.planType,
           cycleDays: sub.cycleDays,
+          subscriptionStartDate: sub.subscriptionStartDate,
+          subscriptionEndDate: sub.subscriptionEndDate,
           items: sub.items,
-          amount: sub.amount,
-          paymentMethod: sub.paymentMethod,
           initialDeliveryDate: sub.initialDeliveryDate,
           nextDeliveryDate: sub.nextDeliveryDate,
           nextBillingDate: sub.nextBillingDate,
@@ -406,11 +320,11 @@ class SubscriptionController {
             subscriptionNumber: subscription.subscriptionNumber,
             orderId: subscription.orderId,
             status: subscription.status,
+            planType: subscription.planType,
             cycleDays: subscription.cycleDays,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
             items: subscription.items,
-            amount: subscription.amount,
-            paymentMethod: subscription.paymentMethod,
-            gatewaySubscriptionId: subscription.gatewaySubscriptionId,
             initialDeliveryDate: subscription.initialDeliveryDate,
             nextDeliveryDate: subscription.nextDeliveryDate,
             nextBillingDate: subscription.nextBillingDate,

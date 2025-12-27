@@ -13,9 +13,14 @@ import {
   PaymentStatus,
   OrderStatus,
   MembershipStatus,
+  OrderPlanType,
+  ProductVariant,
+  SubscriptionStatus,
+  SubscriptionCycle,
 } from "../../models/enums";
 import { Payments } from "../../models/commerce/payments.model";
 import { Orders } from "../../models/commerce/orders.model";
+import { Subscriptions } from "../../models/commerce/subscriptions.model";
 import { Memberships } from "../../models/commerce/memberships.model";
 import { Coupons } from "../../models/commerce/coupons.model";
 import { User } from "../../models/index.model";
@@ -385,6 +390,7 @@ export class PaymentService {
       await payment.save();
       console.log("✅ [PAYMENT SERVICE] Step 7: Payment saved to database");
 
+      // ========== WEBHOOK FLOW: Update Order & Create Subscription ==========
       // Update order status if payment is completed
       if (
         result.status === PaymentStatus.COMPLETED &&
@@ -399,10 +405,13 @@ export class PaymentService {
           .populate("billingAddressId");
         if (order) {
           console.log("✅ [PAYMENT SERVICE] - Order found:", order.orderNumber);
+
+          // Update order status to COMPLETED and CONFIRMED
           order.paymentStatus = PaymentStatus.COMPLETED;
           order.status = OrderStatus.CONFIRMED;
           order.paymentId = (payment._id as mongoose.Types.ObjectId).toString();
           await order.save();
+
           console.log(
             "✅ [PAYMENT SERVICE] - Order status updated to CONFIRMED"
           );
@@ -411,7 +420,7 @@ export class PaymentService {
           );
 
           // Track coupon usage if a coupon was applied
-          if (order.couponCode && order.couponDiscount?.amount > 0) {
+          if (order.couponCode && order.couponDiscountAmount > 0) {
             console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
             try {
               // Find the coupon by code
@@ -423,7 +432,11 @@ export class PaymentService {
                   couponId: coupon._id as mongoose.Types.ObjectId,
                   userId: order.userId as mongoose.Types.ObjectId,
                   orderId: order._id as mongoose.Types.ObjectId,
-                  discountAmount: order.couponDiscount,
+                  discountAmount: {
+                    amount: order.couponDiscountAmount,
+                    currency: order.currency,
+                    taxRate: 0,
+                  },
                   couponCode: order.couponCode,
                   orderNumber: order.orderNumber,
                 });
@@ -450,6 +463,56 @@ export class PaymentService {
           );
           await this.handleOrderConfirmation(order, payment);
           console.log("✅ [PAYMENT SERVICE] - Order confirmation email sent");
+
+          // ========== SUBSCRIPTION CREATION LOGIC ==========
+          // Auto-create subscription if order is eligible
+          // Conditions:
+          // 1. Order must be a subscription order (isOneTime = false OR planType = SUBSCRIPTION)
+          // 2. Order must be for SACHETS variant
+          // 3. Order must have valid selectedPlanDays (30, 60, 90, or 180)
+          // 4. No duplicate subscription should exist for this order
+          console.log(
+            "🟢 [PAYMENT SERVICE] Step 10: Checking for subscription auto-creation"
+          );
+
+          // Refresh order from database to ensure we have latest data with all fields
+          const freshOrder = await Orders.findById(order._id)
+            .select(
+              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+            )
+            .lean();
+
+          if (freshOrder) {
+            // Convert payment to plain object if it's a mongoose document
+            const paymentData = payment.toObject ? payment.toObject() : payment;
+            console.log(
+              "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder..."
+            );
+
+            // Call the reusable subscription creation function
+            const subscription = await this.createSubscriptionFromOrder(
+              freshOrder,
+              paymentData
+            );
+
+            if (subscription) {
+              console.log(
+                "✅ [PAYMENT SERVICE] - Subscription created:",
+                subscription.subscriptionNumber
+              );
+            } else {
+              console.log(
+                "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
+              );
+            }
+          } else {
+            console.warn(
+              "⚠️ [PAYMENT SERVICE] - Could not fetch fresh order for subscription creation"
+            );
+            logger.warn(
+              `Could not fetch fresh order ${order._id} for subscription creation`
+            );
+          }
         } else {
           console.warn("⚠️ [PAYMENT SERVICE] - Order not found for payment");
         }
@@ -786,7 +849,7 @@ export class PaymentService {
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(order.total.amount);
+      const amountInMinorUnits = this.toMinorUnits(order.grandTotal);
 
       // Convert populated addresses to AddressSnapshotType format
       const shippingAddress = order.shippingAddressId
@@ -799,7 +862,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: order.total.currency,
+        currency: order.currency,
         orderId: orderId,
         userId: data.userId,
         description: `Order ${order.orderNumber}`,
@@ -837,11 +900,11 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: order.total.amount,
-          currency: order.total.currency,
-          taxRate: order.tax.amount / order.subtotal.amount || 0,
+          amount: order.grandTotal,
+          currency: order.currency,
+          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
         },
-        currency: order.total.currency,
+        currency: order.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -957,12 +1020,81 @@ export class PaymentService {
               `Order ${order.orderNumber} confirmed after payment completion`
             );
             await this.handleOrderConfirmation(order, payment);
+
+            // ========== SUBSCRIPTION CREATION LOGIC ==========
+            // Auto-create subscription if order is eligible
+            // Refresh order from database to ensure we have latest data with all fields
+            const freshOrder = await Orders.findById(order._id)
+              .select(
+                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+              )
+              .lean();
+            if (freshOrder) {
+              // Convert payment to plain object if it's a mongoose document
+              const paymentData = payment.toObject
+                ? payment.toObject()
+                : payment;
+              console.log(
+                "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder..."
+              );
+
+              // Call the reusable subscription creation function
+              const subscription = await this.createSubscriptionFromOrder(
+                freshOrder,
+                paymentData
+              );
+
+              if (subscription) {
+                console.log(
+                  "✅ [PAYMENT SERVICE] - Subscription created:",
+                  subscription.subscriptionNumber
+                );
+              }
+            } else {
+              logger.warn(
+                `Could not fetch fresh order ${order._id} for subscription creation`
+              );
+            }
           } else if (previousOrderPaymentStatus !== PaymentStatus.COMPLETED) {
             // Order status already confirmed, but paymentStatus was not updated
             orderUpdated = true;
             logger.info(
               `Order ${order.orderNumber} paymentStatus updated to COMPLETED`
             );
+
+            // ========== SUBSCRIPTION CREATION LOGIC ==========
+            // Auto-create subscription if order is eligible (even if order was already confirmed)
+            const freshOrder = await Orders.findById(order._id)
+              .select(
+                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+              )
+              .lean();
+            if (freshOrder) {
+              // Convert payment to plain object if it's a mongoose document
+              const paymentData = payment.toObject
+                ? payment.toObject()
+                : payment;
+              console.log(
+                "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (already confirmed)..."
+              );
+
+              // Call the reusable subscription creation function
+              const subscription = await this.createSubscriptionFromOrder(
+                freshOrder,
+                paymentData
+              );
+
+              if (subscription) {
+                console.log(
+                  "✅ [PAYMENT SERVICE] - Subscription created:",
+                  subscription.subscriptionNumber
+                );
+              }
+            } else {
+              logger.warn(
+                `Could not fetch fresh order ${order._id} for subscription creation`
+              );
+            }
           }
         } else if (result.status === PaymentStatus.FAILED) {
           // Keep order as pending if payment failed
@@ -1184,11 +1316,11 @@ export class PaymentService {
   }
 
   private buildOrderCheckoutLineItems(order: any): PaymentLineItem[] {
-    const currency = order?.total?.currency || "EUR";
+    const currency = order?.currency || "EUR";
     return [
       {
         name: `Order ${order?.orderNumber || ""}`.trim(),
-        amount: this.toMinorUnits(order?.total?.amount || 0),
+        amount: this.toMinorUnits(order?.grandTotal || 0),
         currency,
         quantity: 1,
         description: `${order?.items?.length || 0} item(s)`,
@@ -1235,14 +1367,14 @@ export class PaymentService {
       const items = Array.isArray(order.items)
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
-            quantity: item.quantity || 1,
-            unitAmount: item.price?.amount || 0,
-            currency: item.price?.currency || order.total?.currency || "EUR",
+            quantity: 1, // Quantity removed from order items
+            unitAmount: item.amount || item.totalAmount || 0,
+            currency: order.currency || "EUR",
           }))
         : [];
 
       console.log("📧 [EMAIL] - Items count:", items.length);
-      console.log("📧 [EMAIL] - Total amount:", order.total?.amount);
+      console.log("📧 [EMAIL] - Total amount:", order.grandTotal);
 
       console.log("📧 [EMAIL] Step 3: Sending order confirmation email");
 
@@ -1258,11 +1390,26 @@ export class PaymentService {
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         paymentMethod: payment?.paymentMethod,
-        subtotal: order.subtotal || order.total,
-        tax: order.tax,
-        shipping: order.shipping,
-        discount: order.discount,
-        total: order.total,
+        subtotal: {
+          amount: order.subTotal,
+          currency: order.currency,
+        },
+        tax: {
+          amount: order.taxAmount,
+          currency: order.currency,
+        },
+        shipping: {
+          amount: 0, // Shipping not stored separately in new model
+          currency: order.currency,
+        },
+        discount: {
+          amount: order.subTotal - order.discountedPrice,
+          currency: order.currency,
+        },
+        total: {
+          amount: order.grandTotal,
+          currency: order.currency,
+        },
         items,
         shippingAddress: shippingAddressSnapshot,
       });
@@ -1289,6 +1436,279 @@ export class PaymentService {
       console.error("❌ [EMAIL] ===========================");
       logger.error("Order confirmation email dispatch failed:", error);
     }
+  }
+
+  /**
+   * Create subscription from order (Reusable function)
+   * This is the main subscription creation logic that can be called from multiple places
+   *
+   * @param order - Order document or plain object
+   * @param payment - Payment document or plain object
+   * @returns Created subscription or null if not eligible
+   */
+  async createSubscriptionFromOrder(
+    order: any,
+    payment: any
+  ): Promise<any | null> {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      console.log(
+        "🟢 [SUBSCRIPTION] ========== Create Subscription From Order =========="
+      );
+      console.log("🟢 [SUBSCRIPTION] Order Number:", order?.orderNumber);
+      console.log("🟢 [SUBSCRIPTION] Order ID:", order?._id);
+      console.log("🟢 [SUBSCRIPTION] Payment ID:", payment?._id);
+
+      // ========== STEP 1: Validate Order Eligibility ==========
+      console.log("🟢 [SUBSCRIPTION] Step 1: Validating order eligibility...");
+
+      // Check if order is eligible for subscription creation
+      // Only create subscription if:
+      // 1. isOneTime is false (subscription order) OR planType is SUBSCRIPTION
+      // 2. variantType is SACHETS
+      // 3. selectedPlanDays is valid (30, 60, 90, or 180)
+
+      console.log("🟢 [SUBSCRIPTION] - isOneTime:", order?.isOneTime);
+      console.log("🟢 [SUBSCRIPTION] - planType:", order?.planType);
+      console.log("🟢 [SUBSCRIPTION] - variantType:", order?.variantType);
+      console.log(
+        "🟢 [SUBSCRIPTION] - selectedPlanDays:",
+        order?.selectedPlanDays
+      );
+
+      // Check isOneTime - must be explicitly false OR planType must be SUBSCRIPTION
+      const isSubscriptionOrder =
+        order.isOneTime === false ||
+        order.planType === OrderPlanType.SUBSCRIPTION;
+
+      if (!isSubscriptionOrder) {
+        console.log(
+          `⚠️ [SUBSCRIPTION] - Order is one-time purchase. isOneTime: ${order.isOneTime}, planType: ${order.planType}`
+        );
+        logger.info(
+          `Order ${order.orderNumber} is one-time purchase, skipping subscription creation`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      // Check variantType - must be SACHETS
+      if (!order.variantType || order.variantType !== ProductVariant.SACHETS) {
+        console.log(
+          `⚠️ [SUBSCRIPTION] - variantType is ${order.variantType}, subscription only available for SACHETS`
+        );
+        logger.info(
+          `Order ${order.orderNumber} variantType is ${order.variantType}, subscription only available for SACHETS`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      console.log("✅ [SUBSCRIPTION] - Order is eligible for subscription");
+
+      // ========== STEP 2: Check for Duplicate Subscription ==========
+      console.log(
+        "🟢 [SUBSCRIPTION] Step 2: Checking for duplicate subscription..."
+      );
+
+      const existingSubscription = await Subscriptions.findOne({
+        orderId: order._id,
+        isDeleted: false,
+      })
+        .session(session)
+        .lean();
+
+      if (existingSubscription) {
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Subscription already exists, skipping creation"
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
+          existingSubscription._id
+        );
+        logger.info(
+          `Subscription already exists for order ${order.orderNumber}, skipping creation`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      console.log("✅ [SUBSCRIPTION] - No duplicate found, proceeding...");
+
+      // ========== STEP 3: Validate Plan Duration ==========
+      console.log("🟢 [SUBSCRIPTION] Step 3: Validating plan duration...");
+
+      const cycleDays = order.selectedPlanDays;
+      console.log("🟢 [SUBSCRIPTION] - cycleDays from order:", cycleDays);
+
+      if (!cycleDays || ![30, 60, 90, 180].includes(cycleDays)) {
+        console.log(
+          `⚠️ [SUBSCRIPTION] - Invalid cycleDays: ${cycleDays}, must be 30, 60, 90, or 180`
+        );
+        logger.warn(
+          `Order ${order.orderNumber} has invalid cycleDays: ${cycleDays}, skipping subscription creation`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      console.log("✅ [SUBSCRIPTION] - Valid cycleDays:", cycleDays);
+
+      // ========== STEP 4: Calculate Subscription Dates ==========
+      console.log(
+        "🟢 [SUBSCRIPTION] Step 4: Calculating subscription dates..."
+      );
+
+      const now = new Date();
+
+      // subscriptionStartDate = current date (payment completion date)
+      const subscriptionStartDate = now;
+
+      // subscriptionEndDate = subscriptionStartDate + cycleDays
+      // Calculate end date based on the cycle days
+      const subscriptionEndDate = new Date(now);
+      subscriptionEndDate.setDate(subscriptionEndDate.getDate() + cycleDays);
+
+      // lastBilledDate = subscriptionStartDate (payment just completed)
+      const lastBilledDate = now;
+
+      // initialDeliveryDate = subscriptionStartDate + 1 day (next day delivery)
+      const initialDeliveryDate = new Date(now);
+      initialDeliveryDate.setDate(initialDeliveryDate.getDate() + 1);
+
+      // nextDeliveryDate = subscriptionStartDate + cycleDays
+      const nextDeliveryDate = new Date(now);
+      nextDeliveryDate.setDate(nextDeliveryDate.getDate() + cycleDays);
+
+      // nextBillingDate = subscriptionStartDate + cycleDays
+      const nextBillingDate = new Date(now);
+      nextBillingDate.setDate(nextBillingDate.getDate() + cycleDays);
+
+      console.log("✅ [SUBSCRIPTION] - Dates calculated:");
+      console.log(
+        "   - subscriptionStartDate:",
+        subscriptionStartDate.toISOString()
+      );
+      console.log(
+        "   - subscriptionEndDate:",
+        subscriptionEndDate.toISOString()
+      );
+      console.log("   - lastBilledDate:", lastBilledDate.toISOString());
+      console.log(
+        "   - initialDeliveryDate:",
+        initialDeliveryDate.toISOString()
+      );
+      console.log("   - nextDeliveryDate:", nextDeliveryDate.toISOString());
+      console.log("   - nextBillingDate:", nextBillingDate.toISOString());
+
+      // ========== STEP 5: Map Order Items to Subscription Items ==========
+      console.log("🟢 [SUBSCRIPTION] Step 5: Mapping order items...");
+
+      const subscriptionItems = order.items.map((item: any) => ({
+        productId: new mongoose.Types.ObjectId(item.productId),
+        name: item.name,
+        planDays: item.planDays,
+        capsuleCount: item.capsuleCount,
+        amount: item.amount,
+        discountedPrice: item.discountedPrice,
+        taxRate: item.taxRate,
+        totalAmount: item.totalAmount,
+        durationDays: item.durationDays,
+        savingsPercentage: item.savingsPercentage,
+        features: item.features || [],
+      }));
+
+      console.log(
+        "✅ [SUBSCRIPTION] - Items mapped:",
+        subscriptionItems.length
+      );
+
+      // ========== STEP 6: Create Subscription ==========
+      console.log(
+        "🟢 [SUBSCRIPTION] Step 6: Creating subscription in database..."
+      );
+
+      const subscription = await Subscriptions.create(
+        [
+          {
+            userId: order.userId,
+            orderId: order._id,
+            planType: OrderPlanType.SUBSCRIPTION,
+            cycleDays: cycleDays as SubscriptionCycle,
+            subscriptionStartDate,
+            subscriptionEndDate,
+            items: subscriptionItems,
+            initialDeliveryDate,
+            nextDeliveryDate,
+            nextBillingDate,
+            lastBilledDate,
+            status: SubscriptionStatus.ACTIVE,
+            metadata: {
+              autoCreated: true,
+              createdFromPayment: payment._id
+                ? payment._id.toString()
+                : payment.id || payment._id,
+              orderNumber: order.orderNumber,
+              createdAt: now.toISOString(),
+            },
+          },
+        ],
+        { session }
+      );
+
+      console.log("✅ [SUBSCRIPTION] - Subscription created successfully!");
+      console.log(
+        "✅ [SUBSCRIPTION] - Subscription Number:",
+        subscription[0].subscriptionNumber
+      );
+      console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription[0]._id);
+      console.log("✅ [SUBSCRIPTION] - Status:", subscription[0].status);
+
+      // ========== STEP 7: Commit Transaction ==========
+      await session.commitTransaction();
+      console.log("✅ [SUBSCRIPTION] - Transaction committed");
+
+      logger.info(
+        `✅ Subscription ${subscription[0].subscriptionNumber} created for order ${order.orderNumber}`
+      );
+
+      console.log(
+        "✅ [SUBSCRIPTION] ============================================"
+      );
+
+      return subscription[0];
+    } catch (error: any) {
+      // Rollback transaction on error
+      await session.abortTransaction();
+
+      console.error("❌ [SUBSCRIPTION] ========== ERROR ==========");
+      console.error("❌ [SUBSCRIPTION] Error:", error.message);
+      console.error("❌ [SUBSCRIPTION] Stack:", error.stack);
+      console.error("❌ [SUBSCRIPTION] ===========================");
+
+      logger.error(
+        `Failed to create subscription for order ${order.orderNumber}:`,
+        error
+      );
+
+      // Don't throw error - subscription creation failure shouldn't break payment flow
+      return null;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  /**
+   * Auto-create subscription for subscription orders after payment completion
+   * This is a wrapper around createSubscriptionFromOrder for backward compatibility
+   */
+  private async autoCreateSubscription(
+    order: any,
+    payment: any
+  ): Promise<void> {
+    await this.createSubscriptionFromOrder(order, payment);
   }
 }
 

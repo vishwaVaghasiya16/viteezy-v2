@@ -152,7 +152,10 @@ class PaymentController {
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
-            total: result.order.total,
+            total: {
+              amount: result.order.grandTotal,
+              currency: result.order.currency,
+            },
           },
           gateway: {
             redirectUrl: result.result.redirectUrl,
@@ -208,7 +211,10 @@ class PaymentController {
             orderNumber: result.order.orderNumber,
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
-            total: result.order.total,
+            total: {
+              amount: result.order.grandTotal,
+              currency: result.order.currency,
+            },
           },
           updated: result.updated,
         },
@@ -902,6 +908,141 @@ class PaymentController {
         },
         "Payments retrieved successfully"
       );
+    }
+  );
+
+  /**
+   * Track payment status (Public API for Mobile App)
+   * @route GET /api/v1/payments/track
+   * @access Public
+   * @query orderId or membershipId (one is required)
+   */
+  trackPaymentStatus = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { orderId, membershipId } = req.query;
+
+      // Validate that at least one ID is provided
+      if (!orderId && !membershipId) {
+        throw new AppError(
+          "Either orderId or membershipId is required in query parameters",
+          400
+        );
+      }
+
+      console.log("🔍 [PAYMENT TRACKING] Tracking payment");
+      console.log("  - orderId:", orderId || "not provided");
+      console.log("  - membershipId:", membershipId || "not provided");
+
+      let payment = null;
+      let referenceType = null;
+      let referenceDetails: any = null;
+
+      // 1. Try to find by order ID
+      if (orderId) {
+        // Validate ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(orderId as string)) {
+          throw new AppError("Invalid orderId format", 400);
+        }
+
+        const orderObjectId = new mongoose.Types.ObjectId(orderId as string);
+
+        payment = await Payments.findOne({ orderId: orderObjectId })
+          .populate("orderId")
+          .populate("membershipId")
+          .lean();
+
+        if (payment) {
+          referenceType = "order";
+          console.log("✅ [PAYMENT TRACKING] Found by order ID");
+        }
+      }
+
+      // 2. Try to find by membership ID
+      if (!payment && membershipId) {
+        // Validate ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(membershipId as string)) {
+          throw new AppError("Invalid membershipId format", 400);
+        }
+
+        const membershipObjectId = new mongoose.Types.ObjectId(
+          membershipId as string
+        );
+
+        payment = await Payments.findOne({ membershipId: membershipObjectId })
+          .populate("orderId")
+          .populate("membershipId")
+          .lean();
+
+        if (payment) {
+          referenceType = "membership";
+          console.log("✅ [PAYMENT TRACKING] Found by membership ID");
+        }
+      }
+
+      if (!payment) {
+        throw new AppError(
+          "Payment not found for the provided orderId or membershipId",
+          404
+        );
+      }
+
+      // Extract reference details
+      if (payment.orderId) {
+        const order = payment.orderId as any;
+        referenceDetails = {
+          type: "order",
+          orderNumber: order.orderNumber,
+          orderId: order._id,
+          orderStatus: order.status,
+          paymentStatus: order.paymentStatus,
+          grandTotal: order.grandTotal,
+          currency: order.currency,
+          items: order.items?.length || 0,
+          isOneTime: order.isOneTime,
+          planType: order.planType,
+          variantType: order.variantType,
+          selectedPlanDays: order.selectedPlanDays,
+        };
+      } else if (payment.membershipId) {
+        const membership = payment.membershipId as any;
+        referenceDetails = {
+          type: "membership",
+          membershipId: membership._id,
+          membershipStatus: membership.status,
+          planName: membership.planName,
+          planPrice: membership.planPrice,
+          startDate: membership.startDate,
+          endDate: membership.endDate,
+        };
+      } else {
+        referenceDetails = {
+          type: "payment",
+          paymentId: payment._id,
+        };
+      }
+
+      // Build response
+      const response = {
+        paymentId: payment._id,
+        paymentStatus: payment.status,
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount?.amount || 0,
+        currency: payment.currency || payment.amount?.currency || "EUR",
+        gatewayTransactionId: payment.gatewayTransactionId,
+        processedAt: payment.processedAt,
+        createdAt: payment.createdAt,
+        reference: referenceDetails,
+        // Status flags for easy mobile app handling
+        isPending: payment.status === PaymentStatus.PENDING,
+        isCompleted: payment.status === PaymentStatus.COMPLETED,
+        isFailed: payment.status === PaymentStatus.FAILED,
+        isCancelled: payment.status === PaymentStatus.CANCELLED,
+        isRefunded: payment.status === PaymentStatus.REFUNDED,
+      };
+
+      console.log("✅ [PAYMENT TRACKING] Payment status:", payment.status);
+
+      res.apiSuccess(response, "Payment status retrieved successfully");
     }
   );
 }

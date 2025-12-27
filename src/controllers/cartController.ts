@@ -86,9 +86,6 @@ export class CartController {
         message: "Cart retrieved successfully",
         data: {
           cart: result.cart,
-          ...(result.paymentDetails && {
-            paymentDetails: result.paymentDetails,
-          }),
           ...(result.suggestedProducts && {
             suggestedProducts: result.suggestedProducts,
           }),
@@ -128,8 +125,7 @@ export class CartController {
   }
 
   /**
-   * Update cart item quantity by productId
-   * If quantity is not provided, removes the item from cart entirely
+   * Update cart item by productId
    */
   static async updateItem(
     req: AuthenticatedRequest,
@@ -142,21 +138,14 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, variantId, quantity } = req.body;
+      const { productId } = req.body;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
       }
 
-      // Quantity is optional - if provided, must be at least 1
-      if (quantity !== undefined && quantity !== null && quantity < 1) {
-        throw new AppError("quantity must be at least 1", 400);
-      }
-
       const result = await cartService.updateItem(userId, {
         productId,
-        variantId,
-        quantity,
       });
 
       res.status(200).json({
@@ -185,7 +174,7 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, variantId, quantity } = req.body;
+      const { productId } = req.body;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
@@ -193,8 +182,6 @@ export class CartController {
 
       const result = await cartService.removeItem(userId, {
         productId,
-        variantId,
-        quantity, // If quantity is not provided, all quantities will be removed
       });
 
       res.status(200).json({
@@ -296,6 +283,69 @@ export class CartController {
         data: {
           products: suggestedProducts,
           count: suggestedProducts.length,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Apply coupon to cart
+   */
+  static async applyCoupon(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = req.user?.id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const { couponCode } = req.body;
+
+      if (!couponCode) {
+        throw new AppError("Coupon code is required", 400);
+      }
+
+      const result = await cartService.applyCoupon(userId, couponCode);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          cart: result.cart,
+          couponDiscountAmount: result.couponDiscountAmount,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Remove coupon from cart
+   */
+  static async removeCoupon(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = req.user?.id || req.userId;
+      if (!userId) {
+        throw new AppError("User authentication required", 401);
+      }
+
+      const result = await cartService.removeCoupon(userId);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          cart: result.cart,
         },
       });
     } catch (error) {

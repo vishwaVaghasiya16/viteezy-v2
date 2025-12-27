@@ -16,7 +16,6 @@ import {
   SupportedLanguage,
 } from "../models/common.model";
 import { Products } from "../models/commerce/products.model";
-import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 
 /**
@@ -174,17 +173,17 @@ const transformProductForLanguage = (
 ): any => {
   // Remove variants from product before spreading to avoid conflicts
   const { variants: _, ...productWithoutVariants } = product;
-  
+
   // Determine variants - keep string arrays as-is, transform objects
   let variantsValue: any[] = [];
   if (Array.isArray(product.variants) && product.variants.length > 0) {
-    if (typeof product.variants[0] === 'string') {
+    if (typeof product.variants[0] === "string") {
       // It's a string array - keep as-is
       variantsValue = product.variants;
     } else {
       // It's an object array - transform
       variantsValue = product.variants.map((variant: any) => {
-        if (typeof variant === 'string') {
+        if (typeof variant === "string") {
           return variant;
         }
         return {
@@ -299,9 +298,10 @@ class CheckoutController {
           );
 
           // Add variants array based on hasStandupPouch
-          const variantsArray = transformedProduct.hasStandupPouch === true
-            ? ["sachets", "stand_up_pouch"]
-            : ["sachets"];
+          const variantsArray =
+            transformedProduct.hasStandupPouch === true
+              ? ["sachets", "stand_up_pouch"]
+              : ["sachets"];
 
           // Build product in getAllProducts format
           let enrichedProduct: any = {
@@ -426,7 +426,8 @@ class CheckoutController {
           );
 
           // Remove variants before spreading to avoid conflicts
-          const { variants: __, ...transformedWithoutVariants } = transformedProduct;
+          const { variants: __, ...transformedWithoutVariants } =
+            transformedProduct;
 
           // Build product in getAllProducts format (same structure)
           const enrichedProduct: any = {
@@ -436,9 +437,10 @@ class CheckoutController {
           };
 
           // Add variants array explicitly based on hasStandupPouch
-          enrichedProduct.variants = transformedProduct.hasStandupPouch === true
-            ? ["sachets", "stand_up_pouch"]
-            : ["sachets"];
+          enrichedProduct.variants =
+            transformedProduct.hasStandupPouch === true
+              ? ["sachets", "stand_up_pouch"]
+              : ["sachets"];
 
           // Only add member pricing fields if user is a member (same as getAllProducts)
           if (memberPriceResult.isMember) {
@@ -600,32 +602,19 @@ class CheckoutController {
         (item) => item.isMember === true
       );
 
-      // Get product IDs and variant IDs from cart items
+      // Get product IDs from cart items
       const productIds = cartValidation.items.map(
         (item) => new mongoose.Types.ObjectId(item.productId)
       );
-      const variantIds = cartValidation.items
-        .map((item) => item.variantId)
-        .filter((id) => id)
-        .map((id) => new mongoose.Types.ObjectId(id));
 
-      // Fetch products and variants with full details
-      const [products, variants] = await Promise.all([
-        Products.find({
-          _id: { $in: productIds },
-          isDeleted: false,
-          status: true,
-        })
-          .populate("categories", "name slug description image")
-          .lean(),
-        variantIds.length > 0
-          ? ProductVariants.find({
-              _id: { $in: variantIds },
-              isDeleted: { $ne: true },
-              isActive: true,
-            }).lean()
-          : Promise.resolve([]),
-      ]);
+      // Fetch products with full details
+      const products = await Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      })
+        .populate("categories", "name slug description image")
+        .lean();
 
       // Manually populate ingredients for all products
       const allIngredientIds: string[] = [];
@@ -684,9 +673,6 @@ class CheckoutController {
       const productMap = new Map(
         products.map((p: any) => [p._id.toString(), p])
       );
-      const variantMap = new Map(
-        variants.map((v: any) => [v._id.toString(), v])
-      );
 
       // Build items with full product details
       const itemsWithProducts = await Promise.all(
@@ -695,10 +681,6 @@ class CheckoutController {
           if (!product) {
             return null;
           }
-
-          const variant = item.variantId
-            ? variantMap.get(item.variantId)
-            : null;
 
           // Transform product for language
           const transformedProduct = transformProductForLanguage(
@@ -711,9 +693,10 @@ class CheckoutController {
             calculateMonthlyAmounts(transformedProduct);
 
           // Add variants array based on hasStandupPouch
-          const variantsArray = productWithMonthlyAmounts.hasStandupPouch === true
-            ? ["sachets", "stand_up_pouch"]
-            : ["sachets"];
+          const variantsArray =
+            productWithMonthlyAmounts.hasStandupPouch === true
+              ? ["sachets", "stand_up_pouch"]
+              : ["sachets"];
 
           // Build full product object similar to getAllProducts format
           const fullProduct: any = {
@@ -746,23 +729,10 @@ class CheckoutController {
             isInCart: true, // Products in checkout summary are in cart
           };
 
-          // Add variant info if exists
-          if (variant) {
-            fullProduct.variantInfo = {
-              _id: variant._id,
-              name: variant.name,
-              sku: variant.sku,
-              attributes: variant.attributes,
-              price: variant.price,
-              compareAtPrice: variant.compareAtPrice,
-            };
-          }
-
           return {
             product: fullProduct,
             productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
+            quantity: 1, // Quantity removed from cart, each item is 1
             originalPrice: item.originalPrice,
             memberPrice: item.memberPrice,
             discount: item.discount,
@@ -1024,19 +994,25 @@ class CheckoutController {
         throw new AppError("User authentication required", 401);
       }
 
-      // Extract query parameters (with defaults applied by Joi validation)
-      const planDurationDays = req.query.planDurationDays
-        ? parseInt(req.query.planDurationDays as string)
-        : 180;
-      const variantType = (req.query.variantType as string) || "SACHETS";
-      const capsuleCount = req.query.capsuleCount
-        ? parseInt(req.query.capsuleCount as string)
-        : undefined;
+      // Extract body parameters (with defaults applied by Joi validation)
+      const {
+        planDurationDays = 180,
+        variantType = "SACHETS",
+        capsuleCount,
+        couponCode,
+        isOneTime,
+        shippingAddressId,
+        billingAddressId,
+      } = req.body;
 
       const result = await checkoutService.getCheckoutPageSummary(userId, {
         planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
         variantType: variantType as "SACHETS" | "STAND_UP_POUCH",
         capsuleCount: capsuleCount as 30 | 60 | undefined,
+        couponCode: couponCode || undefined,
+        isOneTime: isOneTime || false,
+        shippingAddressId: shippingAddressId || null,
+        billingAddressId: billingAddressId || null,
       });
 
       res.status(200).json(result);

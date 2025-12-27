@@ -6,6 +6,7 @@ import {
   checkoutPlanSelectionSchema,
   enhancedPricingSchema,
   checkoutPageSummarySchema,
+  checkoutPageSummaryBodySchema,
 } from "../validation/checkoutPlanSelectionValidation";
 
 const router = Router();
@@ -45,16 +46,17 @@ router.get("/summary", CheckoutController.getCheckoutSummary);
 router.get("/purchase-plans", CheckoutController.getPurchasePlans);
 
 /**
- * @route   GET /api/v1/checkout/page-summary
- * @desc    Get comprehensive checkout page summary with products, plans, pricing, and suggestions
+ * @route   POST /api/v1/checkout/page-summary
+ * @desc    Get comprehensive checkout page summary with products, plans, pricing, tax, discounts, and coupon verification
  * @access  Private
- * @query   planDurationDays (optional) - 30 | 60 | 90 | 180 (defaults to 180)
- * @query   variantType (optional) - SACHETS | STAND_UP_POUCH (defaults to SACHETS)
- * @query   capsuleCount (optional) - 30 | 60 (for STAND_UP_POUCH variant)
+ * @body    planDurationDays (optional) - 30 | 60 | 90 | 180 (defaults to 180)
+ * @body    variantType (optional) - SACHETS | STAND_UP_POUCH (defaults to SACHETS)
+ * @body    capsuleCount (optional) - 30 | 60 (for STAND_UP_POUCH variant)
+ * @body    couponCode (optional) - Coupon code to apply
  */
-router.get(
+router.post(
   "/page-summary",
-  validateQuery(checkoutPageSummarySchema),
+  validateJoi(checkoutPageSummaryBodySchema),
   CheckoutController.getCheckoutPageSummary
 );
 

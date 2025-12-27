@@ -85,6 +85,19 @@ interface GoogleLoginData {
   deviceInfo?: string;
 }
 
+interface RegisterFamilyMemberData {
+  parentMemberId: string;
+  firstName: string;
+  lastName: string;
+  email?: string;
+  password: string;
+  phone?: string;
+  countryCode?: string;
+  gender?: string;
+  age?: number;
+  relationshipToParent: string;
+}
+
 class AuthService {
   private readonly JWT_SECRET: string;
   private readonly JWT_REFRESH_SECRET: string;
@@ -1370,7 +1383,9 @@ class AuthService {
 
       if (isFirebaseToken) {
         // Verify Firebase ID token
-        const decodedToken = await firebaseService.verifyFirebaseIdToken(idToken);
+        const decodedToken = await firebaseService.verifyFirebaseIdToken(
+          idToken
+        );
 
         // Check if the token is from Google provider
         if (decodedToken.firebase.sign_in_provider !== "google.com") {
@@ -1566,6 +1581,164 @@ class AuthService {
       // Generic fallback for any other Google authentication errors
       throw new AppError("Please enter valid token", 400);
     }
+  }
+  /**
+   * Register Family Member
+   * Registers a sub-member/family member under a parent/main member
+   * Email is optional for family members
+   */
+  async registerFamilyMember(
+    data: RegisterFamilyMemberData
+  ): Promise<{ user: any; message: string }> {
+    const {
+      parentMemberId,
+      firstName,
+      lastName,
+      email,
+      password,
+      phone,
+      countryCode,
+      gender,
+      age,
+      relationshipToParent,
+    } = data;
+
+    // Verify parent member exists
+    const parentMember = await User.findById(parentMemberId);
+    if (!parentMember) {
+      throw new AppError("Parent member not found", 404);
+    }
+
+    // Check if parent member is active
+    if (!parentMember.isActive) {
+      throw new AppError("Parent member account is not active", 400);
+    }
+
+    // If email is provided, check if it's already in use
+    if (email && email.trim()) {
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        throw new AppError("Email already in use by another user", 400);
+      }
+    }
+
+    // Generate unique member ID for family member
+    const memberId = await generateMemberId();
+
+    // Create family member user
+    // For sub-members, email is optional, so we handle it accordingly
+    const familyMemberData: any = {
+      firstName,
+      lastName,
+      password, // Will be hashed by pre-save hook
+      phone,
+      countryCode,
+      gender,
+      age,
+      memberId,
+      isSubMember: true,
+      parentMemberId: parentMember._id,
+      relationshipToParent,
+      isEmailVerified: false, // Family members start as unverified
+      isActive: true,
+    };
+
+    // Only add email if provided
+    if (email && email.trim()) {
+      familyMemberData.email = email.toLowerCase();
+    }
+
+    const familyMember = await User.create(familyMemberData);
+
+    logger.info(
+      `Family member created successfully: ${familyMember._id} under parent: ${parentMemberId}`
+    );
+
+    // If email is provided, send OTP for verification
+    if (email && email.trim()) {
+      try {
+        await this.sendOTPForVerification(
+          familyMember._id.toString(),
+          email,
+          OTPType.EMAIL_VERIFICATION
+        );
+      } catch (error) {
+        logger.error("Failed to send OTP to family member:", error);
+        // Don't fail registration if OTP sending fails
+      }
+    }
+
+    // Use registeredAt if set, otherwise fallback to createdAt
+    const registrationDate =
+      familyMember.registeredAt || familyMember.createdAt;
+
+    return {
+      user: {
+        _id: familyMember._id,
+        firstName: familyMember.firstName,
+        lastName: familyMember.lastName,
+        email: familyMember.email || null,
+        phone: familyMember.phone,
+        countryCode: familyMember.countryCode,
+        gender: familyMember.gender,
+        age: familyMember.age,
+        memberId: familyMember.memberId,
+        isSubMember: familyMember.isSubMember,
+        parentMemberId: familyMember.parentMemberId,
+        relationshipToParent: familyMember.relationshipToParent,
+        isEmailVerified: familyMember.isEmailVerified,
+        registeredAt: registrationDate,
+      },
+      message: email
+        ? "Family member registered successfully. Please verify email with the OTP sent."
+        : "Family member registered successfully.",
+    };
+  }
+
+  /**
+   * Get Family Members
+   * Retrieves all family members (sub-members) for a parent member
+   */
+  async getFamilyMembers(parentMemberId: string): Promise<{
+    familyMembers: any[];
+    message: string;
+  }> {
+    // Verify parent member exists
+    const parentMember = await User.findById(parentMemberId);
+    if (!parentMember) {
+      throw new AppError("Parent member not found", 404);
+    }
+
+    // Get all family members for this parent
+    const familyMembers = await User.find({
+      parentMemberId: parentMemberId,
+      isSubMember: true,
+    })
+      .select(
+        "-password -passwordResetToken -passwordResetTokenExpires -sessionIds"
+      )
+      .lean();
+
+    return {
+      familyMembers: familyMembers.map((member) => ({
+        _id: member._id,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        email: member.email || null,
+        phone: member.phone,
+        countryCode: member.countryCode,
+        gender: member.gender,
+        age: member.age,
+        memberId: member.memberId,
+        isSubMember: member.isSubMember,
+        relationshipToParent: member.relationshipToParent,
+        isEmailVerified: member.isEmailVerified,
+        isActive: member.isActive,
+        registeredAt: member.registeredAt || member.createdAt,
+        createdAt: member.createdAt,
+      })),
+      message: "Family members retrieved successfully",
+    };
   }
 }
 

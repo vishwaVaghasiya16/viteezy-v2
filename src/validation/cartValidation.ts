@@ -1,6 +1,7 @@
 import Joi from "joi";
 import mongoose from "mongoose";
 import { AppError } from "../utils/AppError";
+import { ProductVariant } from "../models/enums";
 
 // Add item to cart schema
 export const addCartItemSchema = Joi.object({
@@ -8,7 +9,9 @@ export const addCartItemSchema = Joi.object({
     .required()
     .custom((value, helpers) => {
       if (!mongoose.Types.ObjectId.isValid(value)) {
-        return helpers.error("any.invalid", { message: "Invalid product ID format" });
+        return helpers.error("any.invalid", {
+          message: "Invalid product ID format",
+        });
       }
       return value;
     })
@@ -16,28 +19,14 @@ export const addCartItemSchema = Joi.object({
       "any.required": "Product ID is required",
       "any.invalid": "Product ID must be a valid MongoDB ObjectId",
     }),
-  variantId: Joi.string()
-    .optional()
-    .custom((value, helpers) => {
-      if (value && !mongoose.Types.ObjectId.isValid(value)) {
-        return helpers.error("any.invalid", { message: "Invalid variant ID format" });
-      }
-      return value;
-    })
-    .messages({
-      "any.invalid": "Variant ID must be a valid MongoDB ObjectId",
-    }),
-  quantity: Joi.number()
-    .integer()
-    .min(1)
+  variantType: Joi.string()
     .required()
+    .valid(ProductVariant.SACHETS, ProductVariant.STAND_UP_POUCH)
     .messages({
-      "number.base": "Quantity must be a number",
-      "number.integer": "Quantity must be an integer",
-      "number.min": "Quantity must be at least 1",
-      "any.required": "Quantity is required",
+      "any.required": "Variant type is required",
+      "any.only": "Variant type must be either SACHETS or STAND_UP_POUCH",
     }),
-});
+}).label("AddCartItemPayload");
 
 // Update cart item schema
 export const updateCartItemSchema = Joi.object({
@@ -45,34 +34,15 @@ export const updateCartItemSchema = Joi.object({
     .required()
     .custom((value, helpers) => {
       if (!mongoose.Types.ObjectId.isValid(value)) {
-        return helpers.error("any.invalid", { message: "Invalid product ID format" });
+        return helpers.error("any.invalid", {
+          message: "Invalid product ID format",
+        });
       }
       return value;
     })
     .messages({
       "any.required": "Product ID is required",
       "any.invalid": "Product ID must be a valid MongoDB ObjectId",
-    }),
-  variantId: Joi.string()
-    .optional()
-    .allow(null, "")
-    .custom((value, helpers) => {
-      if (value && !mongoose.Types.ObjectId.isValid(value)) {
-        return helpers.error("any.invalid", { message: "Invalid variant ID format" });
-      }
-      return value;
-    })
-    .messages({
-      "any.invalid": "Variant ID must be a valid MongoDB ObjectId",
-    }),
-  quantity: Joi.number()
-    .integer()
-    .min(1)
-    .optional()
-    .messages({
-      "number.base": "Quantity must be a number",
-      "number.integer": "Quantity must be an integer",
-      "number.min": "Quantity must be at least 1",
     }),
 });
 
@@ -102,4 +72,3 @@ export const validateCart = (schema: Joi.ObjectSchema) => {
     }
   };
 };
-
