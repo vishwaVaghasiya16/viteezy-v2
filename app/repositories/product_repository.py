@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
@@ -97,3 +98,91 @@ class ProductRepository:
             results = [doc async for doc in fallback_cursor]
         
         return results
+    
+    async def get_products_by_titles(self, product_titles: list[str]) -> list[dict[str, Any]]:
+        """Fetch products by their titles (case-insensitive partial match)."""
+        if not product_titles:
+            return []
+        
+        # First, try exact or near-exact matches
+        title_filters = []
+        for title in product_titles:
+            if not title:
+                continue
+            # Escape special regex characters and search in multilingual title fields
+            escaped_title = re.escape(title)
+            # Use word boundaries for better matching, but also allow partial matches
+            title_filters.extend([
+                {"title.en": {"$regex": escaped_title, "$options": "i"}},
+                {"title.nl": {"$regex": escaped_title, "$options": "i"}},
+                {"title.de": {"$regex": escaped_title, "$options": "i"}},
+                {"title": {"$regex": escaped_title, "$options": "i"}},
+            ])
+        
+        if not title_filters:
+            return []
+        
+        filters: dict[str, Any] = {
+            "status": True,
+            "isDeleted": {"$ne": True},
+            "$or": title_filters
+        }
+        
+        # Get more products to allow for better matching
+        products = await self.collection.find(filters).to_list(length=len(product_titles) * 5)
+        
+        # Match products to titles in order (prefer exact matches)
+        matched_products = []
+        matched_product_ids = set()
+        
+        for title in product_titles:
+            if not title:
+                continue
+            
+            title_lower = title.lower().strip()
+            best_match = None
+            best_match_score = 0
+            
+            for product in products:
+                product_id = str(product.get("_id", ""))
+                if product_id in matched_product_ids:
+                    continue
+                
+                # Check if product title matches
+                title_obj = product.get("title", {})
+                product_title = ""
+                if isinstance(title_obj, dict):
+                    product_title = title_obj.get("en", "") or title_obj.get(list(title_obj.keys())[0] if title_obj else "", "")
+                elif isinstance(title_obj, str):
+                    product_title = title_obj
+                
+                product_title_lower = product_title.lower().strip()
+                
+                # Calculate match score
+                score = 0
+                # Exact match gets highest score
+                if title_lower == product_title_lower:
+                    score = 100
+                # Title is contained in product title or vice versa
+                elif title_lower in product_title_lower:
+                    score = 80
+                elif product_title_lower in title_lower:
+                    score = 70
+                # Check if key words match (split by spaces and common separators)
+                else:
+                    title_words = set(re.split(r'[\s\+\-]+', title_lower))
+                    product_words = set(re.split(r'[\s\+\-]+', product_title_lower))
+                    common_words = title_words.intersection(product_words)
+                    if common_words and len(common_words) >= min(2, len(title_words)):
+                        score = 50 + len(common_words) * 10
+                
+                if score > best_match_score:
+                    best_match = product
+                    best_match_score = score
+            
+            # Only add if we have a reasonable match (score >= 50)
+            if best_match and best_match_score >= 50:
+                matched_products.append(best_match)
+                matched_product_ids.add(str(best_match.get("_id", "")))
+        
+        return matched_products

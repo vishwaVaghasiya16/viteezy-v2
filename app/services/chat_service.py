@@ -814,8 +814,10 @@ class ChatService:
                             session_id=session.id, messages=[recommendation_reply], user_id=user_id
                         )
                     
-                    # Mark recommendations as shown
+                    # Mark recommendations as shown and store product titles
+                    product_titles = [product.title for product in recommended_products] if recommended_products else []
                     onboarding_state["recommendations_shown"] = True
+                    onboarding_state["recommended_product_titles"] = product_titles
                     await self.session_repo.update_metadata(
                         session_id=session.id,
                         metadata={**(session.metadata or {}), "onboarding": onboarding_state},
@@ -1114,8 +1116,11 @@ class ChatService:
             )
             
             # Mark onboarding as complete and recommendations as shown
+            # Store product titles in metadata for later retrieval
+            product_titles = [product.title for product in recommended_products]
             onboarding_state["complete"] = True
             onboarding_state["recommendations_shown"] = True
+            onboarding_state["recommended_product_titles"] = product_titles
             await self.session_repo.update_metadata(
                 session_id=session.id,
                 metadata={**(session.metadata or {}), "onboarding": onboarding_state},
