@@ -1,17 +1,12 @@
 import mongoose, { Schema, Document } from "mongoose";
-import {
-  PriceSchema,
-  AuditSchema,
-  SoftDelete,
-  PriceType,
-} from "../common.model";
+import { AuditSchema, SoftDelete } from "../common.model";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
-  PaymentMethod,
+  OrderPlanType,
   SUBSCRIPTION_STATUS_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
-  PAYMENT_METHOD_VALUES,
+  ORDER_PLAN_TYPE_VALUES,
 } from "../enums";
 
 export interface ISubscription extends Document {
@@ -19,22 +14,24 @@ export interface ISubscription extends Document {
   userId: mongoose.Types.ObjectId;
   orderId: mongoose.Types.ObjectId; // Initial order that created this subscription
   status: SubscriptionStatus;
+  planType: OrderPlanType; // Plan type (One-Time or Subscription)
   cycleDays: SubscriptionCycle; // 60, 90, or 180 days
+  subscriptionStartDate: Date; // Subscription start date
+  subscriptionEndDate?: Date; // Subscription end date
   items: Array<{
     productId: mongoose.Types.ObjectId;
-    variantId?: mongoose.Types.ObjectId;
-    quantity: number;
-    price: PriceType;
     name: string;
-    sku?: string;
+    planDays?: number; // Plan days for this specific item
+    capsuleCount?: number; // Capsule count for this specific item
+    // Additional pricing and plan details
+    amount: number; // Original amount
+    discountedPrice: number; // Discounted price
+    taxRate: number; // Tax rate
+    totalAmount: number; // Total amount
+    durationDays?: number; // Duration in days (for subscription plans)
+    savingsPercentage?: number; // Savings percentage
+    features?: string[]; // Plan features
   }>;
-  amount: PriceType; // Recurring billing amount
-  subscriptionPlanDiscount?: PriceType; // 90-day plan discount (15% of subtotal)
-  // Payment Gateway Information
-  paymentMethod: PaymentMethod;
-  gatewaySubscriptionId?: string; // Stripe subscription ID or Mollie subscription ID
-  gatewayCustomerId?: string; // Customer ID in payment gateway
-  gatewayPaymentMethodId?: string; // Saved payment method ID
   // Delivery & Billing Dates
   initialDeliveryDate: Date; // First shipment date (immediate)
   nextDeliveryDate: Date; // Next scheduled delivery
@@ -83,17 +80,30 @@ const SubscriptionSchema = new Schema<ISubscription>(
       enum: SUBSCRIPTION_STATUS_VALUES,
       default: SubscriptionStatus.ACTIVE,
     },
+    planType: {
+      type: String,
+      enum: ORDER_PLAN_TYPE_VALUES,
+      required: true,
+    },
     cycleDays: {
       type: Number,
       enum: SUBSCRIPTION_CYCLE_VALUES,
       required: true,
       validate: {
         validator: function (value: number) {
-          // Only allow 60, 90, or 180 days (30 is disabled)
-          return [60, 90, 180].includes(value);
+          // Allow 30, 60, 90, or 180 days
+          return [30, 60, 90, 180].includes(value);
         },
-        message: "Cycle days must be 60, 90, or 180",
+        message: "Cycle days must be 30, 60, 90, or 180",
       },
+    },
+    subscriptionStartDate: {
+      type: Date,
+      required: true,
+    },
+    subscriptionEndDate: {
+      type: Date,
+      default: null,
     },
     items: [
       {
@@ -102,60 +112,50 @@ const SubscriptionSchema = new Schema<ISubscription>(
           ref: "products",
           required: true,
         },
-        variantId: {
-          type: Schema.Types.ObjectId,
-          ref: "product_variants",
-        },
-        quantity: {
-          type: Number,
-          required: true,
-          min: 1,
-        },
-        price: {
-          type: PriceSchema,
-          required: true,
-        },
         name: {
           type: String,
           trim: true,
           default: null,
         },
-        sku: {
-          type: String,
-          trim: true,
+        planDays: {
+          type: Number,
           default: null,
+        },
+        capsuleCount: {
+          type: Number,
+          default: null,
+        },
+        // Additional pricing and plan details
+        amount: {
+          type: Number,
+          default: 0,
+        },
+        discountedPrice: {
+          type: Number,
+          default: 0,
+        },
+        taxRate: {
+          type: Number,
+          default: 0,
+        },
+        totalAmount: {
+          type: Number,
+          default: 0,
+        },
+        durationDays: {
+          type: Number,
+          default: null,
+        },
+        savingsPercentage: {
+          type: Number,
+          default: null,
+        },
+        features: {
+          type: [String],
+          default: [],
         },
       },
     ],
-    amount: {
-      type: PriceSchema,
-      required: true,
-    },
-    subscriptionPlanDiscount: {
-      type: PriceSchema,
-      default: null,
-    },
-    paymentMethod: {
-      type: String,
-      enum: PAYMENT_METHOD_VALUES,
-      required: true,
-    },
-    gatewaySubscriptionId: {
-      type: String,
-      trim: true,
-      default: null,
-      // Note: sparse and unique are handled in schema.index() below
-    },
-    gatewayCustomerId: {
-      type: String,
-      trim: true,
-      default: null,
-    },
-    gatewayPaymentMethodId: {
-      type: String,
-      trim: true,
-      default: null,
-    },
     initialDeliveryDate: {
       type: Date,
       required: true,
@@ -243,10 +243,6 @@ SubscriptionSchema.index({ userId: 1, status: 1 });
 SubscriptionSchema.index({ orderId: 1 });
 SubscriptionSchema.index({ status: 1, nextBillingDate: 1 });
 SubscriptionSchema.index({ status: 1, nextDeliveryDate: 1 });
-SubscriptionSchema.index(
-  { gatewaySubscriptionId: 1 },
-  { unique: true, sparse: true }
-);
 SubscriptionSchema.index({ createdAt: -1 });
 
 export const Subscriptions = mongoose.model<ISubscription>(
