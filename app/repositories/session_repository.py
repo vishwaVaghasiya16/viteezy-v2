@@ -288,6 +288,7 @@ class SessionRepository:
         Otherwise, tries legacy format first, then searches across all users.
         """
         now = datetime.now(timezone.utc)
+        logger.info(f"Updating session_name for session_id={session_id}, user_id={user_id}, session_name={session_name}")
         
         # If user_id not provided, try to find it by searching for the session
         if not user_id:
@@ -297,6 +298,7 @@ class SessionRepository:
             )
             if user_doc:
                 user_id = str(user_doc["_id"])
+                logger.info(f"Found user_id={user_id} for session_id={session_id}")
         
         if user_id:
             # New format: update session_name within nested session
@@ -314,13 +316,57 @@ class SessionRepository:
                 return_document=ReturnDocument.AFTER
             )
             
-            if not updated:
-                return None
+            if updated:
+                # Find the updated session
+                for session in updated.get("sessions", []):
+                    if session.get("session_id") == session_id:
+                        logger.info(f"Successfully updated session_name in ai_conversations for session_id={session_id}")
+                        return self._nested_session_to_session(session, session_id)
+                logger.warning(f"Session {session_id} not found in updated document")
             
-            # Find the updated session
-            for session in updated.get("sessions", []):
-                if session.get("session_id") == session_id:
-                    return self._nested_session_to_session(session, session_id)
+            # Fallback: If direct update failed, search across all users for this session
+            logger.info(f"Direct update failed, searching across all users for session_id={session_id}")
+            user_doc = await self.collection.find_one(
+                {"sessions.session_id": session_id},
+                {"_id": 1, "sessions.$": 1}
+            )
+            
+            if user_doc and user_doc.get("sessions"):
+                found_user_id = str(user_doc["_id"])
+                found_user_oid = ObjectId(found_user_id)
+                logger.info(f"Found session in user document with _id={found_user_id}, attempting update")
+                
+                updated = await self.collection.find_one_and_update(
+                    {"_id": found_user_oid, "sessions.session_id": session_id},
+                    {
+                        "$set": {
+                            "sessions.$.session_name": session_name,
+                            "sessions.$.updated_at": now,
+                            "updated_at": now
+                        }
+                    },
+                    return_document=ReturnDocument.AFTER
+                )
+                
+                if updated:
+                    for session in updated.get("sessions", []):
+                        if session.get("session_id") == session_id:
+                            logger.info(f"Successfully updated session_name in ai_conversations for session_id={session_id} (via fallback search)")
+                            return self._nested_session_to_session(session, session_id)
+            
+            # Try legacy format as last resort
+            logger.info(f"Trying legacy format for session_id={session_id}")
+            updated = await self.collection.find_one_and_update(
+                {"_id": session_id},
+                {"$set": {"session_name": session_name, "updated_at": now}},
+                return_document=ReturnDocument.AFTER
+            )
+            
+            if updated:
+                logger.info(f"Successfully updated session_name in ai_conversations for session_id={session_id} (legacy format)")
+                return self._document_to_session(updated)
+            
+            logger.warning(f"Failed to update session_name: No document found with _id={user_oid} and sessions.session_id={session_id}, and no legacy document found")
             return None
         else:
             # Try legacy format first: direct update

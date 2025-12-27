@@ -840,29 +840,40 @@ async def check_user_login(
                                 # Generate creative session name using OpenAI
                                 try:
                                     session_name = await chat_service.generate_session_name(concern_label)
+                                    import logging
+                                    logging.info(f"Generated session_name: {session_name} for session {request.session_id}")
                                     
                                     # Update session with session_name in ai_conversations
-                                    await chat_service.session_repo.update_session_name(
+                                    updated_session = await chat_service.session_repo.update_session_name(
                                         session_id=request.session_id,
                                         session_name=session_name,
                                         user_id=request.user_id
                                     )
                                     
+                                    if updated_session:
+                                        logging.info(f"Successfully updated session_name in ai_conversations for session {request.session_id}")
+                                    else:
+                                        logging.warning(f"Failed to update session_name in ai_conversations for session {request.session_id} - update returned None")
+                                    
                                     # Update session_name in quiz_sessions as well
                                     if chat_service.quiz_session_repo:
                                         try:
-                                            await chat_service.quiz_session_repo.update_session_name(
+                                            quiz_updated = await chat_service.quiz_session_repo.update_session_name(
                                                 user_id=request.user_id,
                                                 session_id=request.session_id,
                                                 session_name=session_name
                                             )
+                                            if quiz_updated:
+                                                logging.info(f"Successfully updated session_name in quiz_sessions for session {request.session_id}")
+                                            else:
+                                                logging.warning(f"Failed to update session_name in quiz_sessions for session {request.session_id}")
                                         except Exception as e:
-                                            import logging
                                             logging.warning(f"Failed to update session_name in quiz_sessions: {e}")
                                 except Exception as e:
                                     # Log error but don't fail the request
                                     import logging
-                                    logging.warning(f"Failed to generate or update session_name: {e}")
+                                    import traceback
+                                    logging.error(f"Failed to generate or update session_name: {e}\n{traceback.format_exc()}")
                         
                         # Get product titles from session metadata and fetch product details
                         product_titles = onboarding_state.get("recommended_product_titles", [])
