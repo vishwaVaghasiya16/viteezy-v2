@@ -714,7 +714,7 @@ async def check_user_login(
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             return UserLoginResponseCustom(
-                success=False,
+                success=True,
                 message="User must be registered first",
                 data=login_data
             )
@@ -864,10 +864,82 @@ async def check_user_login(
                                     import logging
                                     logging.warning(f"Failed to generate or update session_name: {e}")
                         
+                        # Get product titles from session metadata and fetch product details
+                        product_titles = onboarding_state.get("recommended_product_titles", [])
+                        
+                        # Fallback: Extract product titles from recommendation message if not in metadata
+                        if not product_titles and recommendation_message:
+                            import re
+                            # Extract product names from the message (they appear as standalone lines)
+                            # Pattern: Product names are typically on their own line, followed by explanation
+                            lines = recommendation_message.split('\n')
+                            for i, line in enumerate(lines):
+                                line = line.strip()
+                                # Skip empty lines, intro text, and explanation lines
+                                if not line or line.startswith('Based on') or line.startswith('Here are') or line.startswith('This product') or line.startswith('Note:') or line.startswith('⚠️'):
+                                    continue
+                                # Check if this looks like a product name (not too long, doesn't start with common words)
+                                if len(line) < 100 and not line.startswith(('Since', 'Specifically', 'IMPORTANT', 'Note')):
+                                    # Check if next line starts with "This product" or similar (indicates it's a product name)
+                                    if i + 1 < len(lines) and (lines[i + 1].strip().startswith('This product') or lines[i + 1].strip().startswith('Based on')):
+                                        product_titles.append(line)
+                        
+                        products_data = []
+                        
+                        if product_titles and chat_service.product_service:
+                            try:
+                                import logging
+                                logging.info(f"Fetching products for titles: {product_titles}")
+                                
+                                # Access product repository from product service
+                                product_repo = chat_service.product_service.repository
+                                
+                                # Fetch products
+                                product_docs = await product_repo.get_products_by_titles(product_titles)
+                                
+                                logging.info(f"Found {len(product_docs)} products from database")
+                                
+                                # Format product data
+                                for product_doc in product_docs:
+                                    # Extract title.en
+                                    title_obj = product_doc.get("title", {})
+                                    if isinstance(title_obj, dict):
+                                        title_en = title_obj.get("en", "")
+                                    elif isinstance(title_obj, str):
+                                        title_en = title_obj
+                                    else:
+                                        title_en = ""
+                                    
+                                    # Extract shortDescription
+                                    short_description = product_doc.get("shortDescription", "")
+                                    
+                                    # Extract productImage
+                                    product_image = product_doc.get("productImage", "")
+                                    
+                                    products_data.append({
+                                        "title": {"en": title_en},
+                                        "shortDescription": short_description,
+                                        "productImage": product_image
+                                    })
+                                    
+                                logging.info(f"Formatted {len(products_data)} products for response")
+                            except Exception as e:
+                                import logging
+                                import traceback
+                                logging.error(f"Failed to fetch product details: {e}\n{traceback.format_exc()}")
+                                # Continue without products if fetch fails
+                        else:
+                            import logging
+                            if not product_titles:
+                                logging.warning("No product titles found in metadata or message")
+                            if not chat_service.product_service:
+                                logging.warning("Product service not available")
+                        
                         login_data = {
                             "isLogin": True,
                             "showRecommendation": True,
                             "message": recommendation_message,
+                            "products": products_data,
                             "timestamp": datetime.now(timezone.utc).isoformat()
                         }
                         return UserLoginResponseCustom(
