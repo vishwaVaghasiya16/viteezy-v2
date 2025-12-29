@@ -62,6 +62,9 @@ class AdminUserController {
       // Build query
       const query: any = {};
 
+      // Exclude deleted users by default
+      query.isDeleted = { $ne: true };
+
       // Filter by active status
       if (isActive !== undefined) {
         const value: string | boolean = isActive;
@@ -167,8 +170,8 @@ class AdminUserController {
 
       const userId = new mongoose.Types.ObjectId(id);
 
-      // Get user basic info
-      const user = await User.findById(id)
+      // Get user basic info (exclude deleted users)
+      const user = await User.findOne({ _id: id, isDeleted: { $ne: true } })
         .select(
           "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin profileImage isMember membershipStatus membershipPlanId membershipExpiresAt membershipActivatedAt language"
         )
@@ -202,8 +205,8 @@ class AdminUserController {
           {
             $group: {
               _id: null,
-              totalSpent: { $sum: "$total.amount" },
-              currency: { $first: "$total.currency" },
+              totalSpent: { $sum: "$grandTotal" },
+              currency: { $first: "$currency" },
             },
           },
         ]),
@@ -424,7 +427,7 @@ class AdminUserController {
         throw new AppError("You cannot block your own account", 400);
       }
 
-      const user = await User.findById(id);
+      const user = await User.findOne({ _id: id, isDeleted: { $ne: true } });
 
       if (!user) {
         throw new AppError("User not found", 404);
@@ -477,13 +480,22 @@ class AdminUserController {
    */
   getUserStats = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
-      const totalUsers = await User.countDocuments();
-      const activeUsers = await User.countDocuments({ isActive: true });
+      const totalUsers = await User.countDocuments({
+        isDeleted: { $ne: true },
+      });
+      const activeUsers = await User.countDocuments({
+        isActive: true,
+        isDeleted: { $ne: true },
+      });
       const verifiedUsers = await User.countDocuments({
         isEmailVerified: true,
+        isDeleted: { $ne: true },
       });
 
       const roleStats = await User.aggregate([
+        {
+          $match: { isDeleted: { $ne: true } },
+        },
         {
           $group: {
             _id: "$role",
@@ -502,6 +514,42 @@ class AdminUserController {
       };
 
       res.apiSuccess({ stats }, "User statistics retrieved successfully");
+    }
+  );
+
+  /**
+   * Delete user (soft delete)
+   * @route DELETE /api/v1/admin/users/:id
+   * @access Admin
+   */
+  deleteUser = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response) => {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        throw new AppError("Invalid user ID", 400);
+      }
+
+      // Prevent admin from deleting themselves
+      if (id === req.user?._id) {
+        throw new AppError("You cannot delete your own account", 400);
+      }
+
+      const user = await User.findOne({ _id: id, isDeleted: { $ne: true } });
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Perform soft delete
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.isActive = false; // Also deactivate the user
+      await user.save();
+
+      logger.info(`User soft deleted: ${id} by admin: ${req.user?._id}`);
+
+      res.apiSuccess(null, "User deleted successfully");
     }
   );
 }

@@ -64,4 +64,15 @@ router.patch(
   adminUserController.toggleUserStatus
 );
 
+/**
+ * @route DELETE /api/v1/admin/users/:id
+ * @desc Delete user (soft delete)
+ * @access Admin
+ */
+router.delete(
+  "/:id",
+  validateParams(adminUserIdParamsSchema),
+  adminUserController.deleteUser
+);
+
 export default router;
