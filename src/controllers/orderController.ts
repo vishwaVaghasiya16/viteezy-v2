@@ -1064,6 +1064,10 @@ class OrderController {
           "billingAddressId",
           "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
         )
+        .populate(
+          "items.productId",
+          "title slug description media categories tags status galleryImages productImage"
+        )
         .lean();
 
       if (!order) {
@@ -1100,60 +1104,19 @@ class OrderController {
         };
       }
 
-      // Get all product IDs from order items
-      const productIds = order.items
-        .map((item: any) => item.productId)
-        .filter((id: any) => id && mongoose.Types.ObjectId.isValid(id))
-        .map((id: any) => new mongoose.Types.ObjectId(id));
-
-      // Fetch all products in one query
-      const products = await Products.find({
-        _id: { $in: productIds },
-        isDeleted: false,
-      })
-        .select(
-          "title slug description media categories tags status galleryImages productImage"
-        )
-        .lean();
-
-      // Create a map for quick lookup
-      const productMap = new Map(
-        products.map((p: any) => [p._id.toString(), p])
-      );
-
       // Transform order items with product details
-      const itemsWithProducts = order.items.map((item: any) => {
-        const product = item.productId
-          ? productMap.get(item.productId.toString())
-          : null;
-
-        return {
-          productId: item.productId,
-          name: item.name,
-          amount: item.amount,
-          discountedPrice: item.discountedPrice,
-          taxRate: item.taxRate,
-          totalAmount: item.totalAmount,
-          durationDays: item.durationDays,
-          capsuleCount: item.capsuleCount,
-          savingsPercentage: item.savingsPercentage,
-          features: item.features,
-          product: product
-            ? {
-                id: product._id,
-                title: product.title,
-                slug: product.slug,
-                description: product.description,
-                media: product.media,
-                categories: product.categories,
-                tags: product.tags,
-                status: product.status,
-                galleryImages: product.galleryImages,
-                productImage: product.productImage,
-              }
-            : null,
-        };
-      });
+      const itemsWithProducts = order.items.map((item: any) => ({
+        productId: item.productId,
+        name: item.name,
+        amount: item.amount,
+        discountedPrice: item.discountedPrice,
+        taxRate: item.taxRate,
+        totalAmount: item.totalAmount,
+        durationDays: item.durationDays,
+        capsuleCount: item.capsuleCount,
+        savingsPercentage: item.savingsPercentage,
+        features: item.features,
+      }));
 
       // Build response
       const orderDetails = {

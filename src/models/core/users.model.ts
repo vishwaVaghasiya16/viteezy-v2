@@ -49,6 +49,9 @@ export interface IUser extends Document {
   isSubMember?: boolean; // Indicates if this is a family/sub-member
   parentMemberId?: Schema.Types.ObjectId; // Reference to parent/main member
   relationshipToParent?: string; // e.g., "Child", "Spouse", "Parent", "Sibling", "Other"
+  // Soft delete fields
+  isDeleted?: boolean;
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -217,6 +220,15 @@ const userSchema = new Schema<IUser>(
     relationshipToParent: {
       type: String,
       enum: ["Child", "Spouse", "Parent", "Sibling", "Other"],
+      default: null,
+    },
+    // Soft delete fields
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
       default: null,
     },
   },

@@ -17,3 +17,4 @@ export { MembershipPlans } from "./membershipPlans.model";
 export { Memberships } from "./memberships.model";
 export { Subscriptions } from "./subscriptions.model";
 export { Wishlists } from "./wishlists.model";
+export { default as VariantType } from "./variantTypes.model";
