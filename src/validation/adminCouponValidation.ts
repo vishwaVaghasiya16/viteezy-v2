@@ -1,6 +1,8 @@
 import Joi from "joi";
+import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 import { CouponType, COUPON_TYPE_VALUES } from "@/models/enums";
+import { paginationQuerySchema } from "./commonValidation";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
@@ -193,3 +195,32 @@ export const updateCouponStatusSchema = Joi.object(
     isActive: Joi.boolean().required().label("Is active"),
   })
 ).label("UpdateCouponStatusPayload");
+
+// Query schemas for coupon listing and usage logs
+export const getCouponsQuerySchema = paginationQuerySchema.keys(
+  withFieldLabels({
+    type: Joi.string()
+      .valid(...COUPON_TYPE_VALUES)
+      .optional()
+      .label("Coupon type"),
+    expiryDateFrom: Joi.date().iso().optional().label("Expiry date from"),
+    expiryDateTo: Joi.date().iso().optional().label("Expiry date to"),
+  })
+).label("GetCouponsQuery");
+
+export const getCouponUsageLogsQuerySchema = paginationQuerySchema.keys(
+  withFieldLabels({
+    couponId: Joi.string()
+      .custom((value, helpers) => {
+        if (!mongoose.Types.ObjectId.isValid(value)) {
+          return helpers.error("any.invalid");
+        }
+        return value;
+      })
+      .optional()
+      .messages({ "any.invalid": "Invalid coupon ID format" })
+      .label("Coupon ID"),
+    expiryDateFrom: Joi.date().iso().optional().label("Expiry date from"),
+    expiryDateTo: Joi.date().iso().optional().label("Expiry date to"),
+  })
+).label("GetCouponUsageLogsQuery");

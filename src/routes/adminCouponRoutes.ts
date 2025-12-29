@@ -11,8 +11,9 @@ import {
   updateCouponSchema,
   couponIdParamsSchema,
   updateCouponStatusSchema,
+  getCouponsQuerySchema,
+  getCouponUsageLogsQuerySchema,
 } from "@/validation/adminCouponValidation";
-import { paginationQuerySchema } from "../validation/commonValidation";
 
 const router = Router();
 
@@ -43,6 +44,31 @@ router.post(
 );
 
 /**
+ * @route GET /api/v1/admin/coupons/stats
+ * @desc Get coupon statistics (for current month)
+ * @access Admin
+ */
+router.get("/stats", adminCouponController.getCouponStats);
+
+/**
+ * @route GET /api/v1/admin/coupons/usage-logs
+ * @desc Get coupon usage logs with filters
+ * @access Admin
+ * @query {Number} [page] - Page number (default: 1)
+ * @query {Number} [limit] - Items per page (default: 10)
+ * @query {String} [status] - Filter by coupon status: "active", "inactive", or "all"
+ * @query {String} [search] - Search by coupon code or name
+ * @query {String} [expiryDateFrom] - Filter by coupon expiry date from (ISO date string)
+ * @query {String} [expiryDateTo] - Filter by coupon expiry date to (ISO date string)
+ * @query {String} [couponId] - Filter by specific coupon ID
+ */
+router.get(
+  "/usage-logs",
+  validateQuery(getCouponUsageLogsQuerySchema),
+  adminCouponController.getCouponUsageLogs
+);
+
+/**
  * @route GET /api/v1/admin/coupons
  * @desc Get paginated list of coupons
  * @access Admin
@@ -51,10 +77,12 @@ router.post(
  * @query {String} [status] - Filter by status: "active", "inactive", or "all"
  * @query {String} [type] - Filter by discount type
  * @query {String} [search] - Search by code or name
+ * @query {String} [expiryDateFrom] - Filter by expiry date from (ISO date string)
+ * @query {String} [expiryDateTo] - Filter by expiry date to (ISO date string)
  */
 router.get(
   "/",
-  validateQuery(paginationQuerySchema),
+  validateQuery(getCouponsQuerySchema),
   adminCouponController.getCoupons
 );
 
