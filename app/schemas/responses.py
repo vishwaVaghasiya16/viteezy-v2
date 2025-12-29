@@ -82,12 +82,22 @@ class SearchMessagesResponse(BaseModel):
     matches: list[dict[str, Any]]
 
 
+class PaginationMeta(BaseModel):
+    """Standard pagination metadata."""
+    page: int = Field(..., description="Current page number (1-based)")
+    limit: int = Field(..., description="Number of items per page")
+    total: int = Field(..., description="Total number of items")
+    pages: int = Field(..., description="Total number of pages")
+    hasNext: bool = Field(..., description="Whether there is a next page")
+    hasPrev: bool = Field(..., description="Whether there is a previous page")
+
+
 class SearchMessagesResponseCustom(BaseModel):
     """Custom response model for search-messages endpoint with success boolean, data, and pagination."""
     success: bool = Field(..., description="Whether the operation was successful")
     message: str = Field(..., description="Response message")
     data: dict[str, Any] | None = Field(default=None, description="Search results data")
-    pagination: dict[str, Any] | None = Field(default=None, description="Pagination information")
+    pagination: PaginationMeta | None = Field(default=None, description="Pagination information")
 
 
 class SessionHistoryResponse(BaseModel):
@@ -103,16 +113,22 @@ class UserSessionsResponse(BaseModel):
     success: bool = Field(..., description="Whether the operation was successful")
     message: str = Field(..., description="Response message")
     data: list[dict[str, Any]] | None = Field(default=None, description="Array of session objects (session_id, session_name, timestamps)")
+    pagination: PaginationMeta | None = Field(default=None, description="Pagination metadata for the sessions list")
+
+
+class DeleteSessionData(BaseModel):
+    """Details about the delete session operation."""
+    session_id: str
+    user_id: str
+    ai_conversations_deleted: bool = Field(default=False, description="Whether session was deleted from ai_conversations")
+    quiz_sessions_deleted: bool = Field(default=False, description="Whether session was deleted from quiz_sessions")
 
 
 class DeleteSessionResponse(BaseModel):
     """Delete session response model."""
-    status: str = Field(..., description="Response status: 'success' or 'fail'")
-    session_id: str
-    user_id: str
-    message: str
-    ai_conversations_deleted: bool = Field(default=False, description="Whether session was deleted from ai_conversations")
-    quiz_sessions_deleted: bool = Field(default=False, description="Whether session was deleted from quiz_sessions")
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(..., description="Response message")
+    data: DeleteSessionData | None = Field(default=None, description="Delete session details")
 
 
 # Specific response models for endpoints that need them

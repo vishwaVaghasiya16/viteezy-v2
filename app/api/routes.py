@@ -17,6 +17,7 @@ from app.schemas.responses import (
     ChatResponseCustom,
     ChatResponseWrapper,
     CreateSessionResponse,
+    DeleteSessionData,
     DeleteSessionResponse,
     ErrorResponse,
     FirstQuestionResponse,
@@ -152,6 +153,8 @@ async def health_check(
 )
 async def get_sessions_by_user(
     user_id: str = Query(..., description="User ID to fetch sessions for"),
+    page: int = Query(1, ge=1, description="Page number (starts from 1)"),
+    limit: int = Query(10, ge=1, le=100, description="Number of sessions per page"),
     chat_service: ChatService = Depends(get_chat_service),
 ) -> UserSessionsResponse:
     """
@@ -165,22 +168,42 @@ async def get_sessions_by_user(
             detail=UserSessionsResponse(
                 success=False,
                 message=exc.message,
-                data=None
+                data=None,
+                pagination=None
             ).model_dump()
         ) from exc
     
     sessions = await chat_service.session_repo.get_sessions_for_user(user_id)
+    
+    # Build pagination base
+    total_sessions = len(sessions) if sessions else 0
+    total_pages = (total_sessions + limit - 1) // limit if total_sessions > 0 else 0
+    pagination = {
+        "page": page,
+        "limit": limit,
+        "total": total_sessions,
+        "pages": total_pages,
+        "hasNext": page < total_pages,
+        "hasPrev": page > 1,
+    }
+    
     if sessions is None:
         return UserSessionsResponse(
             success=False,
             message="User not found or no sessions",
-            data=[]
+            data=[],
+            pagination=pagination
         )
+    
+    # Apply pagination
+    offset = (page - 1) * limit
+    paginated_sessions = sessions[offset:offset + limit]
     
     return UserSessionsResponse(
         success=True,
         message="Sessions fetched successfully",
-        data=sessions
+        data=paginated_sessions,
+        pagination=pagination
     )
 
 
@@ -1247,10 +1270,10 @@ async def search_messages(
         pagination_info = {
             "page": page,
             "limit": limit,
-            "total_pages": total_pages,
-            "total_sessions": total_sessions,
-            "has_next": page < total_pages,
-            "has_previous": page > 1
+            "total": total_sessions,
+            "pages": total_pages,
+            "hasNext": page < total_pages,
+            "hasPrev": page > 1
         }
         
         return SearchMessagesResponseCustom(
@@ -1277,9 +1300,9 @@ async def search_messages(
     "/sessions/{session_id}",
     response_model=DeleteSessionResponse,
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid user_id format"},
-        404: {"model": ErrorResponse, "description": "Session not found"},
-        500: {"model": ErrorResponse, "description": "Internal server error"}
+        400: {"model": DeleteSessionResponse, "description": "Invalid token or parameters"},
+        404: {"model": DeleteSessionResponse, "description": "Session not found"},
+        500: {"model": DeleteSessionResponse, "description": "Internal server error"}
     }
 )
 async def delete_session(
@@ -1299,8 +1322,14 @@ async def delete_session(
         user_id: User ID associated with the session (required)
         
     Returns:
-        DeleteSessionResponse with deletion status for both collections
+        DeleteSessionResponse with standardized success/message/data payload
     """
+    deletion_data = DeleteSessionData(
+        session_id=session_id,
+        user_id=user_id,
+        ai_conversations_deleted=False,
+        quiz_sessions_deleted=False
+    )
     try:
         from bson import ObjectId
         
@@ -1310,11 +1339,10 @@ async def delete_session(
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=ErrorResponse(
-                    status="error",
-                    message="Invalid user_id format. Must be a valid ObjectId.",
-                    error_code="INVALID_USER_ID_FORMAT",
-                    details={"user_id": user_id}
+                detail=DeleteSessionResponse(
+                    success=False,
+                    message="Invalid token",
+                    data=deletion_data
                 ).model_dump()
             )
         
@@ -1323,6 +1351,7 @@ async def delete_session(
             session_id=session_id,
             user_id=user_id
         )
+        deletion_data.ai_conversations_deleted = ai_deleted
         
         # Always attempt to delete from quiz_sessions (even if not found in ai_conversations)
         quiz_deleted = False
@@ -1331,11 +1360,12 @@ async def delete_session(
                 user_id=user_id,
                 session_id=session_id
             )
+        deletion_data.quiz_sessions_deleted = quiz_deleted
         
         # Determine overall status
         # Success if deleted from at least one collection
+        success = ai_deleted or quiz_deleted
         if ai_deleted or quiz_deleted:
-            status_msg = "success"
             if ai_deleted and quiz_deleted:
                 message = "Session deleted from both ai_conversations and quiz_sessions"
             elif ai_deleted:
@@ -1343,25 +1373,21 @@ async def delete_session(
             elif quiz_deleted:
                 message = "Session deleted from quiz_sessions. Also attempted deletion from ai_conversations."
         else:
-            status_msg = "fail"
             message = "Session not found in either collection"
         
         return DeleteSessionResponse(
-            status=status_msg,
-            session_id=session_id,
-            user_id=user_id,
             message=message,
-            ai_conversations_deleted=ai_deleted,
-            quiz_sessions_deleted=quiz_deleted
+            success=success,
+            data=deletion_data
         )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=ErrorResponse(
-                status="error",
+            detail=DeleteSessionResponse(
+                success=False,
                 message="Failed to delete session",
-                error_code="INTERNAL_ERROR"
+                data=deletion_data
             ).model_dump()
         ) from e
