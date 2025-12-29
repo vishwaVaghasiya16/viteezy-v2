@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Coupons } from "@/models/commerce";
+import { Coupons, CouponUsageHistory } from "@/models/commerce";
 import { CouponType } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
@@ -107,15 +107,126 @@ class AdminCouponController {
   );
 
   /**
+   * Get coupon statistics (for current month only)
+   */
+  getCouponStats = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      // Get current month date range
+      const now = new Date();
+      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Calculate 7 days from now for expiring soon
+      const sevenDaysFromNow = new Date(now);
+      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+
+      // Active coupons count (not deleted, isActive = true, and valid if validUntil is set)
+      const activeCouponsFilter: Record<string, any> = {
+        isDeleted: false,
+        isActive: true,
+      };
+      
+      // Coupons are active if they don't have validUntil or validUntil is in the future
+      activeCouponsFilter.$or = [
+        { validUntil: { $exists: false } },
+        { validUntil: null },
+        { validUntil: { $gt: now } },
+      ];
+
+      // Coupons expiring soon (within 7 days, active, not deleted)
+      const expiringSoonFilter: Record<string, any> = {
+        isDeleted: false,
+        isActive: true,
+        validUntil: {
+          $gte: now,
+          $lte: sevenDaysFromNow,
+        },
+      };
+
+      // Get stats in parallel
+      const [
+        activeCouponsCount,
+        expiringSoonCount,
+        totalRedemptionsResult,
+        totalDiscountAmountResult,
+      ] = await Promise.all([
+        // Active coupons
+        Coupons.countDocuments(activeCouponsFilter),
+        
+        // Coupons expiring soon
+        Coupons.countDocuments(expiringSoonFilter),
+        
+        // Total redemptions for current month (from coupon usage history)
+        CouponUsageHistory.aggregate([
+          {
+            $match: {
+              createdAt: {
+                $gte: startOfCurrentMonth,
+                $lte: endOfCurrentMonth,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+            },
+          },
+        ]),
+        
+        // Total discounted amount for current month
+        CouponUsageHistory.aggregate([
+          {
+            $match: {
+              createdAt: {
+                $gte: startOfCurrentMonth,
+                $lte: endOfCurrentMonth,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$discountAmount.amount" },
+              currency: { $first: "$discountAmount.currency" },
+            },
+          },
+        ]),
+      ]);
+
+      const totalRedemptions = totalRedemptionsResult[0]?.total || 0;
+      const totalDiscountAmount = totalDiscountAmountResult[0]?.total || 0;
+      const currency = totalDiscountAmountResult[0]?.currency || "EUR";
+
+      res.apiSuccess(
+        {
+          stats: {
+            activeCoupons: activeCouponsCount,
+            totalRedemptions,
+            totalDiscountedAmount: {
+              amount: totalDiscountAmount,
+              currency,
+            },
+            expiringSoon: expiringSoonCount,
+          },
+        },
+        "Coupon statistics retrieved successfully"
+      );
+    }
+  );
+
+  /**
    * Get paginated list of all coupons (Admin view)
    */
   getCoupons = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
-      const { status, search, type } = req.query as {
+      const { status, search, type, expiryDateFrom, expiryDateTo } = req.query as {
         status?: "active" | "inactive" | "all";
         search?: string;
         type?: CouponType;
+        expiryDateFrom?: string;
+        expiryDateTo?: string;
       };
 
       const filter: Record<string, any> = {
@@ -138,6 +249,21 @@ class AdminCouponController {
           { "name.en": { $regex: search, $options: "i" } },
           { "name.nl": { $regex: search, $options: "i" } },
         ];
+      }
+
+      // Filter by expiry date range
+      if (expiryDateFrom || expiryDateTo) {
+        filter.validUntil = {};
+        if (expiryDateFrom) {
+          const fromDate = new Date(expiryDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          filter.validUntil.$gte = fromDate;
+        }
+        if (expiryDateTo) {
+          const toDate = new Date(expiryDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          filter.validUntil.$lte = toDate;
+        }
       }
 
       const sortOptions: Record<string, 1 | -1> = {
@@ -353,6 +479,188 @@ class AdminCouponController {
       await coupon.save();
 
       res.apiSuccess(null, "Coupon deleted successfully");
+    }
+  );
+
+  /**
+   * Get coupon usage logs (Admin view) with filters
+   */
+  getCouponUsageLogs = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { page, limit, skip } = getPaginationOptions(req);
+      const { status, search, expiryDateFrom, expiryDateTo, couponId } = req.query as {
+        status?: "active" | "inactive" | "all";
+        search?: string;
+        expiryDateFrom?: string;
+        expiryDateTo?: string;
+        couponId?: string;
+      };
+
+      // Build match filter for usage history
+      const matchFilter: Record<string, any> = {};
+
+      // Filter by coupon ID if provided
+      if (couponId) {
+        matchFilter.couponId = new mongoose.Types.ObjectId(couponId);
+      }
+
+      // Build aggregation pipeline
+      const pipeline: any[] = [
+        // Match usage history records
+        { $match: matchFilter },
+        // Lookup coupon details
+        {
+          $lookup: {
+            from: "coupons",
+            localField: "couponId",
+            foreignField: "_id",
+            as: "coupon",
+          },
+        },
+        { $unwind: { path: "$coupon", preserveNullAndEmptyArrays: true } },
+      ];
+
+      // Build coupon filter - only apply if filters are provided
+      const couponFilters: any[] = [];
+
+      // Filter by status if provided
+      if (status === "active") {
+        couponFilters.push({
+          $or: [
+            { "coupon.isActive": true },
+            { coupon: { $exists: false } },
+            { coupon: null },
+          ],
+        });
+      } else if (status === "inactive") {
+        couponFilters.push({
+          $or: [
+            { "coupon.isActive": false },
+            { coupon: { $exists: false } },
+            { coupon: null },
+          ],
+        });
+      }
+
+      // Filter by expiry date if provided
+      if (expiryDateFrom || expiryDateTo) {
+        const expiryFilter: Record<string, any> = {};
+        if (expiryDateFrom) {
+          const fromDate = new Date(expiryDateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          expiryFilter.$gte = fromDate;
+        }
+        if (expiryDateTo) {
+          const toDate = new Date(expiryDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          expiryFilter.$lte = toDate;
+        }
+        couponFilters.push({
+          $or: [
+            { "coupon.validUntil": expiryFilter },
+            { coupon: { $exists: false } },
+            { coupon: null },
+          ],
+        });
+      }
+
+      // Apply coupon filters if any
+      if (couponFilters.length > 0) {
+        pipeline.push({ $match: { $and: couponFilters } });
+      }
+
+      // Add search filter if provided
+      if (search) {
+        pipeline.push({
+          $match: {
+            $or: [
+              { couponCode: { $regex: search, $options: "i" } },
+              { "coupon.code": { $regex: search, $options: "i" } },
+              { "coupon.name.en": { $regex: search, $options: "i" } },
+              { "coupon.name.nl": { $regex: search, $options: "i" } },
+            ],
+          },
+        });
+      }
+
+      // Count total before pagination
+      const countPipeline = [...pipeline, { $count: "total" }];
+      const countResult = await CouponUsageHistory.aggregate(countPipeline);
+      const total = countResult[0]?.total || 0;
+
+      // Add pagination and sorting
+      pipeline.push(
+        { $sort: { createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit }
+      );
+
+      // Lookup user and order details
+      pipeline.push(
+        {
+          $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "user",
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        {
+          $unwind: { path: "$user", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $unwind: { path: "$order", preserveNullAndEmptyArrays: true },
+        },
+        {
+          $project: {
+            _id: 1,
+            couponId: 1,
+            userId: 1,
+            orderId: 1,
+            couponCode: 1,
+            orderNumber: 1,
+            discountAmount: 1,
+            usageCount: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            coupon: {
+              _id: "$coupon._id",
+              code: "$coupon.code",
+              name: "$coupon.name",
+              type: "$coupon.type",
+              value: "$coupon.value",
+              isActive: "$coupon.isActive",
+              validUntil: "$coupon.validUntil",
+            },
+            user: {
+              _id: "$user._id",
+              firstName: "$user.firstName",
+              lastName: "$user.lastName",
+              email: "$user.email",
+            },
+            order: {
+              _id: "$order._id",
+              orderNumber: "$order.orderNumber",
+              total: "$order.total",
+              status: "$order.status",
+            },
+          },
+        }
+      );
+
+      const usageLogs = await CouponUsageHistory.aggregate(pipeline);
+
+      const pagination = getPaginationMeta(page, limit, total);
+
+      res.apiPaginated(usageLogs, pagination, "Coupon usage logs retrieved");
     }
   );
 }
