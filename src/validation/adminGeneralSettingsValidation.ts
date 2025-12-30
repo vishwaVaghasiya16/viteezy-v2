@@ -19,6 +19,8 @@ const addressSchema = Joi.object({
   state: Joi.string().trim().optional().allow(null, "").label("State"),
   zip: Joi.string().trim().optional().allow(null, "").label("ZIP Code"),
   country: Joi.string().trim().optional().allow(null, "").label("Country"),
+  addressLine1: Joi.string().trim().optional().allow(null, "").label("Address Line 1"),
+  addressLine2: Joi.string().trim().optional().allow(null, "").label("Address Line 2"),
 }).label("Address");
 
 const languageSettingSchema = Joi.object({

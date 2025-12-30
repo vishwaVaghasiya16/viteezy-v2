@@ -65,6 +65,8 @@ const AddressSchema = new Schema(
     state: { type: String, trim: true, default: null },
     zip: { type: String, trim: true, default: null },
     country: { type: String, trim: true, default: null },
+    addressLine1: { type: String, trim: true, default: null },
+    addressLine2: { type: String, trim: true, default: null },
   },
   { _id: false }
 );
@@ -150,7 +152,6 @@ const GeneralSettingsSchema = new Schema<IGeneralSettings>(
         { code: "ES", name: "Spanish", isEnabled: false },
       ],
     },
-
     isDeleted: {
       type: Boolean,
       default: false,

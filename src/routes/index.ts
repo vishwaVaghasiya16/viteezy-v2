@@ -47,6 +47,7 @@ import aboutUsRoutes from "./aboutUsRoutes";
 import teamMemberRoutes from "./teamMemberRoutes";
 import countryRoutes from "./countryRoutes";
 import stateRoutes from "./stateRoutes";
+import generalSettingsRoutes from "./generalSettingsRoutes";
 
 const router = Router();
 
@@ -101,5 +102,6 @@ router.use("/memberships", membershipRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/countries", countryRoutes);
 router.use("/states", stateRoutes);
+router.use("/general-settings", generalSettingsRoutes);
 
 export default router;
