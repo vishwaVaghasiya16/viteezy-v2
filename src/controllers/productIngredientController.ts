@@ -252,7 +252,7 @@ class ProductIngredientController {
       const product = await Products.findOne({
         _id: productId,
         isDeleted: false,
-        status: { $ne: ProductStatus.HIDDEN },
+        status: true,
       }).lean();
 
       if (!product) {

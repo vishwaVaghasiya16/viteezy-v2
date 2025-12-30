@@ -231,6 +231,7 @@ class MembershipController {
           },
           payment: {
             id: paymentResponse.payment._id,
+            membershipId: paymentResponse.payment.membershipId,
             status: paymentResponse.payment.status,
             paymentMethod: paymentResponse.payment.paymentMethod,
             gatewayTransactionId: paymentResponse.payment.gatewayTransactionId,
