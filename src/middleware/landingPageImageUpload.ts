@@ -8,6 +8,8 @@ export const handleLandingPageImageUpload = async (
 ) => {
   try {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    console.log("[LandingPageImageUpload] Files received:", files ? Object.keys(files) : "none");
+    console.log("[LandingPageImageUpload] heroSection before processing:", req.body.heroSection);
 
     // Handle heroSection_image_url (image file for hero section)
     if (files?.heroSection_image_url && files.heroSection_image_url.length > 0) {
@@ -16,14 +18,17 @@ export const handleLandingPageImageUpload = async (
         req.body.heroSection = {};
       }
       req.body.heroSection.imageUrl = imageUrl;
-      // If media type is not set or is Image, set media.url to imageUrl
+      // Automatically create media object with Image type
       if (!req.body.heroSection.media) {
         req.body.heroSection.media = {};
       }
-      if (!req.body.heroSection.media.type || req.body.heroSection.media.type === "Image") {
-        req.body.heroSection.media.url = imageUrl;
-        req.body.heroSection.media.type = "Image";
-      }
+      req.body.heroSection.media.url = imageUrl;
+      req.body.heroSection.media.type = "Image";
+      req.body.heroSection.media.sortOrder = req.body.heroSection.media.sortOrder || 0;
+      console.log("[LandingPageImageUpload] Image uploaded, set imageUrl and media:", {
+        imageUrl,
+        media: req.body.heroSection.media
+      });
     }
 
     // Handle heroSection_video_url (video file for hero section)
@@ -33,27 +38,17 @@ export const handleLandingPageImageUpload = async (
         req.body.heroSection = {};
       }
       req.body.heroSection.videoUrl = videoUrl;
-      // If media type is Video, set media.url to videoUrl
+      // Automatically create media object with Video type
       if (!req.body.heroSection.media) {
         req.body.heroSection.media = {};
       }
-      if (req.body.heroSection.media.type === "Video") {
-        req.body.heroSection.media.url = videoUrl;
-      }
-    }
-
-    // Set media.url based on media.type if not already set
-    if (req.body.heroSection && req.body.heroSection.media) {
-      if (req.body.heroSection.media.type === "Image" && req.body.heroSection.imageUrl && !req.body.heroSection.media.url) {
-        req.body.heroSection.media.url = req.body.heroSection.imageUrl;
-      } else if (req.body.heroSection.media.type === "Video" && req.body.heroSection.videoUrl && !req.body.heroSection.media.url) {
-        req.body.heroSection.media.url = req.body.heroSection.videoUrl;
-      }
-      // Default to Image if type not specified
-      if (!req.body.heroSection.media.type && req.body.heroSection.imageUrl) {
-        req.body.heroSection.media.type = "Image";
-        req.body.heroSection.media.url = req.body.heroSection.imageUrl;
-      }
+      req.body.heroSection.media.url = videoUrl;
+      req.body.heroSection.media.type = "Video";
+      req.body.heroSection.media.sortOrder = req.body.heroSection.media.sortOrder || 0;
+      console.log("[LandingPageImageUpload] Video uploaded, set videoUrl and media:", {
+        videoUrl,
+        media: req.body.heroSection.media
+      });
     }
 
     // Handle heroBackgroundImage (optional background image for hero section)
@@ -191,6 +186,8 @@ export const handleLandingPageImageUpload = async (
       }
       req.body.communitySection.backgroundImage = imageUrl;
     }
+
+    console.log("[LandingPageImageUpload] heroSection after processing:", req.body.heroSection);
 
     next();
   } catch (error) {

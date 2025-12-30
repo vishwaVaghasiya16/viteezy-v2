@@ -359,6 +359,11 @@ class LandingPageService {
   async createLandingPage(
     data: CreateLandingPageData
   ): Promise<{ landingPage: any; message: string }> {
+    // Validate that at least one media source is provided
+    if (!data.heroSection.media && !data.heroSection.imageUrl && !data.heroSection.videoUrl) {
+      throw new AppError("Either imageUrl, videoUrl, or media must be provided for hero section", 400);
+    }
+
     // Convert simple strings to I18n format for database
     const landingPageData: any = {
       heroSection: {
@@ -401,9 +406,9 @@ class LandingPageService {
             ? data.heroSection.isEnabled
             : true,
         order: data.heroSection.order ?? 0,
-        media: {
+        media: data.heroSection.media ? {
           ...data.heroSection.media,
-        },
+        } : undefined,
       },
       isActive: data.isActive ?? true,
       createdBy: data.createdBy,

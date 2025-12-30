@@ -49,19 +49,17 @@ const baseStringSchema = Joi.string().trim().min(1).required().messages({
 // Simple Text Schema (optional)
 const baseTextSchema = Joi.string().trim().allow("", null).optional();
 
-// Media Schema (Image or Video)
+// Media Schema (Image or Video) - Optional, will be auto-created from imageUrl or videoUrl
 const baseMediaSchema = Joi.object({
   type: Joi.string()
     .valid(...MEDIA_TYPE_VALUES)
-    .required()
+    .optional()
     .messages({
       "any.only": `Media type must be one of: ${MEDIA_TYPE_VALUES.join(", ")}`,
-      "any.required": "Media type is required",
     })
     .label("Media type"),
-  url: Joi.string().uri().required().messages({
+  url: Joi.string().uri().optional().messages({
     "string.uri": "Media URL must be a valid URL",
-    "any.required": "Media URL is required",
   }),
   sortOrder: Joi.number().integer().min(0).optional(),
 });
@@ -75,7 +73,7 @@ const basePrimaryCTASchema = Joi.object({
 });
 
 const baseHeroSectionSchema = Joi.object({
-  media: baseMediaSchema.required(),
+  media: baseMediaSchema.optional(),
   imageUrl: Joi.string().uri().optional().allow("", null).messages({
     "string.uri": "Image URL must be a valid URL",
   }),
@@ -92,6 +90,28 @@ const baseHeroSectionSchema = Joi.object({
   primaryCTA: Joi.array().items(basePrimaryCTASchema).max(3).optional(),
   isEnabled: Joi.boolean().optional(),
   order: Joi.number().integer().min(0).optional(),
+}).custom((value, helpers) => {
+  // Check if imageUrl or videoUrl is provided (as strings, not empty)
+  const hasImageUrl = value.imageUrl && typeof value.imageUrl === "string" && value.imageUrl.trim() !== "";
+  const hasVideoUrl = value.videoUrl && typeof value.videoUrl === "string" && value.videoUrl.trim() !== "";
+  const hasMedia = value.media && value.media.type && value.media.url;
+  
+  // If media object exists, ensure it has both type and url
+  if (value.media) {
+    if (!value.media.type || !value.media.url) {
+      return helpers.error("any.custom", {
+        message: "Media object must have both type and url",
+      });
+    }
+  }
+  
+  // Note: Files are uploaded via multer and processed in handleLandingPageImageUpload middleware
+  // The middleware runs BEFORE validation, so if files are uploaded, imageUrl/videoUrl will be set
+  // If no files are uploaded and no imageUrl/videoUrl/media is provided, we allow it
+  // The service layer will handle the requirement check if needed
+  // This allows flexibility - files can be uploaded OR URLs can be provided directly
+  
+  return value;
 });
 
 // Membership Section Schema
