@@ -67,20 +67,52 @@ const baseMediaSchema = Joi.object({
 });
 
 // Hero Section Schema
+const basePrimaryCTASchema = Joi.object({
+  label: baseStringSchema.required(),
+  image: Joi.string().uri().optional(),
+  link: Joi.string().uri().optional(),
+  order: Joi.number().integer().min(0).optional().default(0),
+});
+
 const baseHeroSectionSchema = Joi.object({
   media: baseMediaSchema.required(),
+  imageUrl: Joi.string().uri().optional().allow("", null).messages({
+    "string.uri": "Image URL must be a valid URL",
+  }),
+  videoUrl: Joi.string().uri().optional().allow("", null).messages({
+    "string.uri": "Video URL must be a valid URL",
+  }),
+  backgroundImage: Joi.string().uri().optional().allow("", null).messages({
+    "string.uri": "Background image must be a valid URL",
+  }),
   title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
+  highlightedText: Joi.array().items(baseStringSchema).optional(),
+  primaryCTA: Joi.array().items(basePrimaryCTASchema).max(3).optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Membership Section Schema
+const baseMembershipBenefitSchema = Joi.object({
+  icon: Joi.string().trim().optional(),
+  title: baseStringSchema.required(),
+  description: baseTextSchema.optional(),
+  order: Joi.number().integer().min(0).optional().default(0),
+});
+
 const baseMembershipSectionSchema = Joi.object({
   backgroundImage: Joi.string().uri().required().messages({
     "string.uri": "Background image must be a valid URL",
     "any.required": "Background image is required",
   }),
   title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
+  benefits: Joi.array().items(baseMembershipBenefitSchema).min(0).max(5).optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // How It Works Step Schema
@@ -96,6 +128,9 @@ const baseHowItWorksStepSchema = Joi.object({
 
 // How It Works Section Schema
 const baseHowItWorksSectionSchema = Joi.object({
+  title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
+  stepsCount: Joi.number().integer().min(1).max(10).optional(),
   steps: Joi.array()
     .items(baseHowItWorksStepSchema)
     .min(1)
@@ -104,12 +139,21 @@ const baseHowItWorksSectionSchema = Joi.object({
       "array.min": "At least one step is required",
       "any.required": "Steps are required",
     }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Product Category Section Schema
 const baseProductCategorySectionSchema = Joi.object({
   title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
+  productCategoryIds: Joi.array()
+    .items(Joi.string().trim().length(24).hex())
+    .min(1)
+    .optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Mission Section Schema
@@ -120,6 +164,8 @@ const baseMissionSectionSchema = Joi.object({
   }),
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Feature Schema
@@ -135,11 +181,14 @@ const baseFeatureSchema = Joi.object({
 // Features Section Schema
 const baseFeaturesSectionSchema = Joi.object({
   title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
   features: Joi.array().items(baseFeatureSchema).min(1).required().messages({
     "array.min": "At least one feature is required",
     "any.required": "Features are required",
   }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Designed by Science Step Schema
@@ -160,23 +209,59 @@ const baseDesignedByScienceSectionSchema = Joi.object({
   steps: Joi.array()
     .items(baseDesignedByScienceStepSchema)
     .min(1)
+    .max(4)
     .required()
     .messages({
       "array.min": "At least one step is required",
       "any.required": "Steps are required",
     }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
+});
+
+// Community / Social Proof Section Schema
+const baseCommunityMetricSchema = Joi.object({
+  label: baseStringSchema.required(),
+  value: Joi.alternatives()
+    .try(Joi.string().trim().min(1).required(), Joi.number().required())
+    .required(),
+  order: Joi.number().integer().min(0).optional().default(0),
+});
+
+const baseCommunitySectionSchema = Joi.object({
+  backgroundImage: Joi.string().uri().required().messages({
+    "string.uri": "Background image must be a valid URL",
+    "any.required": "Background image is required",
+  }),
+  title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
+  metrics: Joi.array()
+    .items(baseCommunityMetricSchema)
+    .min(1)
+    .max(6)
+    .required()
+    .messages({
+      "array.min": "At least one metric is required",
+      "any.required": "Metrics are required",
+    }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Customer Results Section Schema
 const baseCustomerResultsSectionSchema = Joi.object({
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Blog Section Schema
 const baseBlogSectionSchema = Joi.object({
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // FAQ Item Schema
@@ -194,6 +279,25 @@ const baseFAQSectionSchema = Joi.object({
     "array.min": "At least one FAQ is required",
     "any.required": "FAQs are required",
   }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
+});
+
+// Testimonials Section Schema
+const baseTestimonialsSectionSchema = Joi.object({
+  title: baseStringSchema.required(),
+  subTitle: baseStringSchema.optional(),
+  testimonialIds: Joi.array()
+    .items(Joi.string().trim().length(24).hex())
+    .min(1)
+    .max(10)
+    .required()
+    .messages({
+      "array.min": "At least one testimonial is required",
+      "any.required": "Testimonials are required",
+    }),
+  isEnabled: Joi.boolean().optional(),
+  order: Joi.number().integer().min(0).optional(),
 });
 
 // Schemas with JSON support for form data
@@ -215,6 +319,9 @@ const productCategorySectionSchema = withJsonSupport(
     allowEmpty: true,
   }
 ).optional();
+const communitySectionSchema = withJsonSupport(baseCommunitySectionSchema, {
+  allowEmpty: true,
+}).optional();
 const missionSectionSchema = withJsonSupport(baseMissionSectionSchema, {
   allowEmpty: true,
 }).optional();
@@ -239,6 +346,12 @@ const blogSectionSchema = withJsonSupport(baseBlogSectionSchema, {
 const faqSectionSchema = withJsonSupport(baseFAQSectionSchema, {
   allowEmpty: true,
 }).optional();
+const testimonialsSectionSchema = withJsonSupport(
+  baseTestimonialsSectionSchema,
+  {
+    allowEmpty: true,
+  }
+).optional();
 
 // Create Landing Page Schema
 export const createLandingPageSchema = Joi.object(
@@ -249,6 +362,7 @@ export const createLandingPageSchema = Joi.object(
     productCategorySection: productCategorySectionSchema.label(
       "Product category section"
     ),
+    communitySection: communitySectionSchema.label("Community section"),
     missionSection: missionSectionSchema.label("Mission section"),
     featuresSection: featuresSectionSchema.label("Features section"),
     designedByScienceSection: designedByScienceSectionSchema.label(
@@ -259,6 +373,9 @@ export const createLandingPageSchema = Joi.object(
     ),
     blogSection: blogSectionSchema.label("Blog section"),
     faqSection: faqSectionSchema.label("FAQ section"),
+    testimonialsSection: testimonialsSectionSchema.label(
+      "Testimonials section"
+    ),
     isActive: Joi.boolean().optional().default(true).label("Is active"),
   })
 ).label("CreateLandingPage");
@@ -276,6 +393,9 @@ export const updateLandingPageSchema = Joi.object(
     productCategorySection: productCategorySectionSchema
       .optional()
       .label("Product category section"),
+    communitySection: communitySectionSchema
+      .optional()
+      .label("Community section"),
     missionSection: missionSectionSchema.optional().label("Mission section"),
     featuresSection: featuresSectionSchema.optional().label("Features section"),
     designedByScienceSection: designedByScienceSectionSchema
@@ -286,6 +406,9 @@ export const updateLandingPageSchema = Joi.object(
       .label("Customer results section"),
     blogSection: blogSectionSchema.optional().label("Blog section"),
     faqSection: faqSectionSchema.optional().label("FAQ section"),
+    testimonialsSection: testimonialsSectionSchema
+      .optional()
+      .label("Testimonials section"),
     isActive: Joi.boolean().optional().label("Is active"),
   })
 )

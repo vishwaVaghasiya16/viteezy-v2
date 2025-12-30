@@ -65,13 +65,18 @@ const buildNestedStructure = (body: any): any => {
     }
     
     // Skip file upload fields (handled by image upload middleware)
-    if (key === "heroSection_media_url" ||
-        key === "heroSectionMedia" || 
+    if (key === "heroSection_image_url" ||
+        key === "heroSection_video_url" ||
+        key === "heroSection_media_url" ||
+        key === "heroSectionMedia" ||
+        key === "heroBackgroundImage" ||
         key === "membershipBackgroundImage" || 
         key === "missionBackgroundImage" ||
         key === "howItWorksStepImages" ||
         key === "designedByScienceStepImages" ||
-        key === "featureIcons") {
+        key === "featureIcons" ||
+        key === "heroPrimaryCTAImages" ||
+        key === "communityBackgroundImage") {
       continue;
     }
     
@@ -113,11 +118,96 @@ export const parseLandingPageFormData = (
   try {
     // Parse nested fields from form-data
     const parsed = buildNestedStructure(req.body);
+
+    // Normalize heroSection.highlightedText coming from keys like:
+    // heroSection_highlightedText_0, heroSection_highlightedText_1, ...
+    if (parsed.heroSection && Array.isArray(parsed.heroSection.highlightedText)) {
+      parsed.heroSection.highlightedText = parsed.heroSection.highlightedText.map(
+        (item: any) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const firstKey = Object.keys(item)[0];
+            const value = (item as any)[firstKey];
+            return typeof value === "string" ? value : String(value);
+          }
+          return item;
+        }
+      );
+    }
+
+    // Normalize productCategorySection.productCategoryIds coming from keys like:
+    // productCategorySection_productCategoryIds_0, productCategorySection_productCategoryIds_1, ...
+    if (
+      parsed.productCategorySection &&
+      Array.isArray(parsed.productCategorySection.productCategoryIds)
+    ) {
+      parsed.productCategorySection.productCategoryIds =
+        parsed.productCategorySection.productCategoryIds.map((item: any) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const firstKey = Object.keys(item)[0];
+            const value = (item as any)[firstKey];
+            return typeof value === "string" ? value : String(value);
+          }
+          return item;
+        });
+    }
+
+    // Normalize testimonialsSection.testimonialIds coming from keys like:
+    // testimonialsSection_testimonialIds_0, testimonialsSection_testimonialIds_1, ...
+    if (
+      parsed.testimonialsSection &&
+      Array.isArray(parsed.testimonialsSection.testimonialIds)
+    ) {
+      parsed.testimonialsSection.testimonialIds =
+        parsed.testimonialsSection.testimonialIds.map((item: any) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const firstKey = Object.keys(item)[0];
+            const value = (item as any)[firstKey];
+            return typeof value === "string" ? value : String(value);
+          }
+          return item;
+        });
+    }
     
-    // Merge parsed fields back into req.body
-    Object.assign(req.body, parsed);
+    // Collect all flat field keys that were converted to nested structure
+    // These need to be removed from req.body to avoid validation errors
+    const flatFieldsToRemove = new Set<string>();
+    for (const key of Object.keys(req.body)) {
+      // Skip file upload fields (already handled by image upload middleware)
+      if (
+        key === "heroSection_image_url" ||
+        key === "heroSection_video_url" ||
+        key === "heroSection_media_url" ||
+        key === "heroSectionMedia" ||
+        key === "heroBackgroundImage" ||
+        key === "membershipBackgroundImage" ||
+        key === "missionBackgroundImage" ||
+        key === "howItWorksStepImages" ||
+        key === "designedByScienceStepImages" ||
+        key === "featureIcons" ||
+        key === "heroPrimaryCTAImages" ||
+        key === "communityBackgroundImage"
+      ) {
+        continue;
+      }
+      
+      // If key contains underscore (except isActive), it was converted to nested structure
+      if (key.includes("_") && key !== "isActive") {
+        flatFieldsToRemove.add(key);
+      }
+    }
     
-    // Handle isActive separately
+    // Remove all flat fields that were converted to nested structure
+    for (const key of flatFieldsToRemove) {
+      delete req.body[key];
+    }
+    
+    // Replace req.body with parsed nested structure (this overwrites any remaining flat fields)
+    req.body = parsed;
+    
+    // Ensure isActive is boolean if present
     if (req.body.isActive !== undefined) {
       const boolValue = toBoolean(req.body.isActive);
       if (boolValue !== undefined) {

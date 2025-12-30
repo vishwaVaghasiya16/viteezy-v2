@@ -88,6 +88,26 @@ const transformI18nStringArray = (
   return i18nArray.map((item) => getTranslatedString(item, lang));
 };
 
+interface PrimaryCTAInput {
+  label: string;
+  image?: string;
+  link?: string;
+  order?: number;
+}
+
+interface MembershipBenefitInput {
+  icon?: string;
+  title: string;
+  description?: string;
+  order?: number;
+}
+
+interface CommunityMetricInput {
+  label: string;
+  value: string | number;
+  order?: number;
+}
+
 interface CreateLandingPageData {
   heroSection: {
     media: {
@@ -95,40 +115,74 @@ interface CreateLandingPageData {
       url: string;
       sortOrder?: number;
     };
+    imageUrl?: string;
+    videoUrl?: string;
+    backgroundImage?: string;
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    subTitle?: string;
+    highlightedText?: string[];
+    primaryCTA?: PrimaryCTAInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   membershipSection?: {
     backgroundImage: string;
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    subTitle?: string;
+    benefits?: MembershipBenefitInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   howItWorksSection?: {
+    title?: string;
+    subTitle?: string;
+    stepsCount?: number;
     steps: Array<{
       image: string;
       title: string; // Simple string for now
       description?: string; // Simple string for now
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   productCategorySection?: {
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    subTitle?: string;
+    productCategoryIds?: mongoose.Types.ObjectId[] | string[];
+    isEnabled?: boolean;
+    order?: number;
+  };
+  communitySection?: {
+    backgroundImage?: string;
+    title?: string;
+    subTitle?: string;
+    metrics?: CommunityMetricInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   missionSection?: {
     backgroundImage: string;
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    isEnabled?: boolean;
+    order?: number;
   };
   featuresSection?: {
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    subTitle?: string;
     features: Array<{
       icon: string;
       title: string; // Simple string for now
       description?: string; // Simple string for now
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   designedByScienceSection?: {
     title: string; // Simple string for now
@@ -139,14 +193,27 @@ interface CreateLandingPageData {
       description?: string; // Simple string for now
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
+  };
+  testimonialsSection?: {
+    title?: string;
+    subTitle?: string;
+    testimonialIds?: (mongoose.Types.ObjectId | string)[];
+    isEnabled?: boolean;
+    order?: number;
   };
   customerResultsSection?: {
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    isEnabled?: boolean;
+    order?: number;
   };
   blogSection?: {
     title: string; // Simple string for now
     description?: string; // Simple string for now
+    isEnabled?: boolean;
+    order?: number;
   };
   faqSection?: {
     title: string; // Simple string for now
@@ -156,6 +223,8 @@ interface CreateLandingPageData {
       answer?: string; // Simple string for now
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   isActive?: boolean;
   createdBy?: mongoose.Types.ObjectId;
@@ -168,67 +237,116 @@ interface UpdateLandingPageData {
       url: string;
       sortOrder?: number;
     };
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    imageUrl?: string;
+    videoUrl?: string;
+    backgroundImage?: string;
+    title?: string;
+    description?: string;
+    subTitle?: string;
+    highlightedText?: string[];
+    primaryCTA?: PrimaryCTAInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   membershipSection?: {
     backgroundImage?: string;
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    subTitle?: string;
+    benefits?: MembershipBenefitInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   howItWorksSection?: {
+    title?: string;
+    subTitle?: string;
+    stepsCount?: number;
     steps?: Array<{
       image?: string;
-      title?: string; // Simple string for now
-      description?: string; // Simple string for now
+      title?: string;
+      description?: string;
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   productCategorySection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    subTitle?: string;
+    productCategoryIds?: (mongoose.Types.ObjectId | string)[];
+    isEnabled?: boolean;
+    order?: number;
+  };
+  communitySection?: {
+    backgroundImage?: string;
+    title?: string;
+    subTitle?: string;
+    metrics?: CommunityMetricInput[];
+    isEnabled?: boolean;
+    order?: number;
   };
   missionSection?: {
     backgroundImage?: string;
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    isEnabled?: boolean;
+    order?: number;
   };
   featuresSection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    subTitle?: string;
     features?: Array<{
       icon?: string;
-      title?: string; // Simple string for now
-      description?: string; // Simple string for now
+      title?: string;
+      description?: string;
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   designedByScienceSection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
     steps?: Array<{
       image?: string;
-      title?: string; // Simple string for now
-      description?: string; // Simple string for now
+      title?: string;
+      description?: string;
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
+  };
+  testimonialsSection?: {
+    title?: string;
+    subTitle?: string;
+    testimonialIds?: (mongoose.Types.ObjectId | string)[];
+    isEnabled?: boolean;
+    order?: number;
   };
   customerResultsSection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    isEnabled?: boolean;
+    order?: number;
   };
   blogSection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
+    isEnabled?: boolean;
+    order?: number;
   };
   faqSection?: {
-    title?: string; // Simple string for now
-    description?: string; // Simple string for now
+    title?: string;
+    description?: string;
     faqs?: Array<{
-      question?: string; // Simple string for now
-      answer?: string; // Simple string for now
+      question?: string;
+      answer?: string;
       order?: number;
     }>;
+    isEnabled?: boolean;
+    order?: number;
   };
   isActive?: boolean;
   updatedBy?: mongoose.Types.ObjectId;
@@ -243,9 +361,11 @@ class LandingPageService {
   ): Promise<{ landingPage: any; message: string }> {
     // Convert simple strings to I18n format for database
     const landingPageData: any = {
-      ...data,
       heroSection: {
         ...data.heroSection,
+        imageUrl: data.heroSection.imageUrl,
+        videoUrl: data.heroSection.videoUrl,
+        backgroundImage: data.heroSection.backgroundImage,
         title:
           typeof data.heroSection.title === "string"
             ? { en: data.heroSection.title }
@@ -255,10 +375,38 @@ class LandingPageService {
             ? { en: data.heroSection.description }
             : data.heroSection.description
           : undefined,
+        subTitle: data.heroSection.subTitle
+          ? typeof data.heroSection.subTitle === "string"
+            ? { en: data.heroSection.subTitle }
+            : data.heroSection.subTitle
+          : undefined,
+        highlightedText: Array.isArray(data.heroSection.highlightedText)
+          ? data.heroSection.highlightedText.map((text) =>
+              typeof text === "string" ? { en: text } : text
+            )
+          : undefined,
+        primaryCTA: Array.isArray(data.heroSection.primaryCTA)
+          ? data.heroSection.primaryCTA.map((cta) => ({
+              label:
+                typeof cta.label === "string"
+                  ? { en: cta.label }
+                  : (cta as any).label,
+              image: cta.image,
+              link: cta.link,
+              order: cta.order ?? 0,
+            }))
+          : undefined,
+        isEnabled:
+          data.heroSection.isEnabled !== undefined
+            ? data.heroSection.isEnabled
+            : true,
+        order: data.heroSection.order ?? 0,
         media: {
           ...data.heroSection.media,
         },
       },
+      isActive: data.isActive ?? true,
+      createdBy: data.createdBy,
     };
 
     // Convert membership section strings to I18n format
@@ -274,12 +422,50 @@ class LandingPageService {
             ? { en: data.membershipSection.description }
             : data.membershipSection.description
           : undefined,
+        subTitle: data.membershipSection.subTitle
+          ? typeof data.membershipSection.subTitle === "string"
+            ? { en: data.membershipSection.subTitle }
+            : data.membershipSection.subTitle
+          : undefined,
+        benefits: Array.isArray(data.membershipSection.benefits)
+          ? data.membershipSection.benefits.map((benefit) => ({
+              icon: benefit.icon,
+              title:
+                typeof benefit.title === "string"
+                  ? { en: benefit.title }
+                  : (benefit as any).title,
+              description: benefit.description
+                ? typeof benefit.description === "string"
+                  ? { en: benefit.description }
+                  : (benefit as any).description
+                : undefined,
+              order: benefit.order ?? 0,
+            }))
+          : undefined,
+        isEnabled:
+          data.membershipSection.isEnabled !== undefined
+            ? data.membershipSection.isEnabled
+            : true,
+        order: data.membershipSection.order ?? 0,
       };
     }
 
     // Convert how it works section strings to I18n format
     if (data.howItWorksSection && data.howItWorksSection.steps) {
       landingPageData.howItWorksSection = {
+        title: data.howItWorksSection.title
+          ? typeof data.howItWorksSection.title === "string"
+            ? { en: data.howItWorksSection.title }
+            : (data.howItWorksSection as any).title
+          : undefined,
+        subTitle: data.howItWorksSection.subTitle
+          ? typeof data.howItWorksSection.subTitle === "string"
+            ? { en: data.howItWorksSection.subTitle }
+            : (data.howItWorksSection as any).subTitle
+          : undefined,
+        stepsCount:
+          data.howItWorksSection.stepsCount ??
+          data.howItWorksSection.steps.length,
         steps: data.howItWorksSection.steps.map((step) => ({
           image: step.image,
           title:
@@ -291,6 +477,11 @@ class LandingPageService {
             : undefined,
           order: step.order || 0,
         })),
+        isEnabled:
+          data.howItWorksSection.isEnabled !== undefined
+            ? data.howItWorksSection.isEnabled
+            : true,
+        order: data.howItWorksSection.order ?? 0,
       };
     }
 
@@ -306,6 +497,49 @@ class LandingPageService {
             ? { en: data.productCategorySection.description }
             : data.productCategorySection.description
           : undefined,
+        subTitle: data.productCategorySection.subTitle
+          ? typeof data.productCategorySection.subTitle === "string"
+            ? { en: data.productCategorySection.subTitle }
+            : (data.productCategorySection as any).subTitle
+          : undefined,
+        productCategoryIds: data.productCategorySection.productCategoryIds,
+        isEnabled:
+          data.productCategorySection.isEnabled !== undefined
+            ? data.productCategorySection.isEnabled
+            : true,
+        order: data.productCategorySection.order ?? 0,
+      };
+    }
+
+    // Community / Social Proof section
+    if (data.communitySection) {
+      landingPageData.communitySection = {
+        backgroundImage: data.communitySection.backgroundImage,
+        title: data.communitySection.title
+          ? typeof data.communitySection.title === "string"
+            ? { en: data.communitySection.title }
+            : (data.communitySection as any).title
+          : undefined,
+        subTitle: data.communitySection.subTitle
+          ? typeof data.communitySection.subTitle === "string"
+            ? { en: data.communitySection.subTitle }
+            : (data.communitySection as any).subTitle
+          : undefined,
+        metrics: Array.isArray(data.communitySection.metrics)
+          ? data.communitySection.metrics.map((metric) => ({
+              label:
+                typeof metric.label === "string"
+                  ? { en: metric.label }
+                  : (metric as any).label,
+              value: metric.value,
+              order: metric.order ?? 0,
+            }))
+          : undefined,
+        isEnabled:
+          data.communitySection.isEnabled !== undefined
+            ? data.communitySection.isEnabled
+            : true,
+        order: data.communitySection.order ?? 0,
       };
     }
 
@@ -322,6 +556,11 @@ class LandingPageService {
             ? { en: data.missionSection.description }
             : data.missionSection.description
           : undefined,
+        isEnabled:
+          data.missionSection.isEnabled !== undefined
+            ? data.missionSection.isEnabled
+            : true,
+        order: data.missionSection.order ?? 0,
       };
     }
 
@@ -337,6 +576,11 @@ class LandingPageService {
             ? { en: data.featuresSection.description }
             : data.featuresSection.description
           : undefined,
+        subTitle: data.featuresSection.subTitle
+          ? typeof data.featuresSection.subTitle === "string"
+            ? { en: data.featuresSection.subTitle }
+            : (data.featuresSection as any).subTitle
+          : undefined,
         features: data.featuresSection.features.map((feature) => ({
           icon: feature.icon,
           title:
@@ -350,6 +594,11 @@ class LandingPageService {
             : undefined,
           order: feature.order || 0,
         })),
+        isEnabled:
+          data.featuresSection.isEnabled !== undefined
+            ? data.featuresSection.isEnabled
+            : true,
+        order: data.featuresSection.order ?? 0,
       };
     }
 
@@ -376,6 +625,33 @@ class LandingPageService {
             : undefined,
           order: step.order || 0,
         })),
+        isEnabled:
+          data.designedByScienceSection.isEnabled !== undefined
+            ? data.designedByScienceSection.isEnabled
+            : true,
+        order: data.designedByScienceSection.order ?? 0,
+      };
+    }
+
+    // Testimonials Section
+    if (data.testimonialsSection) {
+      landingPageData.testimonialsSection = {
+        title: data.testimonialsSection.title
+          ? typeof data.testimonialsSection.title === "string"
+            ? { en: data.testimonialsSection.title }
+            : (data.testimonialsSection as any).title
+          : undefined,
+        subTitle: data.testimonialsSection.subTitle
+          ? typeof data.testimonialsSection.subTitle === "string"
+            ? { en: data.testimonialsSection.subTitle }
+            : (data.testimonialsSection as any).subTitle
+          : undefined,
+        testimonialIds: data.testimonialsSection.testimonialIds,
+        isEnabled:
+          data.testimonialsSection.isEnabled !== undefined
+            ? data.testimonialsSection.isEnabled
+            : true,
+        order: data.testimonialsSection.order ?? 0,
       };
     }
 
@@ -391,6 +667,11 @@ class LandingPageService {
             ? { en: data.customerResultsSection.description }
             : data.customerResultsSection.description
           : undefined,
+        isEnabled:
+          data.customerResultsSection.isEnabled !== undefined
+            ? data.customerResultsSection.isEnabled
+            : true,
+        order: data.customerResultsSection.order ?? 0,
       };
     }
 
@@ -406,6 +687,11 @@ class LandingPageService {
             ? { en: data.blogSection.description }
             : data.blogSection.description
           : undefined,
+        isEnabled:
+          data.blogSection.isEnabled !== undefined
+            ? data.blogSection.isEnabled
+            : true,
+        order: data.blogSection.order ?? 0,
       };
     }
 
@@ -433,6 +719,11 @@ class LandingPageService {
             : undefined,
           order: faq.order || 0,
         })),
+        isEnabled:
+          data.faqSection.isEnabled !== undefined
+            ? data.faqSection.isEnabled
+            : true,
+        order: data.faqSection.order ?? 0,
       };
     }
 
@@ -856,7 +1147,9 @@ class LandingPageService {
       console.log(`[Transform] Hero title after transformation:`, heroTitle);
       
       transformed.heroSection = {
-        media: landingPage.heroSection.media,
+        imageUrl: landingPage.heroSection.imageUrl,
+        videoUrl: landingPage.heroSection.videoUrl,
+        backgroundImage: landingPage.heroSection.backgroundImage,
         title: heroTitle,
         highlightedText: transformI18nStringArray(
           landingPage.heroSection.highlightedText || [],

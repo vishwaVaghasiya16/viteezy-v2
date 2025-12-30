@@ -40,7 +40,10 @@ const PrimaryCTASchema = new Schema<PrimaryCTA>(
 );
 
 export interface HeroSection {
-  media: MediaType; // Image or video
+  media: MediaType; // Image or video (type determines which is active)
+  imageUrl?: string; // Optional: Image URL (stored separately)
+  videoUrl?: string; // Optional: Video URL (stored separately)
+  backgroundImage?: string; // Optional background image URL (separate from media)
   title: I18nStringType;
   highlightedText: I18nStringType[]; // Array of highlighted texts
   subTitle: I18nStringType;
@@ -55,6 +58,18 @@ const HeroSectionSchema = new Schema<HeroSection>(
     media: {
       type: MediaSchema,
       required: true,
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
+    },
+    videoUrl: {
+      type: String,
+      trim: true,
+    },
+    backgroundImage: {
+      type: String,
+      trim: true,
     },
     title: {
       type: I18nString,
