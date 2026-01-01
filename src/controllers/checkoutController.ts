@@ -8,7 +8,7 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
-import { Wishlists } from "../models/commerce";
+import { Carts, Wishlists } from "../models/commerce";
 import {
   I18nStringType,
   I18nTextType,
@@ -992,6 +992,26 @@ class CheckoutController {
       const userId = req.user?._id || req.userId;
       if (!userId) {
         throw new AppError("User authentication required", 401);
+      }
+
+      const findCart = await Carts.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      }).lean();
+
+      if (!findCart) {
+        throw new AppError("Cart not found", 404);
+      }
+
+      if (!findCart.items || findCart.items.length === 0) {
+        throw new AppError("Cart is empty", 400);
+      }
+
+      if (findCart.variantType !== req.body.variantType) {
+        throw new AppError(
+          "Cart variant type does not match the request variant type",
+          400
+        );
       }
 
       // Extract body parameters (with defaults applied by Joi validation)
