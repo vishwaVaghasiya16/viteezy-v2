@@ -208,7 +208,7 @@ class SubscriptionController {
       // Get subscriptions
       const [subscriptions, total] = await Promise.all([
         Subscriptions.find(query)
-          .populate("orderId", "orderNumber status")
+          .populate("orderId", "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency")
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(paginationOptions.limit)
