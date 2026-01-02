@@ -147,10 +147,14 @@ export const createOrderSchema = Joi.object(
     planDurationDays: Joi.number()
       .integer()
       .valid(30, 60, 90, 180)
-      .when("isOneTime", {
-        is: true,
-        then: Joi.valid(30, 60).required(),
-        otherwise: Joi.valid(30, 60, 90, 180).required(),
+      .when("variantType", {
+        is: "STAND_UP_POUCH",
+        then: Joi.optional(),
+        otherwise: Joi.when("isOneTime", {
+          is: true,
+          then: Joi.valid(30, 60).required(),
+          otherwise: Joi.valid(30, 60, 90, 180).required(),
+        }),
       })
       .label("Plan Duration Days"),
     isOneTime: Joi.boolean().required().label("Is One Time Purchase"),

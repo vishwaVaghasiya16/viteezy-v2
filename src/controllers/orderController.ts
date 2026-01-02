@@ -400,12 +400,12 @@ class OrderController {
       // Validate planDurationDays based on isOneTime
       if (isOneTime) {
         // For one-time purchase, planDurationDays must be 30 or 60
-        if (!planDurationDays || ![30, 60].includes(planDurationDays)) {
-          throw new AppError(
-            "For one-time purchase, planDurationDays must be 30 or 60",
-            400
-          );
-        }
+        // if (!planDurationDays || ![30, 60].includes(planDurationDays)) {
+        //   throw new AppError(
+        //     "For one-time purchase, planDurationDays must be 30 or 60",
+        //     400
+        //   );
+        // }
       } else {
         // For subscription, planDurationDays must be 30, 60, 90, or 180
         if (
