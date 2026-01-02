@@ -412,6 +412,24 @@ class EmailService {
   }
 
   /**
+   * Send custom HTML email (public method)
+   */
+  async sendCustomEmail(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string
+  ): Promise<boolean> {
+    try {
+      await this.sendEmail({ to, subject, html, text });
+      return true;
+    } catch (error) {
+      logger.error("Failed to send custom email:", error);
+      return false;
+    }
+  }
+
+  /**
    * Generic email sending method using SendGrid
    */
   private async sendEmail(options: EmailOptions): Promise<void> {

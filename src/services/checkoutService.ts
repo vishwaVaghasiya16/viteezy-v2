@@ -1635,6 +1635,7 @@ class CheckoutService {
           };
           membershipDiscount: number;
         }>;
+        cartId: string;
       };
       subscriptionPlans: Array<{
         planKey: string;
@@ -2282,6 +2283,7 @@ class CheckoutService {
       data: {
         cart: {
           items: cartItems as any,
+          cartId: cart._id.toString(),
         },
         subscriptionPlans,
         pricing: {

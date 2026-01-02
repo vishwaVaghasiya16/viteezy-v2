@@ -10,6 +10,7 @@ import { emailService } from "./emailService";
 import { generateMemberId } from "../utils/memberIdGenerator";
 import { firebaseService } from "./firebaseService";
 import { config } from "../config";
+import { referralService } from "./referralService";
 
 /**
  * Helper function to split full name into firstName and lastName
@@ -354,6 +355,9 @@ class AuthService {
     // Generate unique member ID for new user
     const memberId = await generateMemberId();
 
+    // Generate unique referral code for new user
+    const referralCode = await referralService.generateReferralCode(firstName);
+
     // Create user (password will be hashed by pre-save hook)
     // registeredAt will be automatically set by pre-save hook
     const user = await User.create({
@@ -364,6 +368,7 @@ class AuthService {
       phone,
       countryCode,
       memberId, // Assign generated member ID
+      referralCode, // Assign generated referral code
       isEmailVerified: false,
     });
 
@@ -714,6 +719,7 @@ class AuthService {
     if (!user) {
       // Create new user for Apple login (Register)
       const memberId = await generateMemberId();
+      const referralCode = await referralService.generateReferralCode(firstName);
       user = await User.create({
         firstName,
         lastName,
@@ -721,6 +727,7 @@ class AuthService {
         password: crypto.randomBytes(32).toString("hex"), // Random password since Apple handles auth
         isEmailVerified: firebaseUser.emailVerified, // Apple emails are typically verified
         memberId,
+        referralCode,
       });
 
       logger.info(`New user registered via Apple login: ${user.email}`);
@@ -1433,6 +1440,7 @@ class AuthService {
       if (!user) {
         // Create new user for Google login (Register) - same pattern as Apple login
         const memberId = await generateMemberId();
+        const referralCode = await referralService.generateReferralCode(firstName);
         user = await User.create({
           firstName,
           lastName,
@@ -1441,6 +1449,7 @@ class AuthService {
           isEmailVerified: true, // Google emails are verified
           avatar: picture || null,
           memberId,
+          referralCode,
         });
 
         logger.info(`New user registered via Google login: ${user.email}`);
@@ -1625,6 +1634,9 @@ class AuthService {
     // Generate unique member ID for family member
     const memberId = await generateMemberId();
 
+    // Generate unique referral code for family member
+    const referralCode = await referralService.generateReferralCode(firstName);
+
     // Create family member user
     // For sub-members, email is optional, so we handle it accordingly
     const familyMemberData: any = {
@@ -1636,6 +1648,7 @@ class AuthService {
       gender,
       age,
       memberId,
+      referralCode,
       isSubMember: true,
       parentMemberId: parentMember._id,
       relationshipToParent,

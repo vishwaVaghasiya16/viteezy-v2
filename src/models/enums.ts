@@ -314,6 +314,13 @@ export enum SessionStatus {
   REVOKED = "Revoked",
 }
 
+// Referral Status
+export enum ReferralStatus {
+  PENDING = "Pending",
+  PAID = "Paid",
+  COMPLETED = "Completed",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -362,3 +369,4 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
   SubscriptionCycle.DAYS_180,
 ];
 export const SESSION_STATUS_VALUES = Object.values(SessionStatus);
+export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);

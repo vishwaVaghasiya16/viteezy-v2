@@ -35,6 +35,7 @@ export interface IUser extends Document {
   age?: number;
   language?: string; // User's preferred language (default: "English")
   memberId?: string; // Unique member ID (e.g., MEM-A9XK72QD)
+  referralCode?: string; // Unique referral code (e.g., JOHN12345)
   isMember?: boolean;
   membershipStatus?: MembershipStatus;
   membershipPlanId?: Schema.Types.ObjectId;
@@ -163,6 +164,14 @@ const userSchema = new Schema<IUser>(
       uppercase: true,
       match: [/^MEM-[A-Z0-9]{8}$/, "Invalid member ID format"],
       // Note: unique: true automatically creates an index, so index: true is not needed
+    },
+    referralCode: {
+      type: String,
+      unique: true,
+      sparse: true, // Allow null values but ensure uniqueness when present
+      trim: true,
+      uppercase: true,
+      index: true,
     },
     isMember: {
       type: Boolean,

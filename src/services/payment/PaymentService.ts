@@ -548,38 +548,60 @@ export class PaymentService {
           if (order.couponCode && order.couponDiscountAmount > 0) {
             console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
             try {
-              // Find the coupon by code
-              const coupon = await Coupons.findOne({
-                code: order.couponCode.toUpperCase(),
+              // Check if it's a referral code first
+              const { User } = await import("@/models/core");
+              const referrer = await User.findOne({
+                referralCode: order.couponCode.toUpperCase(),
+                isDeleted: false,
               });
-              if (coupon) {
-                await couponUsageHistoryService.trackCouponUsage({
-                  couponId: coupon._id as mongoose.Types.ObjectId,
-                  userId: order.userId as mongoose.Types.ObjectId,
-                  orderId: order._id as mongoose.Types.ObjectId,
-                  discountAmount: {
-                    amount: order.couponDiscountAmount,
-                    currency: order.currency,
-                    taxRate: 0,
-                  },
-                  couponCode: order.couponCode,
-                  orderNumber: order.orderNumber,
-                });
+
+              if (referrer) {
+                // It's a referral code, update referral status
                 console.log(
-                  "✅ [PAYMENT SERVICE] - Coupon usage tracked successfully"
+                  "🟢 [PAYMENT SERVICE] Step 8.1.1: Updating referral status"
+                );
+                const { referralService } = await import("@/services/referralService");
+                await referralService.updateReferralStatusToPaid(
+                  (order._id as mongoose.Types.ObjectId).toString(),
+                  (payment._id as mongoose.Types.ObjectId).toString()
+                );
+                console.log(
+                  "✅ [PAYMENT SERVICE] - Referral status updated to PAID"
                 );
               } else {
-                console.warn(
-                  `⚠️ [PAYMENT SERVICE] - Coupon not found: ${order.couponCode}`
-                );
+                // It's a regular coupon, track coupon usage
+                const coupon = await Coupons.findOne({
+                  code: order.couponCode.toUpperCase(),
+                });
+                if (coupon) {
+                  await couponUsageHistoryService.trackCouponUsage({
+                    couponId: coupon._id as mongoose.Types.ObjectId,
+                    userId: order.userId as mongoose.Types.ObjectId,
+                    orderId: order._id as mongoose.Types.ObjectId,
+                    discountAmount: {
+                      amount: order.couponDiscountAmount,
+                      currency: order.currency,
+                      taxRate: 0,
+                    },
+                    couponCode: order.couponCode,
+                    orderNumber: order.orderNumber,
+                  });
+                  console.log(
+                    "✅ [PAYMENT SERVICE] - Coupon usage tracked successfully"
+                  );
+                } else {
+                  console.warn(
+                    `⚠️ [PAYMENT SERVICE] - Coupon not found: ${order.couponCode}`
+                  );
+                }
               }
             } catch (couponError: any) {
               // Log error but don't fail the entire webhook processing
               console.error(
-                "❌ [PAYMENT SERVICE] - Failed to track coupon usage:",
+                "❌ [PAYMENT SERVICE] - Failed to track coupon/referral usage:",
                 couponError.message
               );
-              logger.error("Failed to track coupon usage:", couponError);
+              logger.error("Failed to track coupon/referral usage:", couponError);
             }
           }
 
@@ -588,6 +610,23 @@ export class PaymentService {
           );
           await this.handleOrderConfirmation(order, payment);
           console.log("✅ [PAYMENT SERVICE] - Order confirmation email sent");
+
+          // Check if this user (referrer) has any PAID referrals and mark them as COMPLETED
+          // This happens when Customer 1's recurring payment is processed
+          try {
+            const { referralService } = await import("@/services/referralService");
+            await referralService.updateReferralStatusToCompleted(
+              (order.userId as mongoose.Types.ObjectId).toString(),
+              (order._id as mongoose.Types.ObjectId).toString()
+            );
+          } catch (referralError: any) {
+            // Log error but don't fail the entire webhook processing
+            console.error(
+              "❌ [PAYMENT SERVICE] - Failed to update referral status to COMPLETED:",
+              referralError.message
+            );
+            logger.error("Failed to update referral status to COMPLETED:", referralError);
+          }
 
           // ========== SUBSCRIPTION CREATION LOGIC ==========
           // Auto-create subscription if order is eligible

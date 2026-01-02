@@ -4,7 +4,7 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { Orders, Payments, Products, Coupons, Carts } from "@/models/commerce";
-import { Addresses } from "@/models/core";
+import { Addresses, User } from "@/models/core";
 import {
   CouponType,
   OrderPlanType,
@@ -907,6 +907,38 @@ class OrderController {
         metadata: orderMetadata,
         notes,
       });
+
+      // Check if couponCode is a referral code and create referral record
+      if (normalizedCouponCode) {
+        try {
+          const referrer = await User.findOne({
+            referralCode: normalizedCouponCode,
+            isDeleted: false,
+            isActive: true,
+          });
+
+          if (referrer && referrer._id.toString() !== userId.toString()) {
+            // It's a referral code, create referral record
+            const { referralService } = await import("@/services/referralService");
+            await referralService.createReferralRecord(
+              referrer._id.toString(),
+              userId.toString(),
+              normalizedCouponCode,
+              (order._id as mongoose.Types.ObjectId).toString(),
+              roundAmount(discountedPrice)
+            );
+            logger.info(
+              `Referral record created for order ${order.orderNumber} with referral code ${normalizedCouponCode}`
+            );
+          }
+        } catch (error: any) {
+          // Log error but don't fail order creation
+          logger.error(
+            `Failed to create referral record for order ${order.orderNumber}:`,
+            error
+          );
+        }
+      }
 
       const orderData = order.toObject();
 
