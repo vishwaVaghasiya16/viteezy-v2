@@ -1007,13 +1007,6 @@ class CheckoutController {
         throw new AppError("Cart is empty", 400);
       }
 
-      if (findCart.variantType !== req.body.variantType) {
-        throw new AppError(
-          "Cart variant type does not match the request variant type",
-          400
-        );
-      }
-
       // Extract body parameters (with defaults applied by Joi validation)
       const {
         planDurationDays = 180,
@@ -1024,6 +1017,19 @@ class CheckoutController {
         shippingAddressId,
         billingAddressId,
       } = req.body;
+
+      // Validate variant type only if cart has a variantType set
+      // If cart variantType is null/undefined, allow the request to proceed
+      if (
+        findCart.variantType &&
+        variantType &&
+        findCart.variantType !== variantType
+      ) {
+        throw new AppError(
+          "Cart variant type does not match the request variant type",
+          400
+        );
+      }
 
       const result = await checkoutService.getCheckoutPageSummary(userId, {
         planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
