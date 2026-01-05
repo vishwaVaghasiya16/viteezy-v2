@@ -4,7 +4,14 @@ import { ProductIngredients } from "../models/commerce/productIngredients.model"
 import { ProductCategory } from "../models/commerce/categories.model";
 import { Orders } from "../models/commerce/orders.model";
 import { ProductFAQs } from "../models/commerce/productFaqs.model";
-import { ProductStatus, ProductVariant, ReviewStatus, OrderStatus, PaymentStatus, FAQStatus } from "../models/enums";
+import {
+  ProductStatus,
+  ProductVariant,
+  ReviewStatus,
+  OrderStatus,
+  PaymentStatus,
+  FAQStatus,
+} from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
@@ -17,6 +24,11 @@ export type ProductSortOption =
   | "priceHighToLow"
   | "rating"
   | "trending";
+
+export interface ProductSortOptionItem {
+  label: string;
+  value: ProductSortOption;
+}
 
 interface CreateProductData {
   title: string;
@@ -246,9 +258,8 @@ class ProductService {
     // Calculate savingsPercentage if discountedPrice is provided
     let savingsPercentage = priceObj.savingsPercentage;
     if (discountedPrice !== undefined && amount > 0) {
-      savingsPercentage = Math.round(
-        ((amount - discountedPrice) / amount) * 100 * 100
-      ) / 100; // Round to 2 decimal places
+      savingsPercentage =
+        Math.round(((amount - discountedPrice) / amount) * 100 * 100) / 100; // Round to 2 decimal places
     }
 
     // Calculate totalAmount
@@ -257,7 +268,8 @@ class ProductService {
     // taxRate is now a direct amount (not percentage), so add it directly
     let totalAmount = priceObj.totalAmount;
     if (totalAmount === undefined) {
-      const baseAmount = discountedPrice !== undefined ? discountedPrice : amount;
+      const baseAmount =
+        discountedPrice !== undefined ? discountedPrice : amount;
       totalAmount = Math.round((baseAmount + taxRate) * 100) / 100;
     }
 
@@ -265,7 +277,8 @@ class ProductService {
       ...priceObj,
       amount,
       taxRate,
-      savingsPercentage: savingsPercentage !== undefined ? savingsPercentage : 0,
+      savingsPercentage:
+        savingsPercentage !== undefined ? savingsPercentage : 0,
       totalAmount,
     };
 
@@ -382,11 +395,16 @@ class ProductService {
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
-    if (!finalPrice && processedSachetPrices && processedSachetPrices.thirtyDays) {
+    if (
+      !finalPrice &&
+      processedSachetPrices &&
+      processedSachetPrices.thirtyDays
+    ) {
       const thirtyDaysPrice = processedSachetPrices.thirtyDays;
-      const baseAmount = thirtyDaysPrice.discountedPrice !== undefined
-        ? thirtyDaysPrice.discountedPrice
-        : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
+      const baseAmount =
+        thirtyDaysPrice.discountedPrice !== undefined
+          ? thirtyDaysPrice.discountedPrice
+          : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
         currency: thirtyDaysPrice.currency || "EUR",
         amount: baseAmount,
@@ -500,9 +518,7 @@ class ProductService {
    * Resolve ingredient identifiers (name) to string IDs
    * Supports both ObjectId format and name lookup (case-insensitive)
    */
-  private async resolveIngredientIds(
-    identifiers: string[]
-  ): Promise<string[]> {
+  private async resolveIngredientIds(identifiers: string[]): Promise<string[]> {
     const ids: string[] = [];
     const names: string[] = [];
 
@@ -614,10 +630,10 @@ class ProductService {
         // Escape special regex characters
         return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       });
-      
+
       // Combine all goals with | (OR) operator
       const combinedRegex = escapedGoals.join("|");
-      
+
       // Use $elemMatch to check if any element in array matches the regex pattern
       // This handles HTML tags like "<p>\"Bone Health\"</p>"
       matchStage.healthGoals = {
@@ -648,7 +664,7 @@ class ProductService {
     if (search && search.trim().length > 0) {
       hasSearch = true;
       const searchTerm = search.trim();
-      
+
       // Try text search first, but also support regex fallback for better compatibility
       // Build text search match with isDeleted filter
       const textSearchMatch: Record<string, any> = {
@@ -670,9 +686,12 @@ class ProductService {
       // Text search must be first stage
       // Use $or to support both text search and regex fallback
       const searchConditions: any[] = [textSearchMatch];
-      
+
       // Add regex fallback for better search compatibility
-      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedSearchTerm = searchTerm.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
       const regexSearchMatch: Record<string, any> = {
         $or: [
           { title: { $regex: escapedSearchTerm, $options: "i" } },
@@ -692,7 +711,7 @@ class ProductService {
         ],
         isDeleted: false,
       };
-      
+
       if (status !== undefined) {
         regexSearchMatch.status = status;
       } else {
@@ -701,9 +720,9 @@ class ProductService {
       if (variant) regexSearchMatch.variant = variant;
       if (hasStandupPouch !== undefined)
         regexSearchMatch.hasStandupPouch = hasStandupPouch;
-      
+
       searchConditions.push(regexSearchMatch);
-      
+
       pipeline.push({
         $match: {
           $or: searchConditions,
@@ -720,8 +739,20 @@ class ProductService {
                 $cond: [
                   {
                     $or: [
-                      { $regexMatch: { input: { $ifNull: ["$title", ""] }, regex: escapedSearchTerm, options: "i" } },
-                      { $regexMatch: { input: { $ifNull: ["$title.en", ""] }, regex: escapedSearchTerm, options: "i" } },
+                      {
+                        $regexMatch: {
+                          input: { $ifNull: ["$title", ""] },
+                          regex: escapedSearchTerm,
+                          options: "i",
+                        },
+                      },
+                      {
+                        $regexMatch: {
+                          input: { $ifNull: ["$title.en", ""] },
+                          regex: escapedSearchTerm,
+                          options: "i",
+                        },
+                      },
                     ],
                   },
                   10,
@@ -745,9 +776,9 @@ class ProductService {
         const escapedGoals = healthGoals.map((goal) => {
           return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         });
-        
+
         const combinedRegex = escapedGoals.join("|");
-        
+
         arrayFilters.healthGoals = {
           $elemMatch: {
             $regex: combinedRegex,
@@ -883,7 +914,7 @@ class ProductService {
 
     // Store base pipeline before adding trending stages
     const basePipeline = [...pipeline];
-    
+
     // Add trending score calculation if sortBy is "trending"
     let useTrendingSort = false;
     if (sortBy === "trending") {
@@ -909,10 +940,10 @@ class ProductService {
     if (useTrendingSort && products.length === 0) {
       // Rebuild pipeline without trending stages - use base pipeline
       const fallbackPipeline = [...basePipeline];
-      
+
       // Add sort by createdAt descending
       fallbackPipeline.push({ $sort: { createdAt: -1 } });
-      
+
       // Add facet for pagination
       fallbackPipeline.push({
         $facet: {
@@ -920,7 +951,7 @@ class ProductService {
           total: [{ $count: "value" }],
         },
       });
-      
+
       // Run aggregation again
       [aggregationResult] = await Products.aggregate(fallbackPipeline);
       products = aggregationResult?.data ?? [];
@@ -933,39 +964,41 @@ class ProductService {
     );
 
     // Add variants array to all products
-    const productsWithVariants = productsWithMonthlyAmounts.map((product: any) => {
-      // Step 1: Deep clone product to avoid any reference issues
-      const productJson = JSON.stringify(product);
-      const clonedProduct = JSON.parse(productJson);
-      
-      // Step 2: Remove variants field if it exists (to avoid conflicts)
-      delete clonedProduct.variants;
-      
-      // Step 3: Create variants array using Array.from() with explicit values
-      // This ensures it's a proper array instance
-      const variantsArray: string[] = Array.from(
-        product.hasStandupPouch === true 
-          ? (["sachets", "stand_up_pouch"] as string[])
-          : (["sachets"] as string[])
-      );
-      
-      // Step 4: Assign variants using direct property assignment
-      clonedProduct.variants = variantsArray;
-      
-      // Step 5: Final verification - ensure variants is an array
-      // If not, recreate it using Array constructor
-      if (!Array.isArray(clonedProduct.variants)) {
-        clonedProduct.variants = new Array<string>();
-        if (product.hasStandupPouch === true) {
-          clonedProduct.variants.push("sachets");
-          clonedProduct.variants.push("stand_up_pouch");
-        } else {
-          clonedProduct.variants.push("sachets");
+    const productsWithVariants = productsWithMonthlyAmounts.map(
+      (product: any) => {
+        // Step 1: Deep clone product to avoid any reference issues
+        const productJson = JSON.stringify(product);
+        const clonedProduct = JSON.parse(productJson);
+
+        // Step 2: Remove variants field if it exists (to avoid conflicts)
+        delete clonedProduct.variants;
+
+        // Step 3: Create variants array using Array.from() with explicit values
+        // This ensures it's a proper array instance
+        const variantsArray: string[] = Array.from(
+          product.hasStandupPouch === true
+            ? (["sachets", "stand_up_pouch"] as string[])
+            : (["sachets"] as string[])
+        );
+
+        // Step 4: Assign variants using direct property assignment
+        clonedProduct.variants = variantsArray;
+
+        // Step 5: Final verification - ensure variants is an array
+        // If not, recreate it using Array constructor
+        if (!Array.isArray(clonedProduct.variants)) {
+          clonedProduct.variants = new Array<string>();
+          if (product.hasStandupPouch === true) {
+            clonedProduct.variants.push("sachets");
+            clonedProduct.variants.push("stand_up_pouch");
+          } else {
+            clonedProduct.variants.push("sachets");
+          }
         }
+
+        return clonedProduct;
       }
-      
-      return clonedProduct;
-    });
+    );
 
     return { products: productsWithVariants, total };
   }
@@ -975,23 +1008,29 @@ class ProductService {
    * Returns featured products first, then fills remaining slots with recent products
    * Maximum 10 products total
    */
-  async getFeaturedOrRecentProducts(): Promise<{ products: any[]; isFeatured: boolean }> {
+  async getFeaturedOrRecentProducts(): Promise<{
+    products: any[];
+    isFeatured: boolean;
+  }> {
     const MAX_PRODUCTS = 10;
-    
+
     // First get featured products
     const featuredProducts = await Products.find({
       isDeleted: false,
       status: true,
       isFeatured: true,
     })
-      .populate("categories", "sId slug name description sortOrder icon image productCount")
+      .populate(
+        "categories",
+        "sId slug name description sortOrder icon image productCount"
+      )
       .sort({ createdAt: -1 })
       .limit(MAX_PRODUCTS)
       .lean();
 
     const featuredCount = featuredProducts?.length || 0;
     const remainingSlots = MAX_PRODUCTS - featuredCount;
-    
+
     let allProducts: any[] = [];
     let hasFeatured = false;
 
@@ -999,7 +1038,7 @@ class ProductService {
     if (featuredCount > 0) {
       hasFeatured = true;
       const featuredProductIds = featuredProducts.map((p: any) => p._id);
-      
+
       // Convert string ingredient IDs to ObjectIds and lookup for featured products
       const featuredWithIngredients = await Promise.all(
         featuredProducts.map(async (product: any) => {
@@ -1019,7 +1058,7 @@ class ProductService {
           return this.addVariantsToSingleProduct(enrichedProduct);
         })
       );
-      
+
       allProducts = [...featuredWithIngredients];
     }
 
@@ -1037,7 +1076,10 @@ class ProductService {
       }
 
       const recentProducts = await Products.find(query)
-        .populate("categories", "sId slug name description sortOrder icon image productCount")
+        .populate(
+          "categories",
+          "sId slug name description sortOrder icon image productCount"
+        )
         .sort({ createdAt: -1 })
         .limit(remainingSlots)
         .lean();
@@ -1142,7 +1184,8 @@ class ProductService {
     });
 
     // Add variants array to product
-    const productWithVariants = this.addVariantsToSingleProduct(enrichedProduct);
+    const productWithVariants =
+      this.addVariantsToSingleProduct(enrichedProduct);
 
     return { product: productWithVariants };
   }
@@ -1216,7 +1259,8 @@ class ProductService {
     });
 
     // Add variants array to product
-    const productWithVariants = this.addVariantsToSingleProduct(enrichedProduct);
+    const productWithVariants =
+      this.addVariantsToSingleProduct(enrichedProduct);
 
     return { product: productWithVariants };
   }
@@ -1267,9 +1311,10 @@ class ProductService {
     }
 
     // Process sachetPrices: calculate savingsPercentage and totalAmount (if being updated)
-    const processedSachetPrices = sachetPrices !== undefined
-      ? this.processSachetPrices(sachetPrices)
-      : sachetPrices;
+    const processedSachetPrices =
+      sachetPrices !== undefined
+        ? this.processSachetPrices(sachetPrices)
+        : sachetPrices;
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
     let normalizedStandupPouchPrice = standupPouchPrice;
@@ -1283,17 +1328,23 @@ class ProductService {
     }
 
     // Process standupPouchPrice: calculate savingsPercentage and totalAmount (if being updated)
-    const processedStandupPouchPrice = normalizedStandupPouchPrice !== undefined
-      ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
-      : normalizedStandupPouchPrice;
+    const processedStandupPouchPrice =
+      normalizedStandupPouchPrice !== undefined
+        ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
+        : normalizedStandupPouchPrice;
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
-    if (!finalPrice && processedSachetPrices && processedSachetPrices.thirtyDays) {
+    if (
+      !finalPrice &&
+      processedSachetPrices &&
+      processedSachetPrices.thirtyDays
+    ) {
       const thirtyDaysPrice = processedSachetPrices.thirtyDays;
-      const baseAmount = thirtyDaysPrice.discountedPrice !== undefined
-        ? thirtyDaysPrice.discountedPrice
-        : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
+      const baseAmount =
+        thirtyDaysPrice.discountedPrice !== undefined
+          ? thirtyDaysPrice.discountedPrice
+          : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
         currency: thirtyDaysPrice.currency || "EUR",
         amount: baseAmount,
@@ -1512,7 +1563,7 @@ class ProductService {
     variants: string[];
     hasStandupPouch: boolean[];
     status: boolean[];
-    sortBy: ProductSortOption[];
+    sortBy: ProductSortOptionItem[];
   }> {
     const [result] = await Products.aggregate([
       {
@@ -1603,13 +1654,15 @@ class ProductService {
     const mapHealthGoals = (items?: Array<{ value: string }>) => {
       const goals = (items ?? []).map((item) => item.value);
       // Clean HTML tags from healthGoals for easier use
-      const cleanedGoals = goals.map((goal) => {
-        // Remove HTML tags like <p> and </p>
-        let cleaned = goal.replace(/<[^>]*>/g, "");
-        // Remove escaped quotes like \"Bone Health\"
-        cleaned = cleaned.replace(/\\"/g, '"').replace(/^"|"$/g, "");
-        return cleaned.trim();
-      }).filter((goal) => goal.length > 0);
+      const cleanedGoals = goals
+        .map((goal) => {
+          // Remove HTML tags like <p> and </p>
+          let cleaned = goal.replace(/<[^>]*>/g, "");
+          // Remove escaped quotes like \"Bone Health\"
+          cleaned = cleaned.replace(/\\"/g, '"').replace(/^"|"$/g, "");
+          return cleaned.trim();
+        })
+        .filter((goal) => goal.length > 0);
       // Return unique values
       return [...new Set(cleanedGoals)];
     };
@@ -1629,7 +1682,28 @@ class ProductService {
       variants: mapToUniqueValues(result?.variants),
       hasStandupPouch: mapToUniqueValues(result?.hasStandupPouch),
       status: mapToUniqueValues(result?.status),
-      sortBy: ["relevance", "priceLowToHigh", "priceHighToLow", "rating"],
+      sortBy: [
+        {
+          label: "Relevance",
+          value: "relevance",
+        },
+        {
+          label: "Price Low To High",
+          value: "priceLowToHigh",
+        },
+        {
+          label: "Price High To Low",
+          value: "priceHighToLow",
+        },
+        {
+          label: "Rating",
+          value: "rating",
+        },
+        {
+          label: "Trending",
+          value: "trending",
+        },
+      ],
     };
   }
 
@@ -1691,11 +1765,13 @@ class ProductService {
    */
   private addVariantsToSingleProduct(product: any): any {
     // Create variants array
-    const variantsArray = this.getVariantsArray(product.hasStandupPouch === true);
-    
+    const variantsArray = this.getVariantsArray(
+      product.hasStandupPouch === true
+    );
+
     // Create new product object without existing variants
     const { variants: _, ...productWithoutVariants } = product;
-    
+
     // Return product with variants array
     return {
       ...productWithoutVariants,
@@ -1767,7 +1843,10 @@ class ProductService {
 
     // Preserve standupPouchPrice with discountedPrice
     if (product.standupPouchPrice) {
-      if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+      if (
+        product.standupPouchPrice.count30 ||
+        product.standupPouchPrice.count60
+      ) {
         result.standupPouchPrice = {
           count30: { ...product.standupPouchPrice.count30 }, // Preserve discountedPrice
           count60: { ...product.standupPouchPrice.count60 }, // Preserve discountedPrice
@@ -1795,7 +1874,7 @@ class ProductService {
       {
         $lookup: {
           from: "orders",
-          let: { 
+          let: {
             productId: "$_id",
             last14DaysDate: last14Days,
             nowDate: now,
@@ -1885,7 +1964,12 @@ class ProductService {
           trendingScore: {
             $add: [
               { $multiply: ["$last7DaysOrders", 2] }, // Recent orders weighted 2x
-              { $multiply: [{ $subtract: ["$last7DaysOrders", "$previous7DaysOrders"] }, 3] }, // Growth weighted 3x
+              {
+                $multiply: [
+                  { $subtract: ["$last7DaysOrders", "$previous7DaysOrders"] },
+                  3,
+                ],
+              }, // Growth weighted 3x
               "$previous7DaysOrders", // Previous orders weighted 1x
             ],
           },
