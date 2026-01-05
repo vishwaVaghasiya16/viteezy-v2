@@ -5,7 +5,6 @@ import { AppError } from "@/utils/AppError";
 import { Coupons, Orders, Carts, Products } from "@/models/commerce";
 import { CouponType, ProductVariant } from "@/models/enums";
 import { cartService } from "@/services/cartService";
-import { referralService } from "@/services/referralService";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 
 interface AuthenticatedRequest extends Request {
@@ -70,87 +69,6 @@ class CouponController {
       const normalizedCouponCode = couponCode.toUpperCase().trim();
 
       try {
-        // First, check if it's a referral code (not a coupon)
-        // Calculate order amount for referral validation
-        const totalsWithoutCoupon = await (
-          cartService as any
-        ).calculateCartTotalsWithVariantType(
-          cart.items,
-          cart.variantType as ProductVariant,
-          0 // No coupon discount
-        );
-
-        const orderAmount =
-          totalsWithoutCoupon.subtotal -
-          totalsWithoutCoupon.discount +
-          totalsWithoutCoupon.tax;
-
-        // Check if code is a referral code
-        const referralValidation = await referralService.validateReferralCode(
-          normalizedCouponCode,
-          userId,
-          orderAmount
-        );
-
-        // If it's a valid referral code, handle it as referral
-        if (referralValidation.isValid && referralValidation.referrer) {
-          // Apply referral discount to cart
-          const referralDiscountAmount = referralValidation.discountAmount;
-          
-          // Update cart with referral code and discount
-          const updatedCart = await Carts.findByIdAndUpdate(
-            cart._id,
-            {
-              couponCode: normalizedCouponCode,
-              couponDiscountAmount: referralDiscountAmount,
-              updatedAt: new Date(),
-            },
-            { new: true }
-          ).lean();
-
-          // Recalculate totals with referral discount
-          const totalsWithReferral = await (
-            cartService as any
-          ).calculateCartTotalsWithVariantType(
-            cart.items,
-            cart.variantType as ProductVariant,
-            referralDiscountAmount
-          );
-
-          // Return success response for referral code
-          res.apiSuccess(
-            {
-              cart: {
-                ...updatedCart,
-                ...totalsWithReferral,
-              },
-              couponCode: normalizedCouponCode,
-              isReferralCode: true,
-              referralDiscount: {
-                amount: referralDiscountAmount,
-                currency: totalsWithReferral.currency || "EUR",
-              },
-            },
-            "Referral code applied successfully"
-          );
-          return;
-        }
-
-        // If referral validation failed but it might be a coupon, continue with coupon validation
-        // But if it was clearly a referral code attempt, throw error
-        if (referralValidation.message && referralValidation.message.includes("referral")) {
-          await Carts.findByIdAndUpdate(
-            cart._id,
-            {
-              couponCode: null,
-              couponDiscountAmount: 0,
-              updatedAt: new Date(),
-            },
-            { new: true }
-          );
-          throw new AppError(referralValidation.message, 400);
-        }
-
         // Find coupon by code
         const coupon = await Coupons.findOne({
           code: normalizedCouponCode,
@@ -257,8 +175,22 @@ class CouponController {
           }
         }
 
-        // Order amount already calculated above for referral validation
-        // Reuse it for coupon validation
+        // Calculate order amount (discounted price total before coupon) - same logic as cartService.applyCoupon
+        // We need to calculate totals without coupon to get the base amount for validation
+        const totalsWithoutCoupon = await (
+          cartService as any
+        ).calculateCartTotalsWithVariantType(
+          cart.items,
+          cart.variantType as ProductVariant,
+          0 // No coupon discount
+        );
+
+        // Order amount is the discounted price total (subtotal - discount + tax)
+        // This represents the amount before coupon is applied
+        const orderAmount =
+          totalsWithoutCoupon.subtotal -
+          totalsWithoutCoupon.discount +
+          totalsWithoutCoupon.tax;
 
         // Validate cart order amount with coupon minimum order amount
         if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
