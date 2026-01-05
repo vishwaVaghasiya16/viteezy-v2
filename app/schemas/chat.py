@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"] = "user"
-    content: str = Field(..., min_length=1, max_length=2000)
+    # Content can be null for cases where we just want to send options/metadata
+    content: str | None = Field(default=None, min_length=1, max_length=2000)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

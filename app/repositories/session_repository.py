@@ -762,6 +762,24 @@ class SessionRepository:
                     "updated_at": session.get("updated_at"),
                 }
             )
+        
+        def parse_created_at(value):
+            """Parse created_at into datetime for sorting; fallback to datetime.min."""
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except Exception:
+                    try:
+                        from dateutil import parser
+                        return parser.parse(value)
+                    except Exception:
+                        return datetime.min
+            return datetime.min
+        
+        # Sort sessions so the latest created session appears first
+        normalized.sort(key=lambda s: parse_created_at(s.get("created_at")), reverse=True)
         return normalized
 
     @handle_database_errors

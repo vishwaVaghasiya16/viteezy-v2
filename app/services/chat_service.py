@@ -3523,7 +3523,7 @@ class ChatService:
                 session_id=session_id,
                 reply=ChatMessage(
                     role="assistant",
-                    content="You have already completed the onboarding. Your recommendations have been provided."
+                    content=None
                 ),
                 options=None,
                 question_type=None,
