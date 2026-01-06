@@ -3,6 +3,7 @@ import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
 import { ProductCategory } from "../models/commerce/categories.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductTestimonials } from "../models/cms/productTestimonials.model";
 import { Blogs } from "../models/cms/blogs.model";
 import { FAQs } from "../models/cms/faqs.model";
@@ -958,13 +959,99 @@ class LandingPageService {
           isActive: true,
           isDeleted: { $ne: true },
         })
-          .populate("products", "_id name title slug")
+          .populate({
+            path: "products",
+            match: { isDeleted: { $ne: true } },
+            populate: [
+              {
+                path: "categories",
+                select: "sId slug name description sortOrder icon image productCount",
+              },
+            ],
+          })
           .select(
             "_id videoUrl videoThumbnail products isFeatured displayOrder"
           )
           .sort({ displayOrder: 1, createdAt: -1 })
           .limit(10) // Max 10 testimonials
           .lean();
+
+        // Manually populate ingredients for all products (since ingredients is string array, not ref)
+        // Collect all unique ingredient IDs from all products
+        const allIngredientIds = new Set<string>();
+        for (const testimonial of testimonials) {
+          if (testimonial.products && Array.isArray(testimonial.products)) {
+            for (const product of testimonial.products) {
+              const productObj = product as any;
+              if (productObj.ingredients && Array.isArray(productObj.ingredients) && productObj.ingredients.length > 0) {
+                productObj.ingredients.forEach((id: any) => {
+                  if (mongoose.Types.ObjectId.isValid(id)) {
+                    allIngredientIds.add(id.toString());
+                  }
+                });
+              }
+            }
+          }
+        }
+
+        // Batch fetch all ingredients
+        let ingredientsMap = new Map<string, any>();
+        if (allIngredientIds.size > 0) {
+          const ingredientObjectIds = Array.from(allIngredientIds).map(
+            (id) => new mongoose.Types.ObjectId(id)
+          );
+          const ingredients = await ProductIngredients.find({
+            _id: { $in: ingredientObjectIds },
+            isDeleted: { $ne: true },
+          })
+            .select("sId slug name description sortOrder icon image _id")
+            .lean();
+
+          // Create a map for quick lookup
+          ingredients.forEach((ingredient: any) => {
+            ingredientsMap.set(ingredient._id.toString(), ingredient);
+          });
+        }
+
+        // Replace ingredient IDs with populated objects and transform for language
+        for (const testimonial of testimonials) {
+          if (testimonial.products && Array.isArray(testimonial.products)) {
+            for (const product of testimonial.products) {
+              const productObj = product as any;
+              
+              // Transform ingredients for language (same as getAllProducts API)
+              if (productObj.ingredients && Array.isArray(productObj.ingredients) && productObj.ingredients.length > 0) {
+                const populatedIngredients = productObj.ingredients
+                  .map((id: any) => {
+                    const idStr = id.toString();
+                    return ingredientsMap.get(idStr) || null;
+                  })
+                  .filter((ingredient: any) => ingredient !== null)
+                  .map((ingredient: any) => ({
+                    _id: ingredient._id,
+                    sId: ingredient.sId,
+                    slug: ingredient.slug,
+                    name: getTranslatedString(ingredient.name, lang),
+                    description: getTranslatedText(ingredient.description, lang),
+                    sortOrder: ingredient.sortOrder,
+                    icon: ingredient.icon || null,
+                    image: ingredient.image || null,
+                  }));
+
+                productObj.ingredients = populatedIngredients;
+              }
+
+              // Transform categories for language (same as getAllProducts API)
+              if (productObj.categories && Array.isArray(productObj.categories) && productObj.categories.length > 0) {
+                productObj.categories = productObj.categories.map((category: any) => ({
+                  ...category,
+                  name: getTranslatedString(category.name, lang),
+                  description: getTranslatedText(category.description, lang),
+                }));
+              }
+            }
+          }
+        }
 
         processedLandingPage.testimonialsSection = {
           ...landingPage.testimonialsSection,
