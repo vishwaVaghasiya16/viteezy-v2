@@ -105,9 +105,6 @@ class ProductService:
             exclude_titles = set((exclude_product_titles or []))
             include_titles = set((include_product_titles or [])) if include_product_titles else None
             
-            # Check if user has negative views on Ayurveda
-            exclude_ayurveda = self._should_exclude_ayurveda(context)
-            
             for score, product in scored_products:
                 # Only include products with minimum confidence score
                 if score < MIN_CONFIDENCE_SCORE:
@@ -126,10 +123,6 @@ class ProductService:
                 
                 # Exclude previous products if specified
                 if product_title in exclude_titles:
-                    continue
-                
-                # Exclude Ayurveda products if user has negative views
-                if exclude_ayurveda and self._is_ayurveda_product(product):
                     continue
                 
                 if self._is_safe_and_suitable(product, context):
@@ -356,26 +349,6 @@ class ProductService:
                 return False
         
         return True
-
-    def _should_exclude_ayurveda(self, context: dict | None) -> bool:
-        """
-        Check if user has negative views on Ayurveda that should exclude Ayurveda products.
-        Returns True if user selected:
-        - "more information needed for an opinion"
-        - "i am skeptical"
-        - "alternative medicine is nonsense"
-        """
-        if not context:
-            return False
-        
-        ayurveda_view = (context.get("ayurveda_view") or "").lower()
-        exclude_views = [
-            "more information needed for an opinion",
-            "i am skeptical",
-            "alternative medicine is nonsense"
-        ]
-        
-        return ayurveda_view in exclude_views
 
     def _is_ayurveda_product(self, product: dict[str, Any]) -> bool:
         """

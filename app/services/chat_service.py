@@ -34,6 +34,7 @@ class ChatService:
         "vitamin_count": (
             "What’s your current vitamin/supplement load? Options: No / 1 to 3 / 4+."
         ),
+        "vitamin_details": "Which vitamins/supplements are you taking? Please include names and dosage if possible, and where you bought them.",
         "gender": "Which fits best: male, woman, or gender neutral?",
         "conceive": "{name}, are you currently pregnant or breastfeeding? (yes/no)",
         "situation": (
@@ -47,6 +48,8 @@ class ChatService:
         ),
         # Lifestyle questions from prompt.txt
         "lifestyle_status": "When it comes to a healthy lifestyle, you are: Been doing well for a long time / Nice on the way / Ready to start",
+        "medical_conditions": "Do you have any medical related conditions such as heart, kidney, liver problem etc.. (yes/no)",
+        "medical_conditions_details": "Please explain in detail about the medical condition(s) you have.",
         "fruit_intake": "How much fruit do you eat on average per day? (For example, a banana or a portion of blueberries) Options: Hardly / One time / Twice or more",
         "vegetable_intake": "How many vegetables do you eat on average per day? (For example, a bell pepper or a portion of broccoli) Options: Hardly / One time / Twice or more",
         "dairy_intake": "How many dairy products do you consume on average per day? (For example, a glass of milk, a piece of cheese or a bowl of yoghurt) Options: Hardly / One time / Twice or more",
@@ -60,14 +63,19 @@ class ChatService:
         "alcohol_weekly": "Do you often drink more than 12 alcoholic drinks in a week? (yes/no)",
         "coffee_intake": "Do you often drink more than 4 cups of coffee a day? (yes/no)",
         "smokes": "Do you smoke? (Also counts if you are a social smoker) (yes/no)",
-        "allergies": "Do you have one or more of the following allergies? Options: No / Milk / Egg / Fish / Shellfish and crustaceans / Peanut / Nuts / Soy / Gluten / Wheat / Pollen",
+        "allergies": "Do you have one or more of the following allergies? Options: No / Milk / Egg / Fish / Shellfish and crustaceans / Peanut / Nuts / Soy / Gluten / Wheat / Pollen / Others",
+        "allergies_other_details": "What specific allergies do you have? Any seasonal allergies? (Please describe in text.)",
         "dietary_preferences": "Do you have any other dietary preferences or intolerances? Options: No preference / Lactose-free / Gluten free / Paleo",
         "sunlight_exposure": 'Do you sit in direct sunlight for more than 30 minutes a day on average? (Without clothes and without sunscreen and makeup) (yes/no)',
         "iron_advised": "Have you ever been advised to take iron? (yes/no)",
         "ayurveda_view": "What is your view on Eastern lifestyle such as Ayurveda? Options: I am convinced / We can learn a lot from ancient medicine / I am open to it / More information needed for an opinion / I am skeptical / Alternative medicine is nonsense",
         "new_product_attitude": "When a new product is available with promising results, you want to: Options: To be the first / You are at the forefront of new products / Learn more / You are cautiously optimistic / Waiting for now / Scientific research takes time",
+        "new_product_request": "Are there any new products you would like us to add? (yes/no)",
+        "new_product_request_details": "What products would you like us to add?",
         "previous_concern_followup": "Sorry to hear you are facing the same concern again..Are you feeling better after intaking the product recommended?",
         "medical_treatment": "Are you currently undergoing any medical treatment? (yes/no)",
+        "medical_treatment_details": "Please explain in detail about the ongoing medical treatment.",
+        "pre_recommendation_notes": "Is there anything you would like to share before product recommendation to us apart from the details asked in the quiz?",
     }
     CONCERN_SYNONYMS = {
         "sleep": "sleep",
@@ -813,8 +821,8 @@ class ChatService:
                     )
                     # Don't return here - continue to show next question
                 
-                # Check if this was the medical_treatment question - if so, generate recommendations but end conversation
-                if current_field == "medical_treatment":
+                # Check if this was the final question - if so, generate recommendations but end conversation
+                if current_field == "pre_recommendation_notes":
                     # Mark onboarding as complete
                     onboarding_state["complete"] = True
                     
@@ -1395,6 +1403,8 @@ class ChatService:
             # For new users or family members, include all questions
             if not has_previous_sessions:
                 steps.extend(["email", "knowledge", "vitamin_count"])
+                if (responses.get("vitamin_count") or "").lower() in {"1 to 3", "4+"}:
+                    steps.append("vitamin_details")
             steps.append("protein")
             if not has_previous_sessions:
                 steps.append("gender")
@@ -1417,6 +1427,13 @@ class ChatService:
         # Add lifestyle questions after concern questions
         steps.extend([
             "lifestyle_status",
+            "medical_conditions",
+        ])
+        
+        if (responses.get("medical_conditions") or "").lower() in {"yes", "y", "yeah", "yep"}:
+            steps.append("medical_conditions_details")
+        
+        steps.extend([
             "fruit_intake",
             "vegetable_intake",
             "dairy_intake",
@@ -1442,20 +1459,31 @@ class ChatService:
         steps.extend(["coffee_intake", "smokes"])
         
         # Allergies, dietary preferences, and other questions
+        steps.append("allergies")
+        if "others" in (responses.get("allergies") or "").lower():
+            steps.append("allergies_other_details")
+        
         steps.extend([
-            "allergies",
             "dietary_preferences",
             "sunlight_exposure",
             "iron_advised",
             "ayurveda_view",
             "new_product_attitude",
+            "new_product_request",
         ])
+
+        if (responses.get("new_product_request") or "").lower() == "yes":
+            steps.append("new_product_request_details")
         
         # Add previous_concern_followup question before medical_treatment if needed
         if should_ask_previous_concern_followup:
             steps.append("previous_concern_followup")
         
-        steps.append("medical_treatment")  # Final question before recommendations
+        steps.append("medical_treatment")
+        if (responses.get("medical_treatment") or "").lower() in {"yes", "y", "yeah", "yep"}:
+            steps.append("medical_treatment_details")
+        steps.append("pre_recommendation_notes")
+        # Final question before recommendations
         
         return steps
 
@@ -1512,6 +1540,12 @@ class ChatService:
                 if is_family
                 else self.PROMPTS["vitamin_count"]
             )
+        if field == "vitamin_details":
+            return (
+                f"Which vitamins/supplements is {person} taking? Please include names and dosage if possible, and where they were bought."
+                if is_family
+                else self.PROMPTS["vitamin_details"]
+            )
         if field == "gender":
             return (
                 f"Which fits {person}: male, woman, or gender neutral?"
@@ -1556,12 +1590,14 @@ class ChatService:
 
         # Handle lifestyle questions
         lifestyle_fields = {
-            "lifestyle_status", "fruit_intake", "vegetable_intake", "dairy_intake",
-            "fiber_intake", "protein_intake", "eating_habits", "meat_intake",
-            "fish_intake", "drinks_alcohol", "alcohol_daily", "alcohol_weekly",
-            "coffee_intake", "smokes", "allergies", "dietary_preferences",
+            "lifestyle_status", "medical_conditions", "medical_conditions_details", "fruit_intake",
+            "vegetable_intake", "dairy_intake", "fiber_intake", "protein_intake",
+            "eating_habits", "meat_intake", "fish_intake", "drinks_alcohol",
+            "alcohol_daily", "alcohol_weekly", "coffee_intake", "smokes",
+            "allergies", "allergies_other_details", "dietary_preferences",
             "sunlight_exposure", "iron_advised", "ayurveda_view", "new_product_attitude",
-            "medical_treatment",
+            "new_product_request", "new_product_request_details", "medical_treatment",
+            "medical_treatment_details", "pre_recommendation_notes",
         }
         if field in lifestyle_fields:
             prompt_template = self.PROMPTS[field]
@@ -1570,13 +1606,16 @@ class ChatService:
                 return prompt_template.format(name=name)
             # For family members, adjust the prompt with proper verb agreement
             if is_family and field in {"lifestyle_status", "fruit_intake", "vegetable_intake", 
-                                       "dairy_intake", "fiber_intake", "protein_intake", 
-                                       "eating_habits", "meat_intake", "fish_intake", 
+                                       "medical_conditions", "medical_conditions_details",
+                                       "dairy_intake", "fiber_intake", "protein_intake",
+                                       "eating_habits", "meat_intake", "fish_intake",
                                        "drinks_alcohol", "alcohol_daily", "alcohol_weekly",
                                        "coffee_intake", "smokes", "allergies", 
-                                       "dietary_preferences", "sunlight_exposure", 
-                                       "iron_advised", "ayurveda_view", "new_product_attitude",
-                                       "medical_treatment"}:
+                                       "allergies_other_details", "dietary_preferences",
+                                       "sunlight_exposure", "iron_advised", "ayurveda_view",
+                                       "new_product_attitude", "new_product_request",
+                                       "new_product_request_details", "medical_treatment",
+                                       "medical_treatment_details", "pre_recommendation_notes"}:
                 import re
                 prompt = prompt_template
                 pronoun = labels.get("pronoun", "they")
@@ -1780,6 +1819,11 @@ class ChatService:
             if normalized in allowed:
                 return True, allowed[normalized], ""
             return False, val, f"{name}, pick one: No, 1 to 3, or 4+."
+        
+        if field == "vitamin_details":
+            if len(val) < 3:
+                return False, val, "Please share the supplement names and dosage details if possible."
+            return True, val, ""
 
         if field == "gender":
             normalized = val.lower()
@@ -1938,7 +1982,7 @@ class ChatService:
                 return True, allowed[normalized], ""
             return False, val, f"{name}, pick one: Never / Once or twice / Three times or more"
 
-        if field in {"drinks_alcohol", "alcohol_daily", "alcohol_weekly", "coffee_intake", "smokes", "sunlight_exposure", "iron_advised", "medical_treatment", "previous_concern_followup"}:
+        if field in {"drinks_alcohol", "alcohol_daily", "alcohol_weekly", "coffee_intake", "smokes", "sunlight_exposure", "iron_advised", "medical_treatment", "previous_concern_followup", "new_product_request", "medical_conditions"}:
             normalized = val.lower()
             if normalized in {"yes", "y", "yeah", "yep", "sure"}:
                 return True, "yes", ""
@@ -1965,6 +2009,8 @@ class ChatService:
                 "gluten": "gluten",
                 "wheat": "wheat",
                 "pollen": "pollen",
+                "others": "others",
+                "other": "others",
             }
             # Allow multiple allergies separated by commas
             if "," in normalized:
@@ -1977,7 +2023,12 @@ class ChatService:
                     return True, ", ".join(valid_parts), ""
             if normalized in allowed:
                 return True, allowed[normalized], ""
-            return False, val, f"{name}, pick from: No / Milk / Egg / Fish / Shellfish and crustaceans / Peanut / Nuts / Soy / Gluten / Wheat / Pollen"
+            return False, val, f"{name}, pick from: No / Milk / Egg / Fish / Shellfish and crustaceans / Peanut / Nuts / Soy / Gluten / Wheat / Pollen / Others"
+
+        if field in {"medical_conditions_details", "allergies_other_details", "medical_treatment_details", "pre_recommendation_notes"}:
+            if len(val) < 3:
+                return False, val, "Please share a bit more detail so I can keep you safe."
+            return True, val, ""
 
         if field == "dietary_preferences":
             normalized = val.lower()
@@ -2680,6 +2731,7 @@ class ChatService:
         concerns = self._normalize_concerns(context.get("concern", []))
         concern_details = context.get("concern_details", {})
         medical_treatment = (context.get("medical_treatment") or "").lower() == "yes"
+        medical_conditions = (context.get("medical_conditions") or "").lower() == "yes"
         
         # Build recommendation text
         recommendations = []
@@ -2693,18 +2745,13 @@ class ChatService:
                 "The following recommendations are based on your profile, but medical guidance is essential.\n\n"
             )
         
-        # Add message if Ayurveda products are excluded due to user's views
-        ayurveda_view = (context.get("ayurveda_view") or "").lower()
-        exclude_ayurveda_views = [
-            "more information needed for an opinion",
-            "i am skeptical",
-            "alternative medicine is nonsense"
-        ]
-        if ayurveda_view in exclude_ayurveda_views:
-            ayurveda_message = (
-                "Note: Since you have said you do not prefer Ayurveda, I am not recommending Ayurveda medicine.\n\n"
+        if medical_conditions:
+            medical_conditions_note = (
+                "IMPORTANT: Since you mentioned having medical conditions, "
+                "please consult with your healthcare provider before starting any new supplements. "
+                "I'll take this into account while recommending products.\n\n"
             )
-            intro_text = ayurveda_message + intro_text if intro_text else ayurveda_message
+            intro_text = medical_conditions_note + intro_text if intro_text else medical_conditions_note
         
         # Add caution if previous_concern_followup was answered (user facing same concern again)
         previous_concern_followup_response = context.get("previous_concern_followup")
@@ -3049,7 +3096,8 @@ class ChatService:
         yes_no_fields = {
             "protein", "conceive", "children", "drinks_alcohol", "alcohol_daily",
             "alcohol_weekly", "coffee_intake", "smokes", "sunlight_exposure",
-            "iron_advised", "medical_treatment", "previous_concern_followup"
+            "iron_advised", "medical_treatment", "previous_concern_followup",
+            "new_product_request", "medical_conditions",
         }
         
         if field in yes_no_fields:
@@ -3151,6 +3199,7 @@ class ChatService:
                 QuestionOption(value="gluten", label="Gluten"),
                 QuestionOption(value="wheat", label="Wheat"),
                 QuestionOption(value="pollen", label="Pollen"),
+                QuestionOption(value="others", label="Others"),
             ], "options"
         
         if field == "dietary_preferences":
