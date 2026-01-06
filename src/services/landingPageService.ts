@@ -25,7 +25,11 @@ const getTranslatedString = (
   }
 
   // If it's an object with language keys
-  if (typeof i18nString === "object" && !Array.isArray(i18nString) && i18nString !== null) {
+  if (
+    typeof i18nString === "object" &&
+    !Array.isArray(i18nString) &&
+    i18nString !== null
+  ) {
     // Try to get the requested language, fallback to English, then any available language
     if (i18nString[lang]) {
       return String(i18nString[lang]);
@@ -34,7 +38,9 @@ const getTranslatedString = (
       return String(i18nString.en);
     }
     // Try to get any available language value
-    const availableLang = Object.keys(i18nString).find(key => i18nString[key]);
+    const availableLang = Object.keys(i18nString).find(
+      (key) => i18nString[key]
+    );
     if (availableLang) {
       return String(i18nString[availableLang]);
     }
@@ -47,10 +53,7 @@ const getTranslatedString = (
 /**
  * Get translated text from I18nTextType (can be string or object)
  */
-const getTranslatedText = (
-  i18nText: any,
-  lang: SupportedLanguage
-): string => {
+const getTranslatedText = (i18nText: any, lang: SupportedLanguage): string => {
   if (!i18nText) return "";
 
   // If it's already a plain string, return it
@@ -59,7 +62,11 @@ const getTranslatedText = (
   }
 
   // If it's an object with language keys
-  if (typeof i18nText === "object" && !Array.isArray(i18nText) && i18nText !== null) {
+  if (
+    typeof i18nText === "object" &&
+    !Array.isArray(i18nText) &&
+    i18nText !== null
+  ) {
     // Try to get the requested language, fallback to English, then any available language
     if (i18nText[lang]) {
       return String(i18nText[lang]);
@@ -68,7 +75,7 @@ const getTranslatedText = (
       return String(i18nText.en);
     }
     // Try to get any available language value
-    const availableLang = Object.keys(i18nText).find(key => i18nText[key]);
+    const availableLang = Object.keys(i18nText).find((key) => i18nText[key]);
     if (availableLang) {
       return String(i18nText[availableLang]);
     }
@@ -361,8 +368,15 @@ class LandingPageService {
     data: CreateLandingPageData
   ): Promise<{ landingPage: any; message: string }> {
     // Validate that at least one media source is provided
-    if (!data.heroSection.media && !data.heroSection.imageUrl && !data.heroSection.videoUrl) {
-      throw new AppError("Either imageUrl, videoUrl, or media must be provided for hero section", 400);
+    if (
+      !data.heroSection.media &&
+      !data.heroSection.imageUrl &&
+      !data.heroSection.videoUrl
+    ) {
+      throw new AppError(
+        "Either imageUrl, videoUrl, or media must be provided for hero section",
+        400
+      );
     }
 
     // Convert simple strings to I18n format for database
@@ -407,9 +421,11 @@ class LandingPageService {
             ? data.heroSection.isEnabled
             : true,
         order: data.heroSection.order ?? 0,
-        media: data.heroSection.media ? {
-          ...data.heroSection.media,
-        } : undefined,
+        media: data.heroSection.media
+          ? {
+              ...data.heroSection.media,
+            }
+          : undefined,
       },
       isActive: data.isActive ?? true,
       createdBy: data.createdBy,
@@ -789,10 +805,12 @@ class LandingPageService {
    * Transforms all I18n fields to requested language
    * @param lang - Language code (en, nl, de, fr, es). Defaults to "en"
    */
-  async getActiveLandingPage(lang: SupportedLanguage = "en"): Promise<{ landingPage: any }> {
+  async getActiveLandingPage(
+    lang: SupportedLanguage = "en"
+  ): Promise<{ landingPage: any }> {
     // Debug: Log the language parameter
     console.log(`[Landing Page Service] Processing with language: ${lang}`);
-    
+
     const landingPage = await LandingPages.findOne({
       isActive: true,
       isDeleted: { $ne: true },
@@ -806,14 +824,20 @@ class LandingPageService {
 
     // Debug: Log sample data structure
     if (landingPage.heroSection?.title) {
-      console.log(`[Landing Page Service] Sample title structure:`, JSON.stringify(landingPage.heroSection.title).substring(0, 100));
+      console.log(
+        `[Landing Page Service] Sample title structure:`,
+        JSON.stringify(landingPage.heroSection.title).substring(0, 100)
+      );
     }
 
     // Filter sections by isEnabled and prepare for sorting
     const processedLandingPage: any = { ...landingPage };
 
     // Filter and sort Hero Section
-    if (landingPage.heroSection && landingPage.heroSection.isEnabled !== false) {
+    if (
+      landingPage.heroSection &&
+      landingPage.heroSection.isEnabled !== false
+    ) {
       // Sort primaryCTA by order
       if (landingPage.heroSection.primaryCTA) {
         processedLandingPage.heroSection = {
@@ -849,8 +873,7 @@ class LandingPageService {
       landingPage.howItWorksSection &&
       landingPage.howItWorksSection.isEnabled !== false
     ) {
-      const stepsCount =
-        landingPage.howItWorksSection.stepsCount || 3; // Default 3
+      const stepsCount = landingPage.howItWorksSection.stepsCount || 3; // Default 3
       processedLandingPage.howItWorksSection = {
         ...landingPage.howItWorksSection,
         steps: landingPage.howItWorksSection.steps
@@ -957,7 +980,7 @@ class LandingPageService {
         const testimonials = await ProductTestimonials.find({
           _id: { $in: landingPage.testimonialsSection.testimonialIds },
           isActive: true,
-          isDeleted: { $ne: true },
+          isDeleted: false,
         })
           .populate({
             path: "products",
@@ -1212,7 +1235,10 @@ class LandingPageService {
     processedLandingPage.sectionOrder = sections.map((s) => s.name);
 
     // Transform all I18n fields to requested language
-    const transformedLandingPage = this.transformToLanguage(processedLandingPage, lang);
+    const transformedLandingPage = this.transformToLanguage(
+      processedLandingPage,
+      lang
+    );
 
     return { landingPage: transformedLandingPage };
   }
@@ -1223,8 +1249,11 @@ class LandingPageService {
   private transformToLanguage(landingPage: any, lang: SupportedLanguage): any {
     // Debug: Log transformation start
     console.log(`[Transform] Starting transformation to language: ${lang}`);
-    console.log(`[Transform] Sample heroSection.title before:`, JSON.stringify(landingPage.heroSection?.title).substring(0, 200));
-    
+    console.log(
+      `[Transform] Sample heroSection.title before:`,
+      JSON.stringify(landingPage.heroSection?.title).substring(0, 200)
+    );
+
     const transformed: any = {
       _id: landingPage._id,
       isActive: landingPage.isActive,
@@ -1235,9 +1264,12 @@ class LandingPageService {
 
     // Transform Hero Section
     if (landingPage.heroSection) {
-      const heroTitle = getTranslatedString(landingPage.heroSection.title, lang);
+      const heroTitle = getTranslatedString(
+        landingPage.heroSection.title,
+        lang
+      );
       console.log(`[Transform] Hero title after transformation:`, heroTitle);
-      
+
       transformed.heroSection = {
         imageUrl: landingPage.heroSection.imageUrl,
         videoUrl: landingPage.heroSection.videoUrl,
@@ -1248,18 +1280,26 @@ class LandingPageService {
           lang
         ),
         subTitle: getTranslatedString(landingPage.heroSection.subTitle, lang),
-        description: getTranslatedText(landingPage.heroSection.description, lang),
-        primaryCTA: (landingPage.heroSection.primaryCTA || []).map((cta: any) => ({
-          label: getTranslatedString(cta.label, lang),
-          image: cta.image,
-          link: cta.link,
-          order: cta.order,
-        })),
+        description: getTranslatedText(
+          landingPage.heroSection.description,
+          lang
+        ),
+        primaryCTA: (landingPage.heroSection.primaryCTA || []).map(
+          (cta: any) => ({
+            label: getTranslatedString(cta.label, lang),
+            image: cta.image,
+            link: cta.link,
+            order: cta.order,
+          })
+        ),
         isEnabled: landingPage.heroSection.isEnabled,
         order: landingPage.heroSection.order,
       };
-      
-      console.log(`[Transform] Hero section transformed title:`, transformed.heroSection.title);
+
+      console.log(
+        `[Transform] Hero section transformed title:`,
+        transformed.heroSection.title
+      );
     }
 
     // Transform Membership Section
@@ -1267,13 +1307,18 @@ class LandingPageService {
       transformed.membershipSection = {
         backgroundImage: landingPage.membershipSection.backgroundImage,
         title: getTranslatedString(landingPage.membershipSection.title, lang),
-        description: getTranslatedText(landingPage.membershipSection.description, lang),
-        benefits: (landingPage.membershipSection.benefits || []).map((benefit: any) => ({
-          icon: benefit.icon,
-          title: getTranslatedString(benefit.title, lang),
-          description: getTranslatedText(benefit.description, lang),
-          order: benefit.order,
-        })),
+        description: getTranslatedText(
+          landingPage.membershipSection.description,
+          lang
+        ),
+        benefits: (landingPage.membershipSection.benefits || []).map(
+          (benefit: any) => ({
+            icon: benefit.icon,
+            title: getTranslatedString(benefit.title, lang),
+            description: getTranslatedText(benefit.description, lang),
+            order: benefit.order,
+          })
+        ),
         isEnabled: landingPage.membershipSection.isEnabled,
         order: landingPage.membershipSection.order,
       };
@@ -1283,7 +1328,10 @@ class LandingPageService {
     if (landingPage.howItWorksSection) {
       transformed.howItWorksSection = {
         title: getTranslatedString(landingPage.howItWorksSection.title, lang),
-        subTitle: getTranslatedString(landingPage.howItWorksSection.subTitle, lang),
+        subTitle: getTranslatedString(
+          landingPage.howItWorksSection.subTitle,
+          lang
+        ),
         stepsCount: landingPage.howItWorksSection.stepsCount,
         steps: (landingPage.howItWorksSection.steps || []).map((step: any) => ({
           image: step.image,
@@ -1299,20 +1347,26 @@ class LandingPageService {
     // Transform Product Category Section
     if (landingPage.productCategorySection) {
       transformed.productCategorySection = {
-        title: getTranslatedString(landingPage.productCategorySection.title, lang),
-        description: getTranslatedText(landingPage.productCategorySection.description, lang),
-        productCategories: (landingPage.productCategorySection.productCategories || []).map(
-          (cat: any) => ({
-            _id: cat._id,
-            slug: cat.slug,
-            name: getTranslatedString(cat.name, lang),
-            description: getTranslatedText(cat.description, lang),
-            sortOrder: cat.sortOrder,
-            icon: cat.icon,
-            image: cat.image,
-            productCount: cat.productCount,
-          })
+        title: getTranslatedString(
+          landingPage.productCategorySection.title,
+          lang
         ),
+        description: getTranslatedText(
+          landingPage.productCategorySection.description,
+          lang
+        ),
+        productCategories: (
+          landingPage.productCategorySection.productCategories || []
+        ).map((cat: any) => ({
+          _id: cat._id,
+          slug: cat.slug,
+          name: getTranslatedString(cat.name, lang),
+          description: getTranslatedText(cat.description, lang),
+          sortOrder: cat.sortOrder,
+          icon: cat.icon,
+          image: cat.image,
+          productCount: cat.productCount,
+        })),
         isEnabled: landingPage.productCategorySection.isEnabled,
         order: landingPage.productCategorySection.order,
       };
@@ -1323,12 +1377,17 @@ class LandingPageService {
       transformed.communitySection = {
         backgroundImage: landingPage.communitySection.backgroundImage,
         title: getTranslatedString(landingPage.communitySection.title, lang),
-        subTitle: getTranslatedString(landingPage.communitySection.subTitle, lang),
-        metrics: (landingPage.communitySection.metrics || []).map((metric: any) => ({
-          label: getTranslatedString(metric.label, lang),
-          value: metric.value,
-          order: metric.order,
-        })),
+        subTitle: getTranslatedString(
+          landingPage.communitySection.subTitle,
+          lang
+        ),
+        metrics: (landingPage.communitySection.metrics || []).map(
+          (metric: any) => ({
+            label: getTranslatedString(metric.label, lang),
+            value: metric.value,
+            order: metric.order,
+          })
+        ),
         isEnabled: landingPage.communitySection.isEnabled,
         order: landingPage.communitySection.order,
       };
@@ -1339,7 +1398,10 @@ class LandingPageService {
       transformed.missionSection = {
         backgroundImage: landingPage.missionSection.backgroundImage,
         title: getTranslatedString(landingPage.missionSection.title, lang),
-        description: getTranslatedText(landingPage.missionSection.description, lang),
+        description: getTranslatedText(
+          landingPage.missionSection.description,
+          lang
+        ),
         isEnabled: landingPage.missionSection.isEnabled,
         order: landingPage.missionSection.order,
       };
@@ -1349,13 +1411,18 @@ class LandingPageService {
     if (landingPage.featuresSection) {
       transformed.featuresSection = {
         title: getTranslatedString(landingPage.featuresSection.title, lang),
-        description: getTranslatedText(landingPage.featuresSection.description, lang),
-        features: (landingPage.featuresSection.features || []).map((feature: any) => ({
-          icon: feature.icon,
-          title: getTranslatedString(feature.title, lang),
-          description: getTranslatedText(feature.description, lang),
-          order: feature.order,
-        })),
+        description: getTranslatedText(
+          landingPage.featuresSection.description,
+          lang
+        ),
+        features: (landingPage.featuresSection.features || []).map(
+          (feature: any) => ({
+            icon: feature.icon,
+            title: getTranslatedString(feature.title, lang),
+            description: getTranslatedText(feature.description, lang),
+            order: feature.order,
+          })
+        ),
         isEnabled: landingPage.featuresSection.isEnabled,
         order: landingPage.featuresSection.order,
       };
@@ -1364,14 +1431,22 @@ class LandingPageService {
     // Transform Designed By Science Section
     if (landingPage.designedByScienceSection) {
       transformed.designedByScienceSection = {
-        title: getTranslatedString(landingPage.designedByScienceSection.title, lang),
-        description: getTranslatedText(landingPage.designedByScienceSection.description, lang),
-        steps: (landingPage.designedByScienceSection.steps || []).map((step: any) => ({
-          image: step.image,
-          title: getTranslatedString(step.title, lang),
-          description: getTranslatedText(step.description, lang),
-          order: step.order,
-        })),
+        title: getTranslatedString(
+          landingPage.designedByScienceSection.title,
+          lang
+        ),
+        description: getTranslatedText(
+          landingPage.designedByScienceSection.description,
+          lang
+        ),
+        steps: (landingPage.designedByScienceSection.steps || []).map(
+          (step: any) => ({
+            image: step.image,
+            title: getTranslatedString(step.title, lang),
+            description: getTranslatedText(step.description, lang),
+            order: step.order,
+          })
+        ),
         isEnabled: landingPage.designedByScienceSection.isEnabled,
         order: landingPage.designedByScienceSection.order,
       };
@@ -1381,7 +1456,10 @@ class LandingPageService {
     if (landingPage.testimonialsSection) {
       transformed.testimonialsSection = {
         title: getTranslatedString(landingPage.testimonialsSection.title, lang),
-        subTitle: getTranslatedString(landingPage.testimonialsSection.subTitle, lang),
+        subTitle: getTranslatedString(
+          landingPage.testimonialsSection.subTitle,
+          lang
+        ),
         testimonials: landingPage.testimonialsSection.testimonials || [],
         isEnabled: landingPage.testimonialsSection.isEnabled,
         order: landingPage.testimonialsSection.order,
@@ -1391,8 +1469,14 @@ class LandingPageService {
     // Transform Customer Results Section
     if (landingPage.customerResultsSection) {
       transformed.customerResultsSection = {
-        title: getTranslatedString(landingPage.customerResultsSection.title, lang),
-        description: getTranslatedText(landingPage.customerResultsSection.description, lang),
+        title: getTranslatedString(
+          landingPage.customerResultsSection.title,
+          lang
+        ),
+        description: getTranslatedText(
+          landingPage.customerResultsSection.description,
+          lang
+        ),
         isEnabled: landingPage.customerResultsSection.isEnabled,
         order: landingPage.customerResultsSection.order,
       };
@@ -1402,7 +1486,10 @@ class LandingPageService {
     if (landingPage.blogSection) {
       transformed.blogSection = {
         title: getTranslatedString(landingPage.blogSection.title, lang),
-        description: getTranslatedText(landingPage.blogSection.description, lang),
+        description: getTranslatedText(
+          landingPage.blogSection.description,
+          lang
+        ),
         blogs: (landingPage.blogSection.blogs || []).map((blog: any) => ({
           _id: blog._id,
           title: getTranslatedString(blog.title, lang),
@@ -1421,7 +1508,10 @@ class LandingPageService {
     if (landingPage.faqSection) {
       transformed.faqSection = {
         title: getTranslatedString(landingPage.faqSection.title, lang),
-        description: getTranslatedText(landingPage.faqSection.description, lang),
+        description: getTranslatedText(
+          landingPage.faqSection.description,
+          lang
+        ),
         faqs: (landingPage.faqSection.faqs || []).map((faq: any) => ({
           _id: faq._id,
           question: getTranslatedString(faq.question, lang),
