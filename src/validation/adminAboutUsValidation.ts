@@ -77,7 +77,7 @@ const mediaSchema = withJsonSupport(baseMediaSchema, {
 const bannerSectionSchema = Joi.object({
   banner_image: mediaSchema.label("Banner image"),
   banner_title: i18nStringSchema.label("Banner title"),
-  banner_subtitle: i18nTextSchema.label("Banner subtitle"),
+  banner_description: i18nTextSchema.label("Banner description"),
   banner_button_text: i18nStringSchema.label("Banner button text"),
   banner_button_link: Joi.string()
     .uri()
@@ -88,12 +88,13 @@ const bannerSectionSchema = Joi.object({
 });
 
 // Founder Quote Section Schema
-const founderQuoteSectionSchema = Joi.object({
+const founderStorySectionSchema = Joi.object({
   founder_image: mediaSchema.label("Founder image"),
-  founder_quote_text: i18nTextSchema.label("Founder quote text"),
+  founder_heading: i18nTextSchema.label("Founder quote text"),
+  founder_description: i18nTextSchema.label("Founder description"),
   founder_name: i18nStringSchema.label("Founder name"),
-  founder_designation: i18nStringSchema.label("Founder designation"),
-  note: i18nTextSchema.label("Note"),
+  founder_position: i18nStringSchema.label("Founder designation"),
+  note: i18nTextSchema.label("Founder note"),
 });
 
 // Meet Brains Section Schema
@@ -136,7 +137,7 @@ export const upsertAboutUsSchema = Joi.object(
     banner: withJsonSupport(bannerSectionSchema, {
       allowEmpty: true,
     }).optional(),
-    founderQuote: withJsonSupport(founderQuoteSectionSchema, {
+    founderStory: withJsonSupport(founderStorySectionSchema, {
       allowEmpty: true,
     }).optional(),
     meetBrains: withJsonSupport(meetBrainsSectionSchema, {
@@ -157,7 +158,7 @@ export const upsertAboutUsSchema = Joi.object(
 export const updateSectionParamsSchema = Joi.object(
   withFieldLabels({
     section: Joi.string()
-      .valid("banner", "founderQuote", "meetBrains", "timeline", "people")
+      .valid("banner", "founderStory", "meetBrains", "timeline", "people")
       .required()
       .label("Section name"),
   })
@@ -167,7 +168,7 @@ export const updateSectionParamsSchema = Joi.object(
 export const updateSectionDataSchema = Joi.alternatives()
   .try(
     bannerSectionSchema,
-    founderQuoteSectionSchema,
+    founderStorySectionSchema,
     meetBrainsSectionSchema,
     timelineSectionSchema,
     peopleSectionSchema
@@ -177,8 +178,8 @@ export const updateSectionDataSchema = Joi.alternatives()
 // Section Data Schemas (for updateSection endpoint)
 export const bannerSectionDataSchema =
   withJsonSupport(bannerSectionSchema).optional();
-export const founderQuoteSectionDataSchema = withJsonSupport(
-  founderQuoteSectionSchema
+export const founderStorySectionDataSchema = withJsonSupport(
+  founderStorySectionSchema
 ).optional();
 export const meetBrainsSectionDataSchema = withJsonSupport(
   meetBrainsSectionSchema

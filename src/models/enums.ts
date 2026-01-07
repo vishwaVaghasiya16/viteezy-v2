@@ -321,6 +321,11 @@ export enum ReferralStatus {
   COMPLETED = "Completed",
 }
 
+export enum SubscriptionPlanStatusEnum {
+  ACTIVE = "ACTIVE",
+  INACTIVE = "INACTIVE",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -370,3 +375,6 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
 ];
 export const SESSION_STATUS_VALUES = Object.values(SessionStatus);
 export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
+export const SUBSCRIPTION_PLAN_STATUS_VALUE = Object.values(
+  SubscriptionPlanStatusEnum
+);

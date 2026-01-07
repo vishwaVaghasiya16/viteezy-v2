@@ -23,7 +23,7 @@ const getValue = (value: any): string | undefined => {
  * Parse nested structure from form-data
  * Handles About Us specific field naming patterns:
  * - banner_banner_title_en -> banner.banner_title.en
- * - founderQuote_founder_quote_text_en -> founderQuote.founder_quote_text.en
+ * - founderStory_founder_heading_en -> founderStory.founder_heading.en
  * - timeline_timeline_events_0_year -> timeline.timeline_events[0].year
  * - people_title_en -> people.title.en
  */
@@ -33,7 +33,7 @@ const buildNestedStructure = (body: any): any => {
   // Known section names mapping (lowercase key -> actual section name)
   const sectionMap: { [key: string]: string } = {
     banner: "banner",
-    founderquote: "founderQuote",
+    founderStory: "founderStory",
     meetbrains: "meetBrains",
     timeline: "timeline",
     people: "people",

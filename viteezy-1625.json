@@ -8931,27 +8931,27 @@
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_en",
+											"key": "banner_banner_description_en",
 											"value": "We are passionate about innovation and excellence",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_nl",
+											"key": "banner_banner_description_nl",
 											"value": "We zijn gepassioneerd over innovatie en excellentie",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_de",
+											"key": "banner_banner_description_de",
 											"value": "Wir sind leidenschaftlich über Innovation und Exzellenz",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_fr",
+											"key": "banner_banner_description_fr",
 											"value": "Nous sommes passionnés par l'innovation et l'excellence",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_es",
+											"key": "banner_banner_description_es",
 											"value": "Estamos apasionados por la innovación y la excelencia",
 											"type": "text"
 										},
@@ -8991,102 +8991,102 @@
 											"src": "/Users/dreamworld/Desktop/Screen Shot 2025-12-18 at 4.44.40 PM.png"
 										},
 										{
-											"key": "founderQuote_founder_quote_text_en",
+											"key": "founderStory_founder_heading_en",
 											"value": "Innovation drives everything we do.",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_quote_text_nl",
+											"key": "founderStory_founder_heading_nl",
 											"value": "Innovatie drijft alles wat we doen.",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_quote_text_de",
+											"key": "founderStory_founder_heading_de",
 											"value": "Innovation treibt alles an, was wir tun.",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_quote_text_fr",
+											"key": "founderStory_founder_heading_fr",
 											"value": "L'innovation motive tout ce que nous faisons.",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_quote_text_es",
+											"key": "founderStory_founder_heading_es",
 											"value": "La innovación impulsa todo lo que hacemos.",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_name_en",
+											"key": "founderStory_founder_name_en",
 											"value": "John Doe",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_name_nl",
+											"key": "founderStory_founder_name_nl",
 											"value": "Jan Janssen",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_name_de",
+											"key": "founderStory_founder_name_de",
 											"value": "Hans Schmidt",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_name_fr",
+											"key": "founderStory_founder_name_fr",
 											"value": "Jean Dupont",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_name_es",
+											"key": "founderStory_founder_name_es",
 											"value": "Juan García",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_designation_en",
+											"key": "founderStory_founder_position_en",
 											"value": "CEO & Founder",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_designation_nl",
+											"key": "founderStory_founder_position_nl",
 											"value": "CEO & Oprichter",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_designation_de",
+											"key": "founderStory_founder_position_de",
 											"value": "CEO & Gründer",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_designation_fr",
+											"key": "founderStory_founder_position_fr",
 											"value": "PDG & Fondateur",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_founder_designation_es",
+											"key": "founderStory_founder_position_es",
 											"value": "CEO y Fundador",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_note_en",
+											"key": "founderStory_note_en",
 											"value": "With over 20 years of experience",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_note_nl",
+											"key": "founderStory_note_nl",
 											"value": "Met meer dan 20 jaar ervaring",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_note_de",
+											"key": "founderStory_note_de",
 											"value": "Mit über 20 Jahren Erfahrung",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_note_fr",
+											"key": "founderStory_note_fr",
 											"value": "Avec plus de 20 ans d'expérience",
 											"type": "text"
 										},
 										{
-											"key": "founderQuote_note_es",
+											"key": "founderStory_note_es",
 											"value": "Con más de 20 años de experiencia",
 											"type": "text"
 										},

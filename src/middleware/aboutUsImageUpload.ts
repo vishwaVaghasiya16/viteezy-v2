@@ -58,15 +58,15 @@ export const handleAboutUsImageUpload = async (
         "about-us",
         files.founder_image[0]
       );
-      if (!req.body.founderQuote) {
-        req.body.founderQuote = {};
+      if (!req.body.founderStory) {
+        req.body.founderStory = {};
       }
-      if (!req.body.founderQuote.founder_image) {
-        req.body.founderQuote.founder_image = {};
+      if (!req.body.founderStory.founder_image) {
+        req.body.founderStory.founder_image = {};
       }
-      req.body.founderQuote.founder_image.url = imageUrl;
-      if (!req.body.founderQuote.founder_image.type) {
-        req.body.founderQuote.founder_image.type = "Image";
+      req.body.founderStory.founder_image.url = imageUrl;
+      if (!req.body.founderStory.founder_image.type) {
+        req.body.founderStory.founder_image.type = "Image";
       }
     }
 

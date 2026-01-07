@@ -32,14 +32,15 @@ class AdminAboutUsController {
           banner: {
             banner_image: null,
             banner_title: {},
-            banner_subtitle: {},
+            banner_description: {},
             banner_button_text: {},
             banner_button_link: "",
           },
-          founderQuote: {
-            founder_quote_text: {},
+          founderStory: {
+            founder_heading: {},
+            founder_description: {},
             founder_name: {},
-            founder_designation: {},
+            founder_position: {},
             note: {},
           },
           meetBrains: {
@@ -78,7 +79,7 @@ class AdminAboutUsController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const { banner, founderQuote, meetBrains, timeline, people } = req.body;
+      const { banner, founderStory, meetBrains, timeline, people } = req.body;
 
       // Find existing About Us page
       let aboutUs = await AboutUs.findOne({
@@ -90,8 +91,8 @@ class AdminAboutUsController {
         if (banner) {
           aboutUs.banner = { ...aboutUs.banner, ...banner };
         }
-        if (founderQuote) {
-          aboutUs.founderQuote = { ...aboutUs.founderQuote, ...founderQuote };
+        if (founderStory) {
+          aboutUs.founderStory = { ...aboutUs.founderStory, ...founderStory };
         }
         if (meetBrains) {
           aboutUs.meetBrains = { ...aboutUs.meetBrains, ...meetBrains };
@@ -113,7 +114,7 @@ class AdminAboutUsController {
         // Create new
         aboutUs = await AboutUs.create({
           banner: banner || {},
-          founderQuote: founderQuote || {},
+          founderStory: founderStory || {},
           meetBrains: meetBrains || {},
           timeline: timeline || {},
           people: people || {},
@@ -138,7 +139,7 @@ class AdminAboutUsController {
 
       const validSections = [
         "banner",
-        "founderQuote",
+        "founderStory",
         "meetBrains",
         "timeline",
         "people",
@@ -170,8 +171,8 @@ class AdminAboutUsController {
       // Update the specific section
       if (section === "banner") {
         aboutUs.banner = { ...aboutUs.banner, ...sectionData };
-      } else if (section === "founderQuote") {
-        aboutUs.founderQuote = { ...aboutUs.founderQuote, ...sectionData };
+      } else if (section === "founderStory") {
+        aboutUs.founderStory = { ...aboutUs.founderStory, ...sectionData };
       } else if (section === "meetBrains") {
         aboutUs.meetBrains = { ...aboutUs.meetBrains, ...sectionData };
       } else if (section === "timeline") {

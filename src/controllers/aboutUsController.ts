@@ -54,15 +54,16 @@ class AboutUsController {
           banner: {
             banner_image: null,
             banner_title: "",
-            banner_subtitle: "",
+            banner_description: "",
             banner_button_text: "",
             banner_button_link: "",
           },
-          founderQuote: {
+          founderStory: {
             founder_image: null,
-            founder_quote_text: "",
+            founder_heading: "",
+            founder_description: "",
             founder_name: "",
-            founder_designation: "",
+            founder_position: "",
             note: "",
           },
           meetBrains: {
@@ -93,25 +94,32 @@ class AboutUsController {
         banner: {
           banner_image: aboutUs.banner?.banner_image || null,
           banner_title: getI18nValue(aboutUs.banner?.banner_title, lang),
-          banner_subtitle: getI18nValue(aboutUs.banner?.banner_subtitle, lang),
+          banner_description: getI18nValue(
+            aboutUs.banner?.banner_description,
+            lang
+          ),
           banner_button_text: getI18nValue(
             aboutUs.banner?.banner_button_text,
             lang
           ),
           banner_button_link: aboutUs.banner?.banner_button_link || "",
         },
-        founderQuote: {
-          founder_image: aboutUs.founderQuote?.founder_image || null,
-          founder_quote_text: getI18nValue(
-            aboutUs.founderQuote?.founder_quote_text,
+        founderStory: {
+          founder_image: aboutUs.founderStory?.founder_image || null,
+          founder_heading: getI18nValue(
+            aboutUs.founderStory?.founder_heading,
             lang
           ),
-          founder_name: getI18nValue(aboutUs.founderQuote?.founder_name, lang),
-          founder_designation: getI18nValue(
-            aboutUs.founderQuote?.founder_designation,
+          founder_description: getI18nValue(
+            aboutUs.founderStory?.founder_description,
             lang
           ),
-          note: getI18nValue(aboutUs.founderQuote?.note, lang),
+          founder_name: getI18nValue(aboutUs.founderStory?.founder_name, lang),
+          founder_position: getI18nValue(
+            aboutUs.founderStory?.founder_position,
+            lang
+          ),
+          note: getI18nValue(aboutUs.founderStory?.note, lang),
         },
         meetBrains: {
           meet_brains_title: getI18nValue(

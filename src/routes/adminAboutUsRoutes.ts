@@ -6,7 +6,7 @@ import {
   upsertAboutUsSchema,
   updateSectionParamsSchema,
   bannerSectionDataSchema,
-  founderQuoteSectionDataSchema,
+  founderStorySectionDataSchema,
   meetBrainsSectionDataSchema,
   timelineSectionDataSchema,
   peopleSectionDataSchema,
@@ -36,7 +36,7 @@ router.get("/", adminAboutUsController.getAboutUs);
  * @desc Create or update About Us page content (supports form-data with file uploads)
  * @access Admin
  * @body {Object} [banner] - Banner section data
- * @body {Object} [founderQuote] - Founder quote section data
+ * @body {Object} [founderStory] - Founder quote section data
  * @body {Object} [meetBrains] - Meet brains section data
  * @body {Object} [timeline] - Timeline section data
  * @body {Object} [people] - People section data
@@ -80,7 +80,7 @@ router.post(
  * @desc Update About Us page content (supports form-data with file uploads)
  * @access Admin
  * @body {Object} [banner] - Banner section data
- * @body {Object} [founderQuote] - Founder quote section data
+ * @body {Object} [founderStory] - Founder quote section data
  * @body {Object} [meetBrains] - Meet brains section data
  * @body {Object} [timeline] - Timeline section data
  * @body {Object} [people] - People section data
@@ -125,7 +125,7 @@ router.put(
  * @route PATCH /api/v1/admin/about-us/sections/:section
  * @desc Update specific section of About Us page
  * @access Admin
- * @param {String} section - Section name (banner, founderQuote, meetBrains, timeline, people)
+ * @param {String} section - Section name (banner, founderStory, meetBrains, timeline, people)
  * @body {Object} sectionData - Section data to update
  * @body {File} [banner_image] - Banner image (if section is banner)
  * @body {File} [meet_brains_main_image] - Meet brains main image (if section is meetBrains)
@@ -169,8 +169,8 @@ router.patch(
       case "banner":
         schema = bannerSectionDataSchema;
         break;
-      case "founderQuote":
-        schema = founderQuoteSectionDataSchema;
+      case "founderStory":
+        schema = founderStorySectionDataSchema;
         break;
       case "meetBrains":
         schema = meetBrainsSectionDataSchema;
