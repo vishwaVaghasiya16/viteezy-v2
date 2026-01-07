@@ -1232,7 +1232,7 @@ class CartService {
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
       {
-        couponCode: undefined,
+        couponCode: null,
         couponDiscountAmount: 0,
         subtotal: totals.subtotal,
         tax: totals.tax,
@@ -1266,7 +1266,7 @@ class CartService {
       discount: 0,
       total: 0,
       currency: "EUR",
-      couponCode: undefined,
+      couponCode: null,
       couponDiscountAmount: 0,
       updatedAt: new Date(),
     });
