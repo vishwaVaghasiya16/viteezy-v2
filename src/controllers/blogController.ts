@@ -9,6 +9,8 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Blogs } from "@/models/cms/blogs.model";
 import { BlogCategories } from "@/models/cms/blogCategories.model";
+import { BlogBanner } from "@/models/cms/blogBanner.model";
+import { GeneralSettings } from "@/models/cms/generalSettings.model";
 import { User } from "@/models/index.model";
 import mongoose from "mongoose";
 import { markdownToHtml } from "@/utils/markdown";
@@ -100,15 +102,22 @@ class BlogController {
         Object.assign(sortOptions, sort);
       }
 
-      const total = await Blogs.countDocuments(filter);
-
-      const blogs = await Blogs.find(filter)
-        .populate("categoryId", "slug title")
-        .populate("authorId", "name email")
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      const [total, blogs, blogBanners, settings] = await Promise.all([
+        Blogs.countDocuments(filter),
+        Blogs.find(filter)
+          .populate("categoryId", "slug title")
+          .populate("authorId", "name email")
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        BlogBanner.find({ isDeleted: { $ne: true } })
+          .sort({ createdAt: -1 })
+          .lean(),
+        GeneralSettings.findOne({
+          isDeleted: { $ne: true },
+        }).lean(),
+      ]);
 
       const transformedBlogs = blogs.map((blog: any) => {
         const category =
@@ -138,9 +147,26 @@ class BlogController {
         };
       });
 
+      // Transform blog banners with localized content
+      const transformedBlogBanners = blogBanners.map((banner: any) => ({
+        _id: banner._id,
+        banner_image: banner.banner_image || null,
+        heading: banner.heading?.[userLang] || banner.heading?.en || "",
+        description:
+          banner.description?.[userLang] || banner.description?.en || "",
+        createdAt: banner.createdAt,
+        updatedAt: banner.updatedAt,
+      }));
+
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(transformedBlogs, pagination, "Blogs retrieved");
+      // Send response with blogs, blog banners, and CMS settings
+      res.status(200).json({
+        success: true,
+        message: "Blogs retrieved",
+        data: { blogs: transformedBlogs, blogBanners: transformedBlogBanners },
+        pagination,
+      });
     }
   );
 

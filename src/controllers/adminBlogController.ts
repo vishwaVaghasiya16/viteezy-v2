@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Blogs, BlogCategories } from "@/models/cms";
+import { Blogs, BlogCategories, BlogBanner } from "@/models/cms";
 import { User } from "@/models/index.model";
 import { fileStorageService } from "@/services/fileStorageService";
 import { logger } from "@/utils/logger";
@@ -174,7 +174,7 @@ class AdminBlogController {
         ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      const [blogs, total] = await Promise.all([
+      const [blogs, total, blogBanners] = await Promise.all([
         Blogs.find(filter)
           .populate("categoryId", "title slug")
           .populate("authorId", "name email")
@@ -183,11 +183,20 @@ class AdminBlogController {
           .limit(limit)
           .lean(),
         Blogs.countDocuments(filter),
+        BlogBanner.find({ isDeleted: { $ne: true } })
+          .sort({ createdAt: -1 })
+          .lean(),
       ]);
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(blogs, pagination, "Blogs retrieved");
+      // Send response with blogs and blog banners
+      res.status(200).json({
+        success: true,
+        message: "Blogs retrieved successfully",
+        data: { blogs, blogBanners },
+        pagination,
+      });
     }
   );
 
