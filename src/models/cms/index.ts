@@ -12,3 +12,4 @@ export { LandingPages } from "./landingPage.model";
 export { TeamMembers } from "./teamMembers.model";
 export { AboutUs } from "./aboutUs.model";
 export { OurTeamPage } from "./ourTeamPage.model";
+export { BlogBanner } from "./blogBanner.model";
