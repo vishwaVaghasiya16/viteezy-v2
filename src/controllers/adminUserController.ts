@@ -256,7 +256,7 @@ class AdminUserController {
         // Recent orders (last 10)
         Orders.find({ userId })
           .select(
-            "_id orderNumber paymentMethod createdAt total items paymentStatus paymentId"
+            "_id orderNumber paymentMethod createdAt grandTotal items paymentStatus paymentId"
           )
           .populate("items.productId", "title productImage slug")
           .sort({ createdAt: -1 })
@@ -341,6 +341,7 @@ class AdminUserController {
           const product = item.productId || {};
           return {
             productName: item.name || product.title || "Unknown Product",
+            planDays: item.planDays || item.capsuleCount || null,
             productImage: product.productImage || null,
             productPrice: {
               amount: item.amount || 0,
