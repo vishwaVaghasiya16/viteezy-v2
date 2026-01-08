@@ -74,7 +74,8 @@ class AdminUserController {
       // Search functionality - only by name or email
       if (search) {
         query.$or = [
-          { name: { $regex: search, $options: "i" } },
+          { firstName: { $regex: search, $options: "i" } },
+          { lastName: { $regex: search, $options: "i" } },
           { email: { $regex: search, $options: "i" } },
         ];
       }
@@ -82,7 +83,7 @@ class AdminUserController {
       // Get all users first (for userType filtering)
       let allUsers = await User.find(query)
         .select(
-          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+          "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
         )
         .sort({ createdAt: -1 })
         .lean();
