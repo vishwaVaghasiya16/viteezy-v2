@@ -5,6 +5,7 @@ import { AppError } from "@/utils/AppError";
 import { Wishlists, Products } from "@/models/commerce";
 import { User } from "@/models/core";
 import { fetchAndEnrichProducts } from "@/services/productEnrichmentService";
+import { cartService } from "@/services/cartService";
 import {
   DEFAULT_LANGUAGE,
   SupportedLanguage,
@@ -100,6 +101,12 @@ class WishlistController {
         productIds.map((id: mongoose.Types.ObjectId) => id.toString())
       );
 
+      // Get cart product IDs if user is authenticated (for isInCart field)
+      let cartProductIds: Set<string> = new Set();
+      if (userId) {
+        cartProductIds = await cartService.getCartProductIds(userId);
+      }
+
       // Fetch and enrich products using common service
       const enrichedProducts = await fetchAndEnrichProducts(productIds, {
         userId,
@@ -120,11 +127,19 @@ class WishlistController {
             return null;
           }
 
+          // Add isInWishlist field (always true since these are wishlist items)
+          const enrichedProduct = {
+            ...product,
+            isInWishlist: true, // All products in wishlist API are in wishlist
+            // Add isInCart field if user is authenticated
+            isInCart: userId ? cartProductIds.has(product._id.toString()) : false,
+          };
+
           return {
             _id: item._id,
             userId: item.userId,
             productId: item.productId,
-            product: product, // Product already has is_liked=true from enrichment service
+            product: enrichedProduct,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt,
           };
