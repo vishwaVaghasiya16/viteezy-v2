@@ -8,6 +8,7 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import { AppError } from "../utils/AppError";
+import { logger } from "../utils/logger";
 import { ProductCategory, Products, Wishlists } from "../models/commerce";
 import { User } from "../models/core";
 import {
@@ -188,10 +189,17 @@ export class ProductController {
   ) {
     try {
       const userId = req.user?.id || req.userId;
+      const userEmail = req.user?.email || "Unknown";
+      const productTitle = req.body?.title || "Unknown";
+      
+      logger.info(`[Product Controller] Create product request received - UserId: ${userId}, UserEmail: ${userEmail}, ProductTitle: "${productTitle}"`);
+      
       const result = await productService.createProduct({
         ...req.body,
         createdBy: userId ? new mongoose.Types.ObjectId(userId) : undefined,
       });
+
+      logger.info(`[Product Controller] Product created successfully - ProductId: ${result.product?._id}, Slug: "${result.product?.slug}", UserId: ${userId}`);
 
       res.status(201).json({
         success: true,
@@ -200,7 +208,8 @@ export class ProductController {
           product: result.product,
         },
       });
-    } catch (error) {
+    } catch (error: any) {
+      logger.error(`[Product Controller] Error creating product - UserId: ${req.user?.id || req.userId}, Error: ${error.message || error}`, error);
       next(error);
     }
   }
