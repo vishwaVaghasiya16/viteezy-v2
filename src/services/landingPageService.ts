@@ -7,6 +7,8 @@ import { ProductIngredients } from "../models/commerce/productIngredients.model"
 import { ProductTestimonials } from "../models/cms/productTestimonials.model";
 import { Blogs } from "../models/cms/blogs.model";
 import { FAQs } from "../models/cms/faqs.model";
+import { Wishlists } from "../models/commerce/wishlists.model";
+import { cartService } from "./cartService";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
@@ -804,9 +806,11 @@ class LandingPageService {
    * Filters sections by isEnabled and sorts by order
    * Transforms all I18n fields to requested language
    * @param lang - Language code (en, nl, de, fr, es). Defaults to "en"
+   * @param userId - Optional user ID for authenticated users (to add is_liked and isInCart fields)
    */
   async getActiveLandingPage(
-    lang: SupportedLanguage = "en"
+    lang: SupportedLanguage = "en",
+    userId?: string | null
   ): Promise<{ landingPage: any }> {
     // Debug: Log the language parameter
     console.log(`[Landing Page Service] Processing with language: ${lang}`);
@@ -1036,6 +1040,29 @@ class LandingPageService {
           });
         }
 
+        // Get user's wishlist and cart product IDs if authenticated
+        let userWishlistProductIds: Set<string> = new Set();
+        let cartProductIds: Set<string> = new Set();
+        
+        if (userId) {
+          try {
+            // Get wishlist product IDs
+            const wishlistItems = await Wishlists.find({
+              userId: new mongoose.Types.ObjectId(userId),
+            })
+              .select("productId")
+              .lean();
+            userWishlistProductIds = new Set(
+              wishlistItems.map((item: any) => item.productId.toString())
+            );
+
+            // Get cart product IDs
+            cartProductIds = await cartService.getCartProductIds(userId);
+          } catch (error) {
+            logger.warn("Failed to fetch wishlist or cart for landing page", error);
+          }
+        }
+
         // Replace ingredient IDs with populated objects and transform for language
         for (const testimonial of testimonials) {
           if (testimonial.products && Array.isArray(testimonial.products)) {
@@ -1071,6 +1098,19 @@ class LandingPageService {
                   name: getTranslatedString(category.name, lang),
                   description: getTranslatedText(category.description, lang),
                 }));
+              }
+
+              // Add is_liked and isInCart fields if user is authenticated (same as getAllProducts API)
+              if (userId) {
+                productObj.is_liked = userWishlistProductIds.has(
+                  productObj._id.toString()
+                );
+                productObj.isInCart = cartProductIds.has(
+                  productObj._id.toString()
+                );
+              } else {
+                productObj.is_liked = false;
+                productObj.isInCart = false;
               }
             }
           }

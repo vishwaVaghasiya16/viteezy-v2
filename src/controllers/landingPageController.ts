@@ -130,20 +130,23 @@ class LandingPageController {
   );
 
   /**
-   * Get active landing page (public endpoint)
+   * Get active landing page (public endpoint with optional authentication)
    * @route GET /api/v1/landing-page?lang=en
-   * @access Public
+   * @access Public (optional authentication)
    * @query {String} [lang] - Language code (en, nl, de, fr, es) or language name (english, dutch, etc.)
    */
   getActiveLandingPage = asyncHandler(
-    async (req: Request, res: Response) => {
+    async (req: AuthenticatedRequest, res: Response) => {
       // Get language from query parameter or user token
       const lang = getUserLanguage(req);
       
-      // Debug: Log the language being used
-      console.log(`[Landing Page API] Language requested: ${req.query.lang}, Resolved: ${lang}`);
+      // Get userId if user is authenticated (from optionalAuth middleware)
+      const userId = req.user?._id || null;
       
-      const result = await landingPageService.getActiveLandingPage(lang);
+      // Debug: Log the language being used
+      console.log(`[Landing Page API] Language requested: ${req.query.lang}, Resolved: ${lang}, UserId: ${userId || 'not authenticated'}`);
+      
+      const result = await landingPageService.getActiveLandingPage(lang, userId);
 
       // Add language info to response headers
       res.setHeader("X-Content-Language", lang);

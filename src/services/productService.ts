@@ -353,12 +353,19 @@ class ProductService {
       price,
       sachetPrices,
       variant,
+      createdBy,
     } = data;
+
+    const creatorId = createdBy?.toString() || "Unknown";
+    logger.info(`[Create Product] Starting product creation - Title: "${title}", CreatedBy: ${creatorId}, Variant: ${variant}`);
 
     // Generate slug from title if not provided
     let finalSlug = slug;
     if (!finalSlug) {
+      logger.info(`[Create Product] Slug not provided, generating from title: "${title}"`);
       const baseSlug = generateSlug(title);
+      logger.debug(`[Create Product] Base slug generated: "${baseSlug}"`);
+      
       finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck: string) => {
@@ -369,29 +376,43 @@ class ProductService {
           return !!existing;
         }
       );
+      logger.info(`[Create Product] Unique slug generated: "${finalSlug}"`);
     } else {
+      logger.info(`[Create Product] Slug provided: "${finalSlug}", validating uniqueness`);
       // Check if provided slug already exists
       const existingProduct = await Products.findOne({
         slug: finalSlug,
         isDeleted: false,
       });
       if (existingProduct) {
+        logger.warn(`[Create Product] Product with slug "${finalSlug}" already exists`);
         throw new AppError("Product with this slug already exists", 409);
       }
+      logger.info(`[Create Product] Slug "${finalSlug}" is unique`);
     }
 
     // Validate standupPouchPrice if hasStandupPouch is true
     if (hasStandupPouch && !standupPouchPrice) {
+      logger.error(`[Create Product] Validation failed - hasStandupPouch is true but standupPouchPrice is missing`);
       throw new AppError(
         "standupPouchPrice is required when hasStandupPouch is true",
         400
       );
     }
 
+    if (hasStandupPouch) {
+      logger.info(`[Create Product] Standup pouch enabled, processing standupPouchPrice`);
+    }
+
     // Process sachetPrices: calculate savingsPercentage and totalAmount
-    const processedSachetPrices = sachetPrices
-      ? this.processSachetPrices(sachetPrices)
-      : sachetPrices;
+    let processedSachetPrices = sachetPrices;
+    if (sachetPrices) {
+      logger.info(`[Create Product] Processing sachetPrices`);
+      processedSachetPrices = this.processSachetPrices(sachetPrices);
+      logger.debug(`[Create Product] Sachet prices processed successfully`);
+    } else {
+      logger.info(`[Create Product] No sachetPrices provided`);
+    }
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
@@ -400,7 +421,8 @@ class ProductService {
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
-      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      logger.info(`[Create Product] Price not provided, deriving from sachetPrices.thirtyDays`);
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays as any; // Type assertion for discountedPrice property
       const baseAmount =
         thirtyDaysPrice.discountedPrice !== undefined
           ? thirtyDaysPrice.discountedPrice
@@ -410,6 +432,11 @@ class ProductService {
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
+      logger.info(`[Create Product] Derived price: ${finalPrice.amount} ${finalPrice.currency}`);
+    } else if (finalPrice) {
+      logger.info(`[Create Product] Using provided price: ${finalPrice.amount} ${finalPrice.currency}`);
+    } else {
+      logger.warn(`[Create Product] No price provided and cannot derive from sachetPrices`);
     }
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
@@ -419,14 +446,21 @@ class ProductService {
       typeof standupPouchPrice === "object" &&
       "oneTime" in standupPouchPrice
     ) {
+      logger.info(`[Create Product] Normalizing standupPouchPrice (unwrapping oneTime wrapper)`);
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
 
     // Process standupPouchPrice: calculate savingsPercentage and totalAmount
-    const processedStandupPouchPrice = normalizedStandupPouchPrice
-      ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
-      : normalizedStandupPouchPrice;
+    let processedStandupPouchPrice = normalizedStandupPouchPrice;
+    if (normalizedStandupPouchPrice) {
+      logger.info(`[Create Product] Processing standupPouchPrice`);
+      processedStandupPouchPrice = this.processStandupPouchPrice(normalizedStandupPouchPrice);
+      logger.debug(`[Create Product] Standup pouch price processed successfully`);
+    }
+
+    // Log product data summary before creation
+    logger.info(`[Create Product] Creating product with - Slug: "${finalSlug}", Variant: ${variant}, HasStandupPouch: ${hasStandupPouch}, Categories: ${data.categories?.length || 0}, Ingredients: ${data.ingredients?.length || 0}`);
 
     // Create product with generated slug and derived price
     const product = await Products.create({
@@ -437,9 +471,10 @@ class ProductService {
       slug: finalSlug,
     });
 
-    logger.info(`Product created successfully: ${product.slug}`);
+    logger.info(`[Create Product] Product created successfully - ID: ${product._id}, Slug: "${product.slug}", Title: "${product.title}"`);
 
     // Populate categories for response
+    logger.debug(`[Create Product] Populating categories for product ${product._id}`);
     const populatedProduct = await Products.findById(product._id)
       .populate(
         "categories",
@@ -447,23 +482,50 @@ class ProductService {
       )
       .lean();
 
+    if (populatedProduct?.categories) {
+      logger.debug(`[Create Product] Populated ${populatedProduct.categories.length} categories`);
+    }
+
     // Get ingredient details and replace ingredients array with populated data
-    const ingredientDetails = await ProductIngredients.find({
-      _id: { $in: product.ingredients || [] },
-    })
-      .select("sId slug name description sortOrder icon image")
-      .lean();
+    const ingredientIds = product.ingredients || [];
+    if (ingredientIds.length > 0) {
+      logger.debug(`[Create Product] Fetching ${ingredientIds.length} ingredient details`);
+      const ingredientDetails = await ProductIngredients.find({
+        _id: { $in: ingredientIds },
+      })
+        .select("sId slug name description sortOrder icon image")
+        .lean();
 
-    // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
-      ...populatedProduct,
-      ingredients: ingredientDetails, // Replace IDs with populated data
-    });
+      logger.debug(`[Create Product] Fetched ${ingredientDetails.length} ingredient details`);
 
-    return {
-      product: productWithMonthlyAmounts,
-      message: "Product created successfully",
-    };
+      // Calculate monthly amounts for subscription prices in response
+      const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+        ...populatedProduct,
+        ingredients: ingredientDetails, // Replace IDs with populated data
+      });
+
+      logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
+
+      return {
+        product: productWithMonthlyAmounts,
+        message: "Product created successfully",
+      };
+    } else {
+      logger.info(`[Create Product] No ingredients to fetch`);
+      
+      // Calculate monthly amounts for subscription prices in response
+      const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+        ...populatedProduct,
+        ingredients: [], // No ingredients
+      });
+
+      logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
+
+      return {
+        product: productWithMonthlyAmounts,
+        message: "Product created successfully",
+      };
+    }
   }
 
   /**
@@ -1340,7 +1402,7 @@ class ProductService {
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
-      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays as any; // Type assertion for discountedPrice property
       const baseAmount =
         thirtyDaysPrice.discountedPrice !== undefined
           ? thirtyDaysPrice.discountedPrice
