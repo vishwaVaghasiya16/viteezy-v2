@@ -17,6 +17,8 @@ import {
   handleVideoAndThumbnailUploadError,
 } from "@/middleware/videoUpload";
 import { parseFormDataJson } from "@/middleware/parseFormData";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 
 const router = Router();
 
@@ -43,6 +45,7 @@ router.post(
     ])
   ),
   parseFormDataJson(["products", "metadata"]),
+  autoTranslateMiddleware("productTestimonials"), // Auto-translate English to all languages (if I18n fields exist)
   validateJoi(createProductTestimonialSchema),
   adminProductTestimonialController.createTestimonial
 );
@@ -59,6 +62,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("productTestimonials"), // Detects language from admin token and transforms I18n fields to single language strings (if I18n fields exist)
   validateQuery(listProductTestimonialsQuerySchema),
   adminProductTestimonialController.getAllTestimonials
 );
@@ -70,6 +74,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("productTestimonials"), // Detects language from admin token and transforms I18n fields to single language strings (if I18n fields exist)
   validateParams(productTestimonialIdParamsSchema),
   adminProductTestimonialController.getTestimonialById
 );
@@ -94,6 +99,7 @@ router.put(
     ])
   ),
   parseFormDataJson(["products", "metadata"]),
+  autoTranslateMiddleware("productTestimonials"), // Auto-translate English to all languages (if I18n fields exist)
   validateParams(productTestimonialIdParamsSchema),
   validateJoi(updateProductTestimonialSchema),
   adminProductTestimonialController.updateTestimonial

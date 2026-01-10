@@ -5,6 +5,8 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminFaqCategoryController } from "@/controllers/adminFaqCategoryController";
 import {
   createFaqCategorySchema,
@@ -36,6 +38,7 @@ router.post(
   handleCategoryImageUploadError(
     categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
   ),
+  autoTranslateMiddleware("faqCategories"), // Auto-translate English to all languages
   validateJoi(createFaqCategorySchema),
   adminFaqCategoryController.createCategory
 );
@@ -47,6 +50,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("faqCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(paginationQuerySchema),
   adminFaqCategoryController.getCategories
 );
@@ -58,6 +62,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("faqCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(faqCategoryIdParamsSchema),
   adminFaqCategoryController.getCategoryById
 );
@@ -78,6 +83,7 @@ router.put(
   handleCategoryImageUploadError(
     categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
   ),
+  autoTranslateMiddleware("faqCategories"), // Auto-translate English to all languages
   validateJoi(updateFaqCategorySchema),
   adminFaqCategoryController.updateCategory
 );

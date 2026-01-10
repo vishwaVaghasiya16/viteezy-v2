@@ -621,10 +621,28 @@ class AdminCouponController {
         },
         {
           $project: {
-            _id: 1,
-            couponId: 1,
-            userId: 1,
-            orderId: 1,
+            _id: { $toString: "$_id" },
+            couponId: {
+              $cond: {
+                if: { $ne: ["$couponId", null] },
+                then: { $toString: "$couponId" },
+                else: null,
+              },
+            },
+            userId: {
+              $cond: {
+                if: { $ne: ["$userId", null] },
+                then: { $toString: "$userId" },
+                else: null,
+              },
+            },
+            orderId: {
+              $cond: {
+                if: { $ne: ["$orderId", null] },
+                then: { $toString: "$orderId" },
+                else: null,
+              },
+            },
             couponCode: 1,
             orderNumber: 1,
             discountAmount: 1,
@@ -632,7 +650,13 @@ class AdminCouponController {
             createdAt: 1,
             updatedAt: 1,
             coupon: {
-              _id: "$coupon._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$coupon._id", null] },
+                  then: { $toString: "$coupon._id" },
+                  else: null,
+                },
+              },
               code: "$coupon.code",
               name: "$coupon.name",
               type: "$coupon.type",
@@ -641,13 +665,25 @@ class AdminCouponController {
               validUntil: "$coupon.validUntil",
             },
             user: {
-              _id: "$user._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$user._id", null] },
+                  then: { $toString: "$user._id" },
+                  else: null,
+                },
+              },
               firstName: "$user.firstName",
               lastName: "$user.lastName",
               email: "$user.email",
             },
             order: {
-              _id: "$order._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$order._id", null] },
+                  then: { $toString: "$order._id" },
+                  else: null,
+                },
+              },
               orderNumber: "$order.orderNumber",
               total: "$order.total",
               status: "$order.status",

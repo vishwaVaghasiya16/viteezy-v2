@@ -1,13 +1,36 @@
 import Joi from "joi";
 
-// I18n string schema for multilingual fields
-const i18nStringSchema = Joi.object({
-  en: Joi.string().allow("", null).optional(),
-  nl: Joi.string().allow("", null).optional(),
-  de: Joi.string().allow("", null).optional(),
-  fr: Joi.string().allow("", null).optional(),
-  es: Joi.string().allow("", null).optional(),
-}).optional();
+// I18n string schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
+const i18nStringSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow("", null), // Plain string (before auto-translation)
+    Joi.object({
+      // I18n object (after auto-translation middleware or direct input)
+      en: Joi.string().trim().allow("", null).optional(),
+      nl: Joi.string().trim().allow("", null).optional(),
+      de: Joi.string().trim().allow("", null).optional(),
+      fr: Joi.string().trim().allow("", null).optional(),
+      es: Joi.string().trim().allow("", null).optional(),
+    })
+  )
+  .optional()
+  .allow(null);
+
+// I18n text schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
+const i18nTextSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow("", null), // Plain string (before auto-translation)
+    Joi.object({
+      // I18n object (after auto-translation middleware or direct input)
+      en: Joi.string().trim().allow("", null).optional(),
+      nl: Joi.string().trim().allow("", null).optional(),
+      de: Joi.string().trim().allow("", null).optional(),
+      fr: Joi.string().trim().allow("", null).optional(),
+      es: Joi.string().trim().allow("", null).optional(),
+    })
+  )
+  .optional()
+  .allow(null);
 
 // Banner image schema
 const bannerImageSchema = Joi.object({}).allow(null).optional();
@@ -16,7 +39,7 @@ const bannerImageSchema = Joi.object({}).allow(null).optional();
 const bannerSchema = Joi.object({
   banner_image: bannerImageSchema,
   title: i18nStringSchema,
-  subtitle: i18nStringSchema,
+  subtitle: i18nTextSchema,
 }).optional();
 
 /**

@@ -6,6 +6,8 @@ import {
   validateQuery,
 } from "@/middleware/joiValidation";
 import { upload, handleMulterError } from "@/middleware/upload";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminBlogController } from "@/controllers/adminBlogController";
 import {
   createBlogSchema,
@@ -28,6 +30,7 @@ router.use(authorize("Admin"));
 router.post(
   "/",
   handleMulterError(upload.single("coverImage"), "cover image"),
+  autoTranslateMiddleware("blogs"), // Auto-translate English to all languages
   validateJoi(createBlogSchema),
   adminBlogController.createBlog
 );
@@ -41,9 +44,13 @@ router.post(
  * @query {String} [search] - Search by title, slug, or tags
  * @query {String} [status] - Filter by status: "Draft" or "Published"
  * @query {String} [categoryId] - Filter by category ID
+ * @note Response is automatically transformed based on admin's language preference from token.
+ *       I18n objects are converted to single language strings (no object structure in response).
+ *       Both blogs and blogBanners are transformed.
  */
 router.get(
   "/",
+  transformResponseMiddleware("blogs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(paginationQuerySchema),
   adminBlogController.getBlogs
 );
@@ -56,6 +63,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("blogs"), // Transform response based on user language
   validateParams(blogIdParamsSchema),
   adminBlogController.getBlogById
 );
@@ -69,6 +77,7 @@ router.get(
 router.put(
   "/:id",
   handleMulterError(upload.single("coverImage"), "cover image"),
+  autoTranslateMiddleware("blogs"), // Auto-translate English to all languages
   validateParams(blogIdParamsSchema),
   validateJoi(updateBlogSchema),
   adminBlogController.updateBlog

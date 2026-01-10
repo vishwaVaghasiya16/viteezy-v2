@@ -6,6 +6,8 @@ import {
   validateQuery,
 } from "@/middleware/joiValidation";
 import { upload, handleMulterError } from "@/middleware/upload";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminBlogBannerController } from "@/controllers/adminBlogBannerController";
 import {
   createBlogBannerSchema,
@@ -32,6 +34,7 @@ router.use(authorize("Admin"));
 router.post(
   "/",
   handleMulterError(upload.single("banner_image"), "banner image"),
+  autoTranslateMiddleware("blogBanners"), // Auto-translate English to all languages
   validateJoi(createBlogBannerSchema),
   adminBlogBannerController.createBlogBanner
 );
@@ -46,6 +49,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("blogBanners"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getAllBlogBannersQuerySchema),
   adminBlogBannerController.getAllBlogBanners
 );
@@ -57,6 +61,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("blogBanners"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(blogBannerIdParamsSchema),
   adminBlogBannerController.getBlogBannerById
 );
@@ -73,6 +78,7 @@ router.get(
 router.put(
   "/:id",
   handleMulterError(upload.single("banner_image"), "banner image"),
+  autoTranslateMiddleware("blogBanners"), // Auto-translate English to all languages
   validateParams(blogBannerIdParamsSchema),
   validateJoi(updateBlogBannerSchema),
   adminBlogBannerController.updateBlogBanner

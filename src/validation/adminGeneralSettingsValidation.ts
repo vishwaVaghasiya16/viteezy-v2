@@ -1,6 +1,22 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
 
+// I18n String Schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
+const i18nStringSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().max(200).allow(null, ""), // Plain string (before auto-translation)
+    Joi.object({
+      // I18n object (after auto-translation middleware)
+      en: Joi.string().trim().max(200).required(),
+      nl: Joi.string().trim().max(200).allow("", null).optional(),
+      de: Joi.string().trim().max(200).allow("", null).optional(),
+      fr: Joi.string().trim().max(200).allow("", null).optional(),
+      es: Joi.string().trim().max(200).allow("", null).optional(),
+    })
+  )
+  .optional()
+  .allow(null);
+
 const socialMediaLinksSchema = Joi.object({
   facebook: Joi.string().uri().optional().allow(null, "").label("Facebook URL"),
   instagram: Joi.string()
@@ -19,8 +35,16 @@ const addressSchema = Joi.object({
   state: Joi.string().trim().optional().allow(null, "").label("State"),
   zip: Joi.string().trim().optional().allow(null, "").label("ZIP Code"),
   country: Joi.string().trim().optional().allow(null, "").label("Country"),
-  addressLine1: Joi.string().trim().optional().allow(null, "").label("Address Line 1"),
-  addressLine2: Joi.string().trim().optional().allow(null, "").label("Address Line 2"),
+  addressLine1: Joi.string()
+    .trim()
+    .optional()
+    .allow(null, "")
+    .label("Address Line 1"),
+  addressLine2: Joi.string()
+    .trim()
+    .optional()
+    .allow(null, "")
+    .label("Address Line 2"),
 }).label("Address");
 
 const languageSettingSchema = Joi.object({
@@ -38,12 +62,7 @@ const languageSettingSchema = Joi.object({
 export const updateGeneralSettingsSchema = Joi.object(
   withFieldLabels({
     // Branding
-    tagline: Joi.string()
-      .trim()
-      .max(200)
-      .optional()
-      .allow(null, "")
-      .label("Tagline"),
+    tagline: i18nStringSchema.label("Tagline"),
 
     // Contact Information
     supportEmail: Joi.string()

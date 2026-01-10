@@ -3,6 +3,7 @@ import { couponUsageHistoryController } from "../controllers/couponUsageHistoryC
 import { authenticate, authorize } from "../middleware/auth";
 import { UserRole } from "../models/enums";
 import { validate } from "../middleware/joiValidation";
+import { transformResponseMiddleware } from "../middleware/responseTransformMiddleware";
 import {
   getMyUsageHistorySchema,
   getUserOrderCouponDataSchema,
@@ -27,11 +28,14 @@ router.get(
  * @desc    Get overall user coupon usage data by userId and orderId
  * @access  Private (Admin)
  * @query   userId, orderId (required)
+ * @note Response is automatically transformed based on admin's language preference from token.
+ *       I18n objects in coupon data are converted to single language strings.
  */
 router.get(
   "/user-order-data",
   authenticate,
   authorize(UserRole.ADMIN),
+  transformResponseMiddleware("coupons"), // Detects language from admin token and transforms I18n fields to single language strings
   validate(getUserOrderCouponDataSchema),
   couponUsageHistoryController.getUserOrderCouponData
 );

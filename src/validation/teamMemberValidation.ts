@@ -60,10 +60,22 @@ const baseI18nTextSchema = Joi.object({
   es: Joi.string().trim().allow("", null),
 });
 
-const i18nStringSchema = withJsonSupport(baseI18nStringSchema).required();
-const i18nTextSchema = withJsonSupport(baseI18nTextSchema, {
-  allowEmpty: true,
-}).optional();
+// I18n String Schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
+const i18nStringSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().min(1), // Plain string (before auto-translation)
+    withJsonSupport(baseI18nStringSchema) // I18n object (after auto-translation middleware or direct input)
+  )
+  .required();
+
+// I18n Text Schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
+const i18nTextSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow("", null), // Plain string (before auto-translation)
+    withJsonSupport(baseI18nTextSchema, { allowEmpty: true }) // I18n object (after auto-translation middleware or direct input)
+  )
+  .optional()
+  .allow(null);
 
 const imageSchema = Joi.string()
   .uri()
@@ -74,7 +86,7 @@ const imageSchema = Joi.string()
 
 export const createTeamMemberSchema = Joi.object(
   withFieldLabels({
-    name: Joi.string().label("Name").required(),
+    name: i18nStringSchema.label("Name"), // Name is also I18nString
     designation: i18nStringSchema.label("Designation"),
     content: i18nTextSchema.label("Content/About"),
     image: imageSchema.optional(),
@@ -83,8 +95,8 @@ export const createTeamMemberSchema = Joi.object(
 
 export const updateTeamMemberSchema = Joi.object(
   withFieldLabels({
-    name: Joi.string().label("Name"),
-    designation: i18nStringSchema.label("Designation"),
+    name: i18nStringSchema.label("Name").optional(), // Name is also I18nString
+    designation: i18nStringSchema.label("Designation").optional(),
     content: i18nTextSchema.label("Content/About"),
     image: imageSchema.optional(),
   })

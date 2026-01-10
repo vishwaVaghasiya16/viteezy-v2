@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { authMiddleware, authorize } from "@/middleware/auth";
 import { validateJoi, validateParams } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminAboutUsController } from "@/controllers/adminAboutUsController";
 import {
   upsertAboutUsSchema,
@@ -28,8 +30,14 @@ router.use(authorize("Admin"));
  * @route GET /api/v1/admin/about-us
  * @desc Get About Us page content
  * @access Admin
+ * @note Response is automatically transformed based on admin's language preference from token.
+ *       I18n objects are converted to single language strings (no object structure in response).
  */
-router.get("/", adminAboutUsController.getAboutUs);
+router.get(
+  "/",
+  transformResponseMiddleware("aboutUs"), // Detects language from admin token and transforms I18n fields to single language strings
+  adminAboutUsController.getAboutUs
+);
 
 /**
  * @route POST /api/v1/admin/about-us
@@ -71,6 +79,7 @@ router.post(
   },
   parseAboutUsFormData,
   handleAboutUsImageUpload,
+  autoTranslateMiddleware("aboutUs"), // Auto-translate English to all languages
   validateJoi(upsertAboutUsSchema),
   adminAboutUsController.upsertAboutUs
 );
@@ -117,6 +126,7 @@ router.put(
   },
   parseAboutUsFormData,
   handleAboutUsImageUpload,
+  autoTranslateMiddleware("aboutUs"), // Auto-translate English to all languages
   validateJoi(upsertAboutUsSchema),
   adminAboutUsController.upsertAboutUs
 );
@@ -159,6 +169,7 @@ router.patch(
   },
   parseAboutUsFormData,
   handleAboutUsImageUpload,
+  autoTranslateMiddleware("aboutUs"), // Auto-translate English to all languages
   validateParams(updateSectionParamsSchema),
   // Dynamic validation based on section type
   (req: Request, res: Response, next: NextFunction) => {

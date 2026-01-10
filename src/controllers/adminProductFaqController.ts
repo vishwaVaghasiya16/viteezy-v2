@@ -129,7 +129,7 @@ class AdminProductFaqController {
 
       const [productFaqs, total] = await Promise.all([
         ProductFAQs.find(filter)
-          .populate("productId", "name slug")
+          .populate("productId", "title slug productImage sachetPrices")
           .sort(sortOptions)
           .skip(skip)
           .limit(limit)
@@ -171,7 +171,19 @@ class AdminProductFaqController {
         .sort({ sortOrder: 1, createdAt: -1 })
         .lean();
 
-      res.apiSuccess({ productFaqs }, "Product FAQs retrieved successfully");
+      // Convert ObjectId fields to strings
+      const transformedProductFaqs = productFaqs.map((faq: any) => ({
+        ...faq,
+        _id: faq._id?.toString() || faq._id,
+        productId: faq.productId?.toString() || faq.productId,
+        createdBy: faq.createdBy?.toString() || faq.createdBy,
+        updatedBy: faq.updatedBy?.toString() || faq.updatedBy,
+      }));
+
+      res.apiSuccess(
+        { productFaqs: transformedProductFaqs },
+        "Product FAQs retrieved successfully"
+      );
     }
   );
 

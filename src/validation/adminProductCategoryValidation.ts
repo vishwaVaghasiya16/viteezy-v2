@@ -20,7 +20,10 @@ const i18nStringSchema = Joi.object({
     "any.required": "English name is required",
     "string.min": "English name must be at least 1 character",
   }),
-  nl: Joi.string().trim().allow("", null).optional().label("Dutch Name"),
+  nl: Joi.string().trim().allow("", null),
+  de: Joi.string().trim().allow("", null),
+  fr: Joi.string().trim().allow("", null),
+  es: Joi.string().trim().allow("", null),
 }).required();
 
 const i18nTextSchema = Joi.object({
@@ -30,6 +33,21 @@ const i18nTextSchema = Joi.object({
     .optional()
     .label("English Description"),
   nl: Joi.string().trim().allow("", null).optional().label("Dutch Description"),
+  de: Joi.string()
+    .trim()
+    .allow("", null)
+    .optional()
+    .label("German Description"),
+  fr: Joi.string()
+    .trim()
+    .allow("", null)
+    .optional()
+    .label("French Description"),
+  es: Joi.string()
+    .trim()
+    .allow("", null)
+    .optional()
+    .label("Spanish Description"),
 }).optional();
 
 const mediaSchema = Joi.alternatives()

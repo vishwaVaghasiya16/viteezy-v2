@@ -17,6 +17,8 @@ import {
   handleCategoryImageUploadError,
 } from "@/middleware/categoryImageUpload";
 import { parseFormDataJson } from "@/middleware/parseFormData";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 
 const router = Router();
 
@@ -27,9 +29,9 @@ router.use(authorize("Admin"));
  * @route POST /api/v1/admin/product-categories
  * @desc Create a new product category
  * @access Admin
- * @body {Object} name - I18n object with en (required) and nl (optional)
+ * @body {String} name - Category name in English (plain string, will be auto-translated to all languages)
  * @body {String} [slug] - Optional slug (auto-generated from name if not provided)
- * @body {Object} [description] - I18n description object
+ * @body {String} [description] - Category description in English (plain string, will be auto-translated to all languages)
  * @body {Number} [sortOrder] - Optional sort order (default: 0)
  * @body {File} [icon] - Optional icon file (multipart/form-data)
  * @body {File} [image] - Optional image file (multipart/form-data)
@@ -45,7 +47,8 @@ router.post(
       { name: "image", maxCount: 1 },
     ])
   ),
-  parseFormDataJson(["name", "description", "seo", "image"]),
+  parseFormDataJson(["seo", "image"]), // Only parse JSON fields (seo, image). name and description are handled by autoTranslateMiddleware
+  autoTranslateMiddleware("categories"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(createProductCategorySchema),
   adminProductCategoryController.createCategory
 );
@@ -61,6 +64,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("categories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getProductCategoriesQuerySchema),
   adminProductCategoryController.getProductCategory
 );
@@ -73,6 +77,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("categories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(productCategoryIdParamsSchema),
   adminProductCategoryController.getCategoryById
 );
@@ -82,9 +87,9 @@ router.get(
  * @desc Update product category
  * @access Admin
  * @param {String} id - Category ID (MongoDB ObjectId)
- * @body {Object} [name] - I18n object with en and nl fields (as JSON string in form-data)
+ * @body {String} [name] - Category name in English (plain string, will be auto-translated to all languages)
  * @body {String} [slug] - Optional slug (auto-regenerated if name changes)
- * @body {Object} [description] - I18n description object (as JSON string in form-data)
+ * @body {String} [description] - Category description in English (plain string, will be auto-translated to all languages)
  * @body {Number} [sortOrder] - Optional sort order
  * @body {File} [icon] - Optional icon file (multipart/form-data)
  * @body {File} [image] - Optional image file (multipart/form-data)
@@ -101,7 +106,8 @@ router.put(
       { name: "image", maxCount: 1 },
     ])
   ),
-  parseFormDataJson(["name", "description", "seo", "image"]),
+  parseFormDataJson(["seo", "image"]), // Only parse JSON fields (seo, image). name and description are handled by autoTranslateMiddleware
+  autoTranslateMiddleware("categories"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(updateProductCategorySchema),
   adminProductCategoryController.updateCategory
 );

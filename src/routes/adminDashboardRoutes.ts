@@ -37,9 +37,17 @@ router.get(
 
 /**
  * @route GET /api/v1/admin/dashboard/top-selling-plans
- * @desc Get top selling plans chart data (90 days, 60 days, one-time purchases)
+ * @desc Get top selling plans data with counts, revenue, and percentages
  * @access Admin
- * @query {String} [date] - Single date filter (ISO 8601 format, default: today)
+ * @query {String} [date] - Single date filter (ISO 8601 format)
+ * @query {String} [month] - Month filter (YYYY-MM format, e.g., "2025-01")
+ * @query {String} [startDate] - Start date for date range (ISO 8601 format)
+ * @query {String} [endDate] - End date for date range (ISO 8601 format, required if startDate provided)
+ * @note Filter priority: startDate/endDate > month > date > default (current month)
+ * @returns {Object} Response with period, summary (totalCount, totalRevenue), and plans array
+ * @example
+ * GET /api/v1/admin/dashboard/top-selling-plans?month=2025-01
+ * GET /api/v1/admin/dashboard/top-selling-plans?startDate=2025-01-01&endDate=2025-01-31
  */
 router.get(
   "/top-selling-plans",
@@ -49,9 +57,19 @@ router.get(
 
 /**
  * @route GET /api/v1/admin/dashboard/top-selling-products
- * @desc Get top selling products list with sales and revenue data
+ * @desc Get top selling products with sales, revenue, and order metrics
  * @access Admin
- * @query {Number} [limit] - Number of products to return (default: 10)
+ * @query {Number} [limit] - Number of products to return (default: 10, max: 100)
+ * @query {String} [date] - Single date filter (ISO 8601 format)
+ * @query {String} [month] - Month filter (YYYY-MM format, e.g., "2025-01")
+ * @query {String} [startDate] - Start date for date range (ISO 8601 format)
+ * @query {String} [endDate] - End date for date range (ISO 8601 format, required if startDate provided)
+ * @note Filter priority: startDate/endDate > month > date > default (all time)
+ * @note Revenue is calculated from actual payment amounts, distributed proportionally per order
+ * @returns {Object} Response with period, summary (totalProducts, totalRevenue, totalOrders), and products array
+ * @example
+ * GET /api/v1/admin/dashboard/top-selling-products?limit=20&month=2025-01
+ * GET /api/v1/admin/dashboard/top-selling-products?startDate=2025-01-01&endDate=2025-01-31&limit=15
  */
 router.get(
   "/top-selling-products",

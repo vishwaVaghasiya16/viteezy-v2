@@ -5,6 +5,8 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminBlogCategoryController } from "@/controllers/adminBlogCategoryController";
 import {
   createBlogCategorySchema,
@@ -29,6 +31,7 @@ router.use(authorize("Admin"));
  */
 router.post(
   "/",
+  autoTranslateMiddleware("blogCategories"), // Auto-translate English to all languages
   validateJoi(createBlogCategorySchema),
   adminBlogCategoryController.createCategory
 );
@@ -44,6 +47,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("blogCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(paginationQuerySchema),
   adminBlogCategoryController.getCategories
 );
@@ -56,6 +60,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("blogCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(blogCategoryIdParamsSchema),
   adminBlogCategoryController.getCategoryById
 );
@@ -72,6 +77,7 @@ router.get(
  */
 router.put(
   "/:id",
+  autoTranslateMiddleware("blogCategories"), // Auto-translate English to all languages
   validateParams(blogCategoryIdParamsSchema),
   validateJoi(updateBlogCategorySchema),
   adminBlogCategoryController.updateCategory

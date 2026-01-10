@@ -13,6 +13,8 @@ import {
   updateStaticPageStatusSchema,
   getStaticPagesSchema,
 } from "@/validation/adminStaticPageValidation";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
 
 const router = Router();
 
@@ -23,9 +25,11 @@ router.use(authorize("Admin"));
  * @route POST /api/v1/admin/static-pages
  * @desc Create a new static page
  * @access Admin
+ * @note I18n fields (title, content) can be sent as plain strings or I18n objects. Plain strings will be automatically converted to I18n objects.
  */
 router.post(
   "/",
+  autoTranslateMiddleware("staticPages"), // Converts plain strings to I18n objects for supported fields
   validateJoi(createStaticPageSchema),
   adminStaticPageController.createStaticPage
 );
@@ -38,10 +42,13 @@ router.post(
  * @query {Number} [limit] - Items per page (default: 10)
  * @query {String} [search] - Search by title or slug
  * @query {String} [status] - Filter by status: "Published" or "Unpublished"
+ * @query {String} [lang] - Language code (en, nl, de, fr, es). If not provided, uses authenticated user's language or defaults to English.
+ * @note I18n fields will be automatically transformed to single language strings based on detected language.
  */
 router.get(
   "/",
   validateQuery(getStaticPagesSchema),
+  transformResponseMiddleware("staticPages"),
   adminStaticPageController.getStaticPages
 );
 
@@ -50,10 +57,13 @@ router.get(
  * @desc Get static page by ID
  * @access Admin
  * @param {String} id - Static page ID (MongoDB ObjectId)
+ * @query {String} [lang] - Language code (en, nl, de, fr, es). If not provided, uses authenticated user's language or defaults to English.
+ * @note I18n fields will be automatically transformed to single language strings based on detected language.
  */
 router.get(
   "/:id",
   validateParams(staticPageIdParamsSchema),
+  transformResponseMiddleware("staticPages"),
   adminStaticPageController.getStaticPageById
 );
 
@@ -61,10 +71,12 @@ router.get(
  * @route PUT /api/v1/admin/static-pages/:id
  * @desc Update static page
  * @access Admin
+ * @note I18n fields (title, content) can be sent as plain strings or I18n objects. Plain strings will be automatically converted to I18n objects.
  */
 router.put(
   "/:id",
   validateParams(staticPageIdParamsSchema),
+  autoTranslateMiddleware("staticPages"), // Converts plain strings to I18n objects for supported fields
   validateJoi(updateStaticPageSchema),
   adminStaticPageController.updateStaticPage
 );

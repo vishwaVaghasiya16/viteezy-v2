@@ -33,12 +33,18 @@ export const createMembershipPlanSchema = Joi.object({
   shortDescription: Joi.object({
     en: Joi.string().optional(),
     nl: Joi.string().optional(),
+    de: Joi.string().optional(),
+    fr: Joi.string().optional(),
+    es: Joi.string().optional(),
   })
     .optional()
     .label("Short Description"),
   description: Joi.object({
     en: Joi.string().optional(),
     nl: Joi.string().optional(),
+    de: Joi.string().optional(),
+    fr: Joi.string().optional(),
+    es: Joi.string().optional(),
   })
     .optional()
     .label("Description"),
@@ -86,12 +92,18 @@ export const updateMembershipPlanSchema = Joi.object({
   shortDescription: Joi.object({
     en: Joi.string().optional(),
     nl: Joi.string().optional(),
+    de: Joi.string().optional(),
+    fr: Joi.string().optional(),
+    es: Joi.string().optional(),
   })
     .optional()
     .label("Short Description"),
   description: Joi.object({
     en: Joi.string().optional(),
     nl: Joi.string().optional(),
+    de: Joi.string().optional(),
+    fr: Joi.string().optional(),
+    es: Joi.string().optional(),
   })
     .optional()
     .label("Description"),

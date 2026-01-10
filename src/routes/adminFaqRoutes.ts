@@ -5,6 +5,8 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminFaqController } from "@/controllers/adminFaqController";
 import {
   createFaqSchema,
@@ -23,7 +25,12 @@ router.use(authorize("Admin"));
  * @desc Create a new FAQ
  * @access Admin
  */
-router.post("/", validateJoi(createFaqSchema), adminFaqController.createFaq);
+router.post(
+  "/",
+  autoTranslateMiddleware("faqs"), // Auto-translate English to all languages
+  validateJoi(createFaqSchema),
+  adminFaqController.createFaq
+);
 
 /**
  * @route GET /api/v1/admin/faqs
@@ -32,6 +39,7 @@ router.post("/", validateJoi(createFaqSchema), adminFaqController.createFaq);
  */
 router.get(
   "/",
+  transformResponseMiddleware("faqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(paginationQuerySchema),
   adminFaqController.getFaqs
 );
@@ -43,6 +51,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("faqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(faqIdParamsSchema),
   adminFaqController.getFaqById
 );
@@ -54,6 +63,7 @@ router.get(
  */
 router.put(
   "/:id",
+  autoTranslateMiddleware("faqs"), // Auto-translate English to all languages
   validateParams(faqIdParamsSchema),
   validateJoi(updateFaqSchema),
   adminFaqController.updateFaq
