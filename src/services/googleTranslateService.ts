@@ -30,8 +30,8 @@ interface CacheEntry {
 }
 
 const translationCache = new Map<string, CacheEntry>();
-const CACHE_MAX_SIZE = 50000; // Max 50k cached translations
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_MAX_SIZE = 100000; // Max 100k cached translations (increased for better cache hit rate)
+const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days (increased from 24 hours for better performance)
 
 class GoogleTranslateService {
   /**
@@ -57,13 +57,13 @@ class GoogleTranslateService {
    * Cache a translation
    */
   private cacheTranslation(text: string, targetLanguage: TranslateLanguageCode, translation: string): void {
-    // If cache is too large, remove oldest entries
-    if (translationCache.size >= CACHE_MAX_SIZE) {
+    // Optimized: Only clean cache when it's significantly over limit (lazy cleanup for better performance)
+    if (translationCache.size >= CACHE_MAX_SIZE * 1.2) {
       const entries = Array.from(translationCache.entries()) as [string, CacheEntry][];
-      // Remove 20% of oldest entries
+      // Remove 30% of oldest entries (more aggressive cleanup)
       entries
         .sort((a, b) => a[1].timestamp - b[1].timestamp)
-        .slice(0, Math.floor(CACHE_MAX_SIZE * 0.2))
+        .slice(0, Math.floor(CACHE_MAX_SIZE * 0.3))
         .forEach(([key]) => translationCache.delete(key));
     }
     

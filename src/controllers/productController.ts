@@ -16,9 +16,8 @@ import {
   I18nTextType,
   DEFAULT_LANGUAGE,
   SupportedLanguage,
-  SUPPORTED_LANGUAGES,
 } from "../models/common.model";
-import { translateProducts, translateProduct } from "../services/productTranslationService";
+import { translateProductForUser, translateProductsForUser } from "../services/productTranslationCommonService";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -243,7 +242,6 @@ export class ProductController {
         healthGoals,
         ingredients,
         sortBy,
-        language, // Accept language parameter from query string
       } = req.query;
 
       const searchTerm =
@@ -285,18 +283,8 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Get target language: prioritize query parameter, then user preference, then default to English
-      let targetLanguage: SupportedLanguage = DEFAULT_LANGUAGE;
-      if (language && typeof language === "string") {
-        // Validate language parameter
-        const lang = language.toLowerCase() as SupportedLanguage;
-        if (SUPPORTED_LANGUAGES.includes(lang)) {
-          targetLanguage = lang;
-        }
-      } else {
-        // Fallback to user language from token/profile
-        targetLanguage = getUserLanguage(req);
-      }
+      // Get target language from user's token/profile, default to English
+      const targetLanguage: SupportedLanguage = getUserLanguage(req);
 
       // Get user's wishlist items if authenticated
       let userWishlistProductIds: Set<string> = new Set();
@@ -317,21 +305,8 @@ export class ProductController {
         cartProductIds = await cartService.getCartProductIds(userId);
       }
 
-      // Translate products if target language is not English
-      let productsToProcess = result.products;
-      if (targetLanguage !== "en") {
-        // First get English text from products using transformProductForLanguage
-        const englishProducts = result.products.map((product: any) =>
-          transformProductForLanguage(product, "en")
-        );
-        // Then translate using Google Translate
-        productsToProcess = await translateProducts(englishProducts, targetLanguage);
-      } else {
-        // For English, use existing transformProductForLanguage
-        productsToProcess = result.products.map((product: any) =>
-          transformProductForLanguage(product, targetLanguage)
-        );
-      }
+      // Translate products using common service (automatically detects language from token)
+      const productsToProcess = await translateProductsForUser(result.products, req);
 
       // Calculate member prices for all products
       const productsWithMemberPrices = await Promise.all(
@@ -573,31 +548,8 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Get target language from query parameter, user preference, or default to English
-      const { language } = req.query;
-      let targetLanguage: SupportedLanguage = DEFAULT_LANGUAGE;
-      if (language && typeof language === "string") {
-        // Validate language parameter
-        const lang = language.toLowerCase() as SupportedLanguage;
-        if (SUPPORTED_LANGUAGES.includes(lang)) {
-          targetLanguage = lang;
-        }
-      } else {
-        // Fallback to user language from token/profile
-        targetLanguage = getUserLanguage(req);
-      }
-
-      // Translate product if target language is not English
-      let transformedProduct: any;
-      if (targetLanguage !== "en") {
-        // First get English text from product using transformProductForLanguage
-        const englishProduct = transformProductForLanguage(result.product, "en");
-        // Then translate using Google Translate
-        transformedProduct = await translateProduct(englishProduct, targetLanguage);
-      } else {
-        // For English, use existing transformProductForLanguage
-        transformedProduct = transformProductForLanguage(result.product, targetLanguage);
-      }
+      // Translate product using common service (automatically detects language from token)
+      const transformedProduct = await translateProductForUser(result.product, req);
 
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {
@@ -690,14 +642,8 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Get user language (defaults to English if not authenticated)
-      const userLang = getUserLanguage(req);
-
-      // Transform product for user's language first
-      const transformedProduct = transformProductForLanguage(
-        result.product,
-        userLang
-      );
+      // Translate product using common service (automatically detects language from token)
+      const transformedProduct = await translateProductForUser(result.product, req);
 
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {

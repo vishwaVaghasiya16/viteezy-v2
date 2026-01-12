@@ -555,22 +555,23 @@ export async function translateProducts(
     });
     
     // Translate nested fields (ingredients, categories, FAQs) in batches to avoid overwhelming API
-    const BATCH_SIZE = 3; // Process 3 products at a time
-    const BATCH_DELAY = 500; // 500ms delay between batches
+    // Optimized: Increased batch size and reduced delay for faster response
+    const BATCH_SIZE = 5; // Process 5 products at a time (increased from 3)
+    const BATCH_DELAY = 200; // 200ms delay between batches (reduced from 500ms)
     
     const finalProducts: any[] = [];
     
     for (let i = 0; i < translatedProducts.length; i += BATCH_SIZE) {
       const batch = translatedProducts.slice(i, i + BATCH_SIZE);
       
-      // Translate batch in parallel
+      // Translate batch in parallel (all at once for speed)
       const batchResults = await Promise.all(
         batch.map((product) => translateProduct(product, targetLanguage))
       );
       
       finalProducts.push(...batchResults);
       
-      // Add delay between batches (except for the last batch)
+      // Add minimal delay between batches only if not the last batch
       if (i + BATCH_SIZE < translatedProducts.length) {
         await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
       }

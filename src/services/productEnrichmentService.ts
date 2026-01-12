@@ -49,8 +49,9 @@ const getTranslatedText = (
 
 /**
  * Transform product to use user's language
+ * Exported for use in common translation service
  */
-const transformProductForLanguage = (
+export const transformProductForLanguage = (
   product: any,
   lang: SupportedLanguage
 ): any => {
