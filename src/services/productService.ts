@@ -473,6 +473,22 @@ class ProductService {
 
     logger.info(`[Create Product] Product created successfully - ID: ${product._id}, Slug: "${product.slug}", Title: "${product.title}"`);
 
+    // Update ingredient documents to add this product ID to their products array
+    const ingredientIds = product.ingredients || [];
+    if (ingredientIds.length > 0) {
+      logger.info(`[Create Product] Updating ${ingredientIds.length} ingredient documents to add product ID`);
+      try {
+        await ProductIngredients.updateMany(
+          { _id: { $in: ingredientIds } },
+          { $addToSet: { products: product._id } } // $addToSet prevents duplicates
+        );
+        logger.info(`[Create Product] Successfully updated ingredient documents with product ID`);
+      } catch (error: any) {
+        logger.error(`[Create Product] Failed to update ingredient documents: ${error.message}`, error);
+        // Don't throw error, just log it - product is already created
+      }
+    }
+
     // Populate categories for response
     logger.debug(`[Create Product] Populating categories for product ${product._id}`);
     const populatedProduct = await Products.findById(product._id)
@@ -487,7 +503,7 @@ class ProductService {
     }
 
     // Get ingredient details and replace ingredients array with populated data
-    const ingredientIds = product.ingredients || [];
+    // Reuse ingredientIds from above (already declared at line 477)
     if (ingredientIds.length > 0) {
       logger.debug(`[Create Product] Fetching ${ingredientIds.length} ingredient details`);
       const ingredientDetails = await ProductIngredients.find({
@@ -1207,11 +1223,26 @@ class ProductService {
     // Get ingredient details and replace ingredients array with populated data
     // Include image field (not icon, as ProductIngredients model has image field)
     // Always include image field even if null/empty for FE consistency
-    const ingredientDetails = await ProductIngredients.find({
-      _id: { $in: product.ingredients || [] },
-    })
-      .select("_id name description image")
-      .lean();
+    const ingredientIds = product.ingredients || [];
+    // Convert ingredient IDs to ObjectIds if they're strings
+    const ingredientObjectIds = ingredientIds
+      .filter((id: any) => id != null) // Filter out null/undefined
+      .map((id: any) => {
+        if (typeof id === 'string') {
+          return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+        }
+        return id instanceof mongoose.Types.ObjectId ? id : (mongoose.Types.ObjectId.isValid(id?.toString()) ? new mongoose.Types.ObjectId(id.toString()) : null);
+      })
+      .filter((id: any) => id != null); // Filter out invalid ObjectIds
+    
+    const ingredientDetails = ingredientObjectIds.length > 0
+      ? await ProductIngredients.find({
+          _id: { $in: ingredientObjectIds },
+          isDeleted: { $ne: true },
+        })
+          .select("_id name description image")
+          .lean()
+      : [];
 
     // Fetch product ingredients linked to this product (relationship is reversed)
     let linkedProductIngredients: any[] = [];
@@ -1236,10 +1267,16 @@ class ProductService {
       .sort({ sortOrder: 1 })
       .lean();
 
+    // Use productIngredientDetails as ingredients if ingredients array is empty
+    // This handles the case where ingredients are linked via reverse relationship
+    const finalIngredients = ingredientDetails.length > 0 
+      ? ingredientDetails 
+      : (linkedProductIngredients.length > 0 ? linkedProductIngredients : []);
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
-      ingredients: ingredientDetails, // Replace IDs with populated data
+      ingredients: finalIngredients, // Use populated ingredients or fallback to linked ingredients
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
@@ -1489,6 +1526,54 @@ class ProductService {
       updateData.price = finalPrice;
     }
 
+    // Handle ingredient updates: update ingredient documents if ingredients are being changed
+    if (data.ingredients !== undefined) {
+      const oldIngredientIds = (existingProduct.ingredients || []).map((id: any) => 
+        id.toString()
+      );
+      const newIngredientIds = (data.ingredients || []).map((id: string) => 
+        id.toString()
+      );
+
+      // Find ingredients to remove (in old but not in new)
+      const ingredientsToRemove = oldIngredientIds.filter(
+        (id: string) => !newIngredientIds.includes(id)
+      );
+      
+      // Find ingredients to add (in new but not in old)
+      const ingredientsToAdd = newIngredientIds.filter(
+        (id: string) => !oldIngredientIds.includes(id)
+      );
+
+      logger.info(`[Update Product] Ingredients changed - Removing from ${ingredientsToRemove.length} ingredients, Adding to ${ingredientsToAdd.length} ingredients`);
+
+      // Remove product ID from old ingredients
+      if (ingredientsToRemove.length > 0) {
+        try {
+          await ProductIngredients.updateMany(
+            { _id: { $in: ingredientsToRemove.map((id: string) => new mongoose.Types.ObjectId(id)) } },
+            { $pull: { products: new mongoose.Types.ObjectId(productId) } }
+          );
+          logger.info(`[Update Product] Removed product ID from ${ingredientsToRemove.length} ingredient documents`);
+        } catch (error: any) {
+          logger.error(`[Update Product] Failed to remove product ID from ingredients: ${error.message}`, error);
+        }
+      }
+
+      // Add product ID to new ingredients
+      if (ingredientsToAdd.length > 0) {
+        try {
+          await ProductIngredients.updateMany(
+            { _id: { $in: ingredientsToAdd.map((id: string) => new mongoose.Types.ObjectId(id)) } },
+            { $addToSet: { products: new mongoose.Types.ObjectId(productId) } } // $addToSet prevents duplicates
+          );
+          logger.info(`[Update Product] Added product ID to ${ingredientsToAdd.length} ingredient documents`);
+        } catch (error: any) {
+          logger.error(`[Update Product] Failed to add product ID to ingredients: ${error.message}`, error);
+        }
+      }
+    }
+
     // Update product with only provided fields
     await Products.findByIdAndUpdate(productId, updateData, {
       new: true,
@@ -1601,6 +1686,22 @@ class ProductService {
 
     // Delete associated assets
     await fileStorageService.deleteFileByUrl(product.productImage);
+
+    // Remove product ID from all ingredient documents
+    const ingredientIds = product.ingredients || [];
+    if (ingredientIds.length > 0) {
+      logger.info(`[Delete Product] Removing product ID from ${ingredientIds.length} ingredient documents`);
+      try {
+        await ProductIngredients.updateMany(
+          { _id: { $in: ingredientIds } },
+          { $pull: { products: new mongoose.Types.ObjectId(productId) } }
+        );
+        logger.info(`[Delete Product] Successfully removed product ID from ingredient documents`);
+      } catch (error: any) {
+        logger.error(`[Delete Product] Failed to remove product ID from ingredients: ${error.message}`, error);
+        // Don't throw error, continue with product deletion
+      }
+    }
 
     // Soft delete
     await Products.findByIdAndUpdate(productId, {
