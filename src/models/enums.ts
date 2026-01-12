@@ -321,6 +321,12 @@ export enum ReferralStatus {
   COMPLETED = "Completed",
 }
 
+// Device Types for Header Banner
+export enum DeviceType {
+  WEB = "WEB",
+  MOBILE = "MOBILE",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -370,3 +376,4 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
 ];
 export const SESSION_STATUS_VALUES = Object.values(SessionStatus);
 export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
+export const DEVICE_TYPE_VALUES = Object.values(DeviceType);

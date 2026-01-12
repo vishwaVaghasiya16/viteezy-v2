@@ -44,6 +44,7 @@ export {
   SubscriptionCycle,
   SessionStatus,
   ReferralStatus,
+  DeviceType,
   // Export enum values
   PRODUCT_STATUS_VALUES,
   USER_ROLE_VALUES,
@@ -86,6 +87,7 @@ export {
   SUBSCRIPTION_CYCLE_VALUES,
   SESSION_STATUS_VALUES,
   REFERRAL_STATUS_VALUES,
+  DEVICE_TYPE_VALUES,
 } from "./enums";
 
 // AI Models

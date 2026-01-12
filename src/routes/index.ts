@@ -27,6 +27,7 @@ import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
 import adminBlogCategoryRoutes from "./adminBlogCategoryRoutes";
 import adminBlogRoutes from "./adminBlogRoutes";
 import adminBlogBannerRoutes from "./adminBlogBannerRoutes";
+import adminHeaderBannerRoutes from "./adminHeaderBannerRoutes";
 import adminFaqCategoryRoutes from "./adminFaqCategoryRoutes";
 import adminFaqRoutes from "./adminFaqRoutes";
 import adminCouponRoutes from "./adminCouponRoutes";
@@ -51,6 +52,7 @@ import teamMemberRoutes from "./teamMemberRoutes";
 import countryRoutes from "./countryRoutes";
 import stateRoutes from "./stateRoutes";
 import generalSettingsRoutes from "./generalSettingsRoutes";
+import headerBannerRoutes from "./headerBannerRoutes";
 
 const router = Router();
 
@@ -63,6 +65,7 @@ router.use("/admin/product-ingredients", adminProductIngredientRoutes);
 router.use("/admin/blog-categories", adminBlogCategoryRoutes);
 router.use("/admin/blogs", adminBlogRoutes);
 router.use("/admin/blog-banners", adminBlogBannerRoutes);
+router.use("/admin/header-banners", adminHeaderBannerRoutes);
 router.use("/admin/faq-categories", adminFaqCategoryRoutes);
 router.use("/admin/faqs", adminFaqRoutes);
 router.use("/admin/coupons", adminCouponRoutes);
@@ -109,5 +112,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/countries", countryRoutes);
 router.use("/states", stateRoutes);
 router.use("/general-settings", generalSettingsRoutes);
+router.use("/header-banner", headerBannerRoutes);
 
 export default router;

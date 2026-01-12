@@ -13,3 +13,4 @@ export { TeamMembers } from "./teamMembers.model";
 export { AboutUs } from "./aboutUs.model";
 export { OurTeamPage } from "./ourTeamPage.model";
 export { BlogBanner } from "./blogBanner.model";
+export { HeaderBanner } from "./headerBanner.model";
