@@ -28,25 +28,17 @@ const mapLanguageToCode = (language: string): SupportedLanguage => {
 
 /**
  * Get user language from request
- * Priority: 1. Query parameter (lang) 2. User token 3. Default to English
+ * Priority: 1. User token 2. Default to English
+ * Query parameter removed - language comes from token only
  */
 const getUserLanguage = (req: Request): SupportedLanguage => {
-  // Check query parameter first
-  const langParam = req.query.lang as string;
-  if (langParam) {
-    const validLang = ["en", "nl", "de", "fr", "es"].includes(langParam.toLowerCase())
-      ? (langParam.toLowerCase() as SupportedLanguage)
-      : DEFAULT_LANGUAGE;
-    return validLang;
-  }
-
-  // Check if user is authenticated and has language preference
+  // Check if user is authenticated and has language preference (from token)
   const authenticatedReq = req as any;
   if (authenticatedReq.user?.language) {
     return mapLanguageToCode(authenticatedReq.user.language);
   }
 
-  // Default to English
+  // Default to English if not authenticated or no language preference
   return DEFAULT_LANGUAGE;
 };
 
@@ -131,20 +123,17 @@ class LandingPageController {
 
   /**
    * Get active landing page (public endpoint with optional authentication)
-   * @route GET /api/v1/landing-page?lang=en
+   * @route GET /api/v1/landing-page
    * @access Public (optional authentication)
-   * @query {String} [lang] - Language code (en, nl, de, fr, es) or language name (english, dutch, etc.)
+   * @description Language is automatically detected from user token. If no token or no language preference, defaults to English.
    */
   getActiveLandingPage = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
-      // Get language from query parameter or user token
+      // Get language from user token (automatically detected from token)
       const lang = getUserLanguage(req);
       
       // Get userId if user is authenticated (from optionalAuth middleware)
       const userId = req.user?._id || null;
-      
-      // Debug: Log the language being used
-      console.log(`[Landing Page API] Language requested: ${req.query.lang}, Resolved: ${lang}, UserId: ${userId || 'not authenticated'}`);
       
       const result = await landingPageService.getActiveLandingPage(lang, userId);
 
