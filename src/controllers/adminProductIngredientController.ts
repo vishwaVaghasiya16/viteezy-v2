@@ -15,6 +15,117 @@ interface AuthenticatedRequest extends Request {
 }
 
 class AdminProductIngredientController {
+  /**
+   * Add ingredient ID to products' ingredients array
+   */
+  private async addIngredientIdToProducts(
+    ingredientId: mongoose.Types.ObjectId,
+    productIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (productIds.length === 0 || !ingredientId) {
+      return;
+    }
+
+    try {
+      const result = await Products.updateMany(
+        {
+          _id: { $in: productIds },
+          isDeleted: false,
+        },
+        {
+          $addToSet: { ingredients: ingredientId }, // Add if not already present
+        }
+      );
+
+      logger.info(
+        `Added ingredient ID ${ingredientId} to ${result.modifiedCount} out of ${result.matchedCount} products`
+      );
+    } catch (error: any) {
+      logger.error("Error adding ingredient ID to products", {
+        ingredientId,
+        productIds,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Remove ingredient ID from products' ingredients array
+   */
+  private async removeIngredientIdFromProducts(
+    ingredientId: mongoose.Types.ObjectId | string,
+    productIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (productIds.length === 0 || !ingredientId) {
+      return;
+    }
+
+    try {
+      // Ensure ingredientId is properly converted to ObjectId
+      const ingredientObjectId =
+        ingredientId instanceof mongoose.Types.ObjectId
+          ? ingredientId
+          : new mongoose.Types.ObjectId(String(ingredientId));
+
+      const result = await Products.updateMany(
+        {
+          _id: { $in: productIds },
+          isDeleted: false,
+        },
+        {
+          $pull: { ingredients: ingredientObjectId },
+        }
+      );
+
+      logger.info(
+        `Removed ingredient ID ${ingredientObjectId} from ${result.modifiedCount} out of ${result.matchedCount} products`
+      );
+    } catch (error: any) {
+      logger.error("Error removing ingredient ID from products", {
+        ingredientId,
+        productIds,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Update products' ingredients array when ingredient products change
+   */
+  private async updateIngredientIdInProducts(
+    ingredientId: mongoose.Types.ObjectId,
+    oldProductIds: mongoose.Types.ObjectId[],
+    newProductIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (!ingredientId) {
+      return;
+    }
+
+    // Find products to remove from (in old but not in new)
+    const productsToRemove = oldProductIds.filter(
+      (oldId) =>
+        !newProductIds.some((newId) => newId.toString() === oldId.toString())
+    );
+
+    // Find products to add to (in new but not in old)
+    const productsToAdd = newProductIds.filter(
+      (newId) =>
+        !oldProductIds.some((oldId) => oldId.toString() === newId.toString())
+    );
+
+    // Remove from old products
+    if (productsToRemove.length > 0) {
+      await this.removeIngredientIdFromProducts(ingredientId, productsToRemove);
+    }
+
+    // Add to new products
+    if (productsToAdd.length > 0) {
+      await this.addIngredientIdToProducts(ingredientId, productsToAdd);
+    }
+  }
+
   private async uploadImage(
     file?: Express.Multer.File
   ): Promise<MediaType | null> {
@@ -127,6 +238,31 @@ class AdminProductIngredientController {
           ? new mongoose.Types.ObjectId(requesterId)
           : undefined,
       });
+
+      // Add ingredient ID to products' ingredients array
+      if (productIds.length > 0) {
+        // Get ingredient ID - handle both _id and id properties
+        let ingredientId: mongoose.Types.ObjectId;
+
+        if (ingredient._id) {
+          ingredientId =
+            ingredient._id instanceof mongoose.Types.ObjectId
+              ? ingredient._id
+              : new mongoose.Types.ObjectId(ingredient._id.toString());
+        } else if ((ingredient as any).id) {
+          ingredientId = new mongoose.Types.ObjectId((ingredient as any).id);
+        } else {
+          logger.error("Ingredient ID not found after creation", {
+            ingredient: ingredient.toObject
+              ? ingredient.toObject()
+              : ingredient,
+          });
+          throw new AppError("Failed to get ingredient ID after creation", 500);
+        }
+
+        // Add ingredient ID to all associated products
+        await this.addIngredientIdToProducts(ingredientId, productIds);
+      }
 
       res.status(201).json({
         success: true,
@@ -242,11 +378,11 @@ class AdminProductIngredientController {
       }
 
       // Handle name update - merge with existing if provided
+      const existingEnglishName = existing.name?.en;
       let finalName = existing.name || {};
       if (name) {
         // Check if English name is being changed
         const newEnglishName = name.en;
-        const existingEnglishName = existing.name?.en;
 
         if (newEnglishName && newEnglishName !== existingEnglishName) {
           await this.assertNameUnique(newEnglishName, id);
@@ -269,7 +405,8 @@ class AdminProductIngredientController {
       }
 
       // Validate products if provided
-      let productIds = existing.products;
+      const oldProductIds = existing.products || [];
+      let productIds = oldProductIds;
       if (products && Array.isArray(products)) {
         if (products.length === 0) {
           throw new AppError("At least one product must be selected", 400);
@@ -292,6 +429,8 @@ class AdminProductIngredientController {
           throw new AppError("One or more products not found", 404);
         }
       }
+
+      const ingredientId = new mongoose.Types.ObjectId(id);
 
       // Handle image upload
       let imageData = existing.image;
@@ -342,6 +481,15 @@ class AdminProductIngredientController {
         { new: true, runValidators: true }
       ).lean();
 
+      // Update products' ingredients array if products changed
+      if (products && Array.isArray(products)) {
+        await this.updateIngredientIdInProducts(
+          ingredientId,
+          oldProductIds,
+          productIds
+        );
+      }
+
       res.status(200).json({
         success: true,
         message: "Product ingredient updated successfully",
@@ -370,6 +518,30 @@ class AdminProductIngredientController {
       // Delete image if exists
       if (ingredient.image) {
         await this.deleteImage(ingredient.image);
+      }
+
+      // Remove ingredient ID from all products' ingredients array
+      const productIds = ingredient.products || [];
+      if (productIds.length > 0) {
+        // Get ingredient ID - handle both _id and id properties, ensure proper ObjectId conversion
+        let ingredientId: mongoose.Types.ObjectId;
+
+        if (ingredient._id) {
+          ingredientId =
+            ingredient._id instanceof mongoose.Types.ObjectId
+              ? ingredient._id
+              : new mongoose.Types.ObjectId(ingredient._id.toString());
+        } else if ((ingredient as any).id) {
+          ingredientId = new mongoose.Types.ObjectId((ingredient as any).id);
+        } else {
+          // Use the id from params as fallback
+          ingredientId = new mongoose.Types.ObjectId(id);
+        }
+
+        logger.info(
+          `Removing ingredient ID ${ingredientId} from ${productIds.length} products`
+        );
+        await this.removeIngredientIdFromProducts(ingredientId, productIds);
       }
 
       await ProductIngredients.findByIdAndUpdate(
