@@ -5,12 +5,13 @@
  */
 
 import { Router } from "express";
-import { authMiddleware } from "@/middleware/auth";
+import { authMiddleware, optionalAuth } from "@/middleware/auth";
 import { BlogController } from "@/controllers/blogController";
 import { validateQuery, validateParams } from "@/middleware/joiValidation";
 import {
   getBlogsSchema,
   getBlogDetailsSchema,
+  getBlogDetailsQuerySchema,
   getPopularBlogsSchema,
   incrementBlogViewsSchema,
   getBlogCategoriesQuerySchema,
@@ -19,47 +20,48 @@ import {
 const router = Router();
 
 /**
- * Protected Routes (Authentication Required)
- * User must be logged in to access blogs
- * Language is automatically detected from user's profile preference
+ * Blog Routes (Optional Authentication)
+ * Language priority: query param > user token > default "en"
+ * Most routes support optional authentication - if user is authenticated, their language preference is used
  */
 
-// Get list of blog categories (authenticated users only)
+// Get list of blog categories (optional authentication)
 router.get(
   "/categories/list",
-  authMiddleware,
+  optionalAuth,
   validateQuery(getBlogCategoriesQuerySchema),
   BlogController.getBlogCategories
 );
 
-// Get popular or latest blogs (top 3-5) - authenticated users only
+// Get popular or latest blogs (top 3-5) - optional authentication
 router.get(
   "/popular/list",
-  authMiddleware,
+  optionalAuth,
   validateQuery(getPopularBlogsSchema),
   BlogController.getPopularBlogs
 );
 
-// Get paginated list of blogs with filters - authenticated users only
+// Get paginated list of blogs with filters - optional authentication
 router.get(
   "/",
-  authMiddleware,
+  optionalAuth,
   validateQuery(getBlogsSchema),
   BlogController.getBlogs
 );
 
-// Get blog details by slug or ID - authenticated users only
+// Get blog details by slug or ID - optional authentication
 router.get(
   "/:slugOrId",
-  authMiddleware,
+  optionalAuth,
   validateParams(getBlogDetailsSchema),
+  validateQuery(getBlogDetailsQuerySchema),
   BlogController.getBlogDetails
 );
 
 // Increment blog view count - authenticated users only
 router.post(
   "/:slugOrId/increment-views",
-  authMiddleware,
+  optionalAuth,
   validateParams(incrementBlogViewsSchema),
   BlogController.incrementBlogViews
 );
