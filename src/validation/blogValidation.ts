@@ -1,5 +1,6 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
+import { getLanguageQuerySchema } from "@/utils/i18nValidationHelper";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 const slugRegex = /^[0-9a-z]+(?:-[0-9a-z]+)*$/;
@@ -41,24 +42,18 @@ const withJsonSupport = <T extends Joi.Schema>(
     })
   );
 
-const baseI18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(3).required().messages({
-    "any.required": "English content is required",
-    "string.min": "English content must be at least 3 characters",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
+import { getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
+
+// Use dynamic I18n schemas that support any configured languages
+const baseI18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 3,
 });
 
 // Description schema - allows markdown/HTML content
-const baseI18nDescriptionSchema = Joi.object({
-  en: Joi.string().allow("", null),
-  nl: Joi.string().allow("", null),
-  de: Joi.string().allow("", null),
-  fr: Joi.string().allow("", null),
-  es: Joi.string().allow("", null),
+const baseI18nDescriptionSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
 });
 
 const baseSeoSchema = Joi.object({
@@ -163,10 +158,7 @@ export const getBlogsSchema = Joi.object(
     category: Joi.string().optional(),
     search: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)
@@ -184,10 +176,7 @@ export const getBlogDetailsSchema = Joi.object(
 
 export const getBlogDetailsQuerySchema = Joi.object(
   withFieldLabels({
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)
@@ -196,10 +185,7 @@ export const getBlogDetailsQuerySchema = Joi.object(
 export const getBlogCategoriesQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string().valid("active", "all").default("active"),
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)
@@ -209,10 +195,7 @@ export const getPopularBlogsSchema = Joi.object(
   withFieldLabels({
     limit: Joi.number().integer().min(3).max(5).optional(),
     type: Joi.string().valid("popular", "latest").optional(),
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)

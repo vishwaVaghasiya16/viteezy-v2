@@ -1,6 +1,7 @@
 import Joi from "joi";
 import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
+import { getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
 
 const objectIdSchema = Joi.string()
   .custom((value, helpers) => {
@@ -15,40 +16,16 @@ const objectIdSchema = Joi.string()
 
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const i18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(1).required().label("English Name").messages({
-    "any.required": "English name is required",
-    "string.min": "English name must be at least 1 character",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
-}).required();
+// Use dynamic I18n schemas that support any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 1,
+});
 
-const i18nTextSchema = Joi.object({
-  en: Joi.string()
-    .trim()
-    .allow("", null)
-    .optional()
-    .label("English Description"),
-  nl: Joi.string().trim().allow("", null).optional().label("Dutch Description"),
-  de: Joi.string()
-    .trim()
-    .allow("", null)
-    .optional()
-    .label("German Description"),
-  fr: Joi.string()
-    .trim()
-    .allow("", null)
-    .optional()
-    .label("French Description"),
-  es: Joi.string()
-    .trim()
-    .allow("", null)
-    .optional()
-    .label("Spanish Description"),
-}).optional();
+const i18nTextSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
+});
 
 const mediaSchema = Joi.alternatives()
   .try(

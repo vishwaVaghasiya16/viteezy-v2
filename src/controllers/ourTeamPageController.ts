@@ -2,21 +2,28 @@ import { Request, Response } from "express";
 import { asyncHandler, markdownToHtml } from "@/utils";
 import { OurTeamPage } from "@/models/cms/ourTeamPage.model";
 import { TeamMembers } from "@/models/cms/teamMembers.model";
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { DEFAULT_LANGUAGE_CODE, normalizeLanguageCode } from "@/utils/languageConstants";
+import { languageService } from "@/services/languageService";
 
-type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
-
-const getLanguageFromQuery = (lang?: string): SupportedLanguage => {
-  const supportedLanguages: SupportedLanguage[] = [
-    "en",
-    "nl",
-    "de",
-    "fr",
-    "es",
-  ];
-  if (lang && supportedLanguages.includes(lang as SupportedLanguage)) {
-    return lang as SupportedLanguage;
+/**
+ * Get language from query parameter, default to "en"
+ * Validates against configured languages dynamically
+ */
+const getLanguageFromQuery = async (lang?: string): Promise<SupportedLanguage> => {
+  if (!lang) {
+    return DEFAULT_LANGUAGE_CODE;
   }
-  return "en";
+
+  const normalized = normalizeLanguageCode(lang);
+  
+  // Validate against configured languages
+  const isValid = await languageService.isValidLanguage(normalized);
+  if (!isValid) {
+    return DEFAULT_LANGUAGE_CODE;
+  }
+
+  return normalized as SupportedLanguage;
 };
 
 class OurTeamPageController {
@@ -25,7 +32,7 @@ class OurTeamPageController {
    */
   getOurTeamPage = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const userLang = getLanguageFromQuery(req.query.lang as string);
+      const userLang = await getLanguageFromQuery(req.query.lang as string);
 
       // Fetch page settings and team members in parallel
       const [pageSettings, teamMembers] = await Promise.all([

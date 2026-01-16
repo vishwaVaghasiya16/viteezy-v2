@@ -7,24 +7,28 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "@/utils";
 import { AboutUs } from "@/models/cms";
-
-type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { getLanguageCodeFromName, DEFAULT_LANGUAGE_CODE, normalizeLanguageCode } from "@/utils/languageConstants";
+import { languageService } from "@/services/languageService";
 
 /**
  * Get language from query parameter, default to "en"
+ * Validates against configured languages dynamically
  */
-const getLanguageFromQuery = (lang?: string): SupportedLanguage => {
-  const supportedLanguages: SupportedLanguage[] = [
-    "en",
-    "nl",
-    "de",
-    "fr",
-    "es",
-  ];
-  if (lang && supportedLanguages.includes(lang as SupportedLanguage)) {
-    return lang as SupportedLanguage;
+const getLanguageFromQuery = async (lang?: string): Promise<SupportedLanguage> => {
+  if (!lang) {
+    return DEFAULT_LANGUAGE_CODE;
   }
-  return "en";
+
+  const normalized = normalizeLanguageCode(lang);
+  
+  // Validate against configured languages
+  const isValid = await languageService.isValidLanguage(normalized);
+  if (!isValid) {
+    return DEFAULT_LANGUAGE_CODE;
+  }
+
+  return normalized as SupportedLanguage;
 };
 
 /**
@@ -42,7 +46,7 @@ class AboutUsController {
    */
   getAboutUs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const lang = getLanguageFromQuery(req.query.lang as string);
+      const lang = await getLanguageFromQuery(req.query.lang as string);
 
       const aboutUs = await AboutUs.findOne({
         isDeleted: false,

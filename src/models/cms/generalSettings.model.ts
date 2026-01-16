@@ -5,6 +5,7 @@ import {
   I18nString,
   I18nStringType,
 } from "../common.model";
+import { LANGUAGE_VALIDATION, DEFAULT_LANGUAGE_CONFIG } from "@/constants/languageConstants";
 
 export interface ISocialMediaLinks {
   facebook?: string;
@@ -83,13 +84,21 @@ const LanguageSettingSchema = new Schema<ILanguageSetting>(
       required: true,
       trim: true,
       uppercase: true,
-      enum: ["EN", "NL", "DE", "FR", "ES"], // Fixed 5 languages
+      // No enum - allows any language code for flexibility
+      validate: {
+        validator: function (v: string) {
+          // ISO 639-1 language codes (2 letters)
+          return /^[A-Z]{2}$/.test(v);
+        },
+        message:
+          "Language code must be a valid 2-letter ISO 639-1 code (e.g., EN, NL, DE, FR, ES, IT, PT, etc.)",
+      },
     },
     name: {
       type: String,
       required: true,
       trim: true,
-      enum: ["English", "Dutch", "German", "French", "Spanish"],
+      // No enum - allows any language name for flexibility
     },
     isEnabled: {
       type: Boolean,
@@ -147,13 +156,11 @@ const GeneralSettingsSchema = new Schema<IGeneralSettings>(
     // Language Settings
     languages: {
       type: [LanguageSettingSchema],
-      default: () => [
-        { code: "EN", name: "English", isEnabled: true },
-        { code: "NL", name: "Dutch", isEnabled: true },
-        { code: "DE", name: "German", isEnabled: false },
-        { code: "FR", name: "French", isEnabled: false },
-        { code: "ES", name: "Spanish", isEnabled: false },
-      ],
+      default: () => DEFAULT_LANGUAGE_CONFIG.map((lang) => ({
+        code: lang.code.toUpperCase(),
+        name: lang.name,
+        isEnabled: lang.isEnabled,
+      })),
     },
     isDeleted: {
       type: Boolean,

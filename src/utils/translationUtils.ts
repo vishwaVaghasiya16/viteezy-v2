@@ -2,10 +2,14 @@ import {
   I18nStringType,
   I18nTextType,
   SupportedLanguage,
-  DEFAULT_LANGUAGE,
+  DEFAULT_LANGUAGE_CODE,
 } from "@/models/common.model";
 import { translationService } from "@/services/translationService";
 import { logger } from "@/utils/logger";
+import { DEFAULT_LANGUAGE as DEFAULT_LANG_CONSTANT } from "@/constants/languageConstants";
+
+// For backward compatibility - use constant from languageConstants
+const DEFAULT_LANGUAGE = DEFAULT_LANG_CONSTANT.CODE;
 
 /**
  * Get translated string from I18nStringType based on language
@@ -49,32 +53,36 @@ export const getTranslatedText = (
     return i18nText;
   }
 
-  // Return the requested language or fallback to English
-  return i18nText[lang] || i18nText.en || "";
+  // Get active languages to check if requested language is still valid
+  // If language was removed, fallback to English
+  const normalizedLang = lang.toLowerCase();
+
+  // Return the requested language if it exists, otherwise fallback to English
+  // This handles cases where a language was removed but old data still exists
+  if (i18nText[normalizedLang]) {
+    return i18nText[normalizedLang];
+  }
+
+  // Fallback to English (always present)
+  return i18nText.en || "";
 };
 
 /**
  * Convert user language string to SupportedLanguage code
  * @param userLanguage - User language from database (e.g., "English", "Dutch")
  * @returns SupportedLanguage code (e.g., "en", "nl")
+ * @note This now uses languageService for dynamic language mapping
  */
-export const getUserLanguageCode = (
+export const getUserLanguageCode = async (
   userLanguage?: string | null
-): SupportedLanguage => {
+): Promise<SupportedLanguage> => {
   if (!userLanguage) {
     return DEFAULT_LANGUAGE;
   }
 
-  const languageMap: Record<string, SupportedLanguage> = {
-    english: "en",
-    dutch: "nl",
-    german: "de",
-    french: "fr",
-    spanish: "es",
-  };
-
-  const normalized = userLanguage.toLowerCase().trim();
-  return languageMap[normalized] || DEFAULT_LANGUAGE;
+  // Use dynamic language mapping from languageService
+  const { getLanguageCodeFromName } = await import("@/utils/languageConstants");
+  return await getLanguageCodeFromName(userLanguage);
 };
 
 /**

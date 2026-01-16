@@ -2,44 +2,23 @@ import { Request, Response, NextFunction } from "express";
 import { asyncHandler } from "@/utils";
 import { landingPageService } from "@/services/landingPageService";
 import mongoose from "mongoose";
-
-type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
-const DEFAULT_LANGUAGE: SupportedLanguage = "en";
-
-/**
- * Map language name to language code
- */
-const mapLanguageToCode = (language: string): SupportedLanguage => {
-  const languageMap: Record<string, SupportedLanguage> = {
-    english: "en",
-    dutch: "nl",
-    german: "de",
-    french: "fr",
-    spanish: "es",
-    en: "en",
-    nl: "nl",
-    de: "de",
-    fr: "fr",
-    es: "es",
-  };
-
-  return languageMap[language.toLowerCase()] || DEFAULT_LANGUAGE;
-};
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { getLanguageCodeFromName, DEFAULT_LANGUAGE_CODE } from "@/utils/languageConstants";
 
 /**
  * Get user language from request
  * Priority: 1. User token 2. Default to English
  * Query parameter removed - language comes from token only
  */
-const getUserLanguage = (req: Request): SupportedLanguage => {
+const getUserLanguage = async (req: Request): Promise<SupportedLanguage> => {
   // Check if user is authenticated and has language preference (from token)
   const authenticatedReq = req as any;
   if (authenticatedReq.user?.language) {
-    return mapLanguageToCode(authenticatedReq.user.language);
+    return await getLanguageCodeFromName(authenticatedReq.user.language) || DEFAULT_LANGUAGE_CODE;
   }
 
   // Default to English if not authenticated or no language preference
-  return DEFAULT_LANGUAGE;
+  return DEFAULT_LANGUAGE_CODE;
 };
 
 interface AuthenticatedRequest extends Request {
@@ -130,7 +109,7 @@ class LandingPageController {
   getActiveLandingPage = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
       // Get language from user token (automatically detected from token)
-      const lang = getUserLanguage(req);
+      const lang = await getUserLanguage(req);
       
       // Get userId if user is authenticated (from optionalAuth middleware)
       const userId = req.user?._id || null;

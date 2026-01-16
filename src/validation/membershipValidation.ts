@@ -5,6 +5,7 @@ import {
   MEMBERSHIP_INTERVAL_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
+import { getLanguageQuerySchema } from "@/utils/i18nValidationHelper";
 
 const objectIdSchema = Joi.string()
   .custom((value, helpers) => {
@@ -39,10 +40,7 @@ export const getMembershipPlansSchema = Joi.object(
       .valid(...MEMBERSHIP_INTERVAL_VALUES)
       .optional()
       .label("Billing interval"),
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)

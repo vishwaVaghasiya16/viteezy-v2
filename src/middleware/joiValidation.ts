@@ -143,7 +143,12 @@ const createValidationError = (error: JoiValidationError): AppError => {
 export const validateJoi = (schema: ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     // Validate request body against schema
-    const { error, value } = schema.validate(req.body, VALIDATION_OPTIONS);
+    // Use allowUnknown: true for nested objects (I18n objects can have any language keys)
+    const { error, value } = schema.validate(req.body, {
+      ...VALIDATION_OPTIONS,
+      allowUnknown: false, // Still reject top-level unknown fields
+      // But nested objects with .unknown(true) will be allowed
+    });
 
     // If validation fails, throw error
     if (error) {

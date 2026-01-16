@@ -14,22 +14,13 @@ const objectIdSchema = Joi.string()
     "any.invalid": "Invalid ObjectId format",
   });
 
-// I18n String Schema (for text field in update - accepts I18n object)
-const i18nStringSchema = Joi.alternatives()
-  .try(
-    Joi.string().allow(""),
-    Joi.object({
-      en: Joi.string().allow("").optional(),
-      nl: Joi.string().allow("").optional(),
-      de: Joi.string().allow("").optional(),
-      fr: Joi.string().allow("").optional(),
-      es: Joi.string().allow("").optional(),
-    }).min(1)
-  )
-  .optional()
-  .messages({
-    "alternatives.match": "Text must be a string or an I18n object",
-  });
+import { getI18nStringSchema } from "@/utils/i18nValidationHelper";
+
+// Use dynamic I18n schema that supports any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: false,
+  allowEmpty: true,
+});
 
 // Simple string schema (for create - English only)
 const simpleStringSchema = Joi.string()

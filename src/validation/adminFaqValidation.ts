@@ -1,30 +1,22 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
 import { FAQ_STATUS_VALUES } from "@/models/enums";
+import {
+  getI18nStringSchema,
+  getI18nTextSchema,
+} from "@/utils/i18nValidationHelper";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
-const i18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(2).required().messages({
-    "any.required": "English text is required",
-    "string.min": "English text must be at least 2 characters",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
-}).required();
+// Use dynamic I18n schemas that support any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 2,
+});
 
-const i18nTextSchema = Joi.object({
-  en: Joi.string().trim().min(2).required().messages({
-    "any.required": "English text is required",
-    "string.min": "English text must be at least 2 characters",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
-}).required();
+const i18nTextSchema = getI18nTextSchema({
+  required: true,
+});
 
 export const createFaqSchema = Joi.object(
   withFieldLabels({

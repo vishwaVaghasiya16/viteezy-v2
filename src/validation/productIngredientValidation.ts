@@ -42,25 +42,19 @@ const withJsonSupport = <T extends Joi.Schema>(
     })
   );
 
-const baseI18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(2).max(120).required().messages({
-    "any.required": "English name is required",
-    "string.min": "English name must be at least 2 characters",
-    "string.max": "English name cannot exceed 120 characters",
-  }),
-  nl: Joi.string().trim().allow("", null).optional(),
-  de: Joi.string().trim().allow("", null).optional(),
-  fr: Joi.string().trim().allow("", null).optional(),
-  es: Joi.string().trim().allow("", null).optional(),
-}).required();
+import { getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
 
-const baseI18nTextSchema = Joi.object({
-  en: Joi.string().trim().allow("", null).optional(),
-  nl: Joi.string().trim().allow("", null).optional(),
-  de: Joi.string().trim().allow("", null).optional(),
-  fr: Joi.string().trim().allow("", null).optional(),
-  es: Joi.string().trim().allow("", null).optional(),
-}).optional();
+// Use dynamic I18n schemas that support any configured languages
+const baseI18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 2,
+  maxLength: 120,
+});
+
+const baseI18nTextSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
+});
 
 // Support both object and JSON string (for multipart/form-data)
 const i18nStringSchema = withJsonSupport(baseI18nStringSchema).required();

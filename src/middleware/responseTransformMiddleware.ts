@@ -188,7 +188,7 @@ const getUserLanguage = async (
     try {
       const user = await User.findById(userId).select("language").lean();
       if (user && user.language) {
-        const lang = getUserLanguageCode(user.language);
+        const lang = await getUserLanguageCode(user.language);
         req.userLanguage = lang; // Cache it
 
         // Log for debugging

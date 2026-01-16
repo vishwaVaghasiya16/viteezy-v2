@@ -1,6 +1,7 @@
 import axios from "axios";
 import { logger } from "@/utils/logger";
-import { I18nStringType, I18nTextType, SupportedLanguage, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { I18nStringType, I18nTextType, SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { languageService } from "@/services/languageService";
 
 /**
  * Translation Service
@@ -165,8 +166,9 @@ class TranslationService {
       en: englishText,
     };
 
-    // Translate to all other languages
-    const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");
+    // Get active languages dynamically (excluding English)
+    const allLanguages = await languageService.getAllLanguages();
+    const targetLanguages = allLanguages.filter((lang) => lang !== "en");
 
     // Translate each language sequentially (Google Translate API handles one target at a time)
     for (const lang of targetLanguages) {
@@ -207,8 +209,9 @@ class TranslationService {
       en: englishText,
     };
 
-    // Translate to all other languages
-    const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");
+    // Get active languages dynamically (excluding English)
+    const allLanguages = await languageService.getAllLanguages();
+    const targetLanguages = allLanguages.filter((lang) => lang !== "en");
 
     // Translate each language sequentially
     for (const lang of targetLanguages) {

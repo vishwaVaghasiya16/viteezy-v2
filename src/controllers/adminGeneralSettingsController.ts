@@ -4,6 +4,13 @@ import { AppError } from "@/utils/AppError";
 import { GeneralSettings } from "@/models/cms";
 import { fileStorageService } from "@/services/fileStorageService";
 import { logger } from "@/utils/logger";
+import {
+  DEFAULT_LANGUAGE,
+  DEFAULT_LANGUAGE_CONFIG,
+  LANGUAGE_VALIDATION,
+  isValidLanguageCode,
+  normalizeLanguageCode,
+} from "@/constants/languageConstants";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -28,14 +35,13 @@ class AdminGeneralSettingsController {
 
       // If no settings exist, create default settings
       if (!settings) {
+        const defaultLanguages = DEFAULT_LANGUAGE_CONFIG.map((lang) => ({
+          code: lang.code.toUpperCase(),
+          name: lang.name,
+          isEnabled: lang.isEnabled,
+        }));
         const defaultSettings = await GeneralSettings.create({
-          languages: [
-            { code: "EN", name: "English", isEnabled: true },
-            { code: "NL", name: "Dutch", isEnabled: true },
-            { code: "DE", name: "German", isEnabled: false },
-            { code: "FR", name: "French", isEnabled: false },
-            { code: "ES", name: "Spanish", isEnabled: false },
-          ],
+          languages: defaultLanguages,
           createdBy: req.user?._id as any,
           updatedBy: req.user?._id as any,
         });
@@ -158,35 +164,30 @@ class AdminGeneralSettingsController {
 
       // Update language settings
       if (languages !== undefined && Array.isArray(languages)) {
-        // Validate that all 5 languages are present
-        const validCodes = ["EN", "NL", "DE", "FR", "ES"];
-        const validNames = ["English", "Dutch", "German", "French", "Spanish"];
-
-        // Map code to name for validation
-        const expectedNameMap: { [key: string]: string } = {
-          EN: "English",
-          NL: "Dutch",
-          DE: "German",
-          FR: "French",
-          ES: "Spanish",
-        };
-
-        if (languages.length !== 5) {
-          throw new AppError("Exactly 5 languages must be provided", 400);
-        }
-
         // Validate each language
         const languageMap = new Map<
           string,
           { name: string; isEnabled: boolean }
         >();
+        
         languages.forEach((lang: any) => {
-          if (!validCodes.includes(lang.code)) {
-            throw new AppError(`Invalid language code: ${lang.code}`, 400);
+          // Validate language code format (ISO 639-1: 2 letters)
+          if (!lang.code || !isValidLanguageCode(lang.code)) {
+            throw new AppError(
+              `Invalid language code: ${lang.code}. Must be a valid 2-letter ISO 639-1 code (e.g., EN, NL, DE, FR, ES, IT, PT, etc.)`,
+              400
+            );
           }
-          if (!validNames.includes(lang.name)) {
-            throw new AppError(`Invalid language name: ${lang.name}`, 400);
+
+          // Validate language name
+          if (!lang.name || typeof lang.name !== "string" || lang.name.trim().length < 2) {
+            throw new AppError(
+              `Invalid language name for code ${lang.code}. Must be a string with at least 2 characters`,
+              400
+            );
           }
+
+          // Validate isEnabled
           if (typeof lang.isEnabled !== "boolean") {
             throw new AppError(
               `isEnabled must be a boolean for language ${lang.code}`,
@@ -194,33 +195,43 @@ class AdminGeneralSettingsController {
             );
           }
 
-          if (expectedNameMap[lang.code] !== lang.name) {
+          const code = normalizeLanguageCode(lang.code).toUpperCase();
+          
+          // Ensure default language is always enabled
+          if (code === DEFAULT_LANGUAGE.CODE.toUpperCase() && lang.isEnabled === false) {
             throw new AppError(
-              `Language code ${lang.code} does not match name ${lang.name}`,
+              `Cannot disable ${DEFAULT_LANGUAGE.NAME} (default language)`,
               400
             );
           }
 
-          languageMap.set(lang.code, {
-            name: lang.name,
+          languageMap.set(code, {
+            name: lang.name.trim(),
             isEnabled: lang.isEnabled,
           });
         });
 
-        // Ensure all 5 languages are present
-        if (languageMap.size !== 5) {
+        // Ensure at least one language exists
+        if (languageMap.size === 0) {
+          throw new AppError("At least one language must be provided", 400);
+        }
+
+        // Ensure default language is always present
+        if (!languageMap.has(DEFAULT_LANGUAGE.CODE.toUpperCase())) {
           throw new AppError(
-            "All 5 languages (EN, NL, DE, FR, ES) must be provided",
+            `${DEFAULT_LANGUAGE.NAME} (${DEFAULT_LANGUAGE.CODE.toUpperCase()}) must always be included`,
             400
           );
         }
 
-        // Convert map back to array in correct order
-        updateData.languages = validCodes.map((code) => ({
-          code,
-          name: expectedNameMap[code],
-          isEnabled: languageMap.get(code)?.isEnabled || false,
-        }));
+        // Convert map back to array
+        updateData.languages = Array.from(languageMap.entries()).map(
+          ([code, { name, isEnabled }]) => ({
+            code,
+            name,
+            isEnabled,
+          })
+        );
       }
 
       if (!settings) {
@@ -249,12 +260,23 @@ class AdminGeneralSettingsController {
       const { code } = req.params;
       const { isEnabled } = req.body;
 
-      const validCodes = ["EN", "NL", "DE", "FR", "ES"];
-      if (!validCodes.includes(code.toUpperCase())) {
-        throw new AppError("Invalid language code", 400);
+      // Validate language code format
+      if (!isValidLanguageCode(code)) {
+        throw new AppError(
+          `Invalid language code format. Must be a valid 2-letter ISO 639-1 code. Received: ${code}`,
+          400
+        );
       }
 
-      const languageCode = code.toUpperCase();
+      const languageCode = normalizeLanguageCode(code).toUpperCase();
+
+      // Prevent disabling default language
+      if (languageCode === DEFAULT_LANGUAGE.CODE.toUpperCase() && isEnabled === false) {
+        throw new AppError(
+          `Cannot disable ${DEFAULT_LANGUAGE.NAME} (default language)`,
+          400
+        );
+      }
 
       let settings = await GeneralSettings.findOne({
         isDeleted: { $ne: true },

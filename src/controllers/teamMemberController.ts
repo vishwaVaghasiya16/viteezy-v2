@@ -7,24 +7,28 @@ import {
 } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { TeamMembers } from "@/models/cms/teamMembers.model";
-
-type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { DEFAULT_LANGUAGE_CODE, normalizeLanguageCode } from "@/utils/languageConstants";
+import { languageService } from "@/services/languageService";
 
 /**
  * Get language from query parameter, default to "en"
+ * Validates against configured languages dynamically
  */
-const getLanguageFromQuery = (lang?: string): SupportedLanguage => {
-  const supportedLanguages: SupportedLanguage[] = [
-    "en",
-    "nl",
-    "de",
-    "fr",
-    "es",
-  ];
-  if (lang && supportedLanguages.includes(lang as SupportedLanguage)) {
-    return lang as SupportedLanguage;
+const getLanguageFromQuery = async (lang?: string): Promise<SupportedLanguage> => {
+  if (!lang) {
+    return DEFAULT_LANGUAGE_CODE;
   }
-  return "en";
+
+  const normalized = normalizeLanguageCode(lang);
+  
+  // Validate against configured languages
+  const isValid = await languageService.isValidLanguage(normalized);
+  if (!isValid) {
+    return DEFAULT_LANGUAGE_CODE;
+  }
+
+  return normalized as SupportedLanguage;
 };
 
 class TeamMemberController {
@@ -35,7 +39,7 @@ class TeamMemberController {
   getTeamMembers = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       // Get language from query parameter
-      const userLang = getLanguageFromQuery(req.query.lang as string);
+      const userLang = await getLanguageFromQuery(req.query.lang as string);
 
       const { page, limit, skip, sort } = getPaginationOptions(req);
 
@@ -95,7 +99,7 @@ class TeamMemberController {
       const { id } = req.params;
 
       // Get language from query parameter
-      const userLang = getLanguageFromQuery(req.query.lang as string);
+      const userLang = await getLanguageFromQuery(req.query.lang as string);
 
       const teamMember = await TeamMembers.findOne({
         _id: id,

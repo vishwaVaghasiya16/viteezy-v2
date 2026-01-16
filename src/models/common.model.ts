@@ -1,32 +1,31 @@
 import mongoose, { Schema } from "mongoose";
 import { MEDIA_TYPE_VALUES, CURRENCY_VALUES } from "./enums";
+import {
+  DEFAULT_LANGUAGE as DEFAULT_LANG_CONST,
+  DEFAULT_SUPPORTED_LANGUAGES,
+} from "@/constants/languageConstants";
 
-// Supported languages
-export type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+// Supported languages - now dynamic, but keeping type for backward compatibility
+export type SupportedLanguage = string; // Changed from union type to string for flexibility
+export const DEFAULT_LANGUAGE_CODE: SupportedLanguage = DEFAULT_LANG_CONST.CODE;
+
+// Legacy constant for backward compatibility (will be deprecated)
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
-  "en",
-  "nl",
-  "de",
-  "fr",
-  "es",
-];
-export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
+  ...DEFAULT_SUPPORTED_LANGUAGES,
+] as string[];
 
-// Type definitions
+// Re-export for backward compatibility (alias to DEFAULT_LANGUAGE_CODE)
+export const DEFAULT_LANGUAGE: SupportedLanguage = DEFAULT_LANGUAGE_CODE;
+
+// Type definitions - now flexible to accept any language codes
 export interface I18nStringType {
-  en?: string;
-  nl?: string;
-  de?: string;
-  fr?: string;
-  es?: string;
+  en?: string; // English is always required
+  [key: string]: string | undefined; // Allow any other language codes
 }
 
 export interface I18nTextType {
-  en?: string;
-  nl?: string;
-  de?: string;
-  fr?: string;
-  es?: string;
+  en?: string; // English is recommended
+  [key: string]: string | undefined; // Allow any other language codes
 }
 
 export interface MediaType {
@@ -66,26 +65,30 @@ export interface AuditType {
   updatedBy?: mongoose.Types.ObjectId;
 }
 
-// Schema definitions
+// Schema definitions - flexible to accept any language codes
+// Mongoose will accept additional fields even if not explicitly defined
 export const I18nString = new Schema<I18nStringType>(
   {
-    en: { type: String, trim: true },
+    en: { type: String, trim: true }, // English is always present
+    // Other languages are dynamically added - Mongoose accepts them
+    // We define common ones for type safety, but any 2-letter code will work
     nl: { type: String, trim: true },
     de: { type: String, trim: true },
     fr: { type: String, trim: true },
     es: { type: String, trim: true },
   },
-  { _id: false }
+  { _id: false, strict: false } // strict: false allows additional fields (other language codes)
 );
 export const I18nText = new Schema<I18nTextType>(
   {
-    en: { type: String, trim: true },
+    en: { type: String, trim: true }, // English is recommended
+    // Other languages are dynamically added - Mongoose accepts them
     nl: { type: String, trim: true },
     de: { type: String, trim: true },
     fr: { type: String, trim: true },
     es: { type: String, trim: true },
   },
-  { _id: false }
+  { _id: false, strict: false } // strict: false allows additional fields (other language codes)
 );
 
 export const MediaSchema = new Schema<MediaType>(

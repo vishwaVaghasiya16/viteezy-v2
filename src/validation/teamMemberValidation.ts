@@ -1,6 +1,7 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
 import { paginationQuerySchema } from "./commonValidation";
+import { getLanguageQuerySchema } from "@/utils/i18nValidationHelper";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
@@ -41,23 +42,17 @@ const withJsonSupport = <T extends Joi.Schema>(
     })
   );
 
-const baseI18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(1).required().messages({
-    "any.required": "English content is required",
-    "string.min": "English content must be at least 1 character",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
+import { getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
+
+// Use dynamic I18n schemas that support any configured languages
+const baseI18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 1,
 });
 
-const baseI18nTextSchema = Joi.object({
-  en: Joi.string().trim().allow("", null),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
+const baseI18nTextSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
 });
 
 // I18n String Schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
@@ -131,10 +126,7 @@ export const getTeamMembersQuerySchema = Joi.object(
  */
 export const getPublicTeamMembersQuerySchema = Joi.object(
   withFieldLabels({
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
     sort: Joi.string().optional(),
@@ -155,10 +147,7 @@ export const getPublicTeamMemberParamsSchema = Joi.object(
 
 export const getPublicTeamMemberQuerySchema = Joi.object(
   withFieldLabels({
-    lang: Joi.string()
-      .valid("en", "nl", "de", "fr", "es")
-      .optional()
-      .label("Language"),
+    lang: getLanguageQuerySchema().label("Language"),
   })
 )
   .unknown(false)

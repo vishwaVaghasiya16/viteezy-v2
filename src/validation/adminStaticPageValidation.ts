@@ -42,23 +42,17 @@ const withJsonSupport = <T extends Joi.Schema>(
     })
   );
 
-const baseI18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(1).required().messages({
-    "any.required": "English content is required",
-    "string.min": "English content must be at least 1 character",
-  }),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
+import { getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
+
+// Use dynamic I18n schemas that support any configured languages
+const baseI18nStringSchema = getI18nStringSchema({
+  required: true,
+  minLength: 1,
 });
 
-const baseI18nTextSchema = Joi.object({
-  en: Joi.string().trim().allow("", null),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
+const baseI18nTextSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
 });
 
 const baseSeoSchema = Joi.object({

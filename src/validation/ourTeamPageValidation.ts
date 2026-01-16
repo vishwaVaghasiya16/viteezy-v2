@@ -1,36 +1,16 @@
 import Joi from "joi";
+import { getLanguageQuerySchema, getI18nStringSchema, getI18nTextSchema } from "@/utils/i18nValidationHelper";
 
-// I18n string schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
-const i18nStringSchema = Joi.alternatives()
-  .try(
-    Joi.string().trim().allow("", null), // Plain string (before auto-translation)
-    Joi.object({
-      // I18n object (after auto-translation middleware or direct input)
-      en: Joi.string().trim().allow("", null).optional(),
-      nl: Joi.string().trim().allow("", null).optional(),
-      de: Joi.string().trim().allow("", null).optional(),
-      fr: Joi.string().trim().allow("", null).optional(),
-      es: Joi.string().trim().allow("", null).optional(),
-    })
-  )
-  .optional()
-  .allow(null);
+// Use dynamic I18n schemas that support any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: false,
+  allowEmpty: true,
+});
 
-// I18n text schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
-const i18nTextSchema = Joi.alternatives()
-  .try(
-    Joi.string().trim().allow("", null), // Plain string (before auto-translation)
-    Joi.object({
-      // I18n object (after auto-translation middleware or direct input)
-      en: Joi.string().trim().allow("", null).optional(),
-      nl: Joi.string().trim().allow("", null).optional(),
-      de: Joi.string().trim().allow("", null).optional(),
-      fr: Joi.string().trim().allow("", null).optional(),
-      es: Joi.string().trim().allow("", null).optional(),
-    })
-  )
-  .optional()
-  .allow(null);
+const i18nTextSchema = getI18nTextSchema({
+  required: false,
+  allowEmpty: true,
+});
 
 // Banner image schema
 const bannerImageSchema = Joi.object({}).allow(null).optional();
@@ -53,5 +33,5 @@ export const updateOurTeamPageSchema = Joi.object({
  * Query schema for public Our Team Page API
  */
 export const getOurTeamPageQuerySchema = Joi.object({
-  lang: Joi.string().valid("en", "nl", "de", "fr", "es").optional(),
+  lang: getLanguageQuerySchema(),
 });

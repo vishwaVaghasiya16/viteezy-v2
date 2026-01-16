@@ -10,7 +10,7 @@ import { FAQs } from "../models/cms/faqs.model";
 import { Wishlists } from "../models/commerce/wishlists.model";
 import { cartService } from "./cartService";
 
-type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
 
 /**
  * Get translated string from I18nStringType

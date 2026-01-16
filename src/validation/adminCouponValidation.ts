@@ -3,16 +3,16 @@ import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 import { CouponType, COUPON_TYPE_VALUES } from "@/models/enums";
 import { paginationQuerySchema } from "./commonValidation";
+import { getI18nStringSchema } from "@/utils/i18nValidationHelper";
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
-const i18nStringSchema = Joi.object({
-  en: Joi.string().trim().min(2).optional(),
-  nl: Joi.string().trim().allow("", null),
-  de: Joi.string().trim().allow("", null),
-  fr: Joi.string().trim().allow("", null),
-  es: Joi.string().trim().allow("", null),
-}).optional();
+// Use dynamic I18n schema that supports any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: false,
+  minLength: 2,
+  allowEmpty: true,
+});
 
 const objectIdSchema = Joi.string()
   .pattern(objectIdRegex)

@@ -1,21 +1,14 @@
 import Joi from "joi";
 import { withFieldLabels } from "./helpers";
+import { LANGUAGE_VALIDATION } from "@/constants/languageConstants";
+import { getI18nStringSchema } from "@/utils/i18nValidationHelper";
 
-// I18n String Schema - accepts either a plain string (will be converted to I18n by middleware) or an I18n object
-const i18nStringSchema = Joi.alternatives()
-  .try(
-    Joi.string().trim().max(200).allow(null, ""), // Plain string (before auto-translation)
-    Joi.object({
-      // I18n object (after auto-translation middleware)
-      en: Joi.string().trim().max(200).required(),
-      nl: Joi.string().trim().max(200).allow("", null).optional(),
-      de: Joi.string().trim().max(200).allow("", null).optional(),
-      fr: Joi.string().trim().max(200).allow("", null).optional(),
-      es: Joi.string().trim().max(200).allow("", null).optional(),
-    })
-  )
-  .optional()
-  .allow(null);
+// Use dynamic I18n schema that supports any configured languages
+const i18nStringSchema = getI18nStringSchema({
+  required: false,
+  maxLength: 200,
+  allowEmpty: true,
+});
 
 const socialMediaLinksSchema = Joi.object({
   facebook: Joi.string().uri().optional().allow(null, "").label("Facebook URL"),
@@ -49,11 +42,17 @@ const addressSchema = Joi.object({
 
 const languageSettingSchema = Joi.object({
   code: Joi.string()
-    .valid("EN", "NL", "DE", "FR", "ES")
+    .pattern(LANGUAGE_VALIDATION.CODE_PATTERN)
     .required()
-    .label("Language Code"),
+    .label("Language Code")
+    .messages({
+      "string.pattern.base":
+        "Language code must be a valid 2-letter ISO 639-1 code (e.g., EN, NL, DE, FR, ES, IT, PT, etc.)",
+    }),
   name: Joi.string()
-    .valid("English", "Dutch", "German", "French", "Spanish")
+    .trim()
+    .min(2)
+    .max(50)
     .required()
     .label("Language Name"),
   isEnabled: Joi.boolean().required().label("Is Enabled"),
@@ -84,7 +83,6 @@ export const updateGeneralSettingsSchema = Joi.object(
     languages: Joi.array()
       .items(languageSettingSchema)
       .min(1)
-      .max(5)
       .optional()
       .label("Languages"),
   })
@@ -94,10 +92,14 @@ export const updateGeneralSettingsSchema = Joi.object(
 
 export const updateLanguageStatusSchema = Joi.object(
   withFieldLabels({
-    code: Joi.string()
-      .valid("EN", "NL", "DE", "FR", "ES")
-      .required()
-      .label("Language Code"),
+  code: Joi.string()
+    .pattern(LANGUAGE_VALIDATION.CODE_PATTERN)
+    .required()
+    .label("Language Code")
+    .messages({
+      "string.pattern.base":
+        "Language code must be a valid 2-letter ISO 639-1 code",
+    }),
     isEnabled: Joi.boolean().required().label("Is Enabled"),
   })
 ).label("UpdateLanguageStatusPayload");

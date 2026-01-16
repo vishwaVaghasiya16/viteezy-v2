@@ -8,6 +8,7 @@ import {
   CURRENCY_VALUES,
 } from "../models/enums";
 import { AppError } from "../utils/AppError";
+import { getLanguageQuerySchema } from "@/utils/i18nValidationHelper";
 
 // Common validation patterns
 const titleSchema = Joi.string().trim().min(2).max(200).required().messages({
@@ -429,8 +430,8 @@ export const getProductCategoriesSchema = Joi.object({
 
 // Get product categories list with products query schema (for navbar)
 export const listProductCategoriesSchema = Joi.object({
-  lan: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
-    "any.only": "Language must be one of: en, nl, de, fr, es",
+  lan: getLanguageQuerySchema().messages({
+    "any.invalid": "Language must be a configured language",
   }),
 })
   .unknown(false)
