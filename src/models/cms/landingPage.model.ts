@@ -481,10 +481,11 @@ const CommunitySectionSchema = new Schema<CommunitySection>(
 export interface TestimonialsSection {
   title: I18nStringType;
   subTitle: I18nStringType;
-  testimonialIds: mongoose.Types.ObjectId[]; // References to product_testimonials (max 6-10)
+  testimonialIds?: mongoose.Types.ObjectId[]; // Testimonials are fetched dynamically (max 6)
   isEnabled: boolean;
   order: number;
-  // Testimonials will be populated dynamically
+  // Testimonials will be fetched dynamically from ProductTestimonials model
+  // Priority: isFeatured = true first, then latest
 }
 
 const TestimonialsSectionSchema = new Schema<TestimonialsSection>(
@@ -497,12 +498,15 @@ const TestimonialsSectionSchema = new Schema<TestimonialsSection>(
       type: I18nString,
       default: () => ({}),
     },
-    testimonialIds: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "product_testimonials",
-      },
-    ],
+    testimonialIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "product_testimonials",
+        },
+      ],
+      default: undefined, // Testimonials will be fetched dynamically
+    },
     isEnabled: {
       type: Boolean,
       default: true,
@@ -549,7 +553,7 @@ export interface BlogSection {
   description: I18nTextType;
   isEnabled: boolean;
   order: number;
-  // Blogs will be fetched dynamically (max 3-4 recent blogs)
+  // Blogs will be fetched dynamically (max 4 recent blogs)
 }
 
 const BlogSectionSchema = new Schema<BlogSection>(
@@ -601,7 +605,7 @@ const FAQItemSchema = new Schema<FAQItem>(
 export interface FAQSection {
   title: I18nStringType;
   description: I18nTextType;
-  faqs: FAQItem[]; // FAQs can be stored here or fetched dynamically (max 6-8)
+  faqs?: FAQItem[]; // FAQs are fetched dynamically from FAQs model (latest 8)
   isEnabled: boolean;
   order: number;
 }
@@ -616,7 +620,10 @@ const FAQSectionSchema = new Schema<FAQSection>(
       type: I18nText,
       default: () => ({}),
     },
-    faqs: [FAQItemSchema],
+    faqs: {
+      type: [FAQItemSchema],
+      default: undefined, // FAQs will be fetched dynamically
+    },
     isEnabled: {
       type: Boolean,
       default: true,

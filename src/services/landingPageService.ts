@@ -7,6 +7,7 @@ import { ProductIngredients } from "../models/commerce/productIngredients.model"
 import { ProductTestimonials } from "../models/cms/productTestimonials.model";
 import { Blogs } from "../models/cms/blogs.model";
 import { FAQs } from "../models/cms/faqs.model";
+import { FAQStatus } from "../models/enums";
 import { Wishlists } from "../models/commerce/wishlists.model";
 import { cartService } from "./cartService";
 
@@ -397,11 +398,7 @@ class LandingPageService {
             ? { en: data.heroSection.description }
             : data.heroSection.description
           : undefined,
-        subTitle: data.heroSection.subTitle
-          ? typeof data.heroSection.subTitle === "string"
-            ? { en: data.heroSection.subTitle }
-            : data.heroSection.subTitle
-          : undefined,
+        // subTitle removed from create API
         highlightedText: Array.isArray(data.heroSection.highlightedText)
           ? data.heroSection.highlightedText.map((text) =>
               typeof text === "string" ? { en: text } : text
@@ -670,7 +667,7 @@ class LandingPageService {
             ? { en: data.testimonialsSection.subTitle }
             : (data.testimonialsSection as any).subTitle
           : undefined,
-        testimonialIds: data.testimonialsSection.testimonialIds,
+        // Testimonials are not stored here, they will be fetched dynamically from ProductTestimonials model
         isEnabled:
           data.testimonialsSection.isEnabled !== undefined
             ? data.testimonialsSection.isEnabled
@@ -720,7 +717,8 @@ class LandingPageService {
     }
 
     // Convert FAQ section strings to I18n format
-    if (data.faqSection && data.faqSection.faqs) {
+    // FAQs will be fetched dynamically from FAQs model (latest 8)
+    if (data.faqSection) {
       landingPageData.faqSection = {
         title:
           typeof data.faqSection.title === "string"
@@ -731,18 +729,7 @@ class LandingPageService {
             ? { en: data.faqSection.description }
             : data.faqSection.description
           : undefined,
-        faqs: data.faqSection.faqs.map((faq) => ({
-          question:
-            typeof faq.question === "string"
-              ? { en: faq.question }
-              : faq.question,
-          answer: faq.answer
-            ? typeof faq.answer === "string"
-              ? { en: faq.answer }
-              : faq.answer
-            : undefined,
-          order: faq.order || 0,
-        })),
+        // FAQs are not stored here, they will be fetched dynamically from FAQs model
         isEnabled:
           data.faqSection.isEnabled !== undefined
             ? data.faqSection.isEnabled
@@ -795,6 +782,95 @@ class LandingPageService {
 
     if (!landingPage) {
       throw new AppError("Landing page not found", 404);
+    }
+
+    // Fetch FAQs from FAQs model if FAQ section is enabled
+    if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
+      const recentFaqs = await FAQs.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { status: FAQStatus.ACTIVE },
+          { status: { $exists: false }, isActive: { $ne: false } },
+        ],
+      })
+        .select("_id question answer sortOrder")
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .limit(8) // Max 8 FAQs
+        .lean();
+
+      // Map sortOrder to order to maintain same response structure
+      // Keep only the fields that match the original structure: _id, question, answer, order
+      const mappedFaqs = recentFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: faq.question,
+        answer: faq.answer,
+        order: faq.sortOrder || 0,
+      }));
+
+      (landingPage as any).faqSection = {
+        ...landingPage.faqSection,
+        faqs: mappedFaqs,
+      };
+    }
+
+    // Fetch Blogs from Blogs model if Blog section is enabled
+    if (landingPage.blogSection && landingPage.blogSection.isEnabled !== false) {
+      const blogs = await Blogs.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id title description coverImage seo createdAt viewCount authorId")
+        .populate("authorId", "firstName lastName")
+        .sort({ createdAt: -1 })
+        .limit(4) // Max 4 blogs
+        .lean();
+
+      // Map authorId to author name (combine firstName and lastName)
+      const blogsWithAuthor = blogs.map((blog: any) => {
+        let authorName = null;
+        if (blog.authorId && typeof blog.authorId === "object") {
+          const firstName = blog.authorId.firstName || "";
+          const lastName = blog.authorId.lastName || "";
+          authorName = `${firstName} ${lastName}`.trim() || null;
+        }
+        return {
+          ...blog,
+          author: authorName,
+        };
+      });
+
+      (landingPage as any).blogSection = {
+        ...landingPage.blogSection,
+        blogs: blogsWithAuthor,
+      };
+    }
+
+    // Fetch Testimonials from ProductTestimonials model if Testimonials section is enabled
+    if (landingPage.testimonialsSection && landingPage.testimonialsSection.isEnabled !== false) {
+      const testimonials = await ProductTestimonials.find({
+        isVisibleInLP: true,
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .populate({
+          path: "products",
+          match: { isDeleted: { $ne: true } },
+          populate: [
+            {
+              path: "categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
+        })
+        .select("_id videoUrl videoThumbnail products isFeatured displayOrder")
+        .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+        .limit(6) // Max 6 testimonials
+        .lean();
+
+      (landingPage as any).testimonialsSection = {
+        ...landingPage.testimonialsSection,
+        testimonials: testimonials,
+      };
     }
 
     return { landingPage };
@@ -973,18 +1049,41 @@ class LandingPageService {
     }
 
     // Filter and populate Testimonials Section
+    // Always fetch testimonials from ProductTestimonials model (max 6)
+    // Priority: isFeatured = true first, then latest
     if (
       landingPage.testimonialsSection &&
       landingPage.testimonialsSection.isEnabled !== false
     ) {
-      if (
-        landingPage.testimonialsSection.testimonialIds &&
-        landingPage.testimonialsSection.testimonialIds.length > 0
-      ) {
-        const testimonials = await ProductTestimonials.find({
-          _id: { $in: landingPage.testimonialsSection.testimonialIds },
+      // First try to fetch testimonials where isVisibleInLP = true and isActive = true
+      // Sort: isFeatured = true first, then by createdAt descending (latest)
+      let testimonials = await ProductTestimonials.find({
+        isVisibleInLP: true,
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .populate({
+          path: "products",
+          match: { isDeleted: { $ne: true } },
+          populate: [
+            {
+              path: "categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
+        })
+        .select(
+          "_id videoUrl videoThumbnail products isFeatured displayOrder"
+        )
+        .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+        .limit(6) // Max 6 testimonials
+        .lean();
+
+      // If no testimonials found with isVisibleInLP = true, fetch latest active testimonials
+      if (!testimonials || testimonials.length === 0) {
+        testimonials = await ProductTestimonials.find({
           isActive: true,
-          isDeleted: false,
+          isDeleted: { $ne: true },
         })
           .populate({
             path: "products",
@@ -999,9 +1098,10 @@ class LandingPageService {
           .select(
             "_id videoUrl videoThumbnail products isFeatured displayOrder"
           )
-          .sort({ displayOrder: 1, createdAt: -1 })
-          .limit(10) // Max 10 testimonials
+          .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+          .limit(6) // Max 6 testimonials
           .lean();
+      }
 
         // Manually populate ingredients for all products (since ingredients is string array, not ref)
         // Collect all unique ingredient IDs from all products
@@ -1116,11 +1216,10 @@ class LandingPageService {
           }
         }
 
-        processedLandingPage.testimonialsSection = {
-          ...landingPage.testimonialsSection,
-          testimonials: testimonials,
-        };
-      }
+      processedLandingPage.testimonialsSection = {
+        ...landingPage.testimonialsSection,
+        testimonials: testimonials,
+      };
     } else {
       delete processedLandingPage.testimonialsSection;
     }
@@ -1138,57 +1237,68 @@ class LandingPageService {
       landingPage.blogSection &&
       landingPage.blogSection.isEnabled !== false
     ) {
-      // Fetch recent blogs (max 3-4)
+      // Fetch recent blogs (max 4)
       const blogs = await Blogs.find({
         isActive: true,
         isDeleted: { $ne: true },
       })
-        .select("_id title description coverImage seo createdAt viewCount")
+        .select("_id title description coverImage seo createdAt viewCount authorId")
+        .populate("authorId", "firstName lastName")
         .sort({ createdAt: -1 })
         .limit(4) // Max 4 blogs
         .lean();
 
+      // Map authorId to author name (combine firstName and lastName)
+      const blogsWithAuthor = blogs.map((blog: any) => {
+        let authorName = null;
+        if (blog.authorId && typeof blog.authorId === "object") {
+          const firstName = blog.authorId.firstName || "";
+          const lastName = blog.authorId.lastName || "";
+          authorName = `${firstName} ${lastName}`.trim() || null;
+        }
+        return {
+          ...blog,
+          author: authorName,
+        };
+      });
+
       processedLandingPage.blogSection = {
         ...landingPage.blogSection,
-        blogs: blogs,
+        blogs: blogsWithAuthor,
       };
     } else {
       delete processedLandingPage.blogSection;
     }
 
     // Filter and fetch FAQs Section
+    // Always fetch latest FAQs from FAQs model (max 8)
     if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
-      // If FAQs are stored in the section, use them
-      // Otherwise, fetch recent FAQs (max 6-8)
-      if (
-        landingPage.faqSection.faqs &&
-        landingPage.faqSection.faqs.length > 0
-      ) {
-        processedLandingPage.faqSection = {
-          ...landingPage.faqSection,
-          faqs: landingPage.faqSection.faqs
-            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
-            .slice(0, 8), // Max 8 FAQs
-        };
-      } else {
-        // Fetch recent FAQs from FAQs collection
-        const recentFaqs = await FAQs.find({
-          isDeleted: { $ne: true },
-          $or: [
-            { status: "active" },
-            { status: { $exists: false }, isActive: { $ne: false } },
-          ],
-        })
-          .select("_id question answer sortOrder")
-          .sort({ sortOrder: 1, createdAt: -1 })
-          .limit(8) // Max 8 FAQs
-          .lean();
+      // Fetch recent FAQs from FAQs collection
+      const recentFaqs = await FAQs.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { status: FAQStatus.ACTIVE },
+          { status: { $exists: false }, isActive: { $ne: false } },
+        ],
+      })
+        .select("_id question answer sortOrder")
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .limit(8) // Max 8 FAQs
+        .lean();
 
-        processedLandingPage.faqSection = {
-          ...landingPage.faqSection,
-          faqs: recentFaqs,
-        };
-      }
+      // Map sortOrder to order to maintain same response structure
+      // Keep only the fields that match the original structure: _id, question, answer, order
+      const mappedFaqs = recentFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: faq.question,
+        answer: faq.answer,
+        order: faq.sortOrder || 0,
+      }));
+
+      processedLandingPage.faqSection = {
+        ...landingPage.faqSection,
+        faqs: mappedFaqs,
+      };
     } else {
       delete processedLandingPage.faqSection;
     }
@@ -1538,6 +1648,7 @@ class LandingPageService {
           seo: blog.seo,
           createdAt: blog.createdAt,
           viewCount: blog.viewCount,
+          author: blog.author || null, // Author name (already mapped from authorId)
         })),
         isEnabled: landingPage.blogSection.isEnabled,
         order: landingPage.blogSection.order,
@@ -2154,51 +2265,7 @@ class LandingPageService {
               };
       }
 
-      if (data.faqSection.faqs) {
-        const existingFAQs = (landingPage.faqSection as any)?.faqs || [];
-        const updatedFAQs = data.faqSection.faqs.map((faq, index) => {
-          const existingFAQ: any = existingFAQs[index] || {};
-          const existingQuestion = existingFAQ.question;
-          const existingAnswer = existingFAQ.answer;
-          const questionObj =
-            existingQuestion &&
-            typeof existingQuestion === "object" &&
-            !Array.isArray(existingQuestion)
-              ? (existingQuestion as Record<string, any>)
-              : {};
-          const answerObj =
-            existingAnswer &&
-            typeof existingAnswer === "object" &&
-            !Array.isArray(existingAnswer)
-              ? (existingAnswer as Record<string, any>)
-              : {};
-
-          return {
-            question: faq.question
-              ? typeof faq.question === "string"
-                ? { ...questionObj, en: faq.question }
-                : { ...questionObj, ...(faq.question as Record<string, any>) }
-              : existingFAQ.question || {},
-            answer:
-              faq.answer !== undefined
-                ? typeof faq.answer === "string"
-                  ? { ...answerObj, en: faq.answer }
-                  : { ...answerObj, ...(faq.answer as Record<string, any>) }
-                : existingFAQ.answer || {},
-            order:
-              faq.order !== undefined
-                ? faq.order
-                : existingFAQ.order !== undefined
-                ? existingFAQ.order
-                : index,
-          };
-        });
-
-        if (!landingPage.faqSection) {
-          (landingPage as any).faqSection = {};
-        }
-        (landingPage.faqSection as any).faqs = updatedFAQs;
-      }
+      // FAQs are not updated here - they are fetched dynamically from FAQs model
     }
 
     if (data.isActive !== undefined) {

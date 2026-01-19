@@ -8,11 +8,46 @@ const storage = multer.memoryStorage();
 
 const allowedMimeTypes: ReadonlyArray<string> = FILE_UPLOAD.ALLOWED_TYPES;
 
+// Allowed video/audio MIME types for heroSection_video_url
+const allowedVideoMimeTypes = [
+  "video/mp4",
+  "video/mpeg",
+  "video/quicktime", // .mov
+  "video/x-msvideo", // .avi
+  "video/webm",
+  "video/ogg",
+  "audio/mpeg", // .mp3
+  "audio/mp3",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/wav",
+  "audio/webm",
+];
+
+// Maximum file size for videos (50MB)
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+
 const fileFilter = (
   req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
+  // Allow video/audio files for heroSection_video_url field
+  if (file.fieldname === "heroSection_video_url") {
+    if (allowedVideoMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(
+        new AppError(
+          "Invalid video file type. Allowed types are MP4, MPEG, MOV, AVI, WEBM, OGG, MP3, M4A, and WAV.",
+          400
+        )
+      );
+    }
+    return;
+  }
+
+  // For other fields, only allow images
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -28,7 +63,9 @@ const fileFilter = (
 export const upload = multer({
   storage,
   limits: {
-    fileSize: config.upload.maxFileSize,
+    // Use higher limit for video files, but we'll check file size in fileFilter based on field name
+    // For now, use video size limit as max to allow videos
+    fileSize: MAX_VIDEO_SIZE,
   },
   fileFilter,
 });
