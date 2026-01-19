@@ -68,7 +68,7 @@ const baseMediaSchema = Joi.object({
 const basePrimaryCTASchema = Joi.object({
   label: baseStringSchema.required(),
   image: Joi.string().uri().optional(),
-  link: Joi.string().uri().optional(),
+  link: Joi.string().trim().optional().allow(""), // Allow any string value, not just URIs
   order: Joi.number().integer().min(0).optional().default(0),
 });
 
