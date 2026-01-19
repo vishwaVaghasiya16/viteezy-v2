@@ -13,6 +13,7 @@ import { upload } from "../middleware/upload";
 import { parseProductFormData } from "../middleware/parseProductFormData";
 import { handleProductImageUpload } from "../middleware/productImageUpload";
 import { validateQuery } from "../middleware/joiValidation";
+import { autoTranslateMiddleware } from "../middleware/translationMiddleware";
 
 const router = Router();
 
@@ -67,6 +68,7 @@ router.post(
   ]),
   parseProductFormData,
   handleProductImageUpload,
+  autoTranslateMiddleware("products"), // Auto-translate English to all languages
   validateProduct(createProductSchema),
   ProductController.createProduct
 );
@@ -105,6 +107,7 @@ router.put(
   ]),
   parseProductFormData,
   handleProductImageUpload,
+  autoTranslateMiddleware("products"), // Auto-translate English to all languages
   validateProduct(updateProductSchema),
   ProductController.updateProduct
 );

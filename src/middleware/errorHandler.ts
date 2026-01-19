@@ -177,14 +177,15 @@ export const errorHandler = (
   if (error instanceof AppError) {
     statusCode = error.statusCode;
     message = error.message;
-    errorType = error.errorType || errorType;
-    errorText = error.message; // Use the error message as error text
+    errorType = (error as any).errorType || errorType;
     
-    // Check if this is a validation error with detailed errors array
-    if (errorType === "Validation Error" && (error as any).errors) {
-      // For validation errors, set message to indicate validation failure
+    // Check if this is a validation error with detailed errors
+    if (((error as any).errorType === "Validation error" || (error as any).errorType === "Validation Error") && (error as any).error) {
+      // Use the detailed error message we set (contains all errors)
+      errorText = (error as any).error || error.message;
       message = "Validation error";
-      errorText = error.message; // Keep the first error message as errorText
+    } else {
+      errorText = error.message; // Use the error message as error text
     }
   }
   // Handle Mongoose validation errors
@@ -283,16 +284,14 @@ export const errorHandler = (
   };
 
   // If this is a validation error with detailed errors array, include it in response
-  if (error instanceof AppError && errorType === "Validation Error" && (error as any).errors) {
+  if (error instanceof AppError && ((error as any).errorType === "Validation error" || (error as any).errorType === "Validation Error") && (error as any).errors) {
     // Set clear validation error message
     response.message = "Validation error";
-    response.errorType = "Validation Error";
+    response.errorType = "Validation error";
     // Include detailed validation errors array
     response.errors = (error as any).errors;
-    // Keep the first error message as the main error text
-    if ((error as any).errors && (error as any).errors.length > 0) {
-      response.error = (error as any).errors[0].message || errorText || message;
-    }
+    // Use the combined error messages we set
+    response.error = (error as any).error || errorText || message;
   }
 
   res.status(statusCode).json(response);

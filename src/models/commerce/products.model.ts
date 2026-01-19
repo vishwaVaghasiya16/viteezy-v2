@@ -25,7 +25,7 @@ export interface SubscriptionPriceWithMetadata
   durationDays?: number; // Duration in days (e.g., 30, 60, 90, 180)
   capsuleCount?: number; // Number of capsules for this subscription period
   savingsPercentage?: number; // Savings percentage (e.g., 30 for "Save 30%")
-  features?: string[]; // Features like "Free shipping", "Can be cancelled at any time"
+  features?: (I18nStringType | string)[]; // Features like "Free shipping", "Can be cancelled at any time" - Array of I18n strings or plain strings
   icon?: string; // URL to icon/image for this subscription option
 }
 
@@ -40,7 +40,7 @@ const SubscriptionPriceWithMetadataSchema =
       durationDays: { type: Number, optional: true },
       capsuleCount: { type: Number, optional: true },
       savingsPercentage: { type: Number, optional: true },
-      features: [{ type: String, trim: true }],
+      features: [{ type: Schema.Types.Mixed }], // Support both I18nString array and String array
       icon: { type: String, trim: true, optional: true },
     },
     { _id: false }
@@ -48,8 +48,8 @@ const SubscriptionPriceWithMetadataSchema =
 
 // Price structure for subscription periods (for Sachets)
 export interface SachetOneTimeCapsuleOptions {
-  count30: PriceType & { capsuleCount?: number }; // 30 count price
-  count60: PriceType & { capsuleCount?: number }; // 60 count price
+  count30: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] }; // 30 count price
+  count60: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] }; // 60 count price
 }
 
 const SachetOneTimeCapsuleOptionsSchema =
@@ -63,6 +63,7 @@ const SachetOneTimeCapsuleOptionsSchema =
             discountedPrice: { type: Number, min: 0, optional: true },
             taxRate: { type: Number, default: 0 },
             capsuleCount: { type: Number, optional: true },
+            features: [{ type: Schema.Types.Mixed }], // Support both I18nString array and String array
           },
           { _id: false }
         ),
@@ -75,6 +76,7 @@ const SachetOneTimeCapsuleOptionsSchema =
             discountedPrice: { type: Number, min: 0, optional: true },
             taxRate: { type: Number, default: 0 },
             capsuleCount: { type: Number, optional: true },
+            features: [{ type: Schema.Types.Mixed }], // Support both I18nString array and String array
           },
           { _id: false }
         ),
@@ -123,26 +125,26 @@ const SubscriptionPriceSchema = new Schema<SubscriptionPriceType>(
 );
 
 export interface SpecificationItem {
-  title: string;
-  descr: string;
+  title: I18nStringType | string; // Support both I18n and plain string
+  descr: I18nTextType | string; // Support both I18n and plain string
   image: string;
   imageMobile?: string;
 }
 
 export interface Specification {
-  main_title: string;
+  main_title: I18nStringType | string; // Support both I18n and plain string
   bg_image: string;
   items: SpecificationItem[]; // 4 items
 }
 
 export interface ComparisonRow {
-  label: string;
+  label: I18nStringType | string; // Support both I18n and plain string
   values: boolean[]; // yes/no per comparison column
 }
 
 export interface ComparisonSection {
-  title: string; // Main title (e.g. "How Green tea extract Compares:")
-  columns: string[]; // Comparison titles (e.g. ["Green tea extract", "Most Melatonin Sleep Aids", ...])
+  title: I18nStringType | string; // Main title (e.g. "How Green tea extract Compares:") - Support both I18n and plain string
+  columns: (I18nStringType | string)[]; // Comparison titles - Array of I18n strings or plain strings
   rows: ComparisonRow[]; // Each row with label + yes/no per column
 }
 
@@ -151,10 +153,10 @@ export interface IProduct extends Document {
   slug: string;
   description: I18nTextType | string;
   productImage: string;
-  benefits: string[]; // Array of strings (can be translated individually)
+  benefits?: (I18nStringType | string)[]; // Array of I18n strings or plain strings
   ingredients: mongoose.Types.ObjectId[]; // Array of product ingredient ObjectIds
   categories?: mongoose.Types.ObjectId[];
-  healthGoals?: string[];
+  healthGoals?: (I18nStringType | string)[]; // Array of I18n strings or plain strings
   nutritionInfo: I18nTextType | string;
   howToUse: I18nTextType | string;
   status: boolean; // true = Active, false = Inactive
@@ -167,11 +169,11 @@ export interface IProduct extends Document {
   standupPouchPrice?: PriceType | SachetOneTimeCapsuleOptions; // Single one-time price or oneTime structure with count30/count60
   standupPouchImages?: string[]; // Separate images for stand-up pouch variant
   // New fields for admin Add Product screen
-  shortDescription?: string;
+  shortDescription?: I18nStringType | string; // Support both I18n and plain string
   galleryImages?: string[]; // Additional product images
   isFeatured?: boolean; // Featured product checkbox
-  comparisonSection?: ComparisonSection; // Comparison section data
-  specification?: Specification; // Product specification section
+  comparisonSection?: ComparisonSection; // Comparison section data (with I18n support)
+  specification?: Specification; // Product specification section (with I18n support)
   isDeleted: boolean;
   deletedAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
@@ -199,8 +201,7 @@ const ProductSchema = new Schema<IProduct>(
       default: null,
     },
     shortDescription: {
-      type: String,
-      trim: true,
+      type: Schema.Types.Mixed, // Support both I18nString and String
       default: null,
     },
     productImage: {
@@ -209,7 +210,7 @@ const ProductSchema = new Schema<IProduct>(
       default: null,
     },
     benefits: {
-      type: [String],
+      type: [Schema.Types.Mixed], // Support both I18nString array and String array
       default: [],
     },
     ingredients: [
@@ -225,7 +226,7 @@ const ProductSchema = new Schema<IProduct>(
       },
     ],
     healthGoals: {
-      type: [String],
+      type: [Schema.Types.Mixed], // Support both I18nString array and String array
       default: [],
     },
     nutritionInfo: {
@@ -273,14 +274,14 @@ const ProductSchema = new Schema<IProduct>(
     },
     comparisonSection: {
       type: {
-        title: { type: String, trim: true, default: null },
+        title: { type: Schema.Types.Mixed, default: null }, // Support both I18nString and String
         columns: {
-          type: [String],
+          type: [Schema.Types.Mixed], // Support both I18nString array and String array
           default: [],
         },
         rows: [
           {
-            label: { type: String, trim: true, default: null },
+            label: { type: Schema.Types.Mixed, default: null }, // Support both I18nString and String
             values: {
               type: [Boolean],
               default: [],
@@ -294,12 +295,12 @@ const ProductSchema = new Schema<IProduct>(
     },
     specification: {
       type: {
-        main_title: { type: String, trim: true, default: null },
+        main_title: { type: Schema.Types.Mixed, default: null }, // Support both I18nString and String
         bg_image: { type: String, trim: true, default: null },
         items: [
           {
-            title: { type: String, trim: true, default: null },
-            descr: { type: String, trim: true, default: null },
+            title: { type: Schema.Types.Mixed, default: null }, // Support both I18nString and String
+            descr: { type: Schema.Types.Mixed, default: null }, // Support both I18nText and String
             image: { type: String, trim: true, default: null },
             imageMobile: { type: String, trim: true, default: null },
             _id: false,

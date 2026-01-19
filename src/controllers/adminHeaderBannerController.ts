@@ -6,14 +6,70 @@ import { getPaginationMeta } from "@/utils/pagination";
 import { HeaderBanner } from "@/models/cms/headerBanner.model";
 import { DeviceType } from "@/models/enums";
 import { logger } from "@/utils/logger";
+import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
     role?: string;
     email?: string;
+    language?: string;
   };
 }
+
+/**
+ * Map user language name to language code
+ */
+const mapLanguageToCode = (language?: string): SupportedLanguage => {
+  const languageMap: Record<string, SupportedLanguage> = {
+    English: "en",
+    Spanish: "es",
+    French: "fr",
+    Dutch: "nl",
+    German: "de",
+  };
+
+  if (!language) {
+    return DEFAULT_LANGUAGE;
+  }
+
+  return languageMap[language] || DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get user language from request (from token if authenticated, otherwise default to English)
+ */
+const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
+  if (req.user?.language) {
+    return mapLanguageToCode(req.user.language);
+  }
+
+  return DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get translated string from I18nStringType
+ */
+const getTranslatedString = (
+  i18nString: any,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nString) return "";
+
+  if (typeof i18nString === "string") {
+    return i18nString;
+  }
+
+  if (
+    typeof i18nString === "object" &&
+    !Array.isArray(i18nString) &&
+    i18nString !== null
+  ) {
+    return i18nString[lang] || i18nString.en || "";
+  }
+
+  return "";
+};
 
 class AdminHeaderBannerController {
   /**
@@ -23,20 +79,32 @@ class AdminHeaderBannerController {
    * @body {String} text - Banner text in English only (simple string)
    * @body {String} deviceType - Device type (WEB or MOBILE)
    * @body {Boolean} [isActive] - Active status (default: false)
+   * @note Auto-translate middleware will convert English text to all supported languages
    */
   createHeaderBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { text, deviceType, isActive } = req.body;
 
-      // Validate text is a simple string (English only)
-      if (typeof text !== "string" || text.trim().length === 0) {
-        throw new AppError("Banner text must be a non-empty English string", 400);
+      // Validate text - can be either a string or I18n object
+      let i18nText: any;
+      if (typeof text === "string") {
+        // Plain string - validate it's not empty
+        if (text.trim().length === 0) {
+          throw new AppError("Banner text must be a non-empty string", 400);
+        }
+        // After autoTranslateMiddleware, text will be converted to I18n object
+        // But if middleware didn't run, use the string as English
+        i18nText = { en: text.trim() };
+      } else if (text && typeof text === "object" && "en" in text) {
+        // I18n object - validate English field is present and not empty
+        if (!text.en || typeof text.en !== "string" || text.en.trim().length === 0) {
+          throw new AppError("Banner text I18n object must have a non-empty 'en' field", 400);
+        }
+        // Use the I18n object directly (after translation middleware, it will have all languages)
+        i18nText = text;
+      } else {
+        throw new AppError("Banner text must be a non-empty string or I18n object with 'en' field", 400);
       }
-
-      // Convert simple English string to I18n object format
-      const i18nText = {
-        en: text.trim(),
-      };
 
       // If setting as active, deactivate all other banners for this device type
       if (isActive === true) {
@@ -52,7 +120,7 @@ class AdminHeaderBannerController {
         );
       }
 
-      // Create header banner with I18n text object (English only)
+      // Create header banner with I18n text object (all languages stored)
       const headerBanner = await HeaderBanner.create({
         text: i18nText,
         deviceType: deviceType as DeviceType,
@@ -137,12 +205,21 @@ class AdminHeaderBannerController {
         HeaderBanner.countDocuments(query),
       ]);
 
+      // Get user language from token (default to English)
+      const userLang = getUserLanguage(req);
+
+      // Transform I18n text to user's selected language (keep response structure same)
+      const transformedBanners = banners.map((banner: any) => ({
+        ...banner,
+        text: getTranslatedString(banner.text, userLang), // Convert I18n object to single language string
+      }));
+
       const paginationMeta = getPaginationMeta(pageNum, limitNum, total);
 
       res.status(200).json({
         success: true,
         message: "Header banners retrieved successfully",
-        data: banners,
+        data: transformedBanners,
         pagination: paginationMeta,
       });
     }
@@ -170,10 +247,19 @@ class AdminHeaderBannerController {
         throw new AppError("Header banner not found", 404);
       }
 
+      // Get user language from token (default to English)
+      const userLang = getUserLanguage(req);
+
+      // Transform I18n text to user's selected language (keep response structure same)
+      const transformedBanner = {
+        ...headerBanner,
+        text: getTranslatedString(headerBanner.text, userLang), // Convert I18n object to single language string
+      };
+
       res.status(200).json({
         success: true,
         message: "Header banner retrieved successfully",
-        data: { headerBanner },
+        data: { headerBanner: transformedBanner },
       });
     }
   );
@@ -237,7 +323,27 @@ class AdminHeaderBannerController {
 
       // Update fields
       if (text !== undefined) {
-        headerBanner.text = text || {};
+        // Validate text - can be either a string or I18n object
+        if (typeof text === "string") {
+          // Plain string - validate it's not empty
+          if (text.trim().length === 0) {
+            throw new AppError("Banner text must be a non-empty string", 400);
+          }
+          // After autoTranslateMiddleware, text will be converted to I18n object
+          // But if middleware didn't run, use the string as English
+          headerBanner.text = { en: text.trim() };
+        } else if (text && typeof text === "object" && "en" in text) {
+          // I18n object - validate English field is present and not empty
+          if (!text.en || typeof text.en !== "string" || text.en.trim().length === 0) {
+            throw new AppError("Banner text I18n object must have a non-empty 'en' field", 400);
+          }
+          // Use the I18n object directly (after translation middleware, it will have all languages)
+          headerBanner.text = text;
+        } else if (text === null || text === "") {
+          throw new AppError("Banner text cannot be empty", 400);
+        } else {
+          throw new AppError("Banner text must be a non-empty string or I18n object with 'en' field", 400);
+        }
       }
       if (isActive !== undefined) {
         headerBanner.isActive = isActive === true;

@@ -17,6 +17,7 @@ import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
 import { fileStorageService } from "./fileStorageService";
 import mongoose, { PipelineStage } from "mongoose";
+import { I18nStringType } from "../models/common.model";
 
 export type ProductSortOption =
   | "relevance"
@@ -362,8 +363,18 @@ class ProductService {
     // Generate slug from title if not provided
     let finalSlug = slug;
     if (!finalSlug) {
-      logger.info(`[Create Product] Slug not provided, generating from title: "${title}"`);
-      const baseSlug = generateSlug(title);
+      // Extract English title from I18n object if needed
+      let titleForSlug: string;
+      if (typeof title === "string") {
+        titleForSlug = title;
+      } else if (title && typeof title === "object" && "en" in title) {
+        titleForSlug = (title as I18nStringType).en || "";
+      } else {
+        titleForSlug = String(title || "");
+      }
+      
+      logger.info(`[Create Product] Slug not provided, generating from title: "${titleForSlug}"`);
+      const baseSlug = generateSlug(titleForSlug);
       logger.debug(`[Create Product] Base slug generated: "${baseSlug}"`);
       
       finalSlug = await generateUniqueSlug(
