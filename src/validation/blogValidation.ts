@@ -163,6 +163,10 @@ export const getBlogsSchema = Joi.object(
     category: Joi.string().optional(),
     search: Joi.string().optional(),
     isActive: Joi.boolean().optional(),
+    lang: Joi.string()
+      .valid("en", "nl", "de", "fr", "es")
+      .optional()
+      .label("Language"),
   })
 )
   .unknown(false)
@@ -178,13 +182,24 @@ export const getBlogDetailsSchema = Joi.object(
   .unknown(false)
   .label("BlogDetailsParams");
 
-export const getBlogDetailsQuerySchema = Joi.object(withFieldLabels({}))
+export const getBlogDetailsQuerySchema = Joi.object(
+  withFieldLabels({
+    lang: Joi.string()
+      .valid("en", "nl", "de", "fr", "es")
+      .optional()
+      .label("Language"),
+  })
+)
   .unknown(false)
   .label("BlogDetailsQuery");
 
 export const getBlogCategoriesQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string().valid("active", "all").default("active"),
+    lang: Joi.string()
+      .valid("en", "nl", "de", "fr", "es")
+      .optional()
+      .label("Language"),
   })
 )
   .unknown(false)
@@ -194,6 +209,10 @@ export const getPopularBlogsSchema = Joi.object(
   withFieldLabels({
     limit: Joi.number().integer().min(3).max(5).optional(),
     type: Joi.string().valid("popular", "latest").optional(),
+    lang: Joi.string()
+      .valid("en", "nl", "de", "fr", "es")
+      .optional()
+      .label("Language"),
   })
 )
   .unknown(false)

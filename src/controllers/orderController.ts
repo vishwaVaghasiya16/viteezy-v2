@@ -419,16 +419,6 @@ class OrderController {
         }
       }
 
-      // Validate capsuleCount for STAND_UP_POUCH
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        if (!capsuleCount || ![30, 60].includes(capsuleCount)) {
-          throw new AppError(
-            "Valid capsuleCount (30 or 60) is required for STAND_UP_POUCH variant",
-            400
-          );
-        }
-      }
-
       // Validate and fetch shipping address
       if (!shippingAddressId) {
         throw new AppError("Shipping address ID is required", 400);
@@ -694,14 +684,6 @@ class OrderController {
             );
           }
 
-          // Use standup pouch pricing based on capsuleCount
-          if (!capsuleCount || ![30, 60].includes(capsuleCount)) {
-            throw new AppError(
-              "Valid capsuleCount (30 or 60) is required for STAND_UP_POUCH variant",
-              400
-            );
-          }
-
           itemCapsuleCount = capsuleCount;
           const standupPrice = product.standupPouchPrice as any;
 
@@ -919,7 +901,9 @@ class OrderController {
 
           if (referrer && referrer._id.toString() !== userId.toString()) {
             // It's a referral code, create referral record
-            const { referralService } = await import("@/services/referralService");
+            const { referralService } = await import(
+              "@/services/referralService"
+            );
             await referralService.createReferralRecord(
               referrer._id.toString(),
               userId.toString(),

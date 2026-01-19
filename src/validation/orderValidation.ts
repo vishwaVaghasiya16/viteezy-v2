@@ -158,15 +158,7 @@ export const createOrderSchema = Joi.object(
       })
       .label("Plan Duration Days"),
     isOneTime: Joi.boolean().required().label("Is One Time Purchase"),
-    capsuleCount: Joi.number()
-      .integer()
-      .valid(30, 60)
-      .when("variantType", {
-        is: "STAND_UP_POUCH",
-        then: Joi.required(),
-        otherwise: Joi.optional(),
-      })
-      .label("Capsule Count"),
+    capsuleCount: Joi.number().integer().label("Capsule Count"),
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
     // Pricing fields as numbers with separate currency
