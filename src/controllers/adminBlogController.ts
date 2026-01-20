@@ -103,6 +103,17 @@ class AdminBlogController {
         throw new AppError("Category not found or inactive", 404);
       }
 
+      // Check if title is unique
+      if (title?.en) {
+        const existingBlog = await Blogs.findOne({
+          "title.en": title.en,
+          isDeleted: false,
+        });
+        if (existingBlog) {
+          throw new AppError("A blog with this title already exists", 400);
+        }
+      }
+
       let authorObjectId: mongoose.Types.ObjectId | null = null;
       if (authorId) {
         authorObjectId = ensureObjectId(authorId, "author");
@@ -270,6 +281,18 @@ class AdminBlogController {
         });
         if (!categoryExists) throw new AppError("Category not found", 404);
         blog.categoryId = categoryObjectId;
+      }
+
+      // Check if title is unique (excluding current blog)
+      if (title?.en) {
+        const existingBlog = await Blogs.findOne({
+          "title.en": title.en,
+          _id: { $ne: blog._id },
+          isDeleted: false,
+        });
+        if (existingBlog) {
+          throw new AppError("A blog with this title already exists", 400);
+        }
       }
 
       if (title) blog.title = title;
