@@ -30,6 +30,7 @@ import mongoose from "mongoose";
 import { membershipService } from "../membershipService";
 import { emailService } from "../emailService";
 import { couponUsageHistoryService } from "../couponUsageHistoryService";
+import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
 
 /**
@@ -543,6 +544,58 @@ export class PaymentService {
           logger.info(
             `Order ${order.orderNumber} confirmed via webhook after payment completion`
           );
+
+          // Clear user's cart after successful payment
+          try {
+            const userId = (order.userId as mongoose.Types.ObjectId).toString();
+            console.log(
+              "🛒 [PAYMENT SERVICE] Step 8.0.1: Clearing cart for user",
+              userId
+            );
+            console.log(
+              "🛒 [PAYMENT SERVICE] - Order ID:",
+              order._id,
+              "Order Number:",
+              order.orderNumber
+            );
+            
+            const clearResult = await cartService.clearCart(userId);
+            console.log(
+              "✅ [PAYMENT SERVICE] - Cart cleared successfully after payment:",
+              clearResult.message
+            );
+            logger.info(
+              `Cart cleared for user ${userId} after successful payment for order ${order.orderNumber}`,
+              {
+                userId,
+                orderId: order._id,
+                orderNumber: order.orderNumber,
+                paymentId: payment._id,
+                clearResult,
+              }
+            );
+          } catch (cartError: any) {
+            // Log error but don't fail the entire webhook processing
+            console.error(
+              "❌ [PAYMENT SERVICE] - Failed to clear cart:",
+              cartError.message
+            );
+            console.error(
+              "❌ [PAYMENT SERVICE] - Cart error stack:",
+              cartError.stack
+            );
+            logger.error(
+              `Failed to clear cart after payment: ${cartError.message}`,
+              {
+                userId: (order.userId as mongoose.Types.ObjectId).toString(),
+                orderId: order._id,
+                orderNumber: order.orderNumber,
+                paymentId: payment._id,
+                error: cartError.message,
+                stack: cartError.stack,
+              }
+            );
+          }
 
           // Track coupon usage if a coupon was applied
           if (order.couponCode && order.couponDiscountAmount > 0) {
