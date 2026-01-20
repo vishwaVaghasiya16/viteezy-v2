@@ -50,13 +50,19 @@ router.post(
       { name: "featureIcons_9", maxCount: 1 },
       // Keep backward compatibility with featureIcons (non-indexed)
       { name: "featureIcons", maxCount: 10 },
+      // Support indexed membershipSection benefits icons: membershipSection_benefits_0_icon, etc.
+      { name: "membershipSection_benefits_0_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_1_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_2_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_3_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_4_icon", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons, featureIcons_0, featureIcons_1, featureIcons_2, featureIcons_3, featureIcons_4, featureIcons_5, featureIcons_6, featureIcons_7, featureIcons_8, featureIcons_9`,
+                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons, featureIcons_0, featureIcons_1, featureIcons_2, featureIcons_3, featureIcons_4, featureIcons_5, featureIcons_6, featureIcons_7, featureIcons_8, featureIcons_9, membershipSection_benefits_0_icon, membershipSection_benefits_1_icon, membershipSection_benefits_2_icon, membershipSection_benefits_3_icon, membershipSection_benefits_4_icon`,
                 400
               )
             );
@@ -119,13 +125,19 @@ router.put(
       { name: "featureIcons_9", maxCount: 1 },
       // Keep backward compatibility with featureIcons (non-indexed)
       { name: "featureIcons", maxCount: 10 },
+      // Support indexed membershipSection benefits icons: membershipSection_benefits_0_icon, etc.
+      { name: "membershipSection_benefits_0_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_1_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_2_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_3_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_4_icon", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons, featureIcons_0, featureIcons_1, featureIcons_2, featureIcons_3, featureIcons_4, featureIcons_5, featureIcons_6, featureIcons_7, featureIcons_8, featureIcons_9`,
+                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons, featureIcons_0, featureIcons_1, featureIcons_2, featureIcons_3, featureIcons_4, featureIcons_5, featureIcons_6, featureIcons_7, featureIcons_8, featureIcons_9, membershipSection_benefits_0_icon, membershipSection_benefits_1_icon, membershipSection_benefits_2_icon, membershipSection_benefits_3_icon, membershipSection_benefits_4_icon`,
                 400
               )
             );

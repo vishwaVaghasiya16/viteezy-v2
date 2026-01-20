@@ -77,7 +77,8 @@ const buildNestedStructure = (body: any): any => {
         key === "featureIcons" ||
         key.startsWith("featureIcons_") || // Skip indexed featureIcons (featureIcons_0, featureIcons_1, etc.)
         key === "heroPrimaryCTAImages" ||
-        key === "communityBackgroundImage") {
+        key === "communityBackgroundImage" ||
+        key.startsWith("membershipSection_benefits_") && key.endsWith("_icon")) { // Skip indexed membershipSection benefits icons
       continue;
     }
     

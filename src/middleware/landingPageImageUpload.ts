@@ -230,6 +230,48 @@ export const handleLandingPageImageUpload = async (
       req.body.communitySection.backgroundImage = imageUrl;
     }
 
+    // Handle membershipSection benefits icons (indexed: membershipSection_benefits_0_icon, etc.)
+    const indexedMembershipBenefitIcons: { index: number; file: Express.Multer.File }[] = [];
+    if (files) {
+      Object.keys(files).forEach((fieldName) => {
+        if (fieldName.startsWith("membershipSection_benefits_") && fieldName.endsWith("_icon")) {
+          const indexMatch = fieldName.match(/membershipSection_benefits_(\d+)_icon/);
+          if (indexMatch) {
+            const index = parseInt(indexMatch[1], 10);
+            const fileArray = files[fieldName];
+            if (fileArray && fileArray.length > 0) {
+              indexedMembershipBenefitIcons.push({ index, file: fileArray[0] });
+            }
+          }
+        }
+      });
+    }
+
+    // Handle indexed membershipSection benefits icons
+    if (indexedMembershipBenefitIcons.length > 0) {
+      // Sort by index to maintain order
+      indexedMembershipBenefitIcons.sort((a, b) => a.index - b.index);
+      
+      const benefitIconUrls = await Promise.all(
+        indexedMembershipBenefitIcons.map(({ file }) => fileStorageService.uploadFile("landing-pages", file))
+      );
+      
+      if (!req.body.membershipSection) {
+        req.body.membershipSection = {};
+      }
+      if (!req.body.membershipSection.benefits) {
+        req.body.membershipSection.benefits = [];
+      }
+      
+      // Assign icons to benefits by their index from field name
+      indexedMembershipBenefitIcons.forEach(({ index }, urlIndex) => {
+        if (!req.body.membershipSection.benefits[index]) {
+          req.body.membershipSection.benefits[index] = {};
+        }
+        req.body.membershipSection.benefits[index].icon = benefitIconUrls[urlIndex];
+      });
+    }
+
     console.log("[LandingPageImageUpload] heroSection after processing:", req.body.heroSection);
 
     next();
