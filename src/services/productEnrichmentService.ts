@@ -80,12 +80,139 @@ export const transformProductForLanguage = (
     variantsValue = product.variants;
   }
 
+  // Transform shortDescription
+  const transformedShortDescription = product.shortDescription
+    ? getTranslatedString(product.shortDescription, lang)
+    : product.shortDescription;
+
+  // Transform benefits array
+  const transformedBenefits = product.benefits
+    ? product.benefits.map((benefit: any) => getTranslatedString(benefit, lang))
+    : product.benefits;
+
+  // Transform healthGoals array
+  const transformedHealthGoals = product.healthGoals
+    ? product.healthGoals.map((goal: any) => getTranslatedString(goal, lang))
+    : product.healthGoals;
+
+  // Transform comparisonSection
+  let transformedComparisonSection = product.comparisonSection;
+  if (product.comparisonSection) {
+    transformedComparisonSection = {
+      ...product.comparisonSection,
+      title: getTranslatedString(product.comparisonSection.title, lang),
+      columns: product.comparisonSection.columns
+        ? product.comparisonSection.columns.map((col: any) =>
+            getTranslatedString(col, lang)
+          )
+        : product.comparisonSection.columns,
+      rows: product.comparisonSection.rows
+        ? product.comparisonSection.rows.map((row: any) => ({
+            ...row,
+            label: getTranslatedString(row.label, lang),
+          }))
+        : product.comparisonSection.rows,
+    };
+  }
+
+  // Transform specification
+  let transformedSpecification = product.specification;
+  if (product.specification) {
+    transformedSpecification = {
+      ...product.specification,
+      main_title: getTranslatedString(product.specification.main_title, lang),
+      items: product.specification.items
+        ? product.specification.items.map((item: any) => ({
+            ...item,
+            title: getTranslatedString(item.title, lang),
+            descr: getTranslatedText(item.descr, lang),
+          }))
+        : product.specification.items,
+    };
+  }
+
+  // Transform sachetPrices features
+  let transformedSachetPrices = product.sachetPrices;
+  if (product.sachetPrices) {
+    transformedSachetPrices = { ...product.sachetPrices };
+
+    // Transform features in subscription periods
+    const periods = ["thirtyDays", "sixtyDays", "ninetyDays", "oneEightyDays"];
+    periods.forEach((period) => {
+      if (transformedSachetPrices[period]?.features) {
+        transformedSachetPrices[period] = {
+          ...transformedSachetPrices[period],
+          features: transformedSachetPrices[period].features.map((feature: any) =>
+            getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    });
+
+    // Transform features in oneTime options
+    if (transformedSachetPrices.oneTime) {
+      transformedSachetPrices.oneTime = { ...transformedSachetPrices.oneTime };
+
+      if (transformedSachetPrices.oneTime.count30?.features) {
+        transformedSachetPrices.oneTime.count30 = {
+          ...transformedSachetPrices.oneTime.count30,
+          features: transformedSachetPrices.oneTime.count30.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+
+      if (transformedSachetPrices.oneTime.count60?.features) {
+        transformedSachetPrices.oneTime.count60 = {
+          ...transformedSachetPrices.oneTime.count60,
+          features: transformedSachetPrices.oneTime.count60.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    }
+  }
+
+  // Transform standupPouchPrice features
+  let transformedStandupPouchPrice = product.standupPouchPrice;
+  if (product.standupPouchPrice) {
+    // Check if it's the count30/count60 structure
+    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+      transformedStandupPouchPrice = { ...product.standupPouchPrice };
+
+      if (transformedStandupPouchPrice.count30?.features) {
+        transformedStandupPouchPrice.count30 = {
+          ...transformedStandupPouchPrice.count30,
+          features: transformedStandupPouchPrice.count30.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+
+      if (transformedStandupPouchPrice.count60?.features) {
+        transformedStandupPouchPrice.count60 = {
+          ...transformedStandupPouchPrice.count60,
+          features: transformedStandupPouchPrice.count60.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    }
+  }
+
   return {
     ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
     description: getTranslatedText(product.description, lang),
+    shortDescription: transformedShortDescription,
+    benefits: transformedBenefits,
+    healthGoals: transformedHealthGoals,
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
+    comparisonSection: transformedComparisonSection,
+    specification: transformedSpecification,
+    sachetPrices: transformedSachetPrices,
+    standupPouchPrice: transformedStandupPouchPrice,
     variants: variantsValue,
     ingredients:
       product.ingredients?.map((ingredient: any) => ({

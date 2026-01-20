@@ -68,7 +68,7 @@ const baseMediaSchema = Joi.object({
 const basePrimaryCTASchema = Joi.object({
   label: baseStringSchema.required(),
   image: Joi.string().uri().optional(),
-  link: Joi.string().uri().optional(),
+  link: Joi.string().trim().optional().allow(""), // Allow any string value, not just URIs
   order: Joi.number().integer().min(0).optional().default(0),
 });
 
@@ -84,7 +84,7 @@ const baseHeroSectionSchema = Joi.object({
     "string.uri": "Background image must be a valid URL",
   }),
   title: baseStringSchema.required(),
-  subTitle: baseStringSchema.optional(),
+  // subTitle removed from create API
   description: baseTextSchema.optional(),
   highlightedText: Joi.array().items(baseStringSchema).optional(),
   primaryCTA: Joi.array().items(basePrimaryCTASchema).max(3).optional(),
@@ -295,10 +295,7 @@ const baseFAQItemSchema = Joi.object({
 const baseFAQSectionSchema = Joi.object({
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
-  faqs: Joi.array().items(baseFAQItemSchema).min(1).required().messages({
-    "array.min": "At least one FAQ is required",
-    "any.required": "FAQs are required",
-  }),
+  // FAQs will be fetched dynamically from FAQs model (latest 8)
   isEnabled: Joi.boolean().optional(),
   order: Joi.number().integer().min(0).optional(),
 });
@@ -307,15 +304,8 @@ const baseFAQSectionSchema = Joi.object({
 const baseTestimonialsSectionSchema = Joi.object({
   title: baseStringSchema.required(),
   subTitle: baseStringSchema.optional(),
-  testimonialIds: Joi.array()
-    .items(Joi.string().trim().length(24).hex())
-    .min(1)
-    .max(10)
-    .required()
-    .messages({
-      "array.min": "At least one testimonial is required",
-      "any.required": "Testimonials are required",
-    }),
+  // Testimonials will be fetched dynamically from ProductTestimonials model (max 6)
+  // Priority: isFeatured = true first, then latest
   isEnabled: Joi.boolean().optional(),
   order: Joi.number().integer().min(0).optional(),
 });

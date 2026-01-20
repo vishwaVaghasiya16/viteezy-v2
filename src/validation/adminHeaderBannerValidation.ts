@@ -31,22 +31,40 @@ const i18nStringSchema = Joi.alternatives()
     "alternatives.match": "Text must be a string or an I18n object",
   });
 
-// Simple string schema (for create - English only)
-const simpleStringSchema = Joi.string()
-  .trim()
-  .min(1)
-  .max(500)
-  .required()
+// I18n String Schema for create (accepts both string and I18n object)
+const createI18nStringSchema = Joi.alternatives()
+  .try(
+    Joi.string()
+      .trim()
+      .min(1)
+      .max(500)
+      .required()
+      .messages({
+        "string.empty": "Banner text cannot be empty",
+        "string.min": "Banner text must be at least 1 character",
+        "string.max": "Banner text must not exceed 500 characters",
+        "any.required": "Banner text is required",
+      }),
+    Joi.object({
+      en: Joi.string().trim().min(1).max(500).required(),
+      nl: Joi.string().trim().max(500).optional(),
+      de: Joi.string().trim().max(500).optional(),
+      fr: Joi.string().trim().max(500).optional(),
+      es: Joi.string().trim().max(500).optional(),
+    })
+      .required()
+      .messages({
+        "object.base": "Banner text must be a string or I18n object",
+        "any.required": "Banner text is required",
+      })
+  )
   .messages({
-    "string.empty": "Banner text cannot be empty",
-    "string.min": "Banner text must be at least 1 character",
-    "string.max": "Banner text must not exceed 500 characters",
-    "any.required": "Banner text is required",
+    "alternatives.match": "Banner text must be a string or I18n object with 'en' field",
   });
 
 export const createHeaderBannerSchema = Joi.object(
   withFieldLabels({
-    text: simpleStringSchema.label("Banner Text (English only)"),
+    text: createI18nStringSchema.label("Banner Text"),
     deviceType: Joi.string()
       .valid(...DEVICE_TYPE_VALUES)
       .required()

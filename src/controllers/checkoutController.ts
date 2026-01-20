@@ -17,6 +17,7 @@ import {
 } from "../models/common.model";
 import { Products } from "../models/commerce/products.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
+import { transformProductForLanguage } from "../services/productEnrichmentService";
 
 /**
  * Calculate monthly amount from totalAmount and durationDays
@@ -164,72 +165,8 @@ const getTranslatedText = (
   return i18nText[lang] || i18nText.en || "";
 };
 
-/**
- * Transform product to use user's language (same as getAllProducts)
- */
-const transformProductForLanguage = (
-  product: any,
-  lang: SupportedLanguage
-): any => {
-  // Remove variants from product before spreading to avoid conflicts
-  const { variants: _, ...productWithoutVariants } = product;
-
-  // Determine variants - keep string arrays as-is, transform objects
-  let variantsValue: any[] = [];
-  if (Array.isArray(product.variants) && product.variants.length > 0) {
-    if (typeof product.variants[0] === "string") {
-      // It's a string array - keep as-is
-      variantsValue = product.variants;
-    } else {
-      // It's an object array - transform
-      variantsValue = product.variants.map((variant: any) => {
-        if (typeof variant === "string") {
-          return variant;
-        }
-        return {
-          ...variant,
-          name: getTranslatedString(variant.name, lang),
-        };
-      });
-    }
-  } else if (product.variants) {
-    variantsValue = product.variants;
-  }
-
-  return {
-    ...productWithoutVariants,
-    title: getTranslatedString(product.title, lang),
-    description: getTranslatedText(product.description, lang),
-    nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
-    howToUse: getTranslatedText(product.howToUse, lang),
-    variants: variantsValue,
-    // Transform populated ingredients for language
-    // Always include image field (null/empty if not present) for FE consistency
-    ingredients:
-      product.ingredients?.map((ingredient: any) => ({
-        _id: ingredient._id,
-        name: getTranslatedString(ingredient.name, lang),
-        description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || null, // Always include image field, null if not present
-      })) || [],
-    // Transform populated categories for language
-    categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
-    // Transform FAQs for language (return empty array if no FAQs)
-    faqs:
-      product.faqs?.map((faq: any) => ({
-        _id: faq._id,
-        question: getTranslatedString(faq.question, lang),
-        answer: getTranslatedText(faq.answer, lang),
-        sortOrder: faq.sortOrder || 0,
-      })) || [],
-  };
-};
+// Using common transformProductForLanguage from productEnrichmentService
+// This ensures all I18n fields are properly transformed (shortDescription, benefits, healthGoals, comparisonSection, specification, features, etc.)
 
 class CheckoutController {
   /**

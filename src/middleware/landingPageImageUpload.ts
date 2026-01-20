@@ -134,7 +134,50 @@ export const handleLandingPageImageUpload = async (
       });
     }
 
-    // Handle featureIcons (multiple files for features)
+    // Handle featureIcons (indexed: featureIcons_0, featureIcons_1, etc.)
+    // First, collect all indexed featureIcons
+    const indexedFeatureIcons: { index: number; file: Express.Multer.File }[] = [];
+    if (files) {
+      Object.keys(files).forEach((fieldName) => {
+        if (fieldName.startsWith("featureIcons_")) {
+          const indexMatch = fieldName.match(/featureIcons_(\d+)/);
+          if (indexMatch) {
+            const index = parseInt(indexMatch[1], 10);
+            const fileArray = files[fieldName];
+            if (fileArray && fileArray.length > 0) {
+              indexedFeatureIcons.push({ index, file: fileArray[0] });
+            }
+          }
+        }
+      });
+    }
+
+    // Handle indexed featureIcons (featureIcons_0, featureIcons_1, etc.)
+    if (indexedFeatureIcons.length > 0) {
+      // Sort by index to maintain order
+      indexedFeatureIcons.sort((a, b) => a.index - b.index);
+      
+      const featureIconUrls = await Promise.all(
+        indexedFeatureIcons.map(({ file }) => fileStorageService.uploadFile("landing-pages", file))
+      );
+      
+      if (!req.body.featuresSection) {
+        req.body.featuresSection = {};
+      }
+      if (!req.body.featuresSection.features) {
+        req.body.featuresSection.features = [];
+      }
+      
+      // Assign icons to features by their index from field name
+      indexedFeatureIcons.forEach(({ index }, urlIndex) => {
+        if (!req.body.featuresSection.features[index]) {
+          req.body.featuresSection.features[index] = {};
+        }
+        req.body.featuresSection.features[index].icon = featureIconUrls[urlIndex];
+      });
+    }
+
+    // Handle backward compatibility: non-indexed featureIcons (old format)
     if (files?.featureIcons && files.featureIcons.length > 0) {
       const featureIconUrls = await Promise.all(
         files.featureIcons.map((file) => fileStorageService.uploadFile("landing-pages", file))
@@ -145,7 +188,7 @@ export const handleLandingPageImageUpload = async (
       if (!req.body.featuresSection.features) {
         req.body.featuresSection.features = [];
       }
-      // Assign icons to features by index
+      // Assign icons to features by sequential index (old behavior)
       featureIconUrls.forEach((url, index) => {
         if (!req.body.featuresSection.features[index]) {
           req.body.featuresSection.features[index] = {};

@@ -6,7 +6,6 @@ import {
   validateQuery,
 } from "@/middleware/joiValidation";
 import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
-import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminHeaderBannerController } from "@/controllers/adminHeaderBannerController";
 import {
   createHeaderBannerSchema,
@@ -28,10 +27,11 @@ router.use(authorize("Admin"));
  * @body    {String} text - Banner text in English only (simple string, not I18n object)
  * @body    {String} deviceType - Device type (WEB or MOBILE)
  * @body    {Boolean} [isActive] - Active status (default: false)
- * @note    Translation will be available in GET APIs based on user's language preference
+ * @note    Auto-translate middleware will convert English text to all supported languages (en, nl, de, fr, es) and store in database
  */
 router.post(
   "/",
+  autoTranslateMiddleware("headerBanners"), // Auto-translate English to all languages
   validateJoi(createHeaderBannerSchema),
   adminHeaderBannerController.createHeaderBanner
 );
@@ -45,10 +45,10 @@ router.post(
  * @query   {String} [search] - Search by text in any language
  * @query   {String} [deviceType] - Filter by device type (WEB or MOBILE)
  * @query   {Boolean} [isActive] - Filter by active status
+ * @note    Returns full I18n object (all languages stored) - no translation middleware
  */
 router.get(
   "/",
-  transformResponseMiddleware("headerBanners"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getAllHeaderBannersQuerySchema),
   adminHeaderBannerController.getAllHeaderBanners
 );
@@ -57,10 +57,10 @@ router.get(
  * @route   GET /api/v1/admin/header-banners/:id
  * @desc    Get header banner by ID (Admin only)
  * @access  Private (Admin)
+ * @note    Returns full I18n object (all languages stored) - no translation middleware
  */
 router.get(
   "/:id",
-  transformResponseMiddleware("headerBanners"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(headerBannerIdParamsSchema),
   adminHeaderBannerController.getHeaderBannerById
 );

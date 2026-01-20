@@ -75,6 +75,7 @@ const buildNestedStructure = (body: any): any => {
         key === "howItWorksStepImages" ||
         key === "designedByScienceStepImages" ||
         key === "featureIcons" ||
+        key.startsWith("featureIcons_") || // Skip indexed featureIcons (featureIcons_0, featureIcons_1, etc.)
         key === "heroPrimaryCTAImages" ||
         key === "communityBackgroundImage") {
       continue;

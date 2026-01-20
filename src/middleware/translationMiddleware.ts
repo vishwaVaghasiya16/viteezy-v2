@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { prepareDataForTranslation } from "@/utils/translationUtils";
+import { prepareProductDataForTranslation } from "@/utils/productTranslationUtils";
 import { logger } from "@/utils/logger";
 
 /**
@@ -39,6 +40,10 @@ const MODEL_I18N_FIELDS: Record<
   blogBanners: {
     i18nString: ["heading"],
     i18nText: ["description"],
+  },
+  headerBanners: {
+    i18nString: ["text"],
+    i18nText: [],
   },
   blogCategories: {
     i18nString: ["title"],
@@ -185,18 +190,23 @@ export const autoTranslateMiddleware = (modelName: string) => {
         return next();
       }
 
-      // Prepare and translate data
-      req.body = await prepareDataForTranslation(
-        req.body,
-        i18nString,
-        i18nText
-      );
-
-      logger.info(`Auto-translated ${modelName} data`, {
-        model: modelName,
-        i18nStringFields: i18nString.length,
-        i18nTextFields: i18nText.length,
-      });
+      // Special handling for products (handles arrays and nested structures)
+      if (modelName === "products") {
+        req.body = await prepareProductDataForTranslation(req.body);
+        logger.info(`Auto-translated product data with all text fields (including arrays and nested structures)`);
+      } else {
+        // Standard translation for other models
+        req.body = await prepareDataForTranslation(
+          req.body,
+          i18nString,
+          i18nText
+        );
+        logger.info(`Auto-translated ${modelName} data`, {
+          model: modelName,
+          i18nStringFields: i18nString.length,
+          i18nTextFields: i18nText.length,
+        });
+      }
 
       next();
     } catch (error: any) {

@@ -105,7 +105,7 @@ class HeaderBannerController {
         return;
       }
 
-      // Transform I18n text to user's language
+      // Transform I18n text to user's selected language (keep response structure same)
       const translatedText = getTranslatedString(headerBanner.text, userLang);
 
       res.status(200).json({
@@ -114,14 +114,13 @@ class HeaderBannerController {
         data: {
           headerBanner: {
             _id: headerBanner._id,
-            text: translatedText,
+            text: translatedText, // Return single language string based on user's language preference
             deviceType: headerBanner.deviceType,
             isActive: headerBanner.isActive,
             createdAt: headerBanner.createdAt,
             updatedAt: headerBanner.updatedAt,
           },
           deviceType: deviceType as DeviceType,
-          language: userLang,
         },
       });
     }
