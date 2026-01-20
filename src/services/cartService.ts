@@ -1256,22 +1256,37 @@ class CartService {
    * Clear cart
    */
   async clearCart(userId: string): Promise<{ message: string }> {
-    const cart = await this.getOrCreateCart(userId);
+    // Find and update cart directly by userId to ensure we get the right cart
+    const result = await Carts.findOneAndUpdate(
+      {
+        userId: new mongoose.Types.ObjectId(userId),
+        isDeleted: false,
+      },
+      {
+        $set: {
+          items: [],
+          variantType: undefined,
+          subtotal: 0,
+          tax: 0,
+          discount: 0,
+          total: 0,
+          currency: "EUR",
+          couponCode: null,
+          couponDiscountAmount: 0,
+          updatedAt: new Date(),
+        },
+      },
+      {
+        new: true,
+      }
+    );
 
-    await Carts.findByIdAndUpdate(cart._id, {
-      items: [],
-      variantType: undefined,
-      subtotal: 0,
-      tax: 0,
-      discount: 0,
-      total: 0,
-      currency: "EUR",
-      couponCode: null,
-      couponDiscountAmount: 0,
-      updatedAt: new Date(),
-    });
-
-    logger.info(`Cart cleared for user ${userId}`);
+    if (!result) {
+      // If no cart found, that's okay - cart might already be empty or not exist
+      logger.info(`No cart found to clear for user ${userId}`);
+    } else {
+      logger.info(`Cart cleared for user ${userId}, cart ID: ${result._id}`);
+    }
 
     return {
       message: "Cart cleared successfully",
