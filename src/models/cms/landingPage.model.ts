@@ -230,7 +230,7 @@ const HowItWorksSectionSchema = new Schema<HowItWorksSection>(
 export interface ProductCategorySection {
   title: I18nStringType;
   description: I18nTextType;
-  productCategoryIds: mongoose.Types.ObjectId[]; // References to product categories
+  productCategoryIds?: mongoose.Types.ObjectId[]; // Optional - categories are fetched dynamically in GET APIs (max 10 recent)
   isEnabled: boolean;
   order: number;
 }
@@ -245,12 +245,15 @@ const ProductCategorySectionSchema = new Schema<ProductCategorySection>(
       type: I18nText,
       default: () => ({}),
     },
-    productCategoryIds: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "product_categories",
-      },
-    ],
+    productCategoryIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: "product_categories",
+        },
+      ],
+      optional: true, // Categories are fetched dynamically in GET APIs
+    },
     isEnabled: {
       type: Boolean,
       default: true,

@@ -163,7 +163,7 @@ interface CreateLandingPageData {
     title: string; // Simple string for now
     description?: string; // Simple string for now
     subTitle?: string;
-    productCategoryIds?: mongoose.Types.ObjectId[] | string[];
+    // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
@@ -285,7 +285,7 @@ interface UpdateLandingPageData {
     title?: string;
     description?: string;
     subTitle?: string;
-    productCategoryIds?: (mongoose.Types.ObjectId | string)[];
+    // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
@@ -523,7 +523,7 @@ class LandingPageService {
             ? { en: data.productCategorySection.subTitle }
             : (data.productCategorySection as any).subTitle
           : undefined,
-        productCategoryIds: data.productCategorySection.productCategoryIds,
+        // productCategoryIds removed - categories are fetched dynamically in GET APIs
         isEnabled:
           data.productCategorySection.isEnabled !== undefined
             ? data.productCategorySection.isEnabled
@@ -873,6 +873,24 @@ class LandingPageService {
       };
     }
 
+    // Fetch Product Categories from ProductCategory model if ProductCategory section is enabled
+    if (landingPage.productCategorySection && landingPage.productCategorySection.isEnabled !== false) {
+      // Fetch latest max 10 categories dynamically from product_categories table
+      const categories = await ProductCategory.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id slug name description sortOrder icon image productCount")
+        .sort({ createdAt: -1 }) // Latest first
+        .limit(10) // Max 10 categories
+        .lean();
+
+      (landingPage as any).productCategorySection = {
+        ...landingPage.productCategorySection,
+        productCategories: categories,
+      };
+    }
+
     return { landingPage };
   }
 
@@ -969,24 +987,20 @@ class LandingPageService {
       landingPage.productCategorySection &&
       landingPage.productCategorySection.isEnabled !== false
     ) {
-      if (
-        landingPage.productCategorySection.productCategoryIds &&
-        landingPage.productCategorySection.productCategoryIds.length > 0
-      ) {
-        const categories = await ProductCategory.find({
-          _id: { $in: landingPage.productCategorySection.productCategoryIds },
-          isActive: true,
-          isDeleted: { $ne: true },
-        })
-          .select("_id slug name description sortOrder icon image productCount")
-          .sort({ sortOrder: 1 })
-          .lean();
+      // Fetch latest max 10 categories dynamically from product_categories table
+      const categories = await ProductCategory.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id slug name description sortOrder icon image productCount")
+        .sort({ createdAt: -1 }) // Latest first
+        .limit(10) // Max 10 categories
+        .lean();
 
-        processedLandingPage.productCategorySection = {
-          ...landingPage.productCategorySection,
-          productCategories: categories,
-        };
-      }
+      processedLandingPage.productCategorySection = {
+        ...landingPage.productCategorySection,
+        productCategories: categories,
+      };
     } else {
       delete processedLandingPage.productCategorySection;
     }

@@ -168,10 +168,7 @@ const baseProductCategorySectionSchema = Joi.object({
   title: baseStringSchema.required(),
   subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
-  productCategoryIds: Joi.array()
-    .items(Joi.string().trim().length(24).hex())
-    .min(1)
-    .optional(),
+  // productCategoryIds removed - categories are fetched dynamically in GET APIs
   isEnabled: Joi.boolean().optional(),
   order: Joi.number().integer().min(0).optional(),
 });
