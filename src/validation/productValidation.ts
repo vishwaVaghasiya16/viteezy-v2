@@ -627,7 +627,7 @@ export const getProductCategoriesSchema = Joi.object({
 
 // Get product categories list with products query schema (for navbar)
 export const listProductCategoriesSchema = Joi.object({
-  lan: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
+  lang: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
     "any.only": "Language must be one of: en, nl, de, fr, es",
   }),
 })

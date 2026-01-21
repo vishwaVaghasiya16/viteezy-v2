@@ -33,7 +33,7 @@ router.get(
 );
 router.get(
   "/categories/list",
-  authMiddleware,
+  optionalAuth,
   validateQuery(listProductCategoriesSchema),
   ProductController.listCategoriesWithProducts
 );

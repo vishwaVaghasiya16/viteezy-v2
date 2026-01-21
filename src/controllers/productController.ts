@@ -872,7 +872,7 @@ export class ProductController {
    * Get list of active product categories with top 3 products each (for navbar)
    * @route GET /api/v1/products/categories/list
    * @access Authenticated users only
-   * @query lan - Language code (en, nl, de, fr, es)
+   * @query lang - Language code (en, nl, de, fr, es)
    */
   static async listCategoriesWithProducts(
     req: AuthenticatedRequest,
@@ -880,36 +880,19 @@ export class ProductController {
     next: NextFunction
   ) {
     try {
-      // Check authentication
-      if (!req.user || !req.user._id) {
-        return next(new AppError("User not authenticated", 401));
-      }
-
-      // Get language from query parameter or user preference
-      const { lan } = req.query as { lan?: string };
+      // Get language priority: query param (lang) > user token > default "en"
+      const { lang } = req.query as {
+        lang?: "en" | "nl" | "de" | "fr" | "es";
+      };
 
       let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
-
-      // Priority: query parameter > user profile > default
-      if (lan) {
-        // Map language code from query
-        const langMap: Record<string, SupportedLanguage> = {
-          en: "en",
-          nl: "nl",
-          de: "de",
-          fr: "fr",
-          es: "es",
-        };
-        userLang = langMap[lan.toLowerCase()] || DEFAULT_LANGUAGE;
+      
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
       } else {
-        // Get user language from profile
-        const user = await User.findById(req.user._id)
-          .select("language")
-          .lean();
-
-        if (user && user.language) {
-          userLang = mapLanguageToCode(user.language);
-        }
+        // Fall back to user's token/profile language
+        userLang = getUserLanguage(req);
       }
 
       // Fetch active categories
