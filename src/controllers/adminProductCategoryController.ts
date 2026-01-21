@@ -35,6 +35,21 @@ class AdminProductCategoryController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
+      // Check if name.en is unique
+      if (name?.en) {
+        const existingCategory = await ProductCategory.findOne({
+          "name.en": name.en.trim(),
+          isDeleted: { $ne: true },
+        });
+
+        if (existingCategory) {
+          throw new AppError(
+            "A category with this name already exists. Please use a different name.",
+            400
+          );
+        }
+      }
+
       // Generate slug if not provided
       const baseSlug = slug || generateSlug(name?.en || "");
       if (!baseSlug) {
@@ -231,6 +246,22 @@ class AdminProductCategoryController {
 
       // Update name
       if (name !== undefined) {
+        // Check if name.en is unique (only if name is being changed)
+        if (name?.en && name.en.trim() !== category.name?.en?.trim()) {
+          const existingCategory = await ProductCategory.findOne({
+            "name.en": name.en.trim(),
+            _id: { $ne: id },
+            isDeleted: { $ne: true },
+          });
+
+          if (existingCategory) {
+            throw new AppError(
+              "A category with this name already exists. Please use a different name.",
+              400
+            );
+          }
+        }
+
         updateData.name = name;
         // Regenerate slug if name changed
         if (name.en && name.en !== category.name?.en) {
