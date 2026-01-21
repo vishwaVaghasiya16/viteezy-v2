@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     mongo_db: str = Field("viteezy-phase-2-staging", alias="MONGODB_DB")
     mongo_sessions_collection: str = "ai_conversations"
     mongo_quiz_sessions_collection: str = "quiz_sessions"
-    mongo_products_collection: str = "temp_product"
+    mongo_products_collection: str = Field("products", alias="MONGO_PRODUCTS_COLLECTION")
 
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
     openai_model: str = "gpt-4o-mini"

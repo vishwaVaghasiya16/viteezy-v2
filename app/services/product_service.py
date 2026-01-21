@@ -24,6 +24,22 @@ class ProductService:
         "fitness": ["fitness", "muscle", "performance", "recovery", "exercise", "strength"],
         "hormones": ["hormone", "hormonal", "menstrual", "cycle", "libido"],
     }
+    
+    # Map concerns to health goals for MongoDB search and scoring
+    CONCERN_TO_HEALTH_GOALS = {
+        "sleep": "Sleep",
+        "stress": "Stress Management",
+        "energy": "Energy Support",
+        "stomach_intestines": ["Digestive Health", "Gut Health"],
+        "skin": "Skin Health",
+        "resistance": "Immune Support",
+        "weight": "Weight Management",
+        "libido": "Libido",
+        "brain": "Brain Health",
+        "hair_nails": ["Hair Health", "Nail Health"],
+        "fitness": "Fitness",
+        "hormones": "Hormone Balance",
+    }
 
     def __init__(self, repository: ProductRepository):
         """Initialize product service with MongoDB repository."""
@@ -76,6 +92,10 @@ class ProductService:
             
             # Score and filter products - ensure only Active products are processed
             scored_products = []
+            # Track if MongoDB search used any criteria (health goals or message terms)
+            # If products were found via search criteria, they deserve a base score even if scoring doesn't match
+            search_used_criteria = bool(health_goals or message_terms or include_product_titles)
+            
             for product in mongo_products:
                 # Double-check that product status is Active (safety check)
                 # Handle both boolean (true) and string ("Active") formats
@@ -87,9 +107,18 @@ class ProductService:
                     continue
                 
                 score = self._score_product(product, keywords, concerns, context)
-                # Give products a base score even if no keywords match (for fallback cases)
-                if score == 0 and not keywords and not concerns:
-                    score = 0.5  # Base score when no search criteria
+                
+                # Give products a base score if they were found by MongoDB search but scoring didn't match
+                # This handles cases where MongoDB found products (via health goals or message terms)
+                # but the scoring logic didn't match keywords
+                if score == 0:
+                    # If MongoDB search used criteria (health goals or message terms) and found products,
+                    # give them a base score so they can still be recommended
+                    if search_used_criteria:
+                        score = 0.5  # Base score for products found by MongoDB search criteria
+                    # If no search criteria at all, also give base score
+                    elif not keywords and not concerns:
+                        score = 0.5  # Base score when no search criteria
                 
                 if score > 0:  # Only include products with positive score
                     scored_products.append((score, product))
@@ -201,24 +230,9 @@ class ProductService:
 
     def _concerns_to_health_goals(self, concerns: list[str]) -> list[str]:
         """Map user concerns to health goals for MongoDB search."""
-        concern_to_health_goal = {
-            "sleep": "Sleep",
-            "stress": "Stress Management",
-            "energy": "Energy Support",
-            "stomach_intestines": ["Digestive Health", "Gut Health"],
-            "skin": "Skin Health",
-            "resistance": "Immune Support",
-            "weight": "Weight Management",
-            "libido": "Libido",
-            "brain": "Brain Health",
-            "hair_nails": ["Hair Health", "Nail Health"],
-            "fitness": "Fitness",
-            "hormones": "Hormone Balance",
-        }
-        
         health_goals = []
         for concern in concerns:
-            goal = concern_to_health_goal.get(concern)
+            goal = self.CONCERN_TO_HEALTH_GOALS.get(concern)
             if goal:
                 if isinstance(goal, list):
                     health_goals.extend(goal)
@@ -245,11 +259,25 @@ class ProductService:
                 score += 1.0
         
         # Bonus for health goals matching concerns
-        health_goals = product.get("healthGoals", [])
-        health_goals_text = " ".join([str(g).lower() for g in health_goals])
+        product_health_goals = product.get("healthGoals", [])
+        health_goals_text = " ".join([str(g).lower() for g in product_health_goals])
         
-        # Check if product health goals match user concerns
+        # Check if product health goals directly match mapped health goals from concerns
         for concern in concerns:
+            expected_goals = self.CONCERN_TO_HEALTH_GOALS.get(concern)
+            if expected_goals:
+                if isinstance(expected_goals, list):
+                    # Check if any expected goal matches any product health goal
+                    for expected_goal in expected_goals:
+                        if any(expected_goal.lower() in str(pg).lower() for pg in product_health_goals):
+                            score += 2.0  # Direct match gets higher score
+                            break
+                else:
+                    # Check if expected goal matches any product health goal
+                    if any(expected_goals.lower() in str(pg).lower() for pg in product_health_goals):
+                        score += 2.0  # Direct match gets higher score
+            
+            # Also check keyword matching (original logic)
             concern_keywords = self.CONCERN_TO_KEYWORDS.get(concern, [])
             for keyword in concern_keywords:
                 if keyword in health_goals_text or keyword in product_text:
@@ -288,33 +316,39 @@ class ProductService:
         # Handle multilingual title (prefer English, fallback to first available)
         title = product.get("title", {})
         if isinstance(title, dict):
-            text_parts.append(title.get("en", title.get(list(title.keys())[0] if title else "", "")))
+            title_val = title.get("en", title.get(list(title.keys())[0] if title else "", ""))
+            if title_val:
+                text_parts.append(str(title_val))
         elif isinstance(title, str):
             text_parts.append(title)
         
         # Handle multilingual description (prefer English, fallback to first available)
         description = product.get("description", {})
         if isinstance(description, dict):
-            text_parts.append(description.get("en", description.get(list(description.keys())[0] if description else "", "")))
+            desc_val = description.get("en", description.get(list(description.keys())[0] if description else "", ""))
+            if desc_val:
+                text_parts.append(str(desc_val))
         elif isinstance(description, str):
             text_parts.append(description)
         
         # Add short description
         if product.get("shortDescription"):
-            text_parts.append(product["shortDescription"])
+            text_parts.append(str(product["shortDescription"]))
         
-        # Add benefits
+        # Add benefits (convert all items to strings to handle ObjectIds and other types)
         if product.get("benefits"):
-            text_parts.extend(product["benefits"])
+            text_parts.extend([str(b) for b in product["benefits"]])
         
-        # Add health goals
+        # Add health goals (convert all items to strings to handle ObjectIds and other types)
         if product.get("healthGoals"):
-            text_parts.extend(product["healthGoals"])
+            text_parts.extend([str(g) for g in product["healthGoals"]])
         
-        # Add ingredients
+        # Add ingredients (convert all items to strings to handle ObjectIds and other types)
         if product.get("ingredients"):
-            text_parts.extend(product["ingredients"])
+            text_parts.extend([str(i) for i in product["ingredients"]])
         
+        # Filter out None values and empty strings, then join
+        text_parts = [part for part in text_parts if part]
         return " ".join(text_parts)
 
     def _is_safe_and_suitable(self, product: dict[str, Any], context: dict | None) -> bool:
@@ -721,14 +755,18 @@ class ProductService:
         # Handle multilingual title
         title_obj = product_doc.get("title", {})
         if isinstance(title_obj, dict):
-            text_parts.append(title_obj.get("en", title_obj.get(list(title_obj.keys())[0] if title_obj else "", "")))
+            title_val = title_obj.get("en", title_obj.get(list(title_obj.keys())[0] if title_obj else "", ""))
+            if title_val:
+                text_parts.append(str(title_val))
         elif isinstance(title_obj, str):
             text_parts.append(title_obj)
         
         # Handle multilingual description
         desc_obj = product_doc.get("description", {})
         if isinstance(desc_obj, dict):
-            text_parts.append(desc_obj.get("en", desc_obj.get(list(desc_obj.keys())[0] if desc_obj else "", "")))
+            desc_val = desc_obj.get("en", desc_obj.get(list(desc_obj.keys())[0] if desc_obj else "", ""))
+            if desc_val:
+                text_parts.append(str(desc_val))
         elif isinstance(desc_obj, str):
             text_parts.append(desc_obj)
         
@@ -743,10 +781,14 @@ class ProductService:
         # Add nutrition info
         nutrition_obj = product_doc.get("nutritionInfo", {})
         if isinstance(nutrition_obj, dict):
-            text_parts.append(nutrition_obj.get("en", nutrition_obj.get(list(nutrition_obj.keys())[0] if nutrition_obj else "", "")))
+            nutrition_val = nutrition_obj.get("en", nutrition_obj.get(list(nutrition_obj.keys())[0] if nutrition_obj else "", ""))
+            if nutrition_val:
+                text_parts.append(str(nutrition_val))
         elif isinstance(nutrition_obj, str):
             text_parts.append(nutrition_obj)
         
+        # Filter out None values and empty strings, then join
+        text_parts = [part for part in text_parts if part]
         return " ".join(text_parts)
 
     @staticmethod

@@ -2916,24 +2916,30 @@ class ChatService:
             text_parts.append(product.description)
         
         if product.benefits:
-            text_parts.extend(product.benefits)
+            text_parts.extend([str(b) for b in product.benefits])
         
         if product.health_goals:
-            text_parts.extend(product.health_goals)
+            text_parts.extend([str(g) for g in product.health_goals])
         
         if product_json:
             # Handle multilingual fields from MongoDB
             if product_json.get("description"):
                 desc = product_json["description"]
                 if isinstance(desc, dict):
-                    text_parts.append(desc.get("en", desc.get(list(desc.keys())[0] if desc else "", "")))
+                    desc_val = desc.get("en", desc.get(list(desc.keys())[0] if desc else "", ""))
+                    if desc_val:
+                        text_parts.append(str(desc_val))
                 elif isinstance(desc, str):
                     text_parts.append(desc)
             if product_json.get("benefits"):
-                text_parts.extend(product_json["benefits"])
+                # Convert all items to strings to handle ObjectIds and other types
+                text_parts.extend([str(b) for b in product_json["benefits"]])
             if product_json.get("ingredients"):
-                text_parts.extend(product_json["ingredients"])
+                # Convert all items to strings to handle ObjectIds and other types
+                text_parts.extend([str(i) for i in product_json["ingredients"]])
         
+        # Filter out None values and empty strings, then join
+        text_parts = [part for part in text_parts if part]
         return " ".join(text_parts)
     
     def _build_problem_summary(self, concerns: list[str], concern_details: dict, context: dict, product_count: int = 3) -> str:
