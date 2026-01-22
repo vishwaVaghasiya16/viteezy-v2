@@ -7,7 +7,7 @@ export {
   responseWrapper,
   paginationWrapper,
   validationWrapper,
-  rateLimitWrapper,
+  // rateLimitWrapper,
   cacheWrapper,
 } from "./apiDecorators";
 export { getPaginationOptions, getPaginationMeta } from "./pagination";
