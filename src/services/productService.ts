@@ -753,134 +753,190 @@ class ProductService {
     if (search && search.trim().length > 0) {
       hasSearch = true;
       const searchTerm = search.trim();
-
-      // Try text search first, but also support regex fallback for better compatibility
-      // Build text search match with isDeleted filter
-      const textSearchMatch: Record<string, any> = {
-        $text: { $search: searchTerm },
-        isDeleted: false,
-      };
-
-      // Add other filters that can be combined with $text in same stage
-      if (status !== undefined) {
-        textSearchMatch.status = status;
-      } else {
-        // Show only active products for regular users
-        textSearchMatch.status = true;
-      }
-      if (variant) textSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined)
-        textSearchMatch.hasStandupPouch = hasStandupPouch;
-
-      // Text search must be first stage
-      // Use $or to support both text search and regex fallback
-      const searchConditions: any[] = [textSearchMatch];
-
-      // Add regex fallback for better search compatibility
       const escapedSearchTerm = searchTerm.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
-      const regexSearchMatch: Record<string, any> = {
-        $or: [
-          { title: { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
-          { description: { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
-          { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
-          { slug: { $regex: escapedSearchTerm, $options: "i" } },
-        ],
-        isDeleted: false,
-      };
 
-      if (status !== undefined) {
-        regexSearchMatch.status = status;
-      } else {
-        regexSearchMatch.status = true;
-      }
-      if (variant) regexSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined)
-        regexSearchMatch.hasStandupPouch = hasStandupPouch;
+      // When categories are provided, use regex search only (can't combine $text with $in easily)
+      // Otherwise, try text search first with regex fallback
+      const hasArrayFilters = categoryObjectIds.length > 0 || healthGoals?.length || ingredientIds.length > 0;
 
-      searchConditions.push(regexSearchMatch);
-
-      pipeline.push({
-        $match: {
-          $or: searchConditions,
-        },
-      });
-
-      // Add relevance score - use textScore if available, otherwise use regex match priority
-      pipeline.push({
-        $addFields: {
-          relevanceScore: {
-            $ifNull: [
-              { $meta: "textScore" },
-              {
-                $cond: [
-                  {
-                    $or: [
-                      {
-                        $regexMatch: {
-                          input: { $ifNull: ["$title", ""] },
-                          regex: escapedSearchTerm,
-                          options: "i",
-                        },
-                      },
-                      {
-                        $regexMatch: {
-                          input: { $ifNull: ["$title.en", ""] },
-                          regex: escapedSearchTerm,
-                          options: "i",
-                        },
-                      },
-                    ],
-                  },
-                  10,
-                  5,
-                ],
-              },
-            ],
-          },
-        },
-      });
-
-      // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
-      const arrayFilters: Record<string, any> = {};
-      if (categoryObjectIds.length > 0) {
-        arrayFilters.categories = {
-          $in: categoryObjectIds,
+      if (hasArrayFilters) {
+        // Use regex search only when array filters are present (categories, healthGoals, ingredients)
+        // This avoids MongoDB restrictions with $text and $in/$all in same pipeline
+        const regexSearchMatch: Record<string, any> = {
+          $or: [
+            { title: { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { description: { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+            { slug: { $regex: escapedSearchTerm, $options: "i" } },
+          ],
+          ...matchStage, // Include all base filters (status, variant, hasStandupPouch, etc.)
         };
-      }
-      if (healthGoals?.length) {
-        // Use $elemMatch with regex for array filters too
-        const escapedGoals = healthGoals.map((goal) => {
-          return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        pipeline.push({
+          $match: regexSearchMatch,
         });
 
-        const combinedRegex = escapedGoals.join("|");
-
-        arrayFilters.healthGoals = {
-          $elemMatch: {
-            $regex: combinedRegex,
-            $options: "i",
+        // Add relevance score for regex search
+        pipeline.push({
+          $addFields: {
+            relevanceScore: {
+              $cond: [
+                {
+                  $or: [
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$title", ""] },
+                        regex: escapedSearchTerm,
+                        options: "i",
+                      },
+                    },
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$title.en", ""] },
+                        regex: escapedSearchTerm,
+                        options: "i",
+                      },
+                    },
+                  ],
+                },
+                10,
+                5,
+              ],
+            },
           },
-        };
-      }
-      if (ingredientIds.length > 0) {
-        arrayFilters.ingredients = { $all: ingredientIds };
-      }
+        });
 
-      if (Object.keys(arrayFilters).length > 0) {
-        pipeline.push({ $match: arrayFilters });
+        // Apply array filters in separate stage
+        const arrayFilters: Record<string, any> = {};
+        if (categoryObjectIds.length > 0) {
+          arrayFilters.categories = {
+            $in: categoryObjectIds,
+          };
+        }
+        if (healthGoals?.length) {
+          // Use $elemMatch with regex for array filters too
+          const escapedGoals = healthGoals.map((goal) => {
+            return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          });
+
+          const combinedRegex = escapedGoals.join("|");
+
+          arrayFilters.healthGoals = {
+            $elemMatch: {
+              $regex: combinedRegex,
+              $options: "i",
+            },
+          };
+        }
+        if (ingredientIds.length > 0) {
+          arrayFilters.ingredients = { $all: ingredientIds };
+        }
+
+        if (Object.keys(arrayFilters).length > 0) {
+          pipeline.push({ $match: arrayFilters });
+        }
+      } else {
+        // No array filters - can use text search with regex fallback
+        // Build text search match with isDeleted filter
+        const textSearchMatch: Record<string, any> = {
+          $text: { $search: searchTerm },
+          isDeleted: false,
+        };
+
+        // Add other filters that can be combined with $text in same stage
+        if (status !== undefined) {
+          textSearchMatch.status = status;
+        } else {
+          // Show only active products for regular users
+          textSearchMatch.status = true;
+        }
+        if (variant) textSearchMatch.variant = variant;
+        if (hasStandupPouch !== undefined)
+          textSearchMatch.hasStandupPouch = hasStandupPouch;
+
+        // Add regex fallback for better search compatibility
+        const regexSearchMatch: Record<string, any> = {
+          $or: [
+            { title: { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { description: { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+            { slug: { $regex: escapedSearchTerm, $options: "i" } },
+          ],
+          isDeleted: false,
+        };
+
+        if (status !== undefined) {
+          regexSearchMatch.status = status;
+        } else {
+          regexSearchMatch.status = true;
+        }
+        if (variant) regexSearchMatch.variant = variant;
+        if (hasStandupPouch !== undefined)
+          regexSearchMatch.hasStandupPouch = hasStandupPouch;
+
+        pipeline.push({
+          $match: {
+            $or: [textSearchMatch, regexSearchMatch],
+          },
+        });
+
+        // Add relevance score - use textScore if available, otherwise use regex match priority
+        pipeline.push({
+          $addFields: {
+            relevanceScore: {
+              $ifNull: [
+                { $meta: "textScore" },
+                {
+                  $cond: [
+                    {
+                      $or: [
+                        {
+                          $regexMatch: {
+                            input: { $ifNull: ["$title", ""] },
+                            regex: escapedSearchTerm,
+                            options: "i",
+                          },
+                        },
+                        {
+                          $regexMatch: {
+                            input: { $ifNull: ["$title.en", ""] },
+                            regex: escapedSearchTerm,
+                            options: "i",
+                          },
+                        },
+                      ],
+                    },
+                    10,
+                    5,
+                  ],
+                },
+              ],
+            },
+          },
+        });
       }
     } else {
       // No search - apply all filters in first stage

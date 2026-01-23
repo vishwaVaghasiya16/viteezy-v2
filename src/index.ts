@@ -384,59 +384,102 @@ app.use(
  * - /api/v1/docs (Python FastAPI docs)
  * - /api/v1/redoc (Python FastAPI ReDoc)
  */
+// Path filter function for Python proxy
+const pythonApiPathFilter = (pathname: string, req: IncomingMessage): boolean => {
+  // Get the actual path from the request
+  const expressReq = req as Request;
+  const actualPath = expressReq.path || pathname;
+  
+  logger.debug(`[Python Proxy PathFilter] Checking path: ${actualPath} (pathname: ${pathname})`);
+  
+  // Proxy these specific Python routes
+  const pythonRoutes = [
+    "/api/v1/health",
+    "/api/v1/sessions",
+    "/api/v1/chat",
+    "/api/v1/useridLogin",
+    "/api/v1/docs",
+    "/api/v1/redoc",
+    "/api/v1/openapi.json",
+  ];
+  
+  // Check exact matches
+  if (pythonRoutes.includes(actualPath)) {
+    logger.info(`[Python Proxy PathFilter] Matched exact route: ${actualPath}`);
+    return true;
+  }
+  
+  // Check if path starts with /api/v1/sessions/ (for session-specific routes)
+  if (actualPath.startsWith("/api/v1/sessions/")) {
+    logger.info(`[Python Proxy PathFilter] Matched sessions route: ${actualPath}`);
+    return true;
+  }
+  
+  logger.debug(`[Python Proxy PathFilter] No match for: ${actualPath}`);
+  return false;
+};
+
 const pythonApiProxyOptions: Options<Request, Response> = {
   target: "http://localhost:8000",
   changeOrigin: true,
-  pathFilter: (pathname: string, req: IncomingMessage) => {
-    // Proxy these specific Python routes
-    const pythonRoutes = [
-      "/api/v1/health",
-      "/api/v1/sessions",
-      "/api/v1/chat",
-      "/api/v1/useridLogin",
-      "/api/v1/docs",
-      "/api/v1/redoc",
-      "/api/v1/openapi.json",
-    ];
-    
-    // Check exact matches
-    if (pythonRoutes.includes(pathname)) {
-      return true;
-    }
-    
-    // Check if path starts with /api/v1/sessions/ (for session-specific routes)
-    if (pathname.startsWith("/api/v1/sessions/")) {
-      return true;
-    }
-    
-    return false;
-  },
+  pathFilter: pythonApiPathFilter,
   onProxyReq: (proxyReq: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
     const expressReq = req as Request;
-    console.log(`[Python Proxy] ${expressReq.method} ${expressReq.url} -> http://localhost:8000${expressReq.url}`);
+    logger.info(`[Python Proxy] Proxying ${expressReq.method} ${expressReq.url} -> http://localhost:8000${expressReq.url}`);
+  },
+  onError: (err: Error, req: IncomingMessage, res: ServerResponse) => {
+    const expressReq = req as Request;
+    logger.error(`[Python Proxy] Error proxying ${expressReq.method} ${expressReq.url}: ${err.message}`);
+    if (!res.headersSent) {
+      (res as Response).status(503).json({
+        success: false,
+        message: "Python API service is unavailable",
+        errorType: "Service Unavailable",
+        error: err.message,
+        data: null,
+      });
+    }
+  },
+  onProxyRes: (proxyRes: ServerResponse, req: IncomingMessage, res: ServerResponse) => {
+    const expressReq = req as Request;
+    logger.info(`[Python Proxy] Response ${proxyRes.statusCode} for ${expressReq.method} ${expressReq.url}`);
   },
 } as Options<Request, Response>;
 
 const pythonApiProxy = createProxyMiddleware(pythonApiProxyOptions);
 
 // Error handling wrapper for Python proxy
+// Note: The pathFilter in pythonApiProxyOptions already handles route matching
+// This wrapper just adds error handling and logging
 const pythonApiProxyWithErrorHandling = (
   req: Request,
   res: Response,
   next: express.NextFunction
 ) => {
+  // Log incoming request
+  logger.info(`[Python Proxy Middleware] ${req.method} ${req.originalUrl}`);
+  
+  // Let the proxy middleware handle path filtering internally
+  // It will call next() automatically if path doesn't match
   pythonApiProxy(req, res, (err: any) => {
     if (err) {
-      console.error("Python API Proxy Error:", err.message);
+      logger.error(`[Python Proxy Middleware] Error: ${err.message}`, err);
       if (!res.headersSent) {
         res.status(503).json({
-          status: "error",
+          success: false,
           message: "Python API service is unavailable",
-          error_code: "SERVICE_UNAVAILABLE",
+          errorType: "Service Unavailable",
+          error: err.message,
+          data: null,
         });
       }
     } else {
-      next();
+      // Proxy middleware handles routing - if it doesn't proxy, it calls next()
+      // If response was sent, don't call next()
+      if (!res.headersSent) {
+        logger.debug(`[Python Proxy Middleware] Request not proxied, continuing to next middleware`);
+        next();
+      }
     }
   });
 };
