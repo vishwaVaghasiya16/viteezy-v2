@@ -28,7 +28,7 @@ export class StripeAdapter implements IPaymentGateway {
     });
 
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
     this.defaultSuccessUrl = `${frontendUrl}/payment/success`;
     this.defaultCancelUrl = `${frontendUrl}/payment/cancel`;
 

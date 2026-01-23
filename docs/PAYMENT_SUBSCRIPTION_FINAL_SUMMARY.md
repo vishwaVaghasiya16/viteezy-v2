@@ -62,7 +62,7 @@
 **Added:**
 
 ```env
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:8080
 AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT=false
 ```
 

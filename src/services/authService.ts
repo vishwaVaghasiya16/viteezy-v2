@@ -910,9 +910,8 @@ class AuthService {
         // Generate reset URL for web/link-based reset
         const frontendUrl =
           process.env.FRONTEND_URL ||
-          process.env.CLIENT_URL ||
-          "http://localhost:3000";
-        const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(
+          "http://localhost:8080";
+        const resetUrl = `${frontendUrl}/resetPassword?token=${resetToken}&email=${encodeURIComponent(
           email
         )}`;
 

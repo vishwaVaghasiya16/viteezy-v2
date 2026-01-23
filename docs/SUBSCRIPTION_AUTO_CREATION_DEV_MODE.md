@@ -57,7 +57,7 @@ curl -X POST http://localhost:8080/api/v1/payments/create \
   -d '{
     "orderId": "YOUR_ORDER_ID",
     "paymentMethod": "MOLLIE",
-    "returnUrl": "http://localhost:3000/payment/return"
+    "returnUrl": "http://localhost:8080/payment/return"
   }'
 ```
 

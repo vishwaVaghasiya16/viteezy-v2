@@ -641,7 +641,7 @@ class PaymentController {
               Object.keys(req.query)
             );
             const frontendUrl =
-              process.env.FRONTEND_URL || "http://localhost:3000";
+              process.env.FRONTEND_URL || "http://localhost:8080";
             return res.redirect(
               `${frontendUrl}/payment/failed?error=Payment ID not found`
             );
@@ -670,7 +670,7 @@ class PaymentController {
               error
             );
             const frontendUrl =
-              process.env.FRONTEND_URL || "http://localhost:3000";
+              process.env.FRONTEND_URL || "http://localhost:8080";
             return res.redirect(
               `${frontendUrl}/payment/failed?error=Payment not found for ID: ${molliePaymentId}`
             );
@@ -689,7 +689,7 @@ class PaymentController {
             "❌ [PAYMENT RETURN] - No gateway ID available for verification"
           );
           const frontendUrl =
-            process.env.FRONTEND_URL || "http://localhost:3000";
+            process.env.FRONTEND_URL || "http://localhost:8080";
           return res.redirect(
             `${frontendUrl}/payment/failed?error=Payment gateway ID not found`
           );
@@ -774,7 +774,7 @@ class PaymentController {
         }
 
         // Determine redirect URL based on payment type
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
         let redirectUrl = `${frontendUrl}/payment/return`;
 
         const resolvedMembershipId =
@@ -808,7 +808,7 @@ class PaymentController {
         res.redirect(redirectUrl);
       } catch (error) {
         logger.error("Payment return handling error:", error);
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
         res.redirect(
           `${frontendUrl}/payment/failed?error=${
             error instanceof Error ? error.message : "Unknown error"
