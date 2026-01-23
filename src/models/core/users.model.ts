@@ -148,8 +148,6 @@ const userSchema = new Schema<IUser>(
         "German",
         "French",
         "Spanish",
-        "Italian",
-        "Portuguese",
       ],
     },
     registeredAt: {
