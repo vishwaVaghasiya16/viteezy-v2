@@ -336,14 +336,12 @@ export const updateProfileSchema = Joi.object(
         "German",
         "French",
         "Spanish",
-        "Italian",
-        "Portuguese"
       )
       .optional()
       .label("Language")
       .messages({
         "any.only":
-          "Language must be one of: English, Dutch, German, French, Spanish, Italian, Portuguese",
+          "Language must be one of: English, Dutch, German, French, Spanish",
       }),
   })
 ).label("UpdateProfilePayload");
