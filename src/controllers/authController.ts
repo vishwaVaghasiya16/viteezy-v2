@@ -138,13 +138,13 @@ class AuthController {
    */
   forgotPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, deviceInfo } = req.body;
+      const { email, deviceInfo, client } = req.body;
 
       if (!deviceInfo) {
         throw new AppError("deviceInfo is required", 400);
       }
 
-      const result = await authService.forgotPassword(email, deviceInfo);
+      const result = await authService.forgotPassword(email, deviceInfo, client);
 
       res.apiSuccess(null, result.message);
     }

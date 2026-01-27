@@ -29,8 +29,8 @@ export class StripeAdapter implements IPaymentGateway {
 
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
-    this.defaultSuccessUrl = `${frontendUrl}/payment/success`;
-    this.defaultCancelUrl = `${frontendUrl}/payment/cancel`;
+    this.defaultSuccessUrl = `${frontendUrl}/orderConfirmed/success`;
+    this.defaultCancelUrl = `${frontendUrl}/orderConfirmed/cancel`;
 
     logger.info("Stripe payment gateway initialized");
   }
@@ -41,14 +41,25 @@ export class StripeAdapter implements IPaymentGateway {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
+      // Check if this is a membership payment (has membershipId in metadata)
+      const isMembershipPayment = !!data.metadata?.membershipId;
+
       const session = await this.stripe.checkout.sessions.create({
         mode: "payment",
         payment_method_types: ["card"],
         billing_address_collection: "required",
         customer_email: data.customerEmail,
         line_items: this.buildLineItems(data),
-        success_url: this.buildSuccessUrl(data.returnUrl, data.orderId),
-        cancel_url: this.buildCancelUrl(data.cancelUrl, data.orderId),
+        success_url: this.buildSuccessUrl(
+          data.returnUrl,
+          data.orderId,
+          isMembershipPayment
+        ),
+        cancel_url: this.buildCancelUrl(
+          data.cancelUrl,
+          data.orderId,
+          isMembershipPayment
+        ),
         client_reference_id: data.orderId,
         metadata: {
           orderId: data.orderId,
@@ -514,9 +525,14 @@ export class StripeAdapter implements IPaymentGateway {
 
   private buildSuccessUrl(
     returnUrl: string | undefined,
-    orderId: string
+    orderId: string,
+    skipQueryParams: boolean = false
   ): string {
     const base = returnUrl || this.defaultSuccessUrl;
+    // For membership payments, return clean URL without query params
+    if (skipQueryParams) {
+      return base;
+    }
     return this.appendQueryParams(base, {
       orderId,
       session_id: "{CHECKOUT_SESSION_ID}",
@@ -525,9 +541,14 @@ export class StripeAdapter implements IPaymentGateway {
 
   private buildCancelUrl(
     cancelUrl: string | undefined,
-    orderId: string
+    orderId: string,
+    skipQueryParams: boolean = false
   ): string {
     const base = cancelUrl || this.defaultCancelUrl;
+    // For membership payments, return clean URL without query params
+    if (skipQueryParams) {
+      return base;
+    }
     return this.appendQueryParams(base, {
       orderId,
       reason: "cancelled",

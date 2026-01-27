@@ -140,7 +140,9 @@ Complete authentication system with OTP verification, password management, and s
 **Request Body:**
 ```json
 {
-  "email": "john@example.com"
+  "email": "john@example.com",
+  "deviceInfo": "Web",
+  "client": "user"
 }
 ```
 
@@ -148,7 +150,7 @@ Complete authentication system with OTP verification, password management, and s
 ```json
 {
   "success": true,
-  "message": "OTP sent to john@example.com"
+  "message": "If an account exists with this email, a password reset instruction has been sent."
 }
 ```
 
@@ -159,8 +161,9 @@ Complete authentication system with OTP verification, password management, and s
 ```json
 {
   "email": "john@example.com",
-  "otp": "123456",
-  "newPassword": "newpassword123"
+  "password": "newpassword123",
+  "confirmPassword": "newpassword123",
+  "token": "reset_token_from_email_link_optional_for_app_flow"
 }
 ```
 

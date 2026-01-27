@@ -243,6 +243,13 @@ export const forgotPasswordSchema = Joi.object(
   withFieldLabels({
     email: emailSchema,
     deviceInfo: deviceInfoSchema,
+    client: Joi.string()
+      .valid("user", "admin")
+      .optional()
+      .label("Client")
+      .messages({
+        "any.only": 'Client must be either "user" or "admin"',
+      }),
   })
 ).label("ForgotPasswordPayload");
 

@@ -3,7 +3,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { User, OTP, AuthSessions } from "../models/index.model";
-import { OTPType, OTPStatus, SessionStatus } from "../models/enums";
+import { OTPType, OTPStatus, SessionStatus, UserRole } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import { emailService } from "./emailService";
@@ -837,7 +837,8 @@ class AuthService {
    */
   async forgotPassword(
     email: string,
-    deviceInfo: string
+    deviceInfo: string,
+    client?: "user" | "admin"
   ): Promise<{ message: string }> {
     const user = await User.findOne({ email });
     if (!user) {
@@ -908,10 +909,21 @@ class AuthService {
         });
 
         // Generate reset URL for web/link-based reset
-        const frontendUrl =
-          process.env.FRONTEND_URL ||
-          "http://localhost:8080";
-        const resetUrl = `${frontendUrl}/resetPassword?token=${resetToken}&email=${encodeURIComponent(
+        // - User-side: FRONTEND_URL (default http://localhost:8080)
+        // - Admin panel: ADMIN_PANEL_URL (default http://localhost:8081)
+        const userFrontendUrl =
+          process.env.FRONTEND_URL || "http://localhost:8080";
+        const adminPanelUrl =
+          process.env.ADMIN_PANEL_URL || "http://localhost:8081";
+
+        // If the caller explicitly says "admin", always use admin panel URL.
+        // Otherwise, fall back to user role (Admin => admin panel) for safety.
+        const shouldUseAdminUrl =
+          client === "admin" || (client !== "user" && user.role === UserRole.ADMIN);
+
+        const baseUrl = shouldUseAdminUrl ? adminPanelUrl : userFrontendUrl;
+
+        const resetUrl = `${baseUrl}/resetPassword?token=${resetToken}&email=${encodeURIComponent(
           email
         )}`;
 

@@ -643,7 +643,7 @@ class PaymentController {
             const frontendUrl =
               process.env.FRONTEND_URL || "http://localhost:8080";
             return res.redirect(
-              `${frontendUrl}/payment/failed?error=Payment ID not found`
+              `${frontendUrl}/orderConfirmed/failed?error=Payment ID not found`
             );
           }
         }
@@ -672,7 +672,7 @@ class PaymentController {
             const frontendUrl =
               process.env.FRONTEND_URL || "http://localhost:8080";
             return res.redirect(
-              `${frontendUrl}/payment/failed?error=Payment not found for ID: ${molliePaymentId}`
+              `${frontendUrl}/orderConfirmed/failed?error=Payment not found for ID: ${molliePaymentId}`
             );
           }
         }
@@ -691,7 +691,7 @@ class PaymentController {
           const frontendUrl =
             process.env.FRONTEND_URL || "http://localhost:8080";
           return res.redirect(
-            `${frontendUrl}/payment/failed?error=Payment gateway ID not found`
+            `${frontendUrl}/orderConfirmed/failed?error=Payment gateway ID not found`
           );
         }
 
@@ -775,7 +775,7 @@ class PaymentController {
 
         // Determine redirect URL based on payment type
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
-        let redirectUrl = `${frontendUrl}/payment/return`;
+        let redirectUrl = `${frontendUrl}/orderConfirmed/return`;
 
         const resolvedMembershipId =
           membershipIdParam ||
@@ -785,20 +785,31 @@ class PaymentController {
 
         if (verifiedPayment.status === PaymentStatus.COMPLETED) {
           if (resolvedMembershipId || payment.membershipId) {
-            redirectUrl = `${frontendUrl}/membership/success?paymentId=${payment._id}`;
+            // Redirect membership payments to clean /products URL (no query params)
+            redirectUrl = `${frontendUrl}/products`;
           } else if (orderId || payment.orderId) {
             redirectUrl = `${frontendUrl}/order/success?paymentId=${
               payment._id
             }&orderId=${orderId || payment.orderId}`;
           } else {
-            redirectUrl = `${frontendUrl}/payment/success?paymentId=${payment._id}`;
+            redirectUrl = `${frontendUrl}/orderConfirmed/success?paymentId=${payment._id}`;
           }
         } else if (verifiedPayment.status === PaymentStatus.FAILED) {
-          redirectUrl = `${frontendUrl}/payment/failed?paymentId=${
-            payment._id
-          }&error=${verifiedPayment.failureReason || "Payment failed"}`;
+          if (resolvedMembershipId || payment.membershipId) {
+            // Redirect membership payments to clean /products URL (no query params)
+            redirectUrl = `${frontendUrl}/products`;
+          } else {
+            redirectUrl = `${frontendUrl}/orderConfirmed/failed?paymentId=${
+              payment._id
+            }&error=${verifiedPayment.failureReason || "Payment failed"}`;
+          }
         } else {
-          redirectUrl = `${frontendUrl}/payment/pending?paymentId=${payment._id}`;
+          if (resolvedMembershipId || payment.membershipId) {
+            // Redirect membership payments to clean /products URL (no query params)
+            redirectUrl = `${frontendUrl}/products`;
+          } else {
+            redirectUrl = `${frontendUrl}/orderConfirmed/pending?paymentId=${payment._id}`;
+          }
         }
 
         logger.info(
@@ -810,7 +821,7 @@ class PaymentController {
         logger.error("Payment return handling error:", error);
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
         res.redirect(
-          `${frontendUrl}/payment/failed?error=${
+          `${frontendUrl}/orderConfirmed/failed?error=${
             error instanceof Error ? error.message : "Unknown error"
           }`
         );
