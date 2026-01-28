@@ -384,7 +384,7 @@ class AuthService {
     );
 
     // Send welcome email asynchronously to avoid delaying the API response
-    this.sendWelcomeEmailAsync(email, firstName, lastName);
+    // this.sendWelcomeEmailAsync(email, firstName, lastName);
 
     // Use registeredAt if set, otherwise fallback to createdAt
     const registrationDate = user.registeredAt || user.createdAt;
@@ -1466,7 +1466,7 @@ class AuthService {
         logger.info(`New user registered via Google login: ${user.email}`);
 
         // Send welcome email asynchronously
-        this.sendWelcomeEmailAsync(email, firstName, lastName);
+        // this.sendWelcomeEmailAsync(email, firstName, lastName);
       } else {
         // User exists, login - same pattern as Apple login
         // Check if user is active
