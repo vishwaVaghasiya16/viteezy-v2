@@ -43,5 +43,12 @@ export const adminGetAllUsersQuerySchema = Joi.object(
       .valid("New User", "Recurring User")
       .optional()
       .label("User Type"),
+    registrationDate: Joi.string()
+      .pattern(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .messages({
+        "string.pattern.base": "Registration date must be in YYYY-MM-DD format",
+      })
+      .label("Registration Date"),
   })
 ).label("AdminGetUsersQuery");
