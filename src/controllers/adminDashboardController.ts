@@ -837,7 +837,7 @@ class AdminDashboardController {
           _id: { $in: productIds },
           isDeleted: { $ne: true },
         })
-          .select("title slug categories price productImage")
+          .select("title slug categories price productImage description status")
           .lean(),
         ProductVariants.find({
           productId: { $in: productIds },
@@ -906,6 +906,8 @@ class AdminDashboardController {
           productName: product?.title || item.productName,
           productImage: product?.productImage || null,
           slug: product?.slug || null,
+          description: product?.description || null,
+          status: product?.status !== undefined ? product.status : null,
           category: categoryName,
           price: product?.price?.amount || 0,
           currency: product?.price?.currency || "EUR",
