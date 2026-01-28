@@ -618,8 +618,8 @@ export const updateProductStatusSchema = Joi.object({
 
 // Get product categories query schema
 export const getProductCategoriesSchema = Joi.object({
-  lang: Joi.string().valid("en", "nl").optional().default("en").messages({
-    "any.only": "Language must be either 'en' or 'nl'",
+  lang: Joi.string().valid("en", "nl", "de", "fr", "es").optional().default("en").messages({
+    "any.only": "Language must be one of: en, nl, de, fr, es",
   }),
 })
   .unknown(false)

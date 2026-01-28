@@ -191,6 +191,14 @@ class MembershipController {
             : req.user?.firstName || req.user?.lastName || ""),
       };
 
+      // Set redirect URLs to /products for membership payments (clean URLs without query params)
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const membershipReturnUrl = `${frontendUrl}/products`;
+      const membershipCancelUrl = `${frontendUrl}/products`;
+
+      // Get email from authenticated user token
+      const customerEmail = req.user?.email;
+
       const paymentResponse =
         await paymentService.createMembershipPaymentIntent({
           membershipId,
@@ -202,7 +210,9 @@ class MembershipController {
           },
           description: `Membership - ${plan.name}`,
           metadata: paymentMetadata,
-          returnUrl,
+          returnUrl: membershipReturnUrl,
+          cancelUrl: membershipCancelUrl,
+          customerEmail,
         });
 
       res.status(201).json({

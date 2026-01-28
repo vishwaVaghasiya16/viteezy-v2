@@ -30,7 +30,7 @@ const DEFAULT_VALUES = {
   UPLOAD_PATH: "uploads/",
   RATE_LIMIT_WINDOW_MS: 900000, // 15 minutes in milliseconds
   RATE_LIMIT_MAX_REQUESTS: 100,
-  CORS_ORIGIN: "http://localhost:3000",
+  CORS_ORIGIN: "http://localhost:8080",
   LOG_LEVEL: "info",
   LOG_FILE: "logs/app.log",
   DIGITALOCEAN_SPACES_ENDPOINT: "",

@@ -388,7 +388,7 @@ MOLLIE_API_KEY=test_...
 
 # App
 APP_BASE_URL=http://localhost:8080
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:8080
 
 # Development/Testing (Optional)
 # Set to 'true' to auto-create subscriptions immediately on payment creation

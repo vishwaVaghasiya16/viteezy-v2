@@ -7,7 +7,7 @@
 #### Netherlands (NL) - Valid Address
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -29,7 +29,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 #### Belgium (BE) - Valid Address
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -51,7 +51,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 #### Luxembourg (LU) - Valid Address
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -77,7 +77,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 #### Netherlands (NL) - Invalid Address (Wrong Postal Code)
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -99,7 +99,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 #### Netherlands (NL) - Invalid Address (Wrong House Number)
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -121,7 +121,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 #### Belgium (BE) - Invalid Address (Wrong Postal Code)
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -187,7 +187,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 ### Test Verified NL Address (Copy-Paste Ready)
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{"firstName":"John","lastName":"Doe","streetName":"Damrak","houseNumber":"1","postalCode":"1012LG","address":"Damrak 1, 1012LG Amsterdam","country":"NL","city":"Amsterdam","isDefault":true}'
@@ -196,7 +196,7 @@ curl -X POST http://localhost:3000/api/v1/addresses \
 ### Test Unverified NL Address (Copy-Paste Ready)
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{"firstName":"Test","lastName":"User","streetName":"Damrak","houseNumber":"99999","postalCode":"1012LG","address":"Damrak 99999, 1012LG Amsterdam","country":"NL","city":"Amsterdam","isDefault":false}'

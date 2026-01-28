@@ -1411,7 +1411,9 @@ export class PaymentService {
     description?: string;
     metadata?: Record<string, string>;
     returnUrl?: string;
+    cancelUrl?: string;
     webhookUrl?: string;
+    customerEmail?: string;
   }): Promise<{
     payment: any;
     result: PaymentResult;
@@ -1465,7 +1467,9 @@ export class PaymentService {
           membershipId: data.membershipId,
         },
         returnUrl: data.returnUrl,
+        cancelUrl: data.cancelUrl,
         webhookUrl,
+        customerEmail: data.customerEmail || user.email,
       };
 
       const result = await gateway.createPaymentIntent(paymentIntentData);
