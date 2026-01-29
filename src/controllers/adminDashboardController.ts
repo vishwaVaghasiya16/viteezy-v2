@@ -265,17 +265,85 @@ class AdminDashboardController {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
 
+      // Helper function to get start of week (Monday)
+      const getStartOfWeek = (date: Date): Date => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+        const weekStart = new Date(d.setDate(diff));
+        weekStart.setHours(0, 0, 0, 0);
+        return weekStart;
+      };
+
+      // Helper function to format week key
+      const getWeekKey = (date: Date): string => {
+        const weekStart = getStartOfWeek(date);
+        const y = weekStart.getFullYear();
+        const m = String(weekStart.getMonth() + 1).padStart(2, "0");
+        const d = String(weekStart.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      };
+
       // Group keys
       let groupId: any = {};
       let dateFormat: string;
+      let pipeline: any[] = [
+        {
+          $match: {
+            status: PaymentStatus.COMPLETED,
+            isDeleted: { $ne: true },
+            createdAt: { $gte: start, $lte: end },
+          },
+        },
+      ];
 
-      if (period === "daily" || period === "weekly") {
+      if (period === "daily") {
         groupId = {
           year: { $year: "$createdAt" },
           month: { $month: "$createdAt" },
           day: { $dayOfMonth: "$createdAt" },
         };
         dateFormat = "daily";
+      } else if (period === "weekly") {
+        // Calculate week start (Monday) for each payment
+        // $dayOfWeek returns 1=Sunday, 2=Monday, ..., 7=Saturday
+        // We want Monday (2) to be the start of the week
+        // Calculate milliseconds to subtract to get to Monday
+        pipeline.push({
+          $addFields: {
+            dayOfWeek: { $dayOfWeek: "$createdAt" },
+            daysToSubtract: {
+              $cond: {
+                if: { $eq: [{ $dayOfWeek: "$createdAt" }, 1] }, // If Sunday, go back 6 days
+                then: 6,
+                else: {
+                  $subtract: [{ $dayOfWeek: "$createdAt" }, 2], // Otherwise subtract to get to Monday
+                },
+              },
+            },
+          },
+        });
+        pipeline.push({
+          $addFields: {
+            weekStartDate: {
+              $subtract: [
+                "$createdAt",
+                {
+                  $multiply: [
+                    "$daysToSubtract",
+                    24 * 60 * 60 * 1000, // Convert days to milliseconds
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        groupId = {
+          year: { $year: "$weekStartDate" },
+          month: { $month: "$weekStartDate" },
+          day: { $dayOfMonth: "$weekStartDate" },
+        };
+        dateFormat = "weekly";
       } else {
         groupId = {
           year: { $year: "$createdAt" },
@@ -284,23 +352,24 @@ class AdminDashboardController {
         dateFormat = "monthly";
       }
 
-      const revenueData = await Payments.aggregate([
-        {
-          $match: {
-            status: PaymentStatus.COMPLETED,
-            isDeleted: { $ne: true },
-            createdAt: { $gte: start, $lte: end },
-          },
+      pipeline.push({
+        $group: {
+          _id: groupId,
+          revenue: { $sum: "$amount.amount" },
+          count: { $sum: 1 },
         },
-        {
-          $group: {
-            _id: groupId,
-            revenue: { $sum: "$amount.amount" },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
-      ]);
+      });
+
+      pipeline.push({
+        $sort:
+          period === "weekly"
+            ? { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+            : period === "daily"
+            ? { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+            : { "_id.year": 1, "_id.month": 1 },
+      });
+
+      const revenueData = await Payments.aggregate(pipeline);
 
       // Prepare data map
       const map = new Map();
@@ -310,6 +379,15 @@ class AdminDashboardController {
           const m = String(item._id.month).padStart(2, "0");
           const d = String(item._id.day).padStart(2, "0");
           map.set(`${y}-${m}-${d}`, {
+            revenue: Number(item.revenue.toFixed(2)),
+            count: item.count,
+          });
+        } else if (dateFormat === "weekly") {
+          const y = item._id.year;
+          const m = String(item._id.month).padStart(2, "0");
+          const d = String(item._id.day).padStart(2, "0");
+          const key = `${y}-${m}-${d}`;
+          map.set(key, {
             revenue: Number(item.revenue.toFixed(2)),
             count: item.count,
           });
@@ -340,35 +418,72 @@ class AdminDashboardController {
       ];
 
       const chartData = [];
-      const cursor = new Date(start);
+      
+      if (dateFormat === "weekly") {
+        // Generate all weeks in the date range
+        const weekStart = getStartOfWeek(start);
+        const weekEnd = getStartOfWeek(end);
+        const cursor = new Date(weekStart);
 
-      while (cursor <= end) {
-        let key: string;
-        let label: string;
+        while (cursor <= weekEnd) {
+          const weekKey = getWeekKey(cursor);
+          const weekEndDate = new Date(cursor);
+          weekEndDate.setDate(cursor.getDate() + 6); // Sunday of the week
 
-        if (dateFormat === "daily") {
-          const y = cursor.getFullYear();
-          const m = String(cursor.getMonth() + 1).padStart(2, "0");
-          const d = String(cursor.getDate()).padStart(2, "0");
+          // Format label: "Feb 12 - Feb 18" or "Feb 12 - Mar 1" if cross-month
+          const startMonth = monthNames[cursor.getMonth()];
+          const startDay = cursor.getDate();
+          const endMonth = monthNames[weekEndDate.getMonth()];
+          const endDay = weekEndDate.getDate();
 
-          key = `${y}-${m}-${d}`;
-          label = `${monthNames[cursor.getMonth()]} ${d}`;
-          cursor.setDate(cursor.getDate() + 1);
-        } else {
-          const y = cursor.getFullYear();
-          const m = String(cursor.getMonth() + 1).padStart(2, "0");
+          let label: string;
+          if (cursor.getMonth() === weekEndDate.getMonth()) {
+            label = `${startMonth} ${startDay} - ${endDay}`;
+          } else {
+            label = `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+          }
 
-          key = `${y}-${m}`;
-          label = monthNames[cursor.getMonth()];
-          cursor.setMonth(cursor.getMonth() + 1);
+          chartData.push({
+            date: weekKey,
+            label: label,
+            revenue: map.get(weekKey)?.revenue || 0,
+            count: map.get(weekKey)?.count || 0,
+          });
+
+          // Move to next week (Monday)
+          cursor.setDate(cursor.getDate() + 7);
         }
+      } else {
+        const cursor = new Date(start);
 
-        chartData.push({
-          date: key,
-          label: label,
-          revenue: map.get(key)?.revenue || 0,
-          count: map.get(key)?.count || 0,
-        });
+        while (cursor <= end) {
+          let key: string;
+          let label: string;
+
+          if (dateFormat === "daily") {
+            const y = cursor.getFullYear();
+            const m = String(cursor.getMonth() + 1).padStart(2, "0");
+            const d = String(cursor.getDate()).padStart(2, "0");
+
+            key = `${y}-${m}-${d}`;
+            label = `${monthNames[cursor.getMonth()]} ${d}`;
+            cursor.setDate(cursor.getDate() + 1);
+          } else {
+            const y = cursor.getFullYear();
+            const m = String(cursor.getMonth() + 1).padStart(2, "0");
+
+            key = `${y}-${m}`;
+            label = monthNames[cursor.getMonth()];
+            cursor.setMonth(cursor.getMonth() + 1);
+          }
+
+          chartData.push({
+            date: key,
+            label: label,
+            revenue: map.get(key)?.revenue || 0,
+            count: map.get(key)?.count || 0,
+          });
+        }
       }
 
       res.apiSuccess(
