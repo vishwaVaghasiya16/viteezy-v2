@@ -31,10 +31,11 @@ const buildNestedStructure = (body: any): any => {
   const result: any = {};
 
   // Known section names mapping (lowercase key -> actual section name)
+  // IMPORTANT: Order matters - longer/more specific names should come first
   const sectionMap: { [key: string]: string } = {
-    banner: "banner",
-    founderquote: "founderQuote",
+    foundernote: "founderNote", // Must come before any other matching
     meetbrains: "meetBrains",
+    banner: "banner",
     timeline: "timeline",
     people: "people",
   };
@@ -79,7 +80,6 @@ const buildNestedStructure = (body: any): any => {
     if (
       key === "banner_image" ||
       key === "meet_brains_main_image" ||
-      key === "founder_image" ||
       key === "people_images"
     ) {
       continue;
@@ -128,57 +128,47 @@ const buildNestedStructure = (body: any): any => {
       if (matchedSection && sectionPrefix) {
         // Extract remaining part after section prefix
         const remaining = key.substring(sectionPrefix.length + 1);
-        const parts = remaining.split("_");
-
-        const path: string[] = [matchedSection];
-
-        // Find array index in parts (look for numeric values)
-        let arrayIndex: number | null = null;
-        let arrayIndexPosition: number = -1;
-
-        for (let i = 0; i < parts.length; i++) {
-          if (/^\d+$/.test(parts[i])) {
-            arrayIndex = parseInt(parts[i]);
-            arrayIndexPosition = i;
-            break;
+        
+        // Handle array pattern: timeline_events_0_title
+        const arrayMatch = remaining.match(/^(.+?)_(\d+)_(.+)$/);
+        if (arrayMatch) {
+          const [, arrayName, index, fieldName] = arrayMatch;
+          const lastPart = fieldName.split("_").pop() || "";
+          const isLastPartLang = languageCodes.includes(lastPart);
+          
+          const path: string[] = [matchedSection];
+          if (isLastPartLang) {
+            const fieldNameWithoutLang = fieldName.substring(0, fieldName.lastIndexOf("_"));
+            path.push(arrayName, index, fieldNameWithoutLang, lastPart);
+          } else {
+            path.push(arrayName, index, fieldName);
           }
+          setNestedValue(result, path, stringValue);
+          continue;
         }
-
+        
+        // Handle language suffix: field_name_en
+        const parts = remaining.split("_");
         const lastPart = parts[parts.length - 1];
         const isLastPartLang = languageCodes.includes(lastPart);
-
-        // Pattern: array_name_index_field_lang (e.g., timeline_events_0_title_en)
-        if (arrayIndex !== null && arrayIndexPosition >= 0) {
-          const arrayName = parts.slice(0, arrayIndexPosition).join("_");
-          const fieldParts = parts.slice(arrayIndexPosition + 1);
-
-          if (isLastPartLang && fieldParts.length >= 2) {
-            // Has language code
-            const fieldName = fieldParts.slice(0, -1).join("_");
-            const lang = lastPart;
-            path.push(arrayName, String(arrayIndex), fieldName, lang);
-          } else {
-            // No language code
-            const fieldName = fieldParts.join("_");
-            path.push(arrayName, String(arrayIndex), fieldName);
-          }
-        }
-        // Pattern: field_name_lang (e.g., banner_title_en)
-        else if (isLastPartLang) {
+        
+        const path: string[] = [matchedSection];
+        
+        if (isLastPartLang) {
+          // Has language code: field_name_lang
           const fieldName = parts.slice(0, -1).join("_");
           path.push(fieldName, lastPart);
-        }
-        // Pattern: just field_name (no language, no array)
-        else {
-          const fieldName = parts.join("_");
+        } else {
+          // No language code: just field_name (keep as single string)
+          const fieldName = remaining; // Keep entire remaining part as field name
           path.push(fieldName);
         }
 
         setNestedValue(result, path, stringValue);
       } else {
-        // No section match, treat as simple nested structure
-        const parts = key.split("_");
-        setNestedValue(result, parts, stringValue);
+        // No section match, treat as top-level field (don't create nested structure)
+        // This handles keys that don't match any known section
+        result[key] = stringValue;
       }
     } else {
       // No underscores, keep as-is

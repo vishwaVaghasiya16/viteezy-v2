@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { prepareDataForTranslation } from "@/utils/translationUtils";
 import { prepareProductDataForTranslation } from "@/utils/productTranslationUtils";
+import { prepareAboutUsDataForTranslation } from "@/utils/aboutUsTranslationUtils";
 import { logger } from "@/utils/logger";
 
 /**
@@ -14,23 +15,19 @@ const MODEL_I18N_FIELDS: Record<
   // CMS Models
   aboutUs: {
     i18nString: [
-      "banner_title",
-      "banner_button_text",
-      "founder_name",
-      "founder_position",
-      "meet_brains_title",
-      "timeline_section_title",
-      "title",
-      "subtitle",
+      "banner.banner_title",
+      "banner.banner_button_text",
+      "founderNote.headline",
+      "meetBrains.meet_brains_title",
+      "timeline.timeline_section_title",
+      "people.title",
     ],
     i18nText: [
-      "banner_description",
-      "founder_heading",
-      "founder_description",
-      "note",
-      "meet_brains_subtitle",
-      "description",
-      "timeline_section_description",
+      "banner.banner_description",
+      "founderNote.description",
+      "meetBrains.meet_brains_subtitle",
+      "timeline.timeline_section_description",
+      "people.subtitle",
     ],
   },
   blogs: {
@@ -194,6 +191,10 @@ export const autoTranslateMiddleware = (modelName: string) => {
       if (modelName === "products") {
         req.body = await prepareProductDataForTranslation(req.body);
         logger.info(`Auto-translated product data with all text fields (including arrays and nested structures)`);
+      } else if (modelName === "aboutUs") {
+        // Special handling for aboutUs (handles timeline events arrays)
+        req.body = await prepareAboutUsDataForTranslation(req.body);
+        logger.info(`Auto-translated aboutUs data with all text fields (including timeline events arrays)`);
       } else {
         // Standard translation for other models
         req.body = await prepareDataForTranslation(

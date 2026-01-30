@@ -8,7 +8,7 @@ import {
   upsertAboutUsSchema,
   updateSectionParamsSchema,
   bannerSectionDataSchema,
-  founderQuoteSectionDataSchema,
+  founderNoteSectionDataSchema,
   meetBrainsSectionDataSchema,
   timelineSectionDataSchema,
   peopleSectionDataSchema,
@@ -44,7 +44,7 @@ router.get(
  * @desc Create or update About Us page content (supports form-data with file uploads)
  * @access Admin
  * @body {Object} [banner] - Banner section data
- * @body {Object} [founderQuote] - Founder quote section data
+ * @body {Object} [founderNote] - Founder note section data
  * @body {Object} [meetBrains] - Meet brains section data
  * @body {Object} [timeline] - Timeline section data
  * @body {Object} [people] - People section data
@@ -57,7 +57,6 @@ router.post(
     upload.fields([
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
-      { name: "founder_image", maxCount: 1 },
       { name: "people_images", maxCount: 20 },
     ])(req, res, (err: any) => {
       if (err) {
@@ -65,7 +64,7 @@ router.post(
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, founder_image, people_images`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images`,
                 400
               )
             );
@@ -89,7 +88,7 @@ router.post(
  * @desc Update About Us page content (supports form-data with file uploads)
  * @access Admin
  * @body {Object} [banner] - Banner section data
- * @body {Object} [founderQuote] - Founder quote section data
+ * @body {Object} [founderNote] - Founder note section data
  * @body {Object} [meetBrains] - Meet brains section data
  * @body {Object} [timeline] - Timeline section data
  * @body {Object} [people] - People section data
@@ -104,7 +103,6 @@ router.put(
     upload.fields([
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
-      { name: "founder_image", maxCount: 1 },
       { name: "people_images", maxCount: 20 },
     ])(req, res, (err: any) => {
       if (err) {
@@ -112,7 +110,7 @@ router.put(
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, founder_image, people_images`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images`,
                 400
               )
             );
@@ -135,7 +133,7 @@ router.put(
  * @route PATCH /api/v1/admin/about-us/sections/:section
  * @desc Update specific section of About Us page
  * @access Admin
- * @param {String} section - Section name (banner, founderQuote, meetBrains, timeline, people)
+ * @param {String} section - Section name (banner, founderNote, meetBrains, timeline, people)
  * @body {Object} sectionData - Section data to update
  * @body {File} [banner_image] - Banner image (if section is banner)
  * @body {File} [meet_brains_main_image] - Meet brains main image (if section is meetBrains)
@@ -180,8 +178,8 @@ router.patch(
       case "banner":
         schema = bannerSectionDataSchema;
         break;
-      case "founderQuote":
-        schema = founderQuoteSectionDataSchema;
+      case "founderNote":
+        schema = founderNoteSectionDataSchema;
         break;
       case "meetBrains":
         schema = meetBrainsSectionDataSchema;

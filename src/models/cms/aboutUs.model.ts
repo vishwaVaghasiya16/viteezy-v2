@@ -15,7 +15,7 @@ import {
 export interface BannerSection {
   banner_image: MediaType; // Banner image
   banner_title: I18nStringType;
-  banner_subtitle: I18nTextType;
+  banner_description: I18nTextType;
   banner_button_text: I18nStringType;
   banner_button_link: string;
 }
@@ -29,7 +29,7 @@ const BannerSectionSchema = new Schema<BannerSection>(
       type: I18nString,
       default: () => ({}),
     },
-    banner_subtitle: {
+    banner_description: {
       type: I18nText,
       default: () => ({}),
     },
@@ -45,33 +45,19 @@ const BannerSectionSchema = new Schema<BannerSection>(
   { _id: false }
 );
 
-// Founder Quote Section
-export interface FounderQuoteSection {
-  founder_image: MediaType;
-  founder_quote_text: I18nTextType;
-  founder_name: I18nStringType;
-  founder_designation: I18nStringType;
-  note: I18nTextType;
+// Founder Note Section
+export interface FounderNoteSection {
+  headline: I18nStringType;
+  description: I18nTextType;
 }
 
-const FounderQuoteSectionSchema = new Schema<FounderQuoteSection>(
+const FounderNoteSectionSchema = new Schema<FounderNoteSection>(
   {
-    founder_image: {
-      type: MediaSchema,
-    },
-    founder_quote_text: {
-      type: I18nText,
-      default: () => ({}),
-    },
-    founder_name: {
+    headline: {
       type: I18nString,
       default: () => ({}),
     },
-    founder_designation: {
-      type: I18nString,
-      default: () => ({}),
-    },
-    note: {
+    description: {
       type: I18nText,
       default: () => ({}),
     },
@@ -186,7 +172,7 @@ const PeopleSectionSchema = new Schema<PeopleSection>(
 // About Us Document Interface
 export interface IAboutUs extends Document, AuditType {
   banner: BannerSection;
-  founderQuote: FounderQuoteSection;
+  founderNote: FounderNoteSection;
   meetBrains: MeetBrainsSection;
   timeline: TimelineSection;
   people: PeopleSection;
@@ -202,8 +188,8 @@ const AboutUsSchema = new Schema<IAboutUs>(
       type: BannerSectionSchema,
       default: () => ({}),
     },
-    founderQuote: {
-      type: FounderQuoteSectionSchema,
+    founderNote: {
+      type: FounderNoteSectionSchema,
       default: () => ({}),
     },
     meetBrains: {

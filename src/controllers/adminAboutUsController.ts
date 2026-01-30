@@ -32,15 +32,13 @@ class AdminAboutUsController {
           banner: {
             banner_image: null,
             banner_title: {},
-            banner_subtitle: {},
+            banner_description: {},
             banner_button_text: {},
             banner_button_link: "",
           },
-          founderQuote: {
-            founder_quote_text: {},
-            founder_name: {},
-            founder_designation: {},
-            note: {},
+          founderNote: {
+            headline: {},
+            description: {},
           },
           meetBrains: {
             meet_brains_title: {},
@@ -78,7 +76,7 @@ class AdminAboutUsController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const { banner, founderQuote, meetBrains, timeline, people } = req.body;
+      const { banner, founderNote, meetBrains, timeline, people } = req.body;
 
       // Find existing About Us page
       let aboutUs = await AboutUs.findOne({
@@ -90,8 +88,8 @@ class AdminAboutUsController {
         if (banner) {
           aboutUs.banner = { ...aboutUs.banner, ...banner };
         }
-        if (founderQuote) {
-          aboutUs.founderQuote = { ...aboutUs.founderQuote, ...founderQuote };
+        if (founderNote) {
+          aboutUs.founderNote = { ...aboutUs.founderNote, ...founderNote };
         }
         if (meetBrains) {
           aboutUs.meetBrains = { ...aboutUs.meetBrains, ...meetBrains };
@@ -113,7 +111,7 @@ class AdminAboutUsController {
         // Create new
         aboutUs = await AboutUs.create({
           banner: banner || {},
-          founderQuote: founderQuote || {},
+          founderNote: founderNote || {},
           meetBrains: meetBrains || {},
           timeline: timeline || {},
           people: people || {},
@@ -138,7 +136,7 @@ class AdminAboutUsController {
 
       const validSections = [
         "banner",
-        "founderQuote",
+        "founderNote",
         "meetBrains",
         "timeline",
         "people",
@@ -170,8 +168,8 @@ class AdminAboutUsController {
       // Update the specific section
       if (section === "banner") {
         aboutUs.banner = { ...aboutUs.banner, ...sectionData };
-      } else if (section === "founderQuote") {
-        aboutUs.founderQuote = { ...aboutUs.founderQuote, ...sectionData };
+      } else if (section === "founderNote") {
+        aboutUs.founderNote = { ...aboutUs.founderNote, ...sectionData };
       } else if (section === "meetBrains") {
         aboutUs.meetBrains = { ...aboutUs.meetBrains, ...sectionData };
       } else if (section === "timeline") {
