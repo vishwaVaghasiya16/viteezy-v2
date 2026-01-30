@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
+import { logger } from "@/utils/logger";
 import { Orders } from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
 import {
@@ -549,6 +550,7 @@ class AdminOrderController {
         : undefined;
 
       // Update status
+      const previousStatus = order.status;
       order.status = status;
 
       // Auto-update timestamps based on status
@@ -564,6 +566,54 @@ class AdminOrderController {
       }
 
       await order.save();
+
+      // Send notifications based on status change
+      try {
+        const { orderNotifications } = await import("@/utils/notificationHelpers");
+        
+        if (status !== previousStatus) {
+          switch (status) {
+            case OrderStatus.SHIPPED:
+              await orderNotifications.orderShipped(
+                order.userId,
+                String(order._id),
+                order.orderNumber,
+                order.trackingNumber,
+                requesterId
+              );
+              break;
+            case OrderStatus.DELIVERED:
+              await orderNotifications.orderDelivered(
+                order.userId,
+                String(order._id),
+                order.orderNumber,
+                requesterId
+              );
+              break;
+            case OrderStatus.CANCELLED:
+              await orderNotifications.orderCancelled(
+                order.userId,
+                String(order._id),
+                order.orderNumber,
+                undefined,
+                requesterId
+              );
+              break;
+            case OrderStatus.PROCESSING:
+              // Order packed notification
+              await orderNotifications.orderPacked(
+                order.userId,
+                String(order._id),
+                order.orderNumber,
+                requesterId
+              );
+              break;
+          }
+        }
+      } catch (error: any) {
+        logger.error(`Failed to send order status notification: ${error.message}`);
+        // Don't fail status update if notification fails
+      }
 
       res.apiSuccess({ order }, "Order status updated successfully");
     }

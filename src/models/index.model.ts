@@ -45,6 +45,8 @@ export {
   SessionStatus,
   ReferralStatus,
   DeviceType,
+  NotificationCategory,
+  NotificationType,
   // Export enum values
   PRODUCT_STATUS_VALUES,
   USER_ROLE_VALUES,
@@ -88,6 +90,8 @@ export {
   SESSION_STATUS_VALUES,
   REFERRAL_STATUS_VALUES,
   DEVICE_TYPE_VALUES,
+  NOTIFICATION_CATEGORY_VALUES,
+  NOTIFICATION_TYPE_VALUES,
 } from "./enums";
 
 // AI Models

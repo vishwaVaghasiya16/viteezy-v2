@@ -67,4 +67,29 @@ router.get(
   userController.getTransactionHistory
 );
 
+/**
+ * Register device token for push notifications
+ * @route POST /api/v1/users/device-token
+ * @access Private
+ * @body {String} deviceToken - FCM/APNs device token
+ * @body {String} [platform] - Platform (android/ios) - optional for tracking
+ */
+router.post(
+  "/device-token",
+  authenticate,
+  userController.registerDeviceToken
+);
+
+/**
+ * Remove device token for push notifications
+ * @route DELETE /api/v1/users/device-token
+ * @access Private
+ * @body {String} deviceToken - FCM/APNs device token to remove
+ */
+router.delete(
+  "/device-token",
+  authenticate,
+  userController.removeDeviceToken
+);
+
 export default router;

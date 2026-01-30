@@ -46,6 +46,8 @@ export interface IUser extends Document {
   passwordResetToken?: string;
   passwordResetTokenExpires?: Date;
   registeredAt?: Date;
+  // Push notification device tokens (FCM/APNs)
+  deviceTokens?: string[]; // Array of FCM/APNs device tokens
   // Family member fields
   isSubMember?: boolean; // Indicates if this is a family/sub-member
   parentMemberId?: Schema.Types.ObjectId; // Reference to parent/main member
@@ -213,6 +215,12 @@ const userSchema = new Schema<IUser>(
     passwordResetTokenExpires: {
       type: Date,
       select: false,
+    },
+    // Push notification device tokens (FCM/APNs)
+    deviceTokens: {
+      type: [String],
+      default: [],
+      select: false, // Don't include in queries by default for security
     },
     // Family member fields
     isSubMember: {

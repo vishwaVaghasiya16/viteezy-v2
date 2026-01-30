@@ -1288,6 +1288,30 @@ export class PaymentService {
             );
             await this.handleOrderConfirmation(order, payment);
 
+            // Send payment successful and order confirmed notifications
+            try {
+              const { paymentNotifications, orderNotifications } = await import("@/utils/notificationHelpers");
+              await Promise.all([
+                paymentNotifications.paymentSuccessful(
+                  order.userId,
+                  String(order._id),
+                  order.orderNumber,
+                  typeof payment.amount === 'object' ? payment.amount.amount : payment.amount,
+                  typeof payment.amount === 'object' ? payment.amount.currency : (payment.currency || order.currency),
+                  order.userId
+                ),
+                orderNotifications.orderConfirmed(
+                  order.userId,
+                  String(order._id),
+                  order.orderNumber,
+                  order.userId
+                ),
+              ]);
+            } catch (error: any) {
+              logger.error(`Failed to send payment/order notifications: ${error.message}`);
+              // Don't fail payment processing if notification fails
+            }
+
             // ========== SUBSCRIPTION CREATION LOGIC ==========
             // Auto-create subscription if order is eligible
             // Refresh order from database to ensure we have latest data with all fields
@@ -1367,6 +1391,21 @@ export class PaymentService {
           // Keep order as pending if payment failed
           orderUpdated = true;
           logger.info(`Order ${order.orderNumber} payment failed`);
+          
+          // Send payment failed notification
+          try {
+            const { paymentNotifications } = await import("@/utils/notificationHelpers");
+            await paymentNotifications.paymentFailed(
+              order.userId,
+              String(order._id),
+              order.orderNumber,
+              result.error || "Payment processing failed",
+              order.userId
+            );
+          } catch (error: any) {
+            logger.error(`Failed to send payment failed notification: ${error.message}`);
+            // Don't fail payment processing if notification fails
+          }
         } else if (result.status === PaymentStatus.CANCELLED) {
           // Keep order as pending if payment cancelled
           orderUpdated = true;
@@ -1936,6 +1975,24 @@ export class PaymentService {
       );
       console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription[0]._id);
       console.log("✅ [SUBSCRIPTION] - Status:", subscription[0].status);
+
+      // Send subscription activated notification (only after payment success)
+      // Payment status is COMPLETED at this point, so subscription is activated
+      try {
+        const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
+        await subscriptionNotifications.subscriptionActivated(
+          order.userId,
+          String(subscription[0]._id),
+          subscription[0].subscriptionNumber,
+          order.userId
+        );
+        logger.info(
+          `Subscription activated notification sent for subscription: ${subscription[0].subscriptionNumber} (payment successful)`
+        );
+      } catch (error: any) {
+        logger.error(`Failed to send subscription activated notification: ${error.message}`);
+        // Don't fail subscription creation if notification fails
+      }
 
       // ========== STEP 7: Commit Transaction ==========
       await session.commitTransaction();

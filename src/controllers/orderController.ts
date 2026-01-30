@@ -890,6 +890,20 @@ class OrderController {
         notes,
       });
 
+      // Send order placed notification
+      try {
+        const { orderNotifications } = await import("@/utils/notificationHelpers");
+        await orderNotifications.orderPlaced(
+          userId,
+          String(order._id),
+          order.orderNumber,
+          userId
+        );
+      } catch (error: any) {
+        logger.error(`Failed to send order placed notification: ${error.message}`);
+        // Don't fail the order creation if notification fails
+      }
+
       // Check if couponCode is a referral code and create referral record
       if (normalizedCouponCode) {
         try {

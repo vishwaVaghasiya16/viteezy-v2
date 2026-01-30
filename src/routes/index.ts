@@ -53,6 +53,7 @@ import countryRoutes from "./countryRoutes";
 import stateRoutes from "./stateRoutes";
 import generalSettingsRoutes from "./generalSettingsRoutes";
 import headerBannerRoutes from "./headerBannerRoutes";
+import notificationRoutes from "./notificationRoutes";
 
 const router = Router();
 
@@ -113,5 +114,6 @@ router.use("/countries", countryRoutes);
 router.use("/states", stateRoutes);
 router.use("/general-settings", generalSettingsRoutes);
 router.use("/header-banner", headerBannerRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

@@ -327,6 +327,27 @@ export enum DeviceType {
   MOBILE = "MOBILE",
 }
 
+// Notification Categories
+export enum NotificationCategory {
+  ORDER = "Order",
+  DELIVERY = "Delivery",
+  PROMOTIONAL = "Promotional",
+  SYSTEM = "System",
+  PAYMENT = "Payment",
+  SUBSCRIPTION = "Subscription",
+  MEMBERSHIP = "Membership",
+  REVIEW = "Review",
+  FAMILY = "Family",
+  SUPPORT = "Support",
+  GENERAL = "General",
+}
+
+// Notification Types
+export enum NotificationType {
+  NORMAL = "Normal",
+  REDIRECTION = "Redirection",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -377,3 +398,5 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
 export const SESSION_STATUS_VALUES = Object.values(SessionStatus);
 export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
 export const DEVICE_TYPE_VALUES = Object.values(DeviceType);
+export const NOTIFICATION_CATEGORY_VALUES = Object.values(NotificationCategory);
+export const NOTIFICATION_TYPE_VALUES = Object.values(NotificationType);

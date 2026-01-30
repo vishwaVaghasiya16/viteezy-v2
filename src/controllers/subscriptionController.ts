@@ -7,6 +7,7 @@ import {
   SubscriptionStatus,
   SubscriptionCycle,
   OrderPlanType,
+  PaymentStatus,
 } from "@/models/enums";
 import { logger } from "@/utils/logger";
 import { computeSubscriptionMetrics } from "@/services/subscriptionService";
@@ -59,6 +60,14 @@ class SubscriptionController {
       if (order.planType !== OrderPlanType.SUBSCRIPTION) {
         throw new AppError(
           "Subscription can only be created for subscription orders",
+          400
+        );
+      }
+
+      // Validate payment is successful before creating subscription
+      if (order.paymentStatus !== PaymentStatus.COMPLETED) {
+        throw new AppError(
+          "Subscription can only be created after payment is successful",
           400
         );
       }
@@ -144,6 +153,24 @@ class SubscriptionController {
           ...(metadata || {}),
         },
       });
+
+      // Send subscription activated notification (only after payment success)
+      // Payment status is COMPLETED (validated above), so subscription is activated
+      try {
+        const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
+        await subscriptionNotifications.subscriptionActivated(
+          userId,
+          String(subscription._id),
+          subscription.subscriptionNumber,
+          userId
+        );
+        logger.info(
+          `Subscription activated notification sent for subscription: ${subscription.subscriptionNumber} (payment successful)`
+        );
+      } catch (error: any) {
+        logger.error(`Failed to send subscription activated notification: ${error.message}`);
+        // Don't fail subscription creation if notification fails
+      }
 
       logger.info(
         `Subscription created: ${subscription.subscriptionNumber} for order: ${orderId}`

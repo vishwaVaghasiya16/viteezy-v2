@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { FilterQuery } from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
+import { logger } from "@/utils/logger";
 import { User } from "@/models/index.model";
 import { Payments } from "@/models/commerce";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
@@ -180,6 +181,99 @@ class UserController {
           },
         },
         "User profile updated successfully"
+      );
+    }
+  );
+
+  /**
+   * Register device token for push notifications
+   * @route POST /api/v1/users/device-token
+   * @access Private
+   */
+  registerDeviceToken = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { deviceToken, platform } = req.body;
+
+      if (!deviceToken || typeof deviceToken !== "string" || deviceToken.trim().length === 0) {
+        throw new AppError("Device token is required", 400);
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Get current device tokens
+      const currentTokens = (user.deviceTokens || []) as string[];
+      const tokenToAdd = deviceToken.trim();
+
+      // Add token if not already present
+      if (!currentTokens.includes(tokenToAdd)) {
+        currentTokens.push(tokenToAdd);
+        user.deviceTokens = currentTokens;
+        await user.save();
+
+        logger.info(
+          `Device token registered for user: ${req.user._id}, platform: ${platform || "unknown"}`
+        );
+      }
+
+      res.apiSuccess(
+        {
+          message: "Device token registered successfully",
+          tokenCount: currentTokens.length,
+        },
+        "Device token registered successfully"
+      );
+    }
+  );
+
+  /**
+   * Remove device token for push notifications
+   * @route DELETE /api/v1/users/device-token
+   * @access Private
+   */
+  removeDeviceToken = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { deviceToken } = req.body;
+
+      if (!deviceToken || typeof deviceToken !== "string" || deviceToken.trim().length === 0) {
+        throw new AppError("Device token is required", 400);
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Get current device tokens
+      const currentTokens = (user.deviceTokens || []) as string[];
+      const tokenToRemove = deviceToken.trim();
+
+      // Remove token if present
+      const updatedTokens = currentTokens.filter((token) => token !== tokenToRemove);
+
+      if (updatedTokens.length !== currentTokens.length) {
+        user.deviceTokens = updatedTokens;
+        await user.save();
+
+        logger.info(`Device token removed for user: ${req.user._id}`);
+      }
+
+      res.apiSuccess(
+        {
+          message: "Device token removed successfully",
+          tokenCount: updatedTokens.length,
+        },
+        "Device token removed successfully"
       );
     }
   );

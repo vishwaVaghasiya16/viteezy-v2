@@ -7,3 +7,4 @@ export { MemberReferrals } from "./memberReferrals.model";
 export { Referrals } from "./referrals.model";
 export { Countries, ICountry } from "./countries.model";
 export { States, IState } from "./states.model";
+export { Notification, INotification } from "./notifications.model";

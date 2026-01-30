@@ -14,7 +14,8 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
+// Rate limiting disabled - commented out as per request
+// import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
@@ -107,15 +108,17 @@ if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
  * Prevents abuse by limiting the number of requests from a single IP
  * Configured via environment variables with sensible defaults
  * Note: Webhook routes are excluded from rate limiting (registered before this middleware)
+ * 
+ * COMMENTED OUT: Rate limiting disabled as per request
  */
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs, // Time window in milliseconds (15 minutes default)
-  max: config.rateLimit.maxRequests, // Maximum requests per window per IP
-  message: "Too many requests from this IP, please try again later.",
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
-});
-app.use(limiter);
+// const limiter = rateLimit({
+//   windowMs: config.rateLimit.windowMs, // Time window in milliseconds (15 minutes default)
+//   max: config.rateLimit.maxRequests, // Maximum requests per window per IP
+//   message: "Too many requests from this IP, please try again later.",
+//   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+//   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+// });
+// app.use(limiter);
 
 /**
  * IMPORTANT: Webhook routes must be registered BEFORE JSON parser
