@@ -66,12 +66,12 @@ class NotificationController {
         message: "Notifications retrieved successfully",
         data: {
           notifications: result.notifications,
-          pagination: getPaginationMeta(
-            paginationOptions.page,
-            paginationOptions.limit,
-            result.total
-          ),
         },
+        pagination: getPaginationMeta(
+          paginationOptions.page,
+          paginationOptions.limit,
+          result.total
+        ),
       });
     }
   );
