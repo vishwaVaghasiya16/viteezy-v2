@@ -971,12 +971,12 @@ export const reviewNotifications = {
     productName: string,
     createdBy?: string | mongoose.Types.ObjectId
   ): Promise<void> {
-    validateNotificationPayload(NotificationType.REDIRECTION, NotificationCategory.GENERAL, { productId });
+    validateNotificationPayload(NotificationType.REDIRECTION, NotificationCategory.REVIEW, { productId });
     const { appRoute, query } = buildMobileAppRoute("product-detail", { productId });
     
     await notificationService.createNotification({
       userId,
-      category: NotificationCategory.GENERAL,
+      category: NotificationCategory.REVIEW,
       type: NotificationType.REDIRECTION,
       title: "Review Request",
       message: `How was your experience with ${productName}? Share your review!`,
@@ -1000,7 +1000,7 @@ export const reviewNotifications = {
     const { appRoute, query } = buildMobileAppRoute("dashboard");
     await notificationService.createNotification({
       userId,
-      category: NotificationCategory.GENERAL,
+      category: NotificationCategory.REVIEW,
       type: NotificationType.NORMAL,
       title: "Review Submitted",
       message: `Thank you for reviewing ${productName}. Your review is under moderation.`,
@@ -1023,7 +1023,7 @@ export const reviewNotifications = {
     const { appRoute, query } = buildMobileAppRoute("dashboard");
     await notificationService.createNotification({
       userId,
-      category: NotificationCategory.GENERAL,
+      category: NotificationCategory.REVIEW,
       type: NotificationType.NORMAL,
       title: "Review Approved",
       message: `Your review for ${productName} has been approved and published.`,
