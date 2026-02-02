@@ -80,6 +80,14 @@ class AdminDashboardController {
         membershipPurchases,
         currentMonthMembershipPurchases,
         lastMonthMembershipPurchases,
+
+        newSubscriptions,
+        currentMonthNewSubscriptions,
+        lastMonthNewSubscriptions,
+
+        cancelledSubscriptions,
+        currentMonthCancelledSubscriptions,
+        lastMonthCancelledSubscriptions,
       ] = await Promise.all([
         // Users
         User.countDocuments({}),
@@ -156,6 +164,37 @@ class AdminDashboardController {
           isDeleted: { $ne: true },
           createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
         }),
+
+        // New Subscriptions (total created)
+        Subscriptions.countDocuments({ isDeleted: { $ne: true } }),
+        // New Subscriptions (created this month)
+        Subscriptions.countDocuments({
+          isDeleted: { $ne: true },
+          createdAt: { $gte: startOfCurrentMonth },
+        }),
+        // New Subscriptions (created last month)
+        Subscriptions.countDocuments({
+          isDeleted: { $ne: true },
+          createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
+        }),
+
+        // Cancelled Subscriptions (total cancelled)
+        Subscriptions.countDocuments({
+          status: SubscriptionStatus.CANCELLED,
+          isDeleted: { $ne: true },
+        }),
+        // Cancelled Subscriptions (cancelled this month)
+        Subscriptions.countDocuments({
+          status: SubscriptionStatus.CANCELLED,
+          isDeleted: { $ne: true },
+          cancelledAt: { $gte: startOfCurrentMonth },
+        }),
+        // Cancelled Subscriptions (cancelled last month)
+        Subscriptions.countDocuments({
+          status: SubscriptionStatus.CANCELLED,
+          isDeleted: { $ne: true },
+          cancelledAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
+        }),
       ]);
 
       // Safe revenue values
@@ -163,7 +202,7 @@ class AdminDashboardController {
       const currentMonthRevenue = revenueCurrentAgg[0]?.total || 0;
       const lastMonthRevenue = revenueLastAgg[0]?.total || 0;
 
-      // Standard SaaS percentage logic
+      // Standard SaaS percentage logic (capped at 100)
       const percentChange = (current: number, previous: number) => {
         if (previous === 0 && current > 0)
           return { percentage: 100, isPositive: true };
@@ -171,8 +210,13 @@ class AdminDashboardController {
           return { percentage: 0, isPositive: false };
 
         const diff = ((current - previous) / previous) * 100;
+        const percentage = Math.abs(Number(diff.toFixed(2)));
+        
+        // Cap percentage at 100 (maximum)
+        const cappedPercentage = Math.min(percentage, 100);
+        
         return {
-          percentage: Math.abs(Number(diff.toFixed(2))),
+          percentage: cappedPercentage,
           isPositive: diff >= 0,
         };
       };
@@ -202,6 +246,20 @@ class AdminDashboardController {
           change: percentChange(
             currentMonthMembershipPurchases,
             lastMonthMembershipPurchases
+          ),
+        },
+        newSubscriptions: {
+          value: newSubscriptions,
+          change: percentChange(
+            currentMonthNewSubscriptions,
+            lastMonthNewSubscriptions
+          ),
+        },
+        cancelledSubscriptions: {
+          value: cancelledSubscriptions,
+          change: percentChange(
+            currentMonthCancelledSubscriptions,
+            lastMonthCancelledSubscriptions
           ),
         },
       };

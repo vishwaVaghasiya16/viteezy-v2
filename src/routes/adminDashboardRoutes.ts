@@ -15,7 +15,7 @@ router.use(authorize("Admin"));
 
 /**
  * @route GET /api/v1/admin/dashboard/stats
- * @desc Get dashboard stats summary (Total Users, Orders, Revenue, Active Subscriptions, Membership Purchases)
+ * @desc Get dashboard stats summary (Total Users, Orders, Revenue, Active Subscriptions, Membership Purchases, New Subscriptions, Cancelled Subscriptions)
  * @access Admin
  * @returns {Object} stats - Object containing all dashboard metrics with percentage changes
  */
