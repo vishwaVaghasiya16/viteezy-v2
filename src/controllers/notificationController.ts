@@ -64,9 +64,7 @@ class NotificationController {
       res.status(200).json({
         success: true,
         message: "Notifications retrieved successfully",
-        data: {
-          notifications: result.notifications,
-        },
+        data:  result.notifications,
         pagination: getPaginationMeta(
           paginationOptions.page,
           paginationOptions.limit,
