@@ -1,4 +1,3 @@
-import admin from "firebase-admin";
 import mongoose from "mongoose";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
@@ -11,6 +10,8 @@ import {
   NotificationCategory,
   NotificationType,
 } from "@/models/enums";
+import { pushProviderManager, DeviceTokenInfo } from "./pushProviders/PushProviderManager";
+import { DevicePlatform, PushProvider } from "./pushProviders/IPushProvider";
 
 /**
  * Notification Payload Interface
@@ -51,41 +52,15 @@ interface PushNotificationOptions {
  * It handles:
  * - Validating notification payloads
  * - Storing notifications in DB
- * - Triggering push notifications (FCM/APNs)
+ * - Triggering push notifications via multiple providers (OneSignal for mobile, Firebase for web)
  * - Ensuring DB save happens even if push delivery fails
+ * 
+ * Current Scope: OneSignal for mobile app
+ * Future Scope: Firebase for web push notifications
  */
 class NotificationService {
-  private firebaseApp: admin.app.App | null = null;
-
   constructor() {
-    this.initializeFirebase();
-  }
-
-  /**
-   * Initialize Firebase Admin SDK for FCM
-   */
-  private initializeFirebase(): void {
-    try {
-      // Check if Firebase is already initialized (by firebaseService or elsewhere)
-      if (admin.apps.length > 0) {
-        this.firebaseApp = admin.app();
-        logger.info("Firebase Admin SDK already initialized for notifications");
-        return;
-      }
-
-      // Firebase should be initialized by firebaseService
-      // If not, we'll log a warning but allow the service to work
-      logger.warn(
-        "Firebase Admin SDK not initialized. Push notifications will not work. " +
-        "Ensure firebaseService is initialized before using notificationService."
-      );
-    } catch (error: any) {
-      logger.warn(
-        "Firebase Admin SDK not initialized. Push notifications will not work.",
-        error
-      );
-      // Don't throw error - allow service to work without push notifications
-    }
+    logger.info("Notification Service initialized with push provider manager");
   }
 
   /**
@@ -142,23 +117,53 @@ class NotificationService {
   }
 
   /**
-   * Get user device tokens for push notifications
+   * Get user device tokens with metadata for push notifications
+   * Supports both new metadata format and backward compatibility with old format
    */
   private async getUserDeviceTokens(
     userId: string | mongoose.Types.ObjectId
-  ): Promise<string[]> {
+  ): Promise<DeviceTokenInfo[]> {
     try {
-      const user = await User.findById(userId).select("deviceTokens").lean();
+      const user = await User.findById(userId)
+        .select("deviceTokens deviceTokenMetadata")
+        .lean();
 
       if (!user) {
         logger.warn(`User not found: ${userId}`);
         return [];
       }
 
-      // Check if user has deviceTokens field
-      // If not, we'll add it to the user model
-      const deviceTokens = (user as any).deviceTokens || [];
-      return Array.isArray(deviceTokens) ? deviceTokens : [];
+      const deviceTokenInfos: DeviceTokenInfo[] = [];
+
+      // Use new metadata format if available
+      if ((user as any).deviceTokenMetadata && Array.isArray((user as any).deviceTokenMetadata)) {
+        for (const tokenMeta of (user as any).deviceTokenMetadata) {
+          if (tokenMeta.token && tokenMeta.platform && tokenMeta.provider) {
+            deviceTokenInfos.push({
+              token: tokenMeta.token,
+              platform: tokenMeta.platform as DevicePlatform,
+              provider: tokenMeta.provider as PushProvider,
+            });
+          }
+        }
+      }
+
+      // Backward compatibility: If no metadata but old deviceTokens exist, assume mobile/OneSignal
+      if (deviceTokenInfos.length === 0 && (user as any).deviceTokens) {
+        const oldTokens = (user as any).deviceTokens || [];
+        for (const token of oldTokens) {
+          if (token && typeof token === "string") {
+            // Default to mobile/OneSignal for backward compatibility
+            deviceTokenInfos.push({
+              token: token,
+              platform: DevicePlatform.MOBILE,
+              provider: PushProvider.ONESIGNAL,
+            });
+          }
+        }
+      }
+
+      return deviceTokenInfos;
     } catch (error: any) {
       logger.error(`Error fetching user device tokens: ${error.message}`);
       return [];
@@ -166,24 +171,17 @@ class NotificationService {
   }
 
   /**
-   * Send push notification via FCM
-   * Supports both Android (FCM) and iOS (APNs) through Firebase Cloud Messaging
+   * Send push notification via appropriate provider
+   * Routes to OneSignal for mobile, Firebase for web
    * 
-   * @param deviceTokens - Array of FCM device tokens
+   * @param deviceTokens - Array of device tokens with metadata
    * @param options - Push notification options
    * @returns Result with success status and error information
    */
   private async sendPushNotification(
-    deviceTokens: string[],
+    deviceTokens: DeviceTokenInfo[],
     options: PushNotificationOptions
   ): Promise<{ success: boolean; error?: string; invalidTokens?: string[] }> {
-    if (!this.firebaseApp) {
-      return {
-        success: false,
-        error: "Firebase Admin SDK not initialized",
-      };
-    }
-
     if (!deviceTokens || deviceTokens.length === 0) {
       return {
         success: false,
@@ -191,141 +189,36 @@ class NotificationService {
       };
     }
 
-    try {
-      // Build data payload - ensure all values are strings (FCM requirement)
-      const dataPayload: Record<string, string> = {};
-      if (options.data) {
-        for (const [key, value] of Object.entries(options.data)) {
-          // Convert all values to strings for FCM
-          dataPayload[key] = String(value !== null && value !== undefined ? value : "");
-        }
-      }
+    // Build push notification payload
+    const pushPayload = {
+      title: options.title,
+      body: options.body,
+      data: options.data || {},
+      imageUrl: options.imageUrl,
+      sound: options.sound,
+      badge: options.badge,
+      clickAction: options.clickAction,
+      priority: options.priority || "high",
+      ttl: options.ttl,
+    };
 
-      // Build FCM message with platform-specific configurations
-      const message: admin.messaging.MulticastMessage = {
-        notification: {
-          title: options.title,
-          body: options.body,
-          imageUrl: options.imageUrl,
-        },
-        data: dataPayload,
-        // iOS (APNs) specific configuration
-        apns: {
-          payload: {
-            aps: {
-              alert: {
-                title: options.title,
-                body: options.body,
-              },
-              sound: options.sound || "default",
-              badge: options.badge,
-              // Enable content-available for background notifications
-              "content-available": 1,
-            },
-          },
-          headers: {
-            "apns-priority": "10", // High priority for immediate delivery
-          },
-        },
-        // Android (FCM) specific configuration
-        android: {
-          priority: (options.priority || "high") as "normal" | "high",
-          notification: {
-            title: options.title,
-            body: options.body,
-            sound: options.sound || "default",
-            channelId: "default", // Android notification channel
-            imageUrl: options.imageUrl,
-            clickAction: options.clickAction,
-            // Enable notification priority for Android
-            priority: "high" as const,
-          },
-          ttl: options.ttl ? options.ttl * 1000 : 86400000, // Default 24 hours in milliseconds
-        },
-        // Web push configuration
-        webpush: {
-          notification: {
-            title: options.title,
-            body: options.body,
-            icon: options.imageUrl || "/icon-192x192.png",
-            badge: "/badge-72x72.png",
-            clickAction: options.clickAction,
-            requireInteraction: false,
-          },
-          fcmOptions: {
-            link: options.clickAction,
-          },
-        },
-        tokens: deviceTokens,
-      };
+    // Send via push provider manager
+    const result = await pushProviderManager.sendPushNotification(
+      deviceTokens,
+      pushPayload
+    );
 
-      // Send multicast message to all device tokens
-      const response = await admin.messaging().sendEachForMulticast(message);
-
-      // Track invalid tokens to remove them
-      const invalidTokens: string[] = [];
-      const errors: string[] = [];
-
-      // Process responses and identify invalid tokens
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          const token = deviceTokens[idx];
-          const errorCode = resp.error?.code;
-
-          // Check for invalid token errors that should be removed
-          if (
-            errorCode === "messaging/invalid-registration-token" ||
-            errorCode === "messaging/registration-token-not-registered" ||
-            errorCode === "messaging/invalid-argument"
-          ) {
-            invalidTokens.push(token);
-            logger.warn(`Invalid device token detected: ${token.substring(0, 20)}...`);
-          }
-
-          errors.push(`Token ${token.substring(0, 20)}...: ${resp.error?.message || "Unknown error"}`);
-        }
-      });
-
-      // Log results
-      if (response.failureCount > 0) {
-        logger.warn(
-          `Push notification partially failed: ${response.failureCount}/${response.responses.length} failures, ${response.successCount} successes`,
-          { errors, invalidTokensCount: invalidTokens.length }
-        );
-      }
-
-      if (response.successCount > 0) {
-        logger.info(
-          `Push notification sent successfully: ${response.successCount}/${response.responses.length} devices`
-        );
-      }
-
-      // If all failed, return error
-      if (response.successCount === 0) {
-        return {
-          success: false,
-          error: errors.join("; "),
-          invalidTokens,
-        };
-      }
-
-      // Return success with invalid tokens for cleanup
-      return {
-        success: true,
-        invalidTokens: invalidTokens.length > 0 ? invalidTokens : undefined,
-      };
-    } catch (error: any) {
-      logger.error(`Error sending push notification: ${error.message}`, error);
-      return {
-        success: false,
-        error: error.message || "Failed to send push notification",
-      };
-    }
+    return {
+      success: result.success,
+      error: result.error,
+      invalidTokens: result.invalidTokens,
+    };
   }
 
   /**
    * Remove invalid device tokens from user
    * Called automatically when invalid tokens are detected
+   * Supports both new metadata format and old format
    */
   private async removeInvalidDeviceTokens(
     userId: string | mongoose.Types.ObjectId,
@@ -341,6 +234,22 @@ class NotificationService {
         return;
       }
 
+      // Remove from new metadata format
+      if (user.deviceTokenMetadata && Array.isArray(user.deviceTokenMetadata)) {
+        const originalLength = user.deviceTokenMetadata.length;
+        user.deviceTokenMetadata = user.deviceTokenMetadata.filter(
+          (tokenMeta: any) => !invalidTokens.includes(tokenMeta.token)
+        );
+        
+        if (user.deviceTokenMetadata.length !== originalLength) {
+          await user.save();
+          logger.info(
+            `Removed ${originalLength - user.deviceTokenMetadata.length} invalid device token(s) from metadata for user: ${userId}`
+          );
+        }
+      }
+
+      // Also remove from old format for backward compatibility
       const currentTokens = (user.deviceTokens || []) as string[];
       const validTokens = currentTokens.filter(
         (token) => !invalidTokens.includes(token)
@@ -439,8 +348,8 @@ class NotificationService {
             title: payload.title,
             message: payload.message,
             // Mobile app navigation (appRoute and query)
-            ...(payload.appRoute && { type: payload.appRoute }), // Override type with appRoute for mobile
-            ...(payload.query && { query: JSON.stringify(payload.query) }), // Stringify query for FCM
+            ...(payload.appRoute && { appRoute: payload.appRoute }),
+            ...(payload.query && { query: JSON.stringify(payload.query) }),
             // Include all additional data from payload (matches notification.data)
             ...(payload.data || {}),
             // Include redirect URL if available (for web - matches notification.redirectUrl)
@@ -700,8 +609,8 @@ class NotificationService {
         title: notification.title,
         message: notification.message,
         // Mobile app navigation (appRoute and query)
-        ...(notification.appRoute && { type: notification.appRoute }), // Override type with appRoute for mobile
-        ...(notification.query && { query: JSON.stringify(notification.query) }), // Stringify query for FCM
+        ...(notification.appRoute && { appRoute: notification.appRoute }),
+        ...(notification.query && { query: JSON.stringify(notification.query) }),
         // Include all stored notification data
         ...(notification.data || {}),
         // Include redirect URL if available (for web)

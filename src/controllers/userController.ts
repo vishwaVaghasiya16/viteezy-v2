@@ -189,6 +189,9 @@ class UserController {
    * Register device token for push notifications
    * @route POST /api/v1/users/device-token
    * @access Private
+   * @body {String} deviceToken - Device token (OneSignal player ID for mobile, FCM token for web)
+   * @body {String} platform - Platform: "mobile" or "web" (default: "mobile")
+   * @body {String} provider - Provider: "onesignal" or "firebase" (auto-detected if not provided)
    */
   registerDeviceToken = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -196,10 +199,38 @@ class UserController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { deviceToken, platform } = req.body;
+      const { deviceToken, platform, provider } = req.body;
 
       if (!deviceToken || typeof deviceToken !== "string" || deviceToken.trim().length === 0) {
         throw new AppError("Device token is required", 400);
+      }
+
+      // Determine platform and provider
+      const devicePlatform = (platform || "mobile").toLowerCase();
+      let deviceProvider = provider?.toLowerCase();
+
+      // Auto-detect provider based on platform if not provided
+      if (!deviceProvider) {
+        deviceProvider = devicePlatform === "web" ? "firebase" : "onesignal";
+      }
+
+      // Validate platform
+      if (devicePlatform !== "mobile" && devicePlatform !== "web") {
+        throw new AppError('Platform must be Mobile or Web', 400);
+      }
+
+      // Validate provider
+      if (deviceProvider !== "onesignal" && deviceProvider !== "firebase") {
+        throw new AppError('Provider must be OneSignal or Firebase', 400);
+      }
+
+      // Validate provider-platform combination
+      if (devicePlatform === "mobile" && deviceProvider !== "onesignal") {
+        throw new AppError('Mobile platform requires OneSignal provider', 400);
+      }
+
+      if (devicePlatform === "web" && deviceProvider !== "firebase") {
+        throw new AppError('Web platform requires Firebase provider', 400);
       }
 
       const user = await User.findById(req.user._id);
@@ -207,25 +238,51 @@ class UserController {
         throw new AppError("User not found", 404);
       }
 
-      // Get current device tokens
-      const currentTokens = (user.deviceTokens || []) as string[];
       const tokenToAdd = deviceToken.trim();
 
-      // Add token if not already present
+      // Initialize metadata array if not exists
+      if (!user.deviceTokenMetadata) {
+        user.deviceTokenMetadata = [];
+      }
+
+      // Check if token already exists in metadata
+      const existingTokenIndex = user.deviceTokenMetadata.findIndex(
+        (tokenMeta: any) => tokenMeta.token === tokenToAdd
+      );
+
+      if (existingTokenIndex === -1) {
+        // Add new token with metadata
+        user.deviceTokenMetadata.push({
+          token: tokenToAdd,
+          platform: devicePlatform,
+          provider: deviceProvider,
+          addedAt: new Date(),
+        });
+      } else {
+        // Update existing token metadata
+        user.deviceTokenMetadata[existingTokenIndex].platform = devicePlatform;
+        user.deviceTokenMetadata[existingTokenIndex].provider = deviceProvider;
+        user.deviceTokenMetadata[existingTokenIndex].addedAt = new Date();
+      }
+
+      // Also add to old format for backward compatibility
+      const currentTokens = (user.deviceTokens || []) as string[];
       if (!currentTokens.includes(tokenToAdd)) {
         currentTokens.push(tokenToAdd);
         user.deviceTokens = currentTokens;
-        await user.save();
-
-        logger.info(
-          `Device token registered for user: ${req.user._id}, platform: ${platform || "unknown"}`
-        );
       }
+
+      await user.save();
+
+      logger.info(
+        `Device token registered for user: ${req.user._id}, platform: ${devicePlatform}, provider: ${deviceProvider}`
+      );
 
       res.apiSuccess(
         {
-          message: "Device token registered successfully",
-          tokenCount: currentTokens.length,
+          tokenCount: user.deviceTokenMetadata.length,
+          platform: devicePlatform,
+          provider: deviceProvider,
         },
         "Device token registered successfully"
       );
@@ -236,6 +293,7 @@ class UserController {
    * Remove device token for push notifications
    * @route DELETE /api/v1/users/device-token
    * @access Private
+   * @body {String} deviceToken - Device token to remove
    */
   removeDeviceToken = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -254,24 +312,39 @@ class UserController {
         throw new AppError("User not found", 404);
       }
 
-      // Get current device tokens
-      const currentTokens = (user.deviceTokens || []) as string[];
       const tokenToRemove = deviceToken.trim();
+      let removed = false;
 
-      // Remove token if present
+      // Remove from metadata format
+      if (user.deviceTokenMetadata && Array.isArray(user.deviceTokenMetadata)) {
+        const originalLength = user.deviceTokenMetadata.length;
+        user.deviceTokenMetadata = user.deviceTokenMetadata.filter(
+          (tokenMeta: any) => tokenMeta.token !== tokenToRemove
+        );
+        if (user.deviceTokenMetadata.length !== originalLength) {
+          removed = true;
+        }
+      }
+
+      // Also remove from old format for backward compatibility
+      const currentTokens = (user.deviceTokens || []) as string[];
       const updatedTokens = currentTokens.filter((token) => token !== tokenToRemove);
 
       if (updatedTokens.length !== currentTokens.length) {
         user.deviceTokens = updatedTokens;
-        await user.save();
+        removed = true;
+      }
 
+      if (removed) {
+        await user.save();
         logger.info(`Device token removed for user: ${req.user._id}`);
       }
 
+      const finalTokenCount = user.deviceTokenMetadata?.length || user.deviceTokens?.length || 0;
+
       res.apiSuccess(
         {
-          message: "Device token removed successfully",
-          tokenCount: updatedTokens.length,
+          tokenCount: finalTokenCount,
         },
         "Device token removed successfully"
       );
