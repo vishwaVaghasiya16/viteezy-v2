@@ -8,8 +8,17 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { StaticPages } from "@/models/cms";
-import { StaticPageStatus } from "@/models/enums";
+import {
+  StaticPages,
+  AboutUs,
+  OurTeamPage,
+  LandingPages,
+  MembershipCms,
+} from "@/models/cms";
+import {
+  StaticPageStatus,
+  SystemPageType,
+} from "@/models/enums";
 import { generateSlug, generateUniqueSlug } from "@/utils/slug";
 
 interface AuthenticatedRequest extends Request {
@@ -23,6 +32,151 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
     throw new AppError(`Invalid ${label}`, 400);
   }
   return new mongoose.Types.ObjectId(id);
+};
+
+// System page definitions (only slugs, titles will be fetched from database)
+const SYSTEM_PAGES: Array<{
+  systemPageType: SystemPageType;
+  slug: string;
+}> = [
+  {
+    systemPageType: SystemPageType.ABOUT_US,
+    slug: "about-us",
+  },
+  {
+    systemPageType: SystemPageType.OUR_TEAM,
+    slug: "our-team",
+  },
+  {
+    systemPageType: SystemPageType.LANDING_PAGE,
+    slug: "landing-page",
+  },
+  {
+    systemPageType: SystemPageType.MEMBERSHIP,
+    slug: "membership",
+  },
+  {
+    systemPageType: SystemPageType.BLOG,
+    slug: "blog",
+  },
+];
+
+/**
+ * Fetch actual data from database for system pages
+ */
+const fetchSystemPageData = async (
+  systemPageType: SystemPageType
+): Promise<{ title: any; content?: any } | null> => {
+  try {
+    switch (systemPageType) {
+      case SystemPageType.ABOUT_US: {
+        const aboutUs = await AboutUs.findOne({ isDeleted: false }).lean();
+        if (aboutUs && aboutUs.banner?.banner_title) {
+          return {
+            title: aboutUs.banner.banner_title,
+            content: aboutUs.banner.banner_description || {},
+          };
+        }
+        // Fallback title
+        return {
+          title: { en: "About Us", nl: "Over Ons", de: "Über Uns", fr: "À Propos de Nous", es: "Acerca de Nosotros" },
+        };
+      }
+
+      case SystemPageType.OUR_TEAM: {
+        const ourTeam = await OurTeamPage.findOne().lean();
+        if (ourTeam && ourTeam.banner?.title) {
+          return {
+            title: ourTeam.banner.title,
+            content: ourTeam.banner.subtitle || {},
+          };
+        }
+        // Fallback title
+        return {
+          title: { en: "Our Team", nl: "Ons Team", de: "Unser Team", fr: "Notre Équipe", es: "Nuestro Equipo" },
+        };
+      }
+
+      case SystemPageType.LANDING_PAGE: {
+        const landingPage = await LandingPages.findOne({
+          isActive: true,
+          isDeleted: false,
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (landingPage && landingPage.heroSection?.title) {
+          return {
+            title: landingPage.heroSection.title,
+            content: landingPage.heroSection.description || {},
+          };
+        }
+        // Fallback title
+        return {
+          title: { en: "Home/Landing Page", nl: "Home/Landing Pagina", de: "Startseite/Landing-Seite", fr: "Page d'Accueil/Landing", es: "Página de Inicio/Landing" },
+        };
+      }
+
+      case SystemPageType.MEMBERSHIP: {
+        const membershipCms = await MembershipCms.findOne({
+          isActive: true,
+          isDeleted: false,
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (membershipCms && membershipCms.heading) {
+          return {
+            title: membershipCms.heading,
+            content: membershipCms.description || {},
+          };
+        }
+        // Fallback title
+        return {
+          title: { en: "Membership", nl: "Lidmaatschap", de: "Mitgliedschaft", fr: "Adhésion", es: "Membresía" },
+        };
+      }
+
+      case SystemPageType.BLOG: {
+        // Blog is just a static entry, use default title
+        return {
+          title: { en: "Blog", nl: "Blog", de: "Blog", fr: "Blog", es: "Blog" },
+        };
+      }
+
+      default:
+        return null;
+    }
+  } catch (error) {
+    // Return fallback on error
+    return null;
+  }
+};
+
+/**
+ * Ensure system pages exist in database
+ */
+const ensureSystemPagesExist = async (): Promise<void> => {
+  for (const systemPage of SYSTEM_PAGES) {
+    const existing = await StaticPages.findOne({
+      isSystemPage: true,
+      systemPageType: systemPage.systemPageType,
+      isDeleted: false,
+    });
+
+    if (!existing) {
+      // Fetch actual data from database
+      const pageData = await fetchSystemPageData(systemPage.systemPageType);
+      
+      await StaticPages.create({
+        slug: systemPage.slug,
+        title: pageData?.title || { en: systemPage.slug },
+        content: pageData?.content || {},
+        status: StaticPageStatus.PUBLISHED,
+        seo: {},
+        isSystemPage: true,
+        systemPageType: systemPage.systemPageType,
+      });
+    }
+  }
 };
 
 class AdminStaticPageController {
@@ -81,29 +235,48 @@ class AdminStaticPageController {
 
   /**
    * Get paginated list of all static pages (Admin view)
+   * System pages are always included and shown first
    */
   getStaticPages = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      // Ensure system pages exist
+      await ensureSystemPagesExist();
+
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { status, search } = req.query as {
         status?: StaticPageStatus;
         search?: string;
       };
 
-      const filter: Record<string, any> = {
+      const baseFilter: Record<string, any> = {
         isDeleted: false,
       };
 
-      if (status) {
-        filter.status = status;
-      }
-
       if (search) {
-        filter.$or = [
+        baseFilter.$or = [
           { "title.en": { $regex: search, $options: "i" } },
           { "title.nl": { $regex: search, $options: "i" } },
           { slug: { $regex: search, $options: "i" } },
         ];
+      }
+
+      // Get system pages separately (always show first, ignore status filter)
+      const systemPagesFilter = {
+        ...baseFilter,
+        isSystemPage: true,
+      };
+
+      // Get regular pages (apply status filter if provided)
+      const regularPagesFilter: Record<string, any> = {
+        ...baseFilter,
+        $or: [
+          { isSystemPage: { $exists: false } },
+          { isSystemPage: false },
+        ],
+      };
+
+      if (status) {
+        regularPagesFilter.status = status;
       }
 
       const sortOptions: Record<string, 1 | -1> = {
@@ -111,18 +284,46 @@ class AdminStaticPageController {
         ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      const [staticPages, total] = await Promise.all([
-        StaticPages.find(filter)
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        StaticPages.countDocuments(filter),
-      ]);
+      // Fetch system pages and regular pages
+      const [systemPagesFromDb, regularPages, systemPagesCount, regularPagesCount] =
+        await Promise.all([
+          StaticPages.find(systemPagesFilter)
+            .sort({ systemPageType: 1 }) // Sort by system page type order
+            .lean(),
+          StaticPages.find(regularPagesFilter)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit)
+            .lean(),
+          StaticPages.countDocuments(systemPagesFilter),
+          StaticPages.countDocuments(regularPagesFilter),
+        ]);
+
+      // Fetch actual data from database for each system page and merge
+      const systemPages = await Promise.all(
+        systemPagesFromDb.map(async (page) => {
+          const actualData = await fetchSystemPageData(
+            page.systemPageType as SystemPageType
+          );
+          
+          if (actualData) {
+            return {
+              ...page,
+              title: actualData.title || page.title,
+              content: actualData.content || page.content,
+            };
+          }
+          return page;
+        })
+      );
+
+      // Combine: system pages first, then regular pages
+      const allPages = [...systemPages, ...regularPages];
+      const total = systemPagesCount + regularPagesCount;
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(staticPages, pagination, "Static pages retrieved");
+      res.apiPaginated(allPages, pagination, "Static pages retrieved");
     }
   );
 
@@ -167,6 +368,14 @@ class AdminStaticPageController {
         throw new AppError("Static page not found", 404);
       }
 
+      // Prevent slug change for system pages
+      if (staticPage.isSystemPage && slug && slug !== staticPage.slug) {
+        throw new AppError(
+          "Cannot change slug for system pages. System pages have fixed slugs.",
+          400
+        );
+      }
+
       // Update fields if provided
       if (title) {
         staticPage.title = title;
@@ -180,12 +389,17 @@ class AdminStaticPageController {
         staticPage.seo = seo;
       }
 
-      if (status) {
+      // Prevent status change for system pages (they are always published)
+      if (staticPage.isSystemPage && status) {
+        // System pages are always published, ignore status change
+        // Don't throw error, just ignore the status update
+      } else if (status) {
+        // Only update status for non-system pages
         staticPage.status = status as StaticPageStatus;
       }
 
-      // Handle slug update with uniqueness check
-      if (slug && slug !== staticPage.slug) {
+      // Handle slug update with uniqueness check (only for non-system pages)
+      if (slug && slug !== staticPage.slug && !staticPage.isSystemPage) {
         const finalSlug = await generateUniqueSlug(slug, async (slugToCheck) =>
           StaticPages.exists({
             slug: slugToCheck,
@@ -242,6 +456,14 @@ class AdminStaticPageController {
         throw new AppError("Static page not found", 404);
       }
 
+      // Prevent status toggle for system pages
+      if (staticPage.isSystemPage) {
+        throw new AppError(
+          "Cannot change status for system pages. System pages are always published.",
+          400
+        );
+      }
+
       staticPage.status = status;
 
       if (requesterId) {
@@ -273,6 +495,14 @@ class AdminStaticPageController {
 
       if (!staticPage) {
         throw new AppError("Static page not found", 404);
+      }
+
+      // Prevent deletion of system pages
+      if (staticPage.isSystemPage) {
+        throw new AppError(
+          "Cannot delete system pages. System pages are pre-defined and cannot be removed.",
+          400
+        );
       }
 
       staticPage.isDeleted = true;
