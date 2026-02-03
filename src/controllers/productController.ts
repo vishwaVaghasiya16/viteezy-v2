@@ -149,12 +149,38 @@ const transformProductForLanguage = (
         : [],
     // Transform populated categories for language
     categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
+      product.categories?.map((category: any) => {
+        // Normalize image field - extract URL if it's an object
+        let normalizedImage: string | null = null;
+        if (category.image) {
+          if (typeof category.image === 'string') {
+            normalizedImage = category.image;
+          } else if (typeof category.image === 'object' && category.image.url) {
+            normalizedImage = category.image.url;
+          }
+        }
+        
+        // Normalize icon field - ensure it's a string or null
+        let normalizedIcon: string | null = null;
+        if (category.icon) {
+          if (typeof category.icon === 'string') {
+            normalizedIcon = category.icon;
+          } else if (typeof category.icon === 'object' && category.icon.url) {
+            normalizedIcon = category.icon.url;
+          }
+        }
+        
+        return {
+          _id: category._id,
+          slug: category.slug,
+          name: getTranslatedString(category.name, lang),
+          description: getTranslatedText(category.description, lang),
+          sortOrder: category.sortOrder || 0,
+          icon: normalizedIcon,
+          image: normalizedImage,
+          productCount: category.productCount || 0,
+        };
+      }) || [],
     // Transform FAQs for language (return empty array if no FAQs)
     faqs:
       product.faqs?.map((faq: any) => ({

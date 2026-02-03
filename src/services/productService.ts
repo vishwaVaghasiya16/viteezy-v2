@@ -967,14 +967,27 @@ class ProductService {
           as: "categories",
         },
       },
-      // Convert string ingredient IDs to ObjectIds and lookup
+      // Convert string ingredient IDs to ObjectIds and lookup (with error handling)
       {
         $addFields: {
           ingredientObjectIds: {
-            $map: {
-              input: { $ifNull: ["$ingredients", []] },
-              as: "id",
-              in: { $toObjectId: "$$id" },
+            $filter: {
+              input: {
+                $map: {
+                  input: { $ifNull: ["$ingredients", []] },
+                  as: "id",
+                  in: {
+                    $convert: {
+                      input: "$$id",
+                      to: "objectId",
+                      onError: null,
+                      onNull: null,
+                    },
+                  },
+                },
+              },
+              as: "objId",
+              cond: { $ne: ["$$objId", null] },
             },
           },
         },
@@ -986,13 +999,15 @@ class ProductService {
           foreignField: "_id",
           pipeline: [
             {
+              $match: {
+                isDeleted: { $ne: true },
+              },
+            },
+            {
               $project: {
-                sId: 1,
-                slug: 1,
+                _id: 1,
                 name: 1,
                 description: 1,
-                sortOrder: 1,
-                icon: 1,
                 image: 1,
               },
             },
