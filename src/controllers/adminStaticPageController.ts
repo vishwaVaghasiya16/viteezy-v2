@@ -226,10 +226,18 @@ class AdminStaticPageController {
         content: content || {},
         status: status as StaticPageStatus,
         seo: seo || {},
+        isSystemPage: false, // Explicitly set to false for regular pages
         createdBy: requesterId,
       });
 
-      res.apiCreated({ staticPage }, "Static page created successfully");
+      // Ensure isSystemPage is explicitly set in response
+      const pageWithFlag = {
+        ...staticPage.toObject(),
+        isSystemPage: false,
+        systemPageType: undefined,
+      };
+
+      res.apiCreated({ staticPage: pageWithFlag }, "Static page created successfully");
     }
   );
 
@@ -311,14 +319,27 @@ class AdminStaticPageController {
               ...page,
               title: actualData.title || page.title,
               content: actualData.content || page.content,
+              isSystemPage: true, // Ensure it's explicitly set
+              systemPageType: page.systemPageType,
             };
           }
-          return page;
+          return {
+            ...page,
+            isSystemPage: true, // Ensure it's explicitly set
+            systemPageType: page.systemPageType,
+          };
         })
       );
 
+      // Ensure regular pages have isSystemPage: false explicitly set
+      const regularPagesWithFlag = regularPages.map((page) => ({
+        ...page,
+        isSystemPage: page.isSystemPage || false, // Explicitly set to false
+        systemPageType: page.systemPageType || undefined, // Only set for system pages
+      }));
+
       // Combine: system pages first, then regular pages
-      const allPages = [...systemPages, ...regularPages];
+      const allPages = [...systemPages, ...regularPagesWithFlag];
       const total = systemPagesCount + regularPagesCount;
 
       const pagination = getPaginationMeta(page, limit, total);
@@ -343,7 +364,14 @@ class AdminStaticPageController {
         throw new AppError("Static page not found", 404);
       }
 
-      res.apiSuccess({ staticPage }, "Static page retrieved successfully");
+      // Ensure isSystemPage is explicitly set in response
+      const pageWithFlag = {
+        ...staticPage,
+        isSystemPage: staticPage.isSystemPage || false,
+        systemPageType: staticPage.systemPageType || undefined,
+      };
+
+      res.apiSuccess({ staticPage: pageWithFlag }, "Static page retrieved successfully");
     }
   );
 
@@ -472,8 +500,15 @@ class AdminStaticPageController {
 
       await staticPage.save();
 
+      // Ensure isSystemPage is explicitly set in response
+      const pageWithFlag = {
+        ...staticPage.toObject(),
+        isSystemPage: staticPage.isSystemPage || false,
+        systemPageType: staticPage.systemPageType || undefined,
+      };
+
       res.apiSuccess(
-        { staticPage },
+        { staticPage: pageWithFlag },
         `Static page ${
           status === StaticPageStatus.PUBLISHED ? "published" : "unpublished"
         } successfully`
