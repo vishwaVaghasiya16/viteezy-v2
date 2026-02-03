@@ -8,6 +8,7 @@
 // Note: Module aliases are handled by:
 // - Development: tsconfig-paths/register (via nodemon exec)
 // - Production: module-alias/register (via npm start script)
+import "module-alias/register";
 import express, { Application, Request, Response } from "express";
 import { IncomingMessage, ServerResponse } from "http";
 import cors from "cors";
