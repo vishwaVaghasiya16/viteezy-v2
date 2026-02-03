@@ -215,19 +215,52 @@ export const transformProductForLanguage = (
     standupPouchPrice: transformedStandupPouchPrice,
     variants: variantsValue,
     ingredients:
-      product.ingredients?.map((ingredient: any) => ({
-        ...ingredient,
-        name: getTranslatedString(ingredient.name, lang),
-        description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || undefined,
-      })) || [],
+      product.ingredients && Array.isArray(product.ingredients) && product.ingredients.length > 0
+        ? product.ingredients
+            .filter((ingredient: any) => {
+              // Filter out IDs (strings or ObjectIds) - only keep populated objects
+              return ingredient && typeof ingredient === 'object' && ingredient._id;
+            })
+            .map((ingredient: any) => ({
+              _id: ingredient._id,
+              name: getTranslatedString(ingredient.name, lang),
+              description: getTranslatedText(ingredient.description, lang),
+              image: ingredient.image || null, // Always include image field, null if not present
+            }))
+        : [],
     categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
+      product.categories?.map((category: any) => {
+        // Normalize image field - extract URL if it's an object
+        let normalizedImage: string | null = null;
+        if (category.image) {
+          if (typeof category.image === 'string') {
+            normalizedImage = category.image;
+          } else if (typeof category.image === 'object' && category.image.url) {
+            normalizedImage = category.image.url;
+          }
+        }
+        
+        // Normalize icon field - ensure it's a string or null
+        let normalizedIcon: string | null = null;
+        if (category.icon) {
+          if (typeof category.icon === 'string') {
+            normalizedIcon = category.icon;
+          } else if (typeof category.icon === 'object' && category.icon.url) {
+            normalizedIcon = category.icon.url;
+          }
+        }
+        
+        return {
+          _id: category._id,
+          slug: category.slug,
+          name: getTranslatedString(category.name, lang),
+          description: getTranslatedText(category.description, lang),
+          sortOrder: category.sortOrder || 0,
+          icon: normalizedIcon,
+          image: normalizedImage,
+          productCount: category.productCount || 0,
+        };
+      }) || [],
   };
 };
 
