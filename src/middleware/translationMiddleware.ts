@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { prepareDataForTranslation } from "@/utils/translationUtils";
 import { prepareProductDataForTranslation } from "@/utils/productTranslationUtils";
 import { prepareAboutUsDataForTranslation } from "@/utils/aboutUsTranslationUtils";
+import { prepareMembershipCmsDataForTranslation } from "@/utils/membershipCmsTranslationUtils";
 import { logger } from "@/utils/logger";
 
 /**
@@ -146,6 +147,10 @@ const MODEL_I18N_FIELDS: Record<
     i18nString: ["tagline"],
     i18nText: [],
   },
+  membershipCms: {
+    i18nString: ["heading", "ctaButtonText"],
+    i18nText: ["description", "note"],
+  },
 };
 
 /**
@@ -195,6 +200,10 @@ export const autoTranslateMiddleware = (modelName: string) => {
         // Special handling for aboutUs (handles timeline events arrays)
         req.body = await prepareAboutUsDataForTranslation(req.body);
         logger.info(`Auto-translated aboutUs data with all text fields (including timeline events arrays)`);
+      } else if (modelName === "membershipCms") {
+        // Special handling for membershipCms (handles membershipBenefits arrays)
+        req.body = await prepareMembershipCmsDataForTranslation(req.body);
+        logger.info(`Auto-translated membershipCms data with all text fields (including membershipBenefits arrays)`);
       } else {
         // Standard translation for other models
         req.body = await prepareDataForTranslation(

@@ -204,20 +204,25 @@ class AdminDashboardController {
 
       // Standard SaaS percentage logic (capped at 100)
       const percentChange = (current: number, previous: number) => {
-        if (previous === 0 && current > 0)
+        // Handle edge cases
+        if (previous === 0 && current > 0) {
           return { percentage: 100, isPositive: true };
-        if (previous === 0 && current === 0)
+        }
+        if (previous === 0 && current === 0) {
           return { percentage: 0, isPositive: false };
+        }
 
+        // Calculate percentage change
         const diff = ((current - previous) / previous) * 100;
+        const isPositive = diff >= 0;
         const percentage = Math.abs(Number(diff.toFixed(2)));
         
-        // Cap percentage at 100 (maximum)
+        // Cap percentage at 100 (maximum) - but preserve the positive/negative indicator
         const cappedPercentage = Math.min(percentage, 100);
         
         return {
           percentage: cappedPercentage,
-          isPositive: diff >= 0,
+          isPositive: isPositive,
         };
       };
 

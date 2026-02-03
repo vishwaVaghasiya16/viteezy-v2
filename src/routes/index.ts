@@ -43,6 +43,8 @@ import adminProductFaqRoutes from "./adminProductFaqRoutes";
 import adminTeamMemberRoutes from "./adminTeamMemberRoutes";
 import adminAboutUsRoutes from "./adminAboutUsRoutes";
 import adminOurTeamPageRoutes from "./adminOurTeamPageRoutes";
+import adminMembershipCmsRoutes from "./adminMembershipCmsRoutes";
+import membershipCmsRoutes from "./membershipCmsRoutes";
 import memberRoutes from "./memberRoutes";
 import ourTeamPageRoutes from "./ourTeamPageRoutes";
 import dashboardRoutes from "./dashboardRoutes";
@@ -82,6 +84,7 @@ router.use("/admin/product-faqs", adminProductFaqRoutes);
 router.use("/admin/team-members", adminTeamMemberRoutes);
 router.use("/admin/about-us", adminAboutUsRoutes);
 router.use("/admin/our-team-page", adminOurTeamPageRoutes);
+router.use("/admin/membership-cms", adminMembershipCmsRoutes);
 
 router.use("/members", memberRoutes);
 router.use("/examples", exampleRoutes);
@@ -115,5 +118,6 @@ router.use("/states", stateRoutes);
 router.use("/general-settings", generalSettingsRoutes);
 router.use("/header-banner", headerBannerRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/membership-cms", membershipCmsRoutes);
 
 export default router;

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   transformI18nObject,
   getUserLanguageCode,
+  getTranslatedString,
 } from "@/utils/translationUtils";
 import { User } from "@/models/core";
 import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
@@ -157,6 +158,10 @@ const MODEL_I18N_FIELDS: Record<
   experts: {
     i18nString: [],
     i18nText: ["bio"],
+  },
+  membershipCms: {
+    i18nString: ["heading", "ctaButtonText"],
+    i18nText: ["description", "note"],
   },
 };
 
@@ -452,9 +457,11 @@ export const transformResponseMiddleware = (modelName: string) => {
             }
 
             // Transform data.category if it exists (single product category)
+            // Skip if modelName is "faqCategories" (handled separately)
             if (
               transformed.data.category &&
-              typeof transformed.data.category === "object"
+              typeof transformed.data.category === "object" &&
+              modelName !== "faqCategories"
             ) {
               const categoryFields = MODEL_I18N_FIELDS["categories"] || {
                 i18nString: [],
@@ -550,6 +557,46 @@ export const transformResponseMiddleware = (modelName: string) => {
               );
             }
 
+            // Transform data.membershipCms if it exists (single membership CMS)
+            if (
+              transformed.data.membershipCms &&
+              typeof transformed.data.membershipCms === "object"
+            ) {
+              const membershipCmsFields = MODEL_I18N_FIELDS["membershipCms"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              const transformedMembershipCms = transformI18nObject(
+                transformed.data.membershipCms,
+                lang,
+                membershipCmsFields.i18nString, // ["heading", "ctaButtonText"]
+                membershipCmsFields.i18nText // ["description", "note"]
+              );
+
+              // Transform nested membershipBenefits array
+              if (
+                transformedMembershipCms.membershipBenefits &&
+                Array.isArray(transformedMembershipCms.membershipBenefits)
+              ) {
+                transformedMembershipCms.membershipBenefits =
+                  transformedMembershipCms.membershipBenefits.map(
+                    (benefit: any) => {
+                      if (benefit && typeof benefit === "object") {
+                        return {
+                          ...benefit,
+                          // Use getTranslatedString directly on I18n objects
+                          title: getTranslatedString(benefit.title, lang),
+                          subtitle: getTranslatedString(benefit.subtitle, lang),
+                        };
+                      }
+                      return benefit;
+                    }
+                  );
+              }
+
+              transformed.data.membershipCms = transformedMembershipCms;
+            }
+
             // Transform data.productFaq if it exists (single product FAQ)
             if (
               transformed.data.productFaq &&
@@ -590,6 +637,147 @@ export const transformResponseMiddleware = (modelName: string) => {
                 : Object.keys(transformedProductFaqs)
                     .sort((a, b) => parseInt(a) - parseInt(b))
                     .map((key) => transformedProductFaqs[key]);
+            }
+
+            // Transform data.faq if it exists (single FAQ)
+            if (
+              transformed.data.faq &&
+              typeof transformed.data.faq === "object"
+            ) {
+              const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              transformed.data.faq = transformI18nObject(
+                transformed.data.faq,
+                lang,
+                faqFields.i18nString, // ["question"]
+                faqFields.i18nText // ["answer"]
+              );
+            }
+
+            // Transform data.faqs if it exists (array of FAQs)
+            if (
+              transformed.data.faqs &&
+              Array.isArray(transformed.data.faqs)
+            ) {
+              const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              const transformedFaqs = transformI18nObject(
+                transformed.data.faqs,
+                lang,
+                faqFields.i18nString, // ["question"]
+                faqFields.i18nText // ["answer"]
+              );
+              // Ensure it's still an array
+              transformed.data.faqs = Array.isArray(transformedFaqs)
+                ? transformedFaqs
+                : Object.keys(transformedFaqs)
+                    .sort((a, b) => parseInt(a) - parseInt(b))
+                    .map((key) => transformedFaqs[key]);
+            }
+
+            // Transform data.categories if it exists (array of FAQ categories)
+            // Check if it's a grouped structure (for FAQs) or simple array (for FAQ categories)
+            if (
+              transformed.data.categories &&
+              Array.isArray(transformed.data.categories)
+            ) {
+              // Check if it's a grouped structure (each item has category and faqs)
+              const isGroupedStructure =
+                transformed.data.categories.length > 0 &&
+                transformed.data.categories[0] &&
+                typeof transformed.data.categories[0] === "object" &&
+                ("category" in transformed.data.categories[0] ||
+                  "faqs" in transformed.data.categories[0]);
+
+              if (isGroupedStructure && modelName === "faqs") {
+                // Handle grouped structure: array of { category, faqs }
+                const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+
+                transformed.data.categories = transformed.data.categories.map(
+                  (group: any) => {
+                    const transformedGroup: any = {};
+
+                    // Transform category if it exists
+                    if (group.category && typeof group.category === "object") {
+                      transformedGroup.category = transformI18nObject(
+                        group.category,
+                        lang,
+                        faqCategoryFields.i18nString, // ["title"]
+                        faqCategoryFields.i18nText // []
+                      );
+                    } else {
+                      transformedGroup.category = group.category;
+                    }
+
+                    // Transform faqs array if it exists
+                    if (group.faqs && Array.isArray(group.faqs)) {
+                      const transformedFaqs = transformI18nObject(
+                        group.faqs,
+                        lang,
+                        faqFields.i18nString, // ["question"]
+                        faqFields.i18nText // ["answer"]
+                      );
+                      transformedGroup.faqs = Array.isArray(transformedFaqs)
+                        ? transformedFaqs
+                        : Object.keys(transformedFaqs)
+                            .sort((a, b) => parseInt(a) - parseInt(b))
+                            .map((key) => transformedFaqs[key]);
+                    } else {
+                      transformedGroup.faqs = group.faqs;
+                    }
+
+                    return transformedGroup;
+                  }
+                );
+              } else {
+                // Handle simple array of FAQ categories
+                const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                const transformedCategories = transformI18nObject(
+                  transformed.data.categories,
+                  lang,
+                  faqCategoryFields.i18nString, // ["title"]
+                  faqCategoryFields.i18nText // []
+                );
+                // Ensure it's still an array
+                transformed.data.categories = Array.isArray(transformedCategories)
+                  ? transformedCategories
+                  : Object.keys(transformedCategories)
+                      .sort((a, b) => parseInt(a) - parseInt(b))
+                      .map((key) => transformedCategories[key]);
+              }
+            }
+
+            // Transform data.category if it exists (single FAQ category)
+            // Check if it's a FAQ category by checking if modelName is "faqCategories"
+            if (
+              transformed.data.category &&
+              typeof transformed.data.category === "object" &&
+              modelName === "faqCategories"
+            ) {
+              const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              transformed.data.category = transformI18nObject(
+                transformed.data.category,
+                lang,
+                faqCategoryFields.i18nString, // ["title"]
+                faqCategoryFields.i18nText // []
+              );
             }
 
             // Transform data.recentUsages if it exists (array of coupon usage history with nested coupon data)
@@ -1018,9 +1206,11 @@ export const transformResponseMiddleware = (modelName: string) => {
           }
 
           // Transform data.category if it exists (single product category)
+          // Skip if modelName is "faqCategories" (handled separately)
           if (
             transformed.data.category &&
-            typeof transformed.data.category === "object"
+            typeof transformed.data.category === "object" &&
+            modelName !== "faqCategories"
           ) {
             const categoryFields = MODEL_I18N_FIELDS["categories"] || {
               i18nString: [],
@@ -1493,7 +1683,12 @@ export const transformResponseMiddleware = (modelName: string) => {
               }
 
               // Transform data.category if it exists (single product category)
-              if (dataObj.category && typeof dataObj.category === "object") {
+              // Skip if modelName is "faqCategories" (handled separately)
+              if (
+                dataObj.category &&
+                typeof dataObj.category === "object" &&
+                modelName !== "faqCategories"
+              ) {
                 const categoryFields = MODEL_I18N_FIELDS["categories"] || {
                   i18nString: [],
                   i18nText: [],
@@ -1558,6 +1753,91 @@ export const transformResponseMiddleware = (modelName: string) => {
                 );
               }
 
+              // Transform data.membershipCms if it exists (single membership CMS)
+              if (
+                dataObj.membershipCms &&
+                typeof dataObj.membershipCms === "object"
+              ) {
+                const membershipCmsFields = MODEL_I18N_FIELDS["membershipCms"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                const transformedMembershipCms = transformI18nObject(
+                  dataObj.membershipCms,
+                  lang,
+                  membershipCmsFields.i18nString, // ["heading", "ctaButtonText"]
+                  membershipCmsFields.i18nText // ["description", "note"]
+                );
+
+                // Transform nested membershipBenefits array
+                if (
+                  transformedMembershipCms.membershipBenefits &&
+                  Array.isArray(transformedMembershipCms.membershipBenefits)
+                ) {
+                  transformedMembershipCms.membershipBenefits =
+                    transformedMembershipCms.membershipBenefits.map(
+                      (benefit: any) => {
+                        if (benefit && typeof benefit === "object") {
+                          return {
+                            ...benefit,
+                            // Use getTranslatedString directly on I18n objects
+                            title: getTranslatedString(benefit.title, lang),
+                            subtitle: getTranslatedString(benefit.subtitle, lang),
+                          };
+                        }
+                        return benefit;
+                      }
+                    );
+                }
+
+                dataObj.membershipCms = transformedMembershipCms;
+              }
+
+              // Transform data.membershipCmsList if it exists (array of membership CMS)
+              if (
+                dataObj.membershipCmsList &&
+                Array.isArray(dataObj.membershipCmsList)
+              ) {
+                const membershipCmsFields = MODEL_I18N_FIELDS["membershipCms"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                dataObj.membershipCmsList = dataObj.membershipCmsList.map(
+                  (item: any) => {
+                    if (item && typeof item === "object") {
+                      const transformed = transformI18nObject(
+                        item,
+                        lang,
+                        membershipCmsFields.i18nString, // ["heading", "ctaButtonText"]
+                        membershipCmsFields.i18nText // ["description", "note"]
+                      );
+
+                      // Transform nested membershipBenefits array
+                      if (
+                        transformed.membershipBenefits &&
+                        Array.isArray(transformed.membershipBenefits)
+                      ) {
+                        transformed.membershipBenefits =
+                          transformed.membershipBenefits.map((benefit: any) => {
+                            if (benefit && typeof benefit === "object") {
+                              return {
+                                ...benefit,
+                                // Use getTranslatedString directly on I18n objects
+                                title: getTranslatedString(benefit.title, lang),
+                                subtitle: getTranslatedString(benefit.subtitle, lang),
+                              };
+                            }
+                            return benefit;
+                          });
+                      }
+
+                      return transformed;
+                    }
+                    return item;
+                  }
+                );
+              }
+
               // Transform data.productFaq if it exists (single product FAQ)
               if (
                 dataObj.productFaq &&
@@ -1593,6 +1873,136 @@ export const transformResponseMiddleware = (modelName: string) => {
                   : Object.keys(transformedProductFaqs)
                       .sort((a, b) => parseInt(a) - parseInt(b))
                       .map((key) => transformedProductFaqs[key]);
+              }
+
+              // Transform data.faq if it exists (single FAQ)
+              if (dataObj.faq && typeof dataObj.faq === "object") {
+                const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                dataObj.faq = transformI18nObject(
+                  dataObj.faq,
+                  lang,
+                  faqFields.i18nString, // ["question"]
+                  faqFields.i18nText // ["answer"]
+                );
+              }
+
+              // Transform data.faqs if it exists (array of FAQs)
+              if (dataObj.faqs && Array.isArray(dataObj.faqs)) {
+                const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                const transformedFaqs = transformI18nObject(
+                  dataObj.faqs,
+                  lang,
+                  faqFields.i18nString, // ["question"]
+                  faqFields.i18nText // ["answer"]
+                );
+                // Ensure it's still an array
+                dataObj.faqs = Array.isArray(transformedFaqs)
+                  ? transformedFaqs
+                  : Object.keys(transformedFaqs)
+                      .sort((a, b) => parseInt(a) - parseInt(b))
+                      .map((key) => transformedFaqs[key]);
+              }
+
+              // Transform data.categories if it exists (array of FAQ categories)
+              // Check if it's a grouped structure (for FAQs) or simple array (for FAQ categories)
+              if (dataObj.categories && Array.isArray(dataObj.categories)) {
+                // Check if it's a grouped structure (each item has category and faqs)
+                const isGroupedStructure =
+                  dataObj.categories.length > 0 &&
+                  dataObj.categories[0] &&
+                  typeof dataObj.categories[0] === "object" &&
+                  ("category" in dataObj.categories[0] ||
+                    "faqs" in dataObj.categories[0]);
+
+                if (isGroupedStructure && modelName === "faqs") {
+                  // Handle grouped structure: array of { category, faqs }
+                  const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                    i18nString: [],
+                    i18nText: [],
+                  };
+                  const faqFields = MODEL_I18N_FIELDS["faqs"] || {
+                    i18nString: [],
+                    i18nText: [],
+                  };
+
+                  dataObj.categories = dataObj.categories.map((group: any) => {
+                    const transformedGroup: any = {};
+
+                    // Transform category if it exists
+                    if (group.category && typeof group.category === "object") {
+                      transformedGroup.category = transformI18nObject(
+                        group.category,
+                        lang,
+                        faqCategoryFields.i18nString, // ["title"]
+                        faqCategoryFields.i18nText // []
+                      );
+                    } else {
+                      transformedGroup.category = group.category;
+                    }
+
+                    // Transform faqs array if it exists
+                    if (group.faqs && Array.isArray(group.faqs)) {
+                      const transformedFaqs = transformI18nObject(
+                        group.faqs,
+                        lang,
+                        faqFields.i18nString, // ["question"]
+                        faqFields.i18nText // ["answer"]
+                      );
+                      transformedGroup.faqs = Array.isArray(transformedFaqs)
+                        ? transformedFaqs
+                        : Object.keys(transformedFaqs)
+                            .sort((a, b) => parseInt(a) - parseInt(b))
+                            .map((key) => transformedFaqs[key]);
+                    } else {
+                      transformedGroup.faqs = group.faqs;
+                    }
+
+                    return transformedGroup;
+                  });
+                } else {
+                  // Handle simple array of FAQ categories
+                  const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                    i18nString: [],
+                    i18nText: [],
+                  };
+                  const transformedCategories = transformI18nObject(
+                    dataObj.categories,
+                    lang,
+                    faqCategoryFields.i18nString, // ["title"]
+                    faqCategoryFields.i18nText // []
+                  );
+                  // Ensure it's still an array
+                  dataObj.categories = Array.isArray(transformedCategories)
+                    ? transformedCategories
+                    : Object.keys(transformedCategories)
+                        .sort((a, b) => parseInt(a) - parseInt(b))
+                        .map((key) => transformedCategories[key]);
+                }
+              }
+
+              // Transform data.category if it exists (single FAQ category)
+              // Check if it's a FAQ category by checking if modelName is "faqCategories"
+              if (
+                dataObj.category &&
+                typeof dataObj.category === "object" &&
+                modelName === "faqCategories"
+              ) {
+                const faqCategoryFields = MODEL_I18N_FIELDS["faqCategories"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                dataObj.category = transformI18nObject(
+                  dataObj.category,
+                  lang,
+                  faqCategoryFields.i18nString, // ["title"]
+                  faqCategoryFields.i18nText // []
+                );
               }
 
               // Transform data.settings if it exists (general settings)
