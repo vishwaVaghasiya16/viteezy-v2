@@ -271,6 +271,9 @@ class AdminStaticPageController {
         baseFilter.$or = [
           { "title.en": { $regex: search, $options: "i" } },
           { "title.nl": { $regex: search, $options: "i" } },
+          { "title.de": { $regex: search, $options: "i" } },
+          { "title.fr": { $regex: search, $options: "i" } },
+          { "title.es": { $regex: search, $options: "i" } },
           { slug: { $regex: search, $options: "i" } },
         ];
       }
