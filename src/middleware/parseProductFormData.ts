@@ -15,6 +15,7 @@ const JSON_FIELDS = [
   "standupPouchPrice",
   "comparisonSection",
   "specification",
+  "faqs", // Optional array of { question, answer }, max 15
 ];
 
 const toBoolean = (value: any): boolean | undefined => {
@@ -65,12 +66,12 @@ const fixJSONEscaping = (jsonString: string): string => {
   return fixed;
 };
 
-const parseJSONField = (value: any, fieldName: string): Record<string, any> | undefined => {
+const parseJSONField = (value: any, fieldName: string): Record<string, any> | any[] | undefined => {
   // Skip if undefined or null
   if (value === undefined || value === null) return undefined;
   
-  // If already an object, return as is
-  if (typeof value === "object" && value !== null) return value as Record<string, any>;
+  // If already an object or array, return as is
+  if (typeof value === "object" && value !== null) return value;
   
   // Handle string values
   if (typeof value === "string") {

@@ -17,7 +17,7 @@ import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
 import { fileStorageService } from "./fileStorageService";
 import mongoose, { PipelineStage } from "mongoose";
-import { I18nStringType } from "../models/common.model";
+import { I18nStringType, I18nTextType } from "../models/common.model";
 
 export type ProductSortOption =
   | "relevance"
@@ -134,6 +134,11 @@ interface CreateProductData {
       values: boolean[];
     }>;
   };
+  /** Optional FAQs for this product (max 15). Each item: { question, answer }. */
+  faqs?: Array<{
+    question: string | I18nStringType;
+    answer: string | I18nTextType;
+  }>;
   createdBy?: mongoose.Types.ObjectId;
 }
 
@@ -240,6 +245,11 @@ interface UpdateProductData {
       values: boolean[];
     }>;
   };
+  /** Optional FAQs for this product (max 15). Each item: { question, answer }. If provided, replaces all existing FAQs. */
+  faqs?: Array<{
+    question: string | I18nStringType;
+    answer: string | I18nTextType;
+  }>;
   updatedBy?: mongoose.Types.ObjectId;
 }
 
@@ -471,11 +481,14 @@ class ProductService {
     }
 
     // Log product data summary before creation
-    logger.info(`[Create Product] Creating product with - Slug: "${finalSlug}", Variant: ${variant}, HasStandupPouch: ${hasStandupPouch}, Categories: ${data.categories?.length || 0}, Ingredients: ${data.ingredients?.length || 0}`);
+    logger.info(`[Create Product] Creating product with - Slug: "${finalSlug}", Variant: ${variant}, HasStandupPouch: ${hasStandupPouch}, Categories: ${data.categories?.length || 0}, Ingredients: ${data.ingredients?.length || 0}, FAQs: ${data.faqs?.length || 0}`);
+
+    // Strip faqs from product data (FAQs are stored in product_faqs collection)
+    const { faqs: faqsInput, ...productData } = data;
 
     // Create product with generated slug and derived price
     const product = await Products.create({
-      ...data,
+      ...productData,
       price: finalPrice,
       sachetPrices: processedSachetPrices,
       standupPouchPrice: processedStandupPouchPrice,
@@ -483,6 +496,26 @@ class ProductService {
     });
 
     logger.info(`[Create Product] Product created successfully - ID: ${product._id}, Slug: "${product.slug}", Title: "${product.title}"`);
+
+    // Create optional product FAQs (max 15)
+    if (faqsInput && faqsInput.length > 0) {
+      const faqDocs = faqsInput.slice(0, 15).map((faq, index) => {
+        const question =
+          typeof faq.question === "string" ? { en: faq.question } : faq.question;
+        const answer =
+          typeof faq.answer === "string" ? { en: faq.answer } : faq.answer;
+        return {
+          productId: product._id,
+          question,
+          answer,
+          sortOrder: index,
+          status: FAQStatus.ACTIVE,
+          isActive: true,
+        };
+      });
+      await ProductFAQs.insertMany(faqDocs);
+      logger.info(`[Create Product] Created ${faqDocs.length} FAQs for product ${product._id}`);
+    }
 
     // Update ingredient documents to add this product ID to their products array
     const ingredientIds = product.ingredients || [];
@@ -1587,14 +1620,17 @@ class ProductService {
       });
     }
 
+    // Extract faqs from data (FAQs are stored in product_faqs collection, not in product doc)
+    const faqsInput = data.faqs;
+
     // Prepare update object - only include fields that are being updated (not undefined)
     const updateData: any = {
       updatedAt: new Date(),
     };
 
-    // Only include fields that are explicitly provided (not undefined)
+    // Only include fields that are explicitly provided (not undefined), excluding faqs
     Object.keys(data).forEach((key) => {
-      if (data[key as keyof UpdateProductData] !== undefined) {
+      if (key !== "faqs" && data[key as keyof UpdateProductData] !== undefined) {
         updateData[key] = data[key as keyof UpdateProductData];
       }
     });
@@ -1667,6 +1703,37 @@ class ProductService {
       new: true,
       runValidators: true,
     });
+
+    // Handle FAQ updates: if faqs are provided, replace all existing FAQs
+    if (faqsInput !== undefined) {
+      if (faqsInput && faqsInput.length > 0) {
+        // Delete all existing FAQs for this product
+        await ProductFAQs.deleteMany({ productId: new mongoose.Types.ObjectId(productId) });
+        logger.info(`[Update Product] Deleted existing FAQs for product ${productId}`);
+
+        // Create new FAQs (max 15)
+        const faqDocs = faqsInput.slice(0, 15).map((faq, index) => {
+          const question =
+            typeof faq.question === "string" ? { en: faq.question } : faq.question;
+          const answer =
+            typeof faq.answer === "string" ? { en: faq.answer } : faq.answer;
+          return {
+            productId: new mongoose.Types.ObjectId(productId),
+            question,
+            answer,
+            sortOrder: index,
+            status: FAQStatus.ACTIVE,
+            isActive: true,
+          };
+        });
+        await ProductFAQs.insertMany(faqDocs);
+        logger.info(`[Update Product] Created ${faqDocs.length} new FAQs for product ${productId}`);
+      } else {
+        // If faqs is empty array, delete all FAQs
+        await ProductFAQs.deleteMany({ productId: new mongoose.Types.ObjectId(productId) });
+        logger.info(`[Update Product] Deleted all FAQs for product ${productId} (empty faqs array provided)`);
+      }
+    }
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
