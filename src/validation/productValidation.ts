@@ -527,6 +527,39 @@ export const createProductSchema = Joi.object({
   isFeatured: isFeaturedSchema,
   comparisonSection: comparisonSectionSchema,
   specification: specificationSchema,
+  // Optional FAQs: max 15, each { question, answer } (string or I18n)
+  faqs: Joi.array()
+    .items(
+      Joi.object({
+        question: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+        answer: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+      }).required()
+    )
+    .min(1)
+    .max(15)
+    .optional()
+    .messages({
+      "array.max": "Maximum 15 FAQs allowed",
+      "array.min": "Each FAQ must have question and answer",
+    }),
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is true, standupPouchPrice must be provided
   if (value.hasStandupPouch === true && !value.standupPouchPrice) {
@@ -580,6 +613,39 @@ export const updateProductSchema = Joi.object({
   isFeatured: isFeaturedSchema.optional(),
   comparisonSection: comparisonSectionSchema.optional(),
   specification: specificationSchema.optional(),
+  // Optional FAQs: max 15, each { question, answer } (string or I18n). If provided, replaces all existing FAQs.
+  faqs: Joi.array()
+    .items(
+      Joi.object({
+        question: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+        answer: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+      }).required()
+    )
+    .min(1)
+    .max(15)
+    .optional()
+    .messages({
+      "array.max": "Maximum 15 FAQs allowed",
+      "array.min": "Each FAQ must have question and answer",
+    }),
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is being set to true, standupPouchPrice must be provided
   // Only validate if hasStandupPouch is explicitly being updated to true
