@@ -53,19 +53,25 @@ export const updateTrackingNumberSchema = Joi.object(
 export const getAllOrdersQuerySchema = paginationQuerySchema.keys(
   withFieldLabels({
     search: Joi.string().trim().optional().label("Search query"),
+
     status: Joi.string()
       .valid(...ORDER_STATUS_VALUES)
       .optional()
       .label("Order status"),
+
     paymentStatus: Joi.string()
       .valid(...PAYMENT_STATUS_VALUES)
       .optional()
       .label("Payment status"),
+
     planType: Joi.string()
       .valid(...ORDER_PLAN_TYPE_VALUES)
       .optional()
       .label("Plan type"),
+
+    // Existing range date filters
     startDate: Joi.date().iso().optional().label("Start date"),
+
     endDate: Joi.date()
       .iso()
       .optional()
@@ -75,6 +81,32 @@ export const getAllOrdersQuerySchema = paginationQuerySchema.keys(
         then: Joi.date().greater(Joi.ref("startDate")),
         otherwise: Joi.date(),
       }),
+
+    // 🔥 NEW: Exact single date filter
+    date: Joi.date().iso().optional().label("Exact order date"),
+
+    // 🔥 NEW: Order total range
+    minTotal: Joi.number()
+      .min(0)
+      .optional()
+      .label("Minimum order total"),
+
+    maxTotal: Joi.number()
+      .min(0)
+      .optional()
+      .label("Maximum order total")
+      .when("minTotal", {
+        is: Joi.exist(),
+        then: Joi.number().greater(Joi.ref("minTotal")),
+        otherwise: Joi.number(),
+      }),
+
+    // 🔥 NEW: Product name search
+    productName: Joi.string()
+      .trim()
+      .optional()
+      .label("Product name"),
+
     customerId: Joi.string()
       .pattern(objectIdRegex)
       .optional()

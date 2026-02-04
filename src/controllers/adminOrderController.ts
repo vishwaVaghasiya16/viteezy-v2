@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
-import { Orders } from "@/models/commerce";
+import { Orders, Payments, Products, Subscriptions } from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
 import {
   OrderStatus,
@@ -253,6 +253,12 @@ class AdminOrderController {
         startDate,
         endDate,
         customerId,
+      
+        // 🔥 NEW
+        date,
+        minTotal,
+        maxTotal,
+        productName,
       } = req.query as {
         search?: string;
         status?: OrderStatus;
@@ -261,6 +267,11 @@ class AdminOrderController {
         startDate?: string;
         endDate?: string;
         customerId?: string;
+      
+        date?: string;
+        minTotal?: string;
+        maxTotal?: string;
+        productName?: string;
       };
 
       const filter: Record<string, any> = {
@@ -270,6 +281,47 @@ class AdminOrderController {
       // Filter by status
       if (status) {
         filter.status = status;
+      }
+
+      if (date) {
+        const from = new Date(date);
+        from.setHours(0, 0, 0, 0);
+      
+        const to = new Date(date);
+        to.setHours(23, 59, 59, 999);
+      
+        filter.createdAt = { $gte: from, $lte: to };
+      }
+
+      if (minTotal || maxTotal) {
+        filter.grandTotal = {};
+      
+        if (minTotal) {
+          filter.grandTotal.$gte = Number(minTotal);
+        }
+      
+        if (maxTotal) {
+          filter.grandTotal.$lte = Number(maxTotal);
+        }
+      }
+
+      if (productName) {
+        const productRegex = { $regex: productName, $options: "i" };
+      
+        const matchingProducts = await Products.find({
+          title: productRegex,
+        })
+          .select("_id")
+          .lean();
+      
+        const productIds = matchingProducts.map((p) => p._id);
+      
+        if (productIds.length > 0) {
+          filter["items.productId"] = { $in: productIds };
+        } else {
+          // No matching product → return empty result
+          filter["items.productId"] = null;
+        }
       }
 
       // Filter by payment status
@@ -428,70 +480,109 @@ class AdminOrderController {
   getOrderById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
-
+  
+      // Fetch the order with populated references
       const order = await Orders.findOne({
         _id: id,
         isDeleted: { $ne: true },
       })
         .populate("userId", "firstName lastName email phone")
-        .populate("items.productId", "title slug description media categories tags status galleryImages productImage")
-        .populate("shippingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
-        .populate("billingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
+        .populate(
+          "items.productId",
+          "title slug description media categories tags status galleryImages productImage"
+        )
+        .populate(
+          "shippingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+        )
+        .populate(
+          "billingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+        )
         .lean();
-
+  
       if (!order) {
         throw new AppError("Order not found", 404);
       }
 
-      // Type guard for populated user
-      const user = order.userId as any;
-      const isPopulatedUser = user && typeof user === 'object' && user.firstName !== undefined;
+      // Safely get user
+      const user = order.userId ? order.userId as any : null;
+  
+      // Fetch payment info
+      const payment = await Payments.findOne({
+        orderId: order._id,
+        isDeleted: { $ne: true },
+      })
+        .select("paymentMethod status gatewayTransactionId")
+        .lean();
+  
+
+      const totalOrders = await Orders.countDocuments({
+        userId: order.userId,
+        isDeleted: { $ne: true },
+      });
+
+      const subscription = await Subscriptions.findOne({
+        orderId: order._id,
+        isDeleted: { $ne: true },
+      }).select("subscriptionNumber createdAt nextBillingDate cycleDays status")
+        .lean();
 
       const transformedOrder = {
         id: order._id,
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
-        customer: isPopulatedUser
+        totalOrders: totalOrders ? totalOrders : 0,
+        subscription: subscription ? {
+          id: subscription._id,
+          subscriptionNumber: subscription.subscriptionNumber,
+          createdAt: subscription.createdAt,
+          nextBillingDate: subscription.nextBillingDate,
+          cycleDays: subscription.cycleDays,
+          status: subscription.status,
+        } : null,
+        customer: user
           ? {
-              id: user._id,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              email: user.email,
-              phone: user.phone,
-              fullName: `${user.firstName} ${user.lastName}`.trim(),
+              id: user._id || null,
+              firstName: user.firstName ? user.firstName : null,
+              lastName: user.lastName ? user.lastName : null,
+              email: user.email ? user.email : null,
+              phone: user.phone ? user.phone : null,
             }
           : null,
-        planType: order.planType,
+        planType: order.planType || null,
         isOneTime: order.isOneTime,
-        variantType: order.variantType,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        items: order.items.map((item: any) => ({
-          productId: item.productId?._id || item.productId,
-          product: item.productId
-            ? {
-                id: item.productId._id,
-                title: item.productId.title,
-                slug: item.productId.slug,
-                description: item.productId.description,
-                media: item.productId.media,
-                categories: item.productId.categories,
-                tags: item.productId.tags,
-                status: item.productId.status,
-                galleryImages: item.productId.galleryImages,
-                productImage: item.productId.productImage,
-              }
-            : null,
-          name: item.name,
-          amount: item.amount,
-          discountedPrice: item.discountedPrice,
-          taxRate: item.taxRate,
-          totalAmount: item.totalAmount,
-          durationDays: item.durationDays,
-          capsuleCount: item.capsuleCount,
-          savingsPercentage: item.savingsPercentage,
-          features: item.features,
-        })),
+        variantType: order.variantType || null,
+        status: order.status || null,
+        paymentStatus: order.paymentStatus || null,
+        items: Array.isArray(order.items)
+          ? order.items.map((item: any) => ({
+              productId: item.productId?._id || item.productId,
+              product: item.productId
+                ? {
+                    id: item.productId._id,
+                    title: item.productId.title,
+                    slug: item.productId.slug,
+                    description: item.productId.description,
+                    media: item.productId.media,
+                    categories: item.productId.categories,
+                    tags: item.productId.tags,
+                    status: item.productId.status,
+                    galleryImages: item.productId.galleryImages,
+                    productImage: item.productId.productImage,
+                  }
+                : null,
+              name: item.name,
+              amount: item.amount,
+              discountedPrice: item.discountedPrice,
+              taxRate: item.taxRate,
+              totalAmount: item.totalAmount,
+              durationDays: item.durationDays,
+              capsuleCount: item.capsuleCount,
+              savingsPercentage: item.savingsPercentage,
+              features: item.features,
+            }))
+          : [],
         pricing: {
           subTotal: order.subTotal,
           discountedPrice: order.discountedPrice,
@@ -503,12 +594,17 @@ class AdminOrderController {
           currency: order.currency,
         },
         paymentMethod: order.paymentMethod,
-        paymentId: order.paymentId,
+        payment: payment
+          ? {
+              paymentMethod: payment.paymentMethod,
+              status: payment.status,
+              gatewayTransactionId: payment.gatewayTransactionId,
+            }
+          : null,
         couponCode: order.couponCode,
         couponMetadata: order.couponMetadata,
         membershipMetadata: order.membershipMetadata,
-        shippingAddress: order.shippingAddressId,
-        billingAddress: order.billingAddressId,
+        shippingAddress: order.shippingAddressId || null,
         trackingNumber: order.trackingNumber,
         shippedAt: order.shippedAt,
         deliveredAt: order.deliveredAt,
@@ -517,7 +613,7 @@ class AdminOrderController {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
       };
-
+  
       res.apiSuccess({ order: transformedOrder }, "Order retrieved successfully");
     }
   );
