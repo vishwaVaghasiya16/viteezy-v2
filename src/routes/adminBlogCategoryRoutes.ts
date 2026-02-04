@@ -38,12 +38,13 @@ router.post(
 
 /**
  * @route GET /api/v1/admin/blog-categories
- * @desc Get paginated list of blog categories
+ * @desc Get paginated list of blog categories with overall blog count per category
  * @access Admin
  * @query {Number} [page] - Page number (default: 1)
  * @query {Number} [limit] - Items per page (default: 10)
  * @query {String} [search] - Search by title or slug
  * @query {String} [status] - Filter by status: "active", "inactive", or "all"
+ * @returns {Array} items - Array of categories, each with blogCount field (overall blogs not deleted)
  */
 router.get(
   "/",

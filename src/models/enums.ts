@@ -59,6 +59,17 @@ export enum StaticPageStatus {
   UNPUBLISHED = "Unpublished",
 }
 
+// System Page Types (pre-defined pages that cannot be deleted or have status toggled)
+export enum SystemPageType {
+  ABOUT_US = "about-us",
+  OUR_TEAM = "our-team",
+  LANDING_PAGE = "landing-page",
+  MEMBERSHIP = "membership",
+  BLOG = "blog",
+}
+
+export const SYSTEM_PAGE_TYPE_VALUES = Object.values(SystemPageType);
+
 // Order Status
 export enum OrderStatus {
   PENDING = "Pending",

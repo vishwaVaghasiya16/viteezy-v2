@@ -102,8 +102,14 @@ class AdminFaqController {
       filter.$or = [
         { "question.en": { $regex: search, $options: "i" } },
         { "question.nl": { $regex: search, $options: "i" } },
+        { "question.de": { $regex: search, $options: "i" } },
+        { "question.fr": { $regex: search, $options: "i" } },
+        { "question.es": { $regex: search, $options: "i" } },
         { "answer.en": { $regex: search, $options: "i" } },
         { "answer.nl": { $regex: search, $options: "i" } },
+        { "answer.de": { $regex: search, $options: "i" } },
+        { "answer.fr": { $regex: search, $options: "i" } },
+        { "answer.es": { $regex: search, $options: "i" } },
         { tags: { $regex: search, $options: "i" } },
       ];
     }

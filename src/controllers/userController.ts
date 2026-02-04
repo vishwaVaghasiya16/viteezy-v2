@@ -233,12 +233,48 @@ class UserController {
         throw new AppError('Web platform requires Firebase provider', 400);
       }
 
+      const tokenToAdd = deviceToken.trim();
+
+      // Validate token format based on provider
+      if (deviceProvider === "onesignal") {
+        // OneSignal player IDs must be UUIDs: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(tokenToAdd)) {
+          // Check if it looks like an FCM token
+          const isFcmToken = tokenToAdd.includes(':') && tokenToAdd.length > 50;
+          const errorMessage = isFcmToken
+            ? 'Invalid token format: You are trying to register an FCM token (Firebase token) as a OneSignal player ID. ' +
+              'For mobile apps: Use OneSignal SDK to get the player ID (UUID format). ' +
+              'For web apps: Use platform="web" and provider="firebase" instead. ' +
+              'OneSignal player IDs are UUIDs like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+            : 'Invalid OneSignal player ID format. OneSignal requires UUID format (e.g., xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). ' +
+              'Make sure you are using the OneSignal SDK to get the player ID, not an FCM token.';
+          
+          throw new AppError(errorMessage, 400);
+        }
+      } else if (deviceProvider === "firebase") {
+        // FCM tokens typically start with a prefix and contain colons
+        // Basic validation: should not be a UUID (to catch if OneSignal ID is sent as Firebase)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(tokenToAdd)) {
+          throw new AppError(
+            'Invalid Firebase token format. The provided token appears to be a OneSignal player ID (UUID) instead of an FCM token.',
+            400
+          );
+        }
+        // FCM tokens are typically longer and contain specific patterns
+        if (tokenToAdd.length < 20) {
+          throw new AppError(
+            'Invalid Firebase token format. FCM tokens are typically longer strings.',
+            400
+          );
+        }
+      }
+
       const user = await User.findById(req.user._id);
       if (!user) {
         throw new AppError("User not found", 404);
       }
-
-      const tokenToAdd = deviceToken.trim();
 
       // Initialize metadata array if not exists
       if (!user.deviceTokenMetadata) {

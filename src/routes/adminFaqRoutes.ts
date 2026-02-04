@@ -13,7 +13,6 @@ import {
   updateFaqSchema,
   faqIdParamsSchema,
 } from "@/validation/adminFaqValidation";
-import { paginationQuerySchema } from "../validation/commonValidation";
 
 const router = Router();
 
@@ -34,13 +33,16 @@ router.post(
 
 /**
  * @route GET /api/v1/admin/faqs
- * @desc Get paginated list of FAQs
+ * @desc Get FAQs grouped by category
  * @access Admin
+ * @query {String} [status] - Filter by status: "Active", "Inactive", "Draft"
+ * @query {String} [search] - Search by question or tags
+ * @query {String} [categoryId] - Filter by specific category ID
+ * @returns {Object} { categories: Array<{ category: Object, faqs: Array }>, total: Number }
  */
 router.get(
   "/",
   transformResponseMiddleware("faqs"), // Detects language from admin token and transforms I18n fields to single language strings
-  validateQuery(paginationQuerySchema),
   adminFaqController.getFaqs
 );
 

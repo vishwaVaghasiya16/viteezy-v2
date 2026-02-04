@@ -48,8 +48,13 @@ router.post(
 
 /**
  * @route GET /api/v1/admin/coupons/stats
- * @desc Get coupon statistics (for current month)
+ * @desc Get coupon statistics with percentage changes (vs last month and last 7 days)
  * @access Admin
+ * @returns {Object} stats - Object containing:
+ *   - activeCoupons: Count with vsLastMonth percentage change
+ *   - totalRedemptions: Count with vsLastMonth percentage change
+ *   - totalDiscountedAmount: Amount with vsLastMonth percentage change
+ *   - expiringSoon: Count and details of coupons expiring within 7 days (with days/months until expiration)
  */
 router.get("/stats", adminCouponController.getCouponStats);
 

@@ -96,9 +96,42 @@ class AdminBlogCategoryController {
         BlogCategories.countDocuments(filter),
       ]);
 
+      // Get category IDs to count overall blogs
+      const categoryIds = categories.map((cat: any) => cat._id);
+
+      // Count overall blogs per category (not deleted)
+      const blogCounts = await Blogs.aggregate([
+        {
+          $match: {
+            categoryId: { $in: categoryIds },
+            isDeleted: false, // Only count blogs that are not deleted
+          },
+        },
+        {
+          $group: {
+            _id: "$categoryId",
+            blogCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      // Create a map of categoryId -> blogCount
+      const blogCountMap = new Map<string, number>();
+      blogCounts.forEach((item) => {
+        if (item._id) {
+          blogCountMap.set(item._id.toString(), item.blogCount);
+        }
+      });
+
+      // Add overall blog count to each category
+      const categoriesWithBlogCount = categories.map((category: any) => ({
+        ...category,
+        blogCount: blogCountMap.get(category._id.toString()) || 0,
+      }));
+
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(categories, pagination, "Categories retrieved");
+      res.apiPaginated(categoriesWithBlogCount, pagination, "Categories retrieved");
     }
   );
 

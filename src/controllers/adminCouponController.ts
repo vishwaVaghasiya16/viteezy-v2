@@ -107,31 +107,35 @@ class AdminCouponController {
   );
 
   /**
-   * Get coupon statistics (for current month only)
+   * Get coupon statistics with percentage changes (vs last month)
    */
   getCouponStats = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      // Get current month date range
       const now = new Date();
+      
+      // Current month date range
       const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Last month date range
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      
       
       // Calculate 7 days from now for expiring soon
       const sevenDaysFromNow = new Date(now);
       sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
-      // Active coupons count (not deleted, isActive = true, and valid if validUntil is set)
+      // Active coupons filter
       const activeCouponsFilter: Record<string, any> = {
         isDeleted: false,
         isActive: true,
-      };
-      
-      // Coupons are active if they don't have validUntil or validUntil is in the future
-      activeCouponsFilter.$or = [
+        $or: [
         { validUntil: { $exists: false } },
         { validUntil: null },
         { validUntil: { $gt: now } },
-      ];
+        ],
+      };
 
       // Coupons expiring soon (within 7 days, active, not deleted)
       const expiringSoonFilter: Record<string, any> = {
@@ -143,20 +147,57 @@ class AdminCouponController {
         },
       };
 
-      // Get stats in parallel
+      // Percentage change calculation function (capped at 100)
+      const percentChange = (current: number, previous: number) => {
+        if (previous === 0 && current > 0) {
+          return { percentage: 100, isPositive: true };
+        }
+        if (previous === 0 && current === 0) {
+          return { percentage: 0, isPositive: false };
+        }
+
+        const diff = ((current - previous) / previous) * 100;
+        const isPositive = diff >= 0;
+        const percentage = Math.abs(Number(diff.toFixed(2)));
+        const cappedPercentage = Math.min(percentage, 100);
+
+        return {
+          percentage: cappedPercentage,
+          isPositive: isPositive,
+        };
+      };
+
+      // Get all stats in parallel
       const [
-        activeCouponsCount,
-        expiringSoonCount,
-        totalRedemptionsResult,
-        totalDiscountAmountResult,
-      ] = await Promise.all([
         // Active coupons
+        activeCouponsCurrent,
+        activeCouponsLastMonth,
+        
+        // Redemptions - Current month
+        totalRedemptionsCurrentMonth,
+        totalRedemptionsLastMonth,
+        
+        // Discounted amount - Current month
+        totalDiscountAmountCurrentMonth,
+        totalDiscountAmountLastMonth,
+        
+        // Expiring soon coupons with details
+        expiringSoonCoupons,
+      ] = await Promise.all([
+        // Active coupons - current
         Coupons.countDocuments(activeCouponsFilter),
+        // Active coupons - last month (at end of last month)
+        Coupons.countDocuments({
+          isDeleted: false,
+          isActive: true,
+          $or: [
+            { validUntil: { $exists: false } },
+            { validUntil: null },
+            { validUntil: { $gt: endOfLastMonth } },
+          ],
+        }),
         
-        // Coupons expiring soon
-        Coupons.countDocuments(expiringSoonFilter),
-        
-        // Total redemptions for current month (from coupon usage history)
+        // Total redemptions - Current month
         CouponUsageHistory.aggregate([
           {
             $match: {
@@ -166,15 +207,22 @@ class AdminCouponController {
               },
             },
           },
+          { $group: { _id: null, total: { $sum: 1 } } },
+        ]),
+        // Total redemptions - Last month
+        CouponUsageHistory.aggregate([
           {
-            $group: {
-              _id: null,
-              total: { $sum: 1 },
+            $match: {
+              createdAt: {
+                $gte: startOfLastMonth,
+                $lte: endOfLastMonth,
             },
           },
+          },
+          { $group: { _id: null, total: { $sum: 1 } } },
         ]),
         
-        // Total discounted amount for current month
+        // Total discounted amount - Current month
         CouponUsageHistory.aggregate([
           {
             $match: {
@@ -192,22 +240,65 @@ class AdminCouponController {
             },
           },
         ]),
+        // Total discounted amount - Last month
+        CouponUsageHistory.aggregate([
+          {
+            $match: {
+              createdAt: {
+                $gte: startOfLastMonth,
+                $lte: endOfLastMonth,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$discountAmount.amount" },
+              currency: { $first: "$discountAmount.currency" },
+            },
+          },
+        ]),
+        
+        // Expiring soon coupons with details
+        Coupons.find(expiringSoonFilter)
+          .select("code name validUntil")
+          .sort({ validUntil: 1 })
+          .lean(),
       ]);
 
-      const totalRedemptions = totalRedemptionsResult[0]?.total || 0;
-      const totalDiscountAmount = totalDiscountAmountResult[0]?.total || 0;
-      const currency = totalDiscountAmountResult[0]?.currency || "EUR";
+      // Extract values
+      const totalRedemptionsCurrent = totalRedemptionsCurrentMonth[0]?.total || 0;
+      const totalRedemptionsLast = totalRedemptionsLastMonth[0]?.total || 0;
+
+      const totalDiscountCurrent = totalDiscountAmountCurrentMonth[0]?.total || 0;
+      const totalDiscountLast = totalDiscountAmountLastMonth[0]?.total || 0;
+      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "EUR";
 
       res.apiSuccess(
         {
           stats: {
-            activeCoupons: activeCouponsCount,
-            totalRedemptions,
-            totalDiscountedAmount: {
-              amount: totalDiscountAmount,
-              currency,
+            activeCoupons: {
+              value: activeCouponsCurrent,
+              change: {
+                vsLastMonth: percentChange(activeCouponsCurrent, activeCouponsLastMonth),
+              },
             },
-            expiringSoon: expiringSoonCount,
+            totalRedemptions: {
+              value: totalRedemptionsCurrent,
+              change: {
+                vsLastMonth: percentChange(totalRedemptionsCurrent, totalRedemptionsLast),
+              },
+            },
+            totalDiscountedAmount: {
+              amount: totalDiscountCurrent,
+              currency,
+              change: {
+                vsLastMonth: percentChange(totalDiscountCurrent, totalDiscountLast),
+              },
+            },
+            expiringSoon: {
+              count: expiringSoonCoupons.length,
+            },
           },
         },
         "Coupon statistics retrieved successfully"
