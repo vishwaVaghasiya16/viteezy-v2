@@ -191,16 +191,16 @@ class NotificationService {
 
     // Build push notification payload
     const pushPayload = {
-      title: options.title,
-      body: options.body,
+          title: options.title,
+          body: options.body,
       data: options.data || {},
-      imageUrl: options.imageUrl,
+          imageUrl: options.imageUrl,
       sound: options.sound,
-      badge: options.badge,
-      clickAction: options.clickAction,
+              badge: options.badge,
+            clickAction: options.clickAction,
       priority: options.priority || "high",
       ttl: options.ttl,
-    };
+      };
 
     // Send via push provider manager
     const result = await pushProviderManager.sendPushNotification(
@@ -208,11 +208,11 @@ class NotificationService {
       pushPayload
     );
 
-    return {
+        return {
       success: result.success,
       error: result.error,
       invalidTokens: result.invalidTokens,
-    };
+      };
   }
 
   /**

@@ -165,6 +165,15 @@ class TranslationService {
       en: englishText,
     };
 
+    // If translation is disabled, return placeholder format for all languages
+    if (!this.enabled) {
+      const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");
+      for (const lang of targetLanguages) {
+        result[lang] = `[${lang.toUpperCase()}] ${englishText}`;
+      }
+      return result;
+    }
+
     // Translate to all other languages
     const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");
 
@@ -206,6 +215,15 @@ class TranslationService {
     const result: I18nTextType = {
       en: englishText,
     };
+
+    // If translation is disabled, return placeholder format for all languages
+    if (!this.enabled) {
+      const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");
+      for (const lang of targetLanguages) {
+        result[lang] = `[${lang.toUpperCase()}] ${englishText}`;
+      }
+      return result;
+    }
 
     // Translate to all other languages
     const targetLanguages: SupportedLanguage[] = SUPPORTED_LANGUAGES.filter((lang) => lang !== "en");

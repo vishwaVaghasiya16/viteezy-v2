@@ -13,7 +13,6 @@ import {
   updateFaqCategorySchema,
   faqCategoryIdParamsSchema,
 } from "@/validation/adminFaqCategoryValidation";
-import { paginationQuerySchema } from "../validation/commonValidation";
 import {
   categoryImageUpload,
   handleCategoryImageUploadError,
@@ -45,13 +44,14 @@ router.post(
 
 /**
  * @route GET /api/v1/admin/faq-categories
- * @desc Get paginated list of FAQ categories
+ * @desc Get all FAQ categories
  * @access Admin
+ * @query {String} [search] - Search by title or slug
+ * @query {String} [status] - Filter by status: "active", "inactive", or "all"
  */
 router.get(
   "/",
   transformResponseMiddleware("faqCategories"), // Detects language from admin token and transforms I18n fields to single language strings
-  validateQuery(paginationQuerySchema),
   adminFaqCategoryController.getCategories
 );
 
