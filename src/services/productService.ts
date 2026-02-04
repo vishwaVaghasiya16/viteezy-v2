@@ -663,6 +663,8 @@ class ProductService {
       healthGoals?: string[];
       ingredients?: string[];
       sortBy?: ProductSortOption;
+      /** When true (admin), do not filter by status — return all active and inactive products */
+      includeInactive?: boolean;
     }
   ): Promise<{ products: any[]; total: number }> {
     const {
@@ -674,6 +676,7 @@ class ProductService {
       healthGoals,
       ingredients,
       sortBy,
+      includeInactive,
     } = filters;
 
     // Base match: not deleted
@@ -681,13 +684,13 @@ class ProductService {
       isDeleted: false,
     };
 
-    // If status filter is provided, use it (admin can filter by status)
-    // Otherwise, show only active products (status = true)
-    if (status !== undefined) {
-      matchStage.status = status;
-    } else {
-      // Show only active products for regular users
-      matchStage.status = true;
+    // If includeInactive (admin), skip status filter; else if status provided use it, else only active
+    if (!includeInactive) {
+      if (status !== undefined) {
+        matchStage.status = status;
+      } else {
+        matchStage.status = true;
+      }
     }
 
     if (variant) {
@@ -857,11 +860,12 @@ class ProductService {
         };
 
         // Add other filters that can be combined with $text in same stage
-        if (status !== undefined) {
-          textSearchMatch.status = status;
-        } else {
-          // Show only active products for regular users
-          textSearchMatch.status = true;
+        if (!includeInactive) {
+          if (status !== undefined) {
+            textSearchMatch.status = status;
+          } else {
+            textSearchMatch.status = true;
+          }
         }
         if (variant) textSearchMatch.variant = variant;
         if (hasStandupPouch !== undefined)
@@ -888,10 +892,12 @@ class ProductService {
           isDeleted: false,
         };
 
-        if (status !== undefined) {
-          regexSearchMatch.status = status;
-        } else {
-          regexSearchMatch.status = true;
+        if (!includeInactive) {
+          if (status !== undefined) {
+            regexSearchMatch.status = status;
+          } else {
+            regexSearchMatch.status = true;
+          }
         }
         if (variant) regexSearchMatch.variant = variant;
         if (hasStandupPouch !== undefined)
