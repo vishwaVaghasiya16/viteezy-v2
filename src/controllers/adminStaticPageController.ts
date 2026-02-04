@@ -34,32 +34,39 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
-// System page definitions (only slugs, titles will be fetched from database)
+// System page definitions (slug + admin route)
 const SYSTEM_PAGES: Array<{
   systemPageType: SystemPageType;
   slug: string;
+  route: string;
 }> = [
   {
     systemPageType: SystemPageType.ABOUT_US,
     slug: "about-us",
+    route: "/admin/about-us",
   },
   {
     systemPageType: SystemPageType.OUR_TEAM,
     slug: "our-team",
+    route: "/admin/our-team",
   },
   {
     systemPageType: SystemPageType.LANDING_PAGE,
     slug: "landing-page",
+    route: "/admin/dashboard",
   },
   {
     systemPageType: SystemPageType.MEMBERSHIP,
     slug: "membership",
+    route: "/admin/membership",
   },
   {
     systemPageType: SystemPageType.BLOG,
     slug: "blog",
+    route: "/admin/blog-managment/blog",
   },
 ];
+
 
 /**
  * Fetch actual data from database for system pages
@@ -163,9 +170,8 @@ const ensureSystemPagesExist = async (): Promise<void> => {
     });
 
     if (!existing) {
-      // Fetch actual data from database
       const pageData = await fetchSystemPageData(systemPage.systemPageType);
-      
+
       await StaticPages.create({
         slug: systemPage.slug,
         title: pageData?.title || { en: systemPage.slug },
@@ -174,6 +180,7 @@ const ensureSystemPagesExist = async (): Promise<void> => {
         seo: {},
         isSystemPage: true,
         systemPageType: systemPage.systemPageType,
+        route: systemPage.route,
       });
     }
   }
@@ -313,30 +320,29 @@ class AdminStaticPageController {
           const actualData = await fetchSystemPageData(
             page.systemPageType as SystemPageType
           );
-          
-          if (actualData) {
-            return {
-              ...page,
-              title: actualData.title || page.title,
-              content: actualData.content || page.content,
-              isSystemPage: true, // Ensure it's explicitly set
-              systemPageType: page.systemPageType,
-            };
-          }
+      
+          const systemConfig = SYSTEM_PAGES.find(
+            (p) => p.systemPageType === page.systemPageType
+          );
+      
           return {
             ...page,
-            isSystemPage: true, // Ensure it's explicitly set
+            title: actualData?.title || page.title,
+            content: actualData?.content || page.content,
+            isSystemPage: true,
             systemPageType: page.systemPageType,
+            route: systemConfig?.route || page.route || null,
           };
         })
-      );
+      );      
 
       // Ensure regular pages have isSystemPage: false explicitly set
       const regularPagesWithFlag = regularPages.map((page) => ({
         ...page,
-        isSystemPage: page.isSystemPage || false, // Explicitly set to false
-        systemPageType: page.systemPageType || undefined, // Only set for system pages
-      }));
+        isSystemPage: page.isSystemPage || false,
+        systemPageType: page.systemPageType || undefined,
+        route: page.route || null,
+      }));      
 
       // Combine: system pages first, then regular pages
       const allPages = [...systemPages, ...regularPagesWithFlag];

@@ -26,6 +26,7 @@ export interface IStaticPage extends Document, AuditType {
   isSystemPage?: boolean; // Indicates if this is a pre-defined system page
   systemPageType?: SystemPageType; // Type of system page (about-us, our-team, etc.)
   isDeleted?: boolean;
+  route?:string | null;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -67,6 +68,10 @@ const StaticPageSchema = new Schema<IStaticPage>(
       required: function (this: IStaticPage) {
         return this.isSystemPage === true;
       },
+    },
+    route: {
+      type: String,
+      default: null
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),
