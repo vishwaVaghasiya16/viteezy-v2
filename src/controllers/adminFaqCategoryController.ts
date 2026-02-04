@@ -127,7 +127,7 @@ class AdminFaqCategoryController {
         .sort(sortOptions)
         .lean();
 
-      res.apiSuccess({ categories }, "FAQ categories retrieved");
+      res.apiSuccess(categories, "FAQ categories retrieved");
     }
   );
 
