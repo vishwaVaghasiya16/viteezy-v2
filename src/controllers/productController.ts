@@ -306,7 +306,7 @@ export class ProductController {
         }
       );
 
-      // Get user ID if authenticated (optional)
+      // Get user ID if authenticated (optional) - for wishlist/cart
       const userId = req.user?._id || req.userId;
 
       // Get target language from user's token/profile, default to English
@@ -407,6 +407,79 @@ export class ProductController {
         success: true,
         message: "Products retrieved successfully",
         data: productsWithMemberPrices,
+        pagination,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get all products for admin (active + inactive), with pagination and same filters.
+   * @route GET /api/v1/admin/products
+   */
+  static async getAllProductsForAdmin(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const {
+        search,
+        status,
+        variant,
+        hasStandupPouch,
+        categories,
+        healthGoals,
+        ingredients,
+        sortBy,
+      } = req.query;
+
+      const searchTerm =
+        typeof search === "string" && search.trim().length
+          ? search.trim()
+          : undefined;
+      const parsedCategories = parseArrayQuery(
+        categories as string | string[] | undefined
+      );
+      const parsedHealthGoals = parseArrayQuery(
+        healthGoals as string | string[] | undefined
+      );
+      const parsedIngredients = parseArrayQuery(
+        ingredients as string | string[] | undefined
+      );
+
+      const sortByValue = isValidSortOption(sortBy) ? sortBy : undefined;
+
+      const result = await productService.getAllProducts(
+        page,
+        limit,
+        skip,
+        sort,
+        {
+          search: searchTerm,
+          status: status as any,
+          variant: variant as any,
+          hasStandupPouch:
+            hasStandupPouch !== undefined
+              ? hasStandupPouch === "true"
+              : undefined,
+          categories: parsedCategories,
+          healthGoals: parsedHealthGoals,
+          ingredients: parsedIngredients,
+          sortBy: sortByValue,
+          includeInactive: true,
+        }
+      );
+
+      const productsToProcess = await translateProductsForUser(result.products, req);
+      const pagination = getPaginationMeta(page, limit, result.total);
+
+      res.status(200).json({
+        success: true,
+        message: "Products retrieved successfully",
+        data: productsToProcess,
         pagination,
       });
     } catch (error) {
