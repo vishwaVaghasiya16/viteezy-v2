@@ -127,6 +127,14 @@ const peopleSectionSchema = Joi.object({
   images: Joi.array().items(mediaSchema).optional().label("People images"),
 });
 
+// Founder Story Section Schema
+const founderStorySectionSchema = Joi.object({
+  headline: i18nStringSchema.label("Founder story headline"),
+  description: i18nTextSchema.label("Founder story description"),
+  image: mediaSchema.label("Founder story image"),
+  name: Joi.string().trim().allow("", null).optional(),
+  position: Joi.string().trim().allow("", null).optional(),
+});
 // Upsert About Us Schema
 export const upsertAboutUsSchema = Joi.object(
   withFieldLabels({
@@ -145,6 +153,9 @@ export const upsertAboutUsSchema = Joi.object(
     people: withJsonSupport(peopleSectionSchema, {
       allowEmpty: true,
     }).optional(),
+    founderStory: withJsonSupport(founderStorySectionSchema, {
+      allowEmpty: true,
+    }).optional(),
   })
 )
   .min(1)
@@ -154,7 +165,7 @@ export const upsertAboutUsSchema = Joi.object(
 export const updateSectionParamsSchema = Joi.object(
   withFieldLabels({
     section: Joi.string()
-      .valid("banner", "founderNote", "meetBrains", "timeline", "people")
+      .valid("banner", "founderNote", "meetBrains", "timeline", "people", "founderStory")
       .required()
       .label("Section name"),
   })
@@ -167,7 +178,8 @@ export const updateSectionDataSchema = Joi.alternatives()
     founderNoteSectionSchema,
     meetBrainsSectionSchema,
     timelineSectionSchema,
-    peopleSectionSchema
+    peopleSectionSchema,
+    founderStorySectionSchema
   )
   .optional();
 
@@ -185,3 +197,6 @@ export const timelineSectionDataSchema = withJsonSupport(
 ).optional();
 export const peopleSectionDataSchema =
   withJsonSupport(peopleSectionSchema).optional();
+export const founderStorySectionDataSchema = withJsonSupport(
+  founderStorySectionSchema
+).optional();

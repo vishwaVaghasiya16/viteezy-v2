@@ -169,6 +169,40 @@ const PeopleSectionSchema = new Schema<PeopleSection>(
   { _id: false }
 );
 
+// Founder Story Section
+export interface FounderStorySection {
+  headline: I18nStringType;
+  description: I18nTextType;
+  image: MediaType;
+  name: string;
+  position: string;
+}
+
+const FounderStorySectionSchema = new Schema<FounderStorySection>(
+  {
+    headline: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    description: {
+      type: I18nText,
+      default: () => ({}),
+    },
+    image: {
+      type: MediaSchema,
+    },
+    name: {
+      type: String,
+      trim: true,
+    },
+    position: {
+      type: String,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
 // About Us Document Interface
 export interface IAboutUs extends Document, AuditType {
   banner: BannerSection;
@@ -176,6 +210,7 @@ export interface IAboutUs extends Document, AuditType {
   meetBrains: MeetBrainsSection;
   timeline: TimelineSection;
   people: PeopleSection;
+  founderStory: FounderStorySection;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -202,6 +237,10 @@ const AboutUsSchema = new Schema<IAboutUs>(
     },
     people: {
       type: PeopleSectionSchema,
+      default: () => ({}),
+    },
+    founderStory: {
+      type: FounderStorySectionSchema,
       default: () => ({}),
     },
     ...SoftDelete,

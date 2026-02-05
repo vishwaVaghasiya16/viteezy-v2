@@ -22,6 +22,10 @@ const MODEL_I18N_FIELDS: Record<
       "meetBrains.meet_brains_title",
       "timeline.timeline_section_title",
       "people.title",
+      "founderStory.description",
+      "founderStory.headline",
+      "founderStory.position",
+      "founderStory.name",
     ],
     i18nText: [
       "banner.banner_description",
@@ -29,6 +33,10 @@ const MODEL_I18N_FIELDS: Record<
       "meetBrains.meet_brains_subtitle",
       "timeline.timeline_section_description",
       "people.subtitle",
+      "founderStory.description",
+      "founderStory.headline",
+      "founderStory.position",
+      "founderStory.name",
     ],
   },
   blogs: {

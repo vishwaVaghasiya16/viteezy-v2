@@ -62,6 +62,13 @@ class AboutUsController {
             headline: "",
             description: "",
           },
+          founderStory: {
+            headline: "",
+            description: "",
+            image: null,
+            name: "",
+            position: "",
+          },
           meetBrains: {
             meet_brains_title: "",
             meet_brains_subtitle: "",
@@ -100,6 +107,13 @@ class AboutUsController {
         founderNote: {
           headline: getI18nValue(aboutUs.founderNote?.headline, lang),
           description: getI18nValue(aboutUs.founderNote?.description, lang),
+        },
+        founderStory: {
+          headline: getI18nValue(aboutUs.founderStory?.headline, lang),
+          description: getI18nValue(aboutUs.founderStory?.description, lang),
+          image: aboutUs.founderStory?.image || null,
+          name: aboutUs.founderStory?.name || "",
+          position: aboutUs.founderStory?.position || "",
         },
         meetBrains: {
           meet_brains_title: getI18nValue(

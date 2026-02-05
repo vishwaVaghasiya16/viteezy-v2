@@ -30,6 +30,25 @@ export const handleAboutUsImageUpload = async (
       }
     }
 
+    // Handle founderStory_image (single file for founder story section)
+    if (files?.founderStory_image && files.founderStory_image.length > 0) {
+      const founderStoryImageUrl = await fileStorageService.uploadFile(
+        "about-us",
+        files.founderStory_image[0]
+      );
+      if (!req.body.founderStory) {
+        req.body.founderStory = {};
+      }
+      if (!req.body.founderStory.image) {
+        req.body.founderStory.image = {};
+      }
+      req.body.founderStory.image.url = founderStoryImageUrl;
+      // Default to image type if not provided
+      if (!req.body.founderStory.image.type) {
+        req.body.founderStory.image.type = "Image";
+      }
+    }
+    
     // Handle meet_brains_main_image (single file for meet brains section)
     if (
       files?.meet_brains_main_image &&
@@ -51,7 +70,6 @@ export const handleAboutUsImageUpload = async (
         req.body.meetBrains.meet_brains_main_image.type = "Image";
       }
     }
-
 
     // Handle people_images (multiple files for people section)
     if (files?.people_images && files.people_images.length > 0) {

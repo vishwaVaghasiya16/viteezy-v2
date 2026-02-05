@@ -12,6 +12,7 @@ import {
   meetBrainsSectionDataSchema,
   timelineSectionDataSchema,
   peopleSectionDataSchema,
+  founderStorySectionDataSchema,
 } from "@/validation/adminAboutUsValidation";
 import { upload } from "@/middleware/upload";
 import { parseAboutUsFormData } from "@/middleware/parseAboutUsFormData";
@@ -58,13 +59,14 @@ router.post(
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
       { name: "people_images", maxCount: 20 },
+      { name: "founderStory_image", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images, founderStory_image`,
                 400
               )
             );
@@ -104,13 +106,14 @@ router.put(
       { name: "banner_image", maxCount: 1 },
       { name: "meet_brains_main_image", maxCount: 1 },
       { name: "people_images", maxCount: 20 },
+      { name: "founderStory_image", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images`,
+                `Unexpected file field: ${err.field}. Allowed fields are: banner_image, meet_brains_main_image, people_images, founderStory_image`,
                 400
               )
             );
@@ -149,8 +152,11 @@ router.patch(
       fields.push({ name: "banner_image", maxCount: 1 });
     } else if (section === "meetBrains") {
       fields.push({ name: "meet_brains_main_image", maxCount: 1 });
+    } else if (section === "founderStory") {
+      fields.push({ name: "founderStory_image", maxCount: 1 });
+    } else if (section === "people") {
+      fields.push({ name: "people_images", maxCount: 20 });
     }
-
     if (fields.length > 0) {
       upload.fields(fields)(req, res, (err: any) => {
         if (err) {
@@ -189,6 +195,9 @@ router.patch(
         break;
       case "people":
         schema = peopleSectionDataSchema;
+        break;
+      case "founderStory":
+        schema = founderStorySectionDataSchema;
         break;
       default:
         return next();

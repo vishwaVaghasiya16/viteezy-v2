@@ -40,6 +40,13 @@ class AdminAboutUsController {
             headline: {},
             description: {},
           },
+          founderStory: {
+            headline: {},
+            description: {},
+            image: null,
+            name: "",
+            position: "",
+          },
           meetBrains: {
             meet_brains_title: {},
             meet_brains_subtitle: {},
@@ -76,7 +83,7 @@ class AdminAboutUsController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const { banner, founderNote, meetBrains, timeline, people } = req.body;
+      const { banner, founderNote, meetBrains, timeline, people, founderStory } = req.body;
 
       // Find existing About Us page
       let aboutUs = await AboutUs.findOne({
@@ -90,6 +97,9 @@ class AdminAboutUsController {
         }
         if (founderNote) {
           aboutUs.founderNote = { ...aboutUs.founderNote, ...founderNote };
+        }
+        if (founderStory) {
+          aboutUs.founderStory = { ...aboutUs.founderStory, ...founderStory };
         }
         if (meetBrains) {
           aboutUs.meetBrains = { ...aboutUs.meetBrains, ...meetBrains };
@@ -112,6 +122,7 @@ class AdminAboutUsController {
         aboutUs = await AboutUs.create({
           banner: banner || {},
           founderNote: founderNote || {},
+          founderStory: founderStory || {},
           meetBrains: meetBrains || {},
           timeline: timeline || {},
           people: people || {},
@@ -137,6 +148,7 @@ class AdminAboutUsController {
       const validSections = [
         "banner",
         "founderNote",
+        "founderStory",
         "meetBrains",
         "timeline",
         "people",
@@ -170,6 +182,8 @@ class AdminAboutUsController {
         aboutUs.banner = { ...aboutUs.banner, ...sectionData };
       } else if (section === "founderNote") {
         aboutUs.founderNote = { ...aboutUs.founderNote, ...sectionData };
+      } else if (section === "founderStory") {
+        aboutUs.founderStory = { ...aboutUs.founderStory, ...sectionData };
       } else if (section === "meetBrains") {
         aboutUs.meetBrains = { ...aboutUs.meetBrains, ...sectionData };
       } else if (section === "timeline") {

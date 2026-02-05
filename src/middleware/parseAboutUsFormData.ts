@@ -34,6 +34,7 @@ const buildNestedStructure = (body: any): any => {
   // IMPORTANT: Order matters - longer/more specific names should come first
   const sectionMap: { [key: string]: string } = {
     foundernote: "founderNote", // Must come before any other matching
+    founderstory: "founderStory",
     meetbrains: "meetBrains",
     banner: "banner",
     timeline: "timeline",
@@ -80,7 +81,8 @@ const buildNestedStructure = (body: any): any => {
     if (
       key === "banner_image" ||
       key === "meet_brains_main_image" ||
-      key === "people_images"
+      key === "people_images" ||
+      key === "founderstory_image"
     ) {
       continue;
     }
