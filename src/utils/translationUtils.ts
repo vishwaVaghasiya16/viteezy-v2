@@ -382,6 +382,16 @@ export const transformI18nObject = (
         );
       }
     }
+    // Handle nested arrays (like timeline_events, membershipBenefits, etc.)
+    else if (Array.isArray(value)) {
+      // Recursively transform each item in the array
+      result[key] = transformI18nObject(
+        value,
+        lang,
+        i18nStringFields,
+        i18nTextFields
+      );
+    }
     // Keep other values as is
     else {
       result[key] = value;

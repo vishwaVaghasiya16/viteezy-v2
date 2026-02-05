@@ -30,23 +30,32 @@ const MODEL_I18N_FIELDS: Record<
 > = {
   aboutUs: {
     i18nString: [
+      // Banner section
       "banner_title",
       "banner_button_text",
-      "founder_name",
-      "founder_position",
+      // FounderNote section
+      "headline",
+      // MeetBrains section
       "meet_brains_title",
+      // Timeline section
       "timeline_section_title",
+      // People section
       "title",
-      "subtitle",
+      // FounderStory section (headline is already included above)
+      // TheStory section
+      "heading",
     ],
     i18nText: [
+      // Banner section
       "banner_description",
-      "founder_heading",
-      "founder_description",
-      "note",
-      "meet_brains_subtitle",
+      // FounderNote section
       "description",
+      // MeetBrains section
+      "meet_brains_subtitle",
+      // Timeline section
       "timeline_section_description",
+      // People section
+      "subtitle",
     ],
   },
   blogs: {
@@ -985,6 +994,23 @@ export const transformResponseMiddleware = (modelName: string) => {
                     .sort((a, b) => parseInt(a) - parseInt(b))
                     .map((key) => transformedLandingPages[key]);
             }
+
+            // Transform data.aboutUs if it exists (About Us page content)
+            if (
+              transformed.data.aboutUs &&
+              typeof transformed.data.aboutUs === "object"
+            ) {
+              const aboutUsFields = MODEL_I18N_FIELDS["aboutUs"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              transformed.data.aboutUs = transformI18nObject(
+                transformed.data.aboutUs,
+                lang,
+                aboutUsFields.i18nString,
+                aboutUsFields.i18nText
+              );
+            }
           } else {
             // Transform the entire data object
             transformed = transformI18nObject(data, lang, i18nString, i18nText);
@@ -1502,6 +1528,23 @@ export const transformResponseMiddleware = (modelName: string) => {
               : Object.keys(transformedLandingPages)
                   .sort((a, b) => parseInt(a) - parseInt(b))
                   .map((key) => transformedLandingPages[key]);
+          }
+
+          // Transform data.aboutUs if it exists (About Us page content)
+          if (
+            transformed.data.aboutUs &&
+            typeof transformed.data.aboutUs === "object"
+          ) {
+            const aboutUsFields = MODEL_I18N_FIELDS["aboutUs"] || {
+              i18nString: [],
+              i18nText: [],
+            };
+            transformed.data.aboutUs = transformI18nObject(
+              transformed.data.aboutUs,
+              lang,
+              aboutUsFields.i18nString,
+              aboutUsFields.i18nText
+            );
           }
 
           // Transform data.recentUsages if it exists (array of coupon usage history with nested coupon data)
@@ -2146,6 +2189,20 @@ export const transformResponseMiddleware = (modelName: string) => {
                       .map((key) => transformedLandingPages[key]);
               }
 
+              // Transform data.aboutUs if it exists (About Us page content)
+              if (dataObj.aboutUs && typeof dataObj.aboutUs === "object") {
+                const aboutUsFields = MODEL_I18N_FIELDS["aboutUs"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                dataObj.aboutUs = transformI18nObject(
+                  dataObj.aboutUs,
+                  lang,
+                  aboutUsFields.i18nString,
+                  aboutUsFields.i18nText
+                );
+              }
+
               // Transform data.recentUsages if it exists (array of coupon usage history with nested coupon data)
               if (dataObj.recentUsages && Array.isArray(dataObj.recentUsages)) {
                 const couponFields = MODEL_I18N_FIELDS["coupons"] || {
@@ -2204,6 +2261,20 @@ export const transformResponseMiddleware = (modelName: string) => {
                 lang,
                 generalSettingsFields.i18nString, // ["tagline"]
                 generalSettingsFields.i18nText // []
+              );
+            }
+
+            // Transform aboutUs if it exists directly in data
+            if (dataObj.aboutUs && typeof dataObj.aboutUs === "object") {
+              const aboutUsFields = MODEL_I18N_FIELDS["aboutUs"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              dataObj.aboutUs = transformI18nObject(
+                dataObj.aboutUs,
+                lang,
+                aboutUsFields.i18nString,
+                aboutUsFields.i18nText
               );
             }
 
