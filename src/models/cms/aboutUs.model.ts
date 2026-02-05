@@ -203,6 +203,24 @@ const FounderStorySectionSchema = new Schema<FounderStorySection>(
   { _id: false }
 );
 
+export interface TheStorySection {
+  heading: I18nStringType,
+  description: I18nStringType
+}
+
+const TheStorySectionSchema = new Schema<TheStorySection>(
+  {
+    heading: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    description: {
+      type: I18nString,
+      default: () => ({}),
+    }
+  }
+)
+
 // About Us Document Interface
 export interface IAboutUs extends Document, AuditType {
   banner: BannerSection;
@@ -211,6 +229,7 @@ export interface IAboutUs extends Document, AuditType {
   timeline: TimelineSection;
   people: PeopleSection;
   founderStory: FounderStorySection;
+  theStory: TheStorySection;
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -242,6 +261,10 @@ const AboutUsSchema = new Schema<IAboutUs>(
     founderStory: {
       type: FounderStorySectionSchema,
       default: () => ({}),
+    },
+    theStory: {
+      type: TheStorySectionSchema,
+      default: () => ({})
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),

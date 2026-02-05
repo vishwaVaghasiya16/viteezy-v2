@@ -84,6 +84,10 @@ class AboutUsController {
             subtitle: "",
             images: [],
           },
+          theStory: {
+            heading: "",
+            description: ""
+          }
         };
         res.apiSuccess(
           { aboutUs: emptyAboutUs },
@@ -150,6 +154,10 @@ class AboutUsController {
           subtitle: getI18nValue(aboutUs.people?.subtitle, lang),
           images: aboutUs.people?.images || [],
         },
+        theStory: {
+          heading: getI18nValue(aboutUs.theStory?.heading, lang),
+          description: getI18nValue(aboutUs.theStory.description, lang)
+        }
       };
 
       res.apiSuccess(

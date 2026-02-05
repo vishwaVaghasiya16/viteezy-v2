@@ -87,6 +87,11 @@ const bannerSectionSchema = Joi.object({
     .label("Banner button link"),
 });
 
+const theStorySectionSchema = Joi.object({
+  heading: i18nStringSchema.label("The Story Heading"),
+  description: i18nStringSchema.label("The Story Description"),
+})
+
 // Founder Note Section Schema
 const founderNoteSectionSchema = Joi.object({
   headline: i18nStringSchema.label("Founder note headline"),
@@ -156,6 +161,9 @@ export const upsertAboutUsSchema = Joi.object(
     founderStory: withJsonSupport(founderStorySectionSchema, {
       allowEmpty: true,
     }).optional(),
+    theStory: withJsonSupport(theStorySectionSchema, {
+      allowEmpty: true
+    })
   })
 )
   .min(1)
@@ -165,7 +173,7 @@ export const upsertAboutUsSchema = Joi.object(
 export const updateSectionParamsSchema = Joi.object(
   withFieldLabels({
     section: Joi.string()
-      .valid("banner", "founderNote", "meetBrains", "timeline", "people", "founderStory")
+      .valid("banner", "founderNote", "meetBrains", "timeline", "people", "founderStory", "theStory")
       .required()
       .label("Section name"),
   })
@@ -179,24 +187,16 @@ export const updateSectionDataSchema = Joi.alternatives()
     meetBrainsSectionSchema,
     timelineSectionSchema,
     peopleSectionSchema,
-    founderStorySectionSchema
+    founderStorySectionSchema,
+    theStorySectionSchema
   )
   .optional();
 
 // Section Data Schemas (for updateSection endpoint)
-export const bannerSectionDataSchema =
-  withJsonSupport(bannerSectionSchema).optional();
-export const founderNoteSectionDataSchema = withJsonSupport(
-  founderNoteSectionSchema
-).optional();
-export const meetBrainsSectionDataSchema = withJsonSupport(
-  meetBrainsSectionSchema
-).optional();
-export const timelineSectionDataSchema = withJsonSupport(
-  timelineSectionSchema
-).optional();
-export const peopleSectionDataSchema =
-  withJsonSupport(peopleSectionSchema).optional();
-export const founderStorySectionDataSchema = withJsonSupport(
-  founderStorySectionSchema
-).optional();
+export const bannerSectionDataSchema = withJsonSupport(bannerSectionSchema).optional();
+export const founderNoteSectionDataSchema = withJsonSupport(founderNoteSectionSchema).optional();
+export const meetBrainsSectionDataSchema = withJsonSupport(meetBrainsSectionSchema).optional();
+export const timelineSectionDataSchema = withJsonSupport(timelineSectionSchema).optional();
+export const peopleSectionDataSchema = withJsonSupport(peopleSectionSchema).optional();
+export const founderStorySectionDataSchema = withJsonSupport(founderStorySectionSchema).optional();
+export const theStorySectionDataSchema = withJsonSupport(theStorySectionSchema).optional();

@@ -24,8 +24,8 @@ const MODEL_I18N_FIELDS: Record<
       "people.title",
       "founderStory.description",
       "founderStory.headline",
-      "founderStory.position",
-      "founderStory.name",
+      "theStory.heading",
+      "theStory.description"
     ],
     i18nText: [
       "banner.banner_description",
@@ -35,8 +35,8 @@ const MODEL_I18N_FIELDS: Record<
       "people.subtitle",
       "founderStory.description",
       "founderStory.headline",
-      "founderStory.position",
-      "founderStory.name",
+      "theStory.heading",
+      "theStory.description"
     ],
   },
   blogs: {

@@ -61,6 +61,10 @@ class AdminAboutUsController {
             title: {},
             subtitle: {},
           },
+          theStory: {
+            heading: {},
+            description: {}
+          }
         };
         res.apiSuccess(
           { aboutUs: emptyAboutUs },
@@ -83,7 +87,7 @@ class AdminAboutUsController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const { banner, founderNote, meetBrains, timeline, people, founderStory } = req.body;
+      const { banner, founderNote, meetBrains, timeline, people, founderStory, theStory } = req.body;
 
       // Find existing About Us page
       let aboutUs = await AboutUs.findOne({
@@ -110,6 +114,9 @@ class AdminAboutUsController {
         if (people) {
           aboutUs.people = { ...aboutUs.people, ...people };
         }
+        if (theStory) {
+          aboutUs.theStory = { ...aboutUs.theStory, ...theStory };
+        }
 
         if (requesterId) {
           aboutUs.updatedBy = requesterId;
@@ -126,6 +133,7 @@ class AdminAboutUsController {
           meetBrains: meetBrains || {},
           timeline: timeline || {},
           people: people || {},
+          theStory: theStory || {},
           createdBy: requesterId,
         });
 
@@ -152,6 +160,7 @@ class AdminAboutUsController {
         "meetBrains",
         "timeline",
         "people",
+        "theStory",
       ];
 
       if (!validSections.includes(section)) {
@@ -190,6 +199,8 @@ class AdminAboutUsController {
         aboutUs.timeline = { ...aboutUs.timeline, ...sectionData };
       } else if (section === "people") {
         aboutUs.people = { ...aboutUs.people, ...sectionData };
+      } else if (section === "theStory") {
+        aboutUs.theStory = { ...aboutUs.theStory, ...sectionData };
       }
 
       if (requesterId) {

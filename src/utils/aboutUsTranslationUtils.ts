@@ -73,6 +73,7 @@ export async function prepareAboutUsDataForTranslation(
 
   try {
     // Define I18nString fields (nested paths)
+    // Note: founderStory.name and founderStory.position are plain strings, NOT i18n fields
     const i18nStringFields = [
       "banner.banner_title",
       "banner.banner_button_text",
@@ -80,23 +81,24 @@ export async function prepareAboutUsDataForTranslation(
       "meetBrains.meet_brains_title",
       "timeline.timeline_section_title",
       "people.title",
-      "founderStory.name",
-      "founderStory.position",
       "founderStory.description",
       "founderStory.headline",
+      "theStory.heading",
+      "theStory.description"
     ];
 
     // Define I18nText fields (nested paths)
+    // Note: founderStory.name and founderStory.position are plain strings, NOT i18n fields
     const i18nTextFields = [
       "banner.banner_description",
       "founderNote.description",
       "meetBrains.meet_brains_subtitle",
       "timeline.timeline_section_description",
       "people.subtitle",
-      "founderStory.name",
-      "founderStory.position",
       "founderStory.description",
       "founderStory.headline",
+      "theStory.heading",
+      "theStory.description"
     ];
 
     // Process I18nString fields

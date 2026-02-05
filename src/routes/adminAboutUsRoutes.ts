@@ -13,6 +13,7 @@ import {
   timelineSectionDataSchema,
   peopleSectionDataSchema,
   founderStorySectionDataSchema,
+  theStorySectionDataSchema,
 } from "@/validation/adminAboutUsValidation";
 import { upload } from "@/middleware/upload";
 import { parseAboutUsFormData } from "@/middleware/parseAboutUsFormData";
@@ -198,6 +199,9 @@ router.patch(
         break;
       case "founderStory":
         schema = founderStorySectionDataSchema;
+        break;
+      case "theStory":
+        schema = theStorySectionDataSchema;
         break;
       default:
         return next();

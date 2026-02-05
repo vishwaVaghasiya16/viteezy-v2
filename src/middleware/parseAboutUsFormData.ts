@@ -36,6 +36,7 @@ const buildNestedStructure = (body: any): any => {
     foundernote: "founderNote", // Must come before any other matching
     founderstory: "founderStory",
     meetbrains: "meetBrains",
+    thestory: "theStory",
     banner: "banner",
     timeline: "timeline",
     people: "people",
