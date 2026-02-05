@@ -664,7 +664,7 @@ export class ProductController {
       );
 
       // Remove variants before spreading to avoid conflicts
-      const { variants: _______, ...transformedWithoutVariants6 } = transformedProduct;
+      const { variants: _______, faqs: _faqsIgnore, ...transformedWithoutVariants6 } = transformedProduct;
 
       // Variants are now string arrays, not objects - skip member price processing
       // Add variants array explicitly based on hasStandupPouch
@@ -672,12 +672,28 @@ export class ProductController {
         ? ["sachets", "stand_up_pouch"]
         : ["sachets"];
 
-      // Keep transformed product structure intact
+      // FAQs: Use result.product.faqs (already flattened in productService) - guaranteed plain strings
+      // Fallback: flatten from transformedProduct if structure differs
+      const flattenFaqField = (val: any): string => {
+        if (val == null) return "";
+        if (typeof val === "string") return val;
+        if (typeof val === "object") return val.en ?? val[getUserLanguage(req)] ?? "";
+        return "";
+      };
+      const sourceFaqs = result.product?.faqs ?? transformedProduct.faqs ?? [];
+      const flattenedFaqs = sourceFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: flattenFaqField(faq.question),
+        answer: flattenFaqField(faq.answer),
+        sortOrder: faq.sortOrder ?? 0,
+      }));
+
+      // Build response - faqs excluded from spread, added explicitly as flattened
       const enrichedProduct: any = {
         ...transformedWithoutVariants6,
-        // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
         variants: variantsArray3,
+        faqs: flattenedFaqs,
       };
 
       // Add member pricing fields at product level
@@ -772,6 +788,13 @@ export class ProductController {
         // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
         variants: variantsArray4,
+        // Ensure FAQs have plain question/answer strings (not { en: "x" })
+        faqs: (transformedProduct.faqs || []).map((faq: any) => ({
+          _id: faq._id,
+          question: getTranslatedString(faq.question, getUserLanguage(req)),
+          answer: getTranslatedText(faq.answer, getUserLanguage(req)),
+          sortOrder: faq.sortOrder ?? 0,
+        })),
       };
 
       // Add member pricing fields at product level

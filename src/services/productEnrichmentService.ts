@@ -261,6 +261,14 @@ export const transformProductForLanguage = (
           productCount: category.productCount || 0,
         };
       }) || [],
+    // Transform FAQs: flatten question/answer from { en: "12" } to plain "12"
+    faqs:
+      product.faqs?.map((faq: any) => ({
+        _id: faq._id,
+        question: getTranslatedString(faq.question, lang),
+        answer: getTranslatedText(faq.answer, lang),
+        sortOrder: faq.sortOrder ?? 0,
+      })) ?? [],
   };
 };
 

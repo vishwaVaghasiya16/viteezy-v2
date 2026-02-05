@@ -1378,7 +1378,7 @@ class ProductService {
 
     // Fetch product FAQs
     // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
-    const productFAQs = await ProductFAQs.find({
+    const rawFAQs = await ProductFAQs.find({
       productId: new mongoose.Types.ObjectId(productId),
       isDeleted: { $ne: true },
       isActive: true,
@@ -1387,6 +1387,14 @@ class ProductService {
       .select("_id question answer sortOrder")
       .sort({ sortOrder: 1 })
       .lean();
+
+    // Flatten question/answer from { en: "x" } to plain "x" for API response
+    const productFAQs = (rawFAQs || []).map((faq: any) => ({
+      _id: faq._id,
+      question: typeof faq.question === "string" ? faq.question : (faq.question?.en ?? ""),
+      answer: typeof faq.answer === "string" ? faq.answer : (faq.answer?.en ?? ""),
+      sortOrder: faq.sortOrder ?? 0,
+    }));
 
     // Use productIngredientDetails as ingredients if ingredients array is empty
     // This handles the case where ingredients are linked via reverse relationship
@@ -1458,16 +1466,23 @@ class ProductService {
       .lean();
 
     // Fetch product FAQs
-    // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
-    const productFAQs = await ProductFAQs.find({
+    const rawFAQsBySlug = await ProductFAQs.find({
       productId: product._id,
       isDeleted: { $ne: true },
       isActive: true,
-      status: FAQStatus.ACTIVE, // "Active" with capital A
+      status: FAQStatus.ACTIVE,
     })
       .select("_id question answer sortOrder")
       .sort({ sortOrder: 1 })
       .lean();
+
+    // Flatten question/answer from { en: "x" } to plain "x" for API response
+    const productFAQs = (rawFAQsBySlug || []).map((faq: any) => ({
+      _id: faq._id,
+      question: typeof faq.question === "string" ? faq.question : (faq.question?.en ?? ""),
+      answer: typeof faq.answer === "string" ? faq.answer : (faq.answer?.en ?? ""),
+      sortOrder: faq.sortOrder ?? 0,
+    }));
 
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
