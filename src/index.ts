@@ -82,7 +82,7 @@ app.use(helmet());
  */
 app.use(
   cors({
-    origin: config.cors.origin,
+    origin: config.cors.origins,
     credentials: true, // Allow cookies and authentication headers
   })
 );
