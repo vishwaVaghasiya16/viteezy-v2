@@ -49,9 +49,10 @@ class AdminCouponController {
         userUsageLimit,
         validFrom,
         validUntil,
-        isActive = true,
+        isActive,
         isRecurring = false,
         oneTimeUse = false,
+        recurringMonths,
         applicableProducts,
         applicableCategories,
         excludedProducts,
@@ -75,10 +76,43 @@ class AdminCouponController {
         );
       }
 
-      // Validate date range
-      if (validFrom && validUntil && validUntil <= validFrom) {
+      const now = new Date();
+
+      // Parse dates if provided
+      const parsedValidFrom = validFrom ? new Date(validFrom) : undefined;
+      const parsedValidUntil = validUntil ? new Date(validUntil) : undefined;
+
+      // Ensure validFrom and validUntil are not in the past (must be current or future date)
+      if (parsedValidFrom && parsedValidFrom < now) {
+        throw new AppError(
+          "Valid from date must be today or a future date",
+          400
+        );
+      }
+
+      if (parsedValidUntil && parsedValidUntil < now) {
+        throw new AppError(
+          "Expiry date must be today or a future date",
+          400
+        );
+      }
+
+      // Validate date range (validUntil after validFrom)
+      if (parsedValidFrom && parsedValidUntil && parsedValidUntil <= parsedValidFrom) {
         throw new AppError("Expiry date must be after valid from date", 400);
       }
+
+      // Set defaults
+      const finalValidFrom = parsedValidFrom || now;
+      const finalMinOrderAmount =
+        minOrderAmount !== undefined && minOrderAmount !== null
+          ? minOrderAmount
+          : 0;
+      
+      // Auto-activate if validFrom is in the future and isActive is not explicitly set
+      // If isActive is not provided, default to true (coupon will be auto-active)
+      // The pre-save hook will handle the logic for future dates
+      const finalIsActive = isActive !== undefined && isActive !== null ? isActive : true;
 
       const coupon = await Coupons.create({
         code: code.toUpperCase().trim(),
@@ -86,16 +120,17 @@ class AdminCouponController {
         description,
         type,
         value,
-        minOrderAmount,
+        minOrderAmount: finalMinOrderAmount,
         maxDiscountAmount,
         usageLimit,
         userUsageLimit,
         usageCount: 0,
-        validFrom: validFrom ? new Date(validFrom) : undefined,
-        validUntil: validUntil ? new Date(validUntil) : undefined,
-        isActive,
+        validFrom: finalValidFrom,
+        validUntil: parsedValidUntil,
+        isActive: finalIsActive,
         isRecurring,
         oneTimeUse,
+        recurringMonths: recurringMonths && Array.isArray(recurringMonths) ? recurringMonths : undefined,
         applicableProducts: sanitizeObjectIdArray(applicableProducts) || [],
         applicableCategories: sanitizeObjectIdArray(applicableCategories) || [],
         excludedProducts: sanitizeObjectIdArray(excludedProducts) || [],
@@ -425,6 +460,7 @@ class AdminCouponController {
         isActive,
         isRecurring,
         oneTimeUse,
+        recurringMonths,
         applicableProducts,
         applicableCategories,
         excludedProducts,
@@ -479,15 +515,36 @@ class AdminCouponController {
         coupon.maxDiscountAmount = maxDiscountAmount;
       if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
       if (userUsageLimit !== undefined) coupon.userUsageLimit = userUsageLimit;
+      // Handle and validate dates
+      const nowUpdate = new Date();
+
       if (validFrom !== undefined) {
-        coupon.validFrom = validFrom ? new Date(validFrom) : undefined;
+        const parsedValidFromUpdate = validFrom ? new Date(validFrom) : undefined;
+        if (parsedValidFromUpdate && parsedValidFromUpdate < nowUpdate) {
+          throw new AppError(
+            "Valid from date must be today or a future date",
+            400
+          );
+        }
+        coupon.validFrom = parsedValidFromUpdate;
       }
+
       if (validUntil !== undefined) {
-        coupon.validUntil = validUntil ? new Date(validUntil) : undefined;
+        const parsedValidUntilUpdate = validUntil ? new Date(validUntil) : undefined;
+        if (parsedValidUntilUpdate && parsedValidUntilUpdate < nowUpdate) {
+          throw new AppError(
+            "Expiry date must be today or a future date",
+            400
+          );
+        }
+        coupon.validUntil = parsedValidUntilUpdate;
       }
       if (isActive !== undefined) coupon.isActive = isActive;
       if (isRecurring !== undefined) coupon.isRecurring = isRecurring;
       if (oneTimeUse !== undefined) coupon.oneTimeUse = oneTimeUse;
+      if (recurringMonths !== undefined) {
+        coupon.recurringMonths = Array.isArray(recurringMonths) ? recurringMonths : undefined;
+      }
       if (applicableProducts !== undefined)
         coupon.applicableProducts =
           sanitizeObjectIdArray(applicableProducts) || [];
@@ -496,15 +553,18 @@ class AdminCouponController {
           sanitizeObjectIdArray(applicableCategories) || [];
       if (excludedProducts !== undefined)
         coupon.excludedProducts = sanitizeObjectIdArray(excludedProducts) || [];
+      
+      // Ensure minOrderAmount defaults to 0 if set to null/undefined
+      if (minOrderAmount !== undefined) {
+        coupon.minOrderAmount = minOrderAmount !== null ? minOrderAmount : 0;
+      } else if (coupon.minOrderAmount === null || coupon.minOrderAmount === undefined) {
+        coupon.minOrderAmount = 0;
+      }
 
-      // Validate date range
-      const finalValidFrom = coupon.validFrom || validFrom;
-      const finalValidUntil = coupon.validUntil || validUntil;
-      if (
-        finalValidFrom &&
-        finalValidUntil &&
-        finalValidUntil <= finalValidFrom
-      ) {
+      // Validate date range after updates
+      const finalValidFrom = coupon.validFrom;
+      const finalValidUntil = coupon.validUntil;
+      if (finalValidFrom && finalValidUntil && finalValidUntil <= finalValidFrom) {
         throw new AppError("Expiry date must be after valid from date", 400);
       }
 

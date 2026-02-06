@@ -833,6 +833,24 @@ export const transformResponseMiddleware = (modelName: string) => {
               );
             }
 
+            // Transform data.coupon if it exists (single coupon object from getCouponById)
+            if (
+              transformed.data.coupon &&
+              typeof transformed.data.coupon === "object"
+            ) {
+              const couponFields = MODEL_I18N_FIELDS["coupons"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              // Transform the coupon object - this will convert I18n fields to single language strings
+              transformed.data.coupon = transformI18nObject(
+                transformed.data.coupon,
+                lang,
+                couponFields.i18nString, // ["name", "description"]
+                couponFields.i18nText // []
+              );
+            }
+
             // Transform data.settings if it exists (general settings)
             if (
               transformed.data.settings &&
@@ -1590,6 +1608,24 @@ export const transformResponseMiddleware = (modelName: string) => {
               couponFields.i18nText // []
             );
           }
+
+          // Transform data.coupon if it exists (single coupon object from getCouponById)
+          if (
+            transformed.data.coupon &&
+            typeof transformed.data.coupon === "object"
+          ) {
+            const couponFields = MODEL_I18N_FIELDS["coupons"] || {
+              i18nString: [],
+              i18nText: [],
+            };
+            // Transform the coupon object - this will convert I18n fields to single language strings
+            transformed.data.coupon = transformI18nObject(
+              transformed.data.coupon,
+              lang,
+              couponFields.i18nString, // ["name", "description"]
+              couponFields.i18nText // []
+            );
+          }
         } else {
           // Transform the entire data object
           transformed = transformI18nObject(data, lang, i18nString, i18nText);
@@ -2242,6 +2278,24 @@ export const transformResponseMiddleware = (modelName: string) => {
                 );
               }
 
+              // Transform data.coupon if it exists (single coupon object from getCouponById)
+              if (
+                dataObj.coupon &&
+                typeof dataObj.coupon === "object"
+              ) {
+                const couponFields = MODEL_I18N_FIELDS["coupons"] || {
+                  i18nString: [],
+                  i18nText: [],
+                };
+                // Transform the coupon object - this will convert I18n fields to single language strings
+                dataObj.coupon = transformI18nObject(
+                  dataObj.coupon,
+                  lang,
+                  couponFields.i18nString, // ["name", "description"]
+                  couponFields.i18nText // []
+                );
+              }
+
               transformed = data as T;
             }
           } else if (data && typeof data === "object") {
@@ -2275,6 +2329,20 @@ export const transformResponseMiddleware = (modelName: string) => {
                 lang,
                 aboutUsFields.i18nString,
                 aboutUsFields.i18nText
+              );
+            }
+
+            // Transform coupon if it exists directly in data
+            if (dataObj.coupon && typeof dataObj.coupon === "object") {
+              const couponFields = MODEL_I18N_FIELDS["coupons"] || {
+                i18nString: [],
+                i18nText: [],
+              };
+              dataObj.coupon = transformI18nObject(
+                dataObj.coupon,
+                lang,
+                couponFields.i18nString, // ["name", "description"]
+                couponFields.i18nText // []
               );
             }
 
