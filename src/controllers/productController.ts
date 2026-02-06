@@ -150,16 +150,20 @@ const transformProductForLanguage = (
     // Transform populated categories for language
     categories:
       product.categories?.map((category: any) => {
-        // Normalize image field - extract URL if it's an object
-        let normalizedImage: string | null = null;
+        // Normalize image field - return as object { type, url, sortOrder }
+        let normalizedImage: { type: string; url: string; sortOrder: number } | null = null;
         if (category.image) {
           if (typeof category.image === 'string') {
-            normalizedImage = category.image;
+            normalizedImage = { type: 'image', url: category.image, sortOrder: 0 };
           } else if (typeof category.image === 'object' && category.image.url) {
-            normalizedImage = category.image.url;
+            normalizedImage = {
+              type: category.image.type || 'image',
+              url: category.image.url,
+              sortOrder: category.image.sortOrder ?? 0,
+            };
           }
         }
-        
+
         // Normalize icon field - ensure it's a string or null
         let normalizedIcon: string | null = null;
         if (category.icon) {
@@ -169,7 +173,7 @@ const transformProductForLanguage = (
             normalizedIcon = category.icon.url;
           }
         }
-        
+
         return {
           _id: category._id,
           slug: category.slug,

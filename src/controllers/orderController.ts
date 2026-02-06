@@ -13,7 +13,13 @@ import {
   OrderStatus,
   PaymentStatus,
 } from "@/models/enums";
-import { PriceType } from "@/models/common.model";
+import {
+  PriceType,
+  I18nStringType,
+  I18nTextType,
+  DEFAULT_LANGUAGE,
+  SupportedLanguage,
+} from "@/models/common.model";
 import {
   getSubscriptionPriceFromProduct,
   getBaseSubtotalForSubscription,
@@ -22,8 +28,64 @@ import {
 interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
+    language?: string;
   };
 }
+
+const mapLanguageToCode = (language?: string): SupportedLanguage => {
+  const languageMap: Record<string, SupportedLanguage> = {
+    English: "en",
+    Spanish: "es",
+    French: "fr",
+    Dutch: "nl",
+    German: "de",
+  };
+  return language ? (languageMap[language] || DEFAULT_LANGUAGE) : DEFAULT_LANGUAGE;
+};
+
+const getUserLanguage = async (
+  req: AuthenticatedRequest,
+  userId: string
+): Promise<SupportedLanguage> => {
+  if (req.user?.language) return mapLanguageToCode(req.user.language);
+  try {
+    const user = await User.findById(userId).select("language").lean();
+    if (user?.language) return mapLanguageToCode(user.language);
+  } catch {
+    // ignore
+  }
+  return DEFAULT_LANGUAGE;
+};
+
+const getI18nString = (
+  val: I18nStringType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val[lang] || val.en || "";
+};
+
+const getI18nText = (
+  val: I18nTextType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val[lang] || val.en || "";
+};
+
+const transformOrderProductForLanguage = (
+  product: any,
+  lang: SupportedLanguage
+): any => {
+  if (!product || typeof product !== "object") return product;
+  return {
+    ...product,
+    title: getI18nString(product.title, lang),
+    description: getI18nText(product.description, lang),
+  };
+};
 
 interface MembershipPayload {
   isMember?: boolean;
@@ -1013,6 +1075,8 @@ class OrderController {
         .limit(limit)
         .lean();
 
+      const userLang = await getUserLanguage(req, req.user!._id.toString());
+
       // Transform orders for response
       const transformedOrders = orders.map((order: any) => ({
         id: order._id,
@@ -1023,7 +1087,9 @@ class OrderController {
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: order.items.map((item: any) => ({
-          productId: item.productId,
+          productId: item.productId
+            ? transformOrderProductForLanguage(item.productId, userLang)
+            : item.productId,
           name: item.name,
           amount: item.amount,
           discountedPrice: item.discountedPrice,
@@ -1104,6 +1170,8 @@ class OrderController {
         throw new AppError("Order not found", 404);
       }
 
+      const userLang = await getUserLanguage(req, req.user!._id.toString());
+
       // Get payment details for this order
       let paymentData = null;
       const payment = await Payments.findOne({
@@ -1136,7 +1204,9 @@ class OrderController {
 
       // Transform order items with product details
       const itemsWithProducts = order.items.map((item: any) => ({
-        productId: item.productId,
+        productId: item.productId
+          ? transformOrderProductForLanguage(item.productId, userLang)
+          : item.productId,
         name: item.name,
         amount: item.amount,
         discountedPrice: item.discountedPrice,
