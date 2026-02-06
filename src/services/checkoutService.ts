@@ -982,12 +982,18 @@ class CheckoutService {
     orderAmount,
     productIds,
     categoryIds,
+    planDurationDays,
+    isSubscription,
+    variantType,
   }: {
     couponCode: string;
     userId: string;
     orderAmount: number;
     productIds: string[];
     categoryIds: string[];
+    planDurationDays?: number;
+    isSubscription?: boolean;
+    variantType?: ProductVariant;
   }): Promise<{ discountAmount: number; metadata?: Record<string, any> }> {
     const coupon = await Coupons.findOne({
       code: couponCode.toUpperCase(),
@@ -1064,6 +1070,48 @@ class CheckoutService {
         "This coupon is not applicable to the selected categories",
         400
       );
+    }
+
+    // Additional validation: recurringMonths for subscription sachet plans
+    // If coupon has recurringMonths configured, it should only apply to matching subscription plan durations
+    if (
+      isSubscription &&
+      variantType === ProductVariant.SACHETS &&
+      Array.isArray((coupon as any).recurringMonths) &&
+      (coupon as any).recurringMonths.length > 0
+    ) {
+      if (!planDurationDays) {
+        throw new AppError(
+          "This coupon is only valid for specific subscription plans",
+          400
+        );
+      }
+
+      const recurringMonths: number[] = (coupon as any).recurringMonths;
+
+      // Map recurring month values to allowed duration days
+      // 1 -> 30 days, 2 -> 60 days, 3 -> 90 days, 6 -> 180 days
+      const monthToDuration: Record<number, number> = {
+        1: 30,
+        2: 60,
+        3: 90,
+        6: 180,
+      };
+
+      const allowedDurations = new Set<number>();
+      for (const month of recurringMonths) {
+        const mappedDuration = monthToDuration[month];
+        if (mappedDuration) {
+          allowedDurations.add(mappedDuration);
+        }
+      }
+
+      if (!allowedDurations.has(planDurationDays)) {
+        throw new AppError(
+          "This coupon is not applicable to the selected subscription plan",
+          400
+        );
+      }
     }
 
     if (
@@ -1262,6 +1310,9 @@ class CheckoutService {
           orderAmount: subtotalAfterMembership,
           productIds,
           categoryIds,
+          planDurationDays: options.planDurationDays,
+          isSubscription: options.isSubscription,
+          variantType: options.variantType,
         });
         couponDiscountAmount = couponResult.discountAmount;
       }
@@ -1548,6 +1599,12 @@ class CheckoutService {
           orderAmount: subtotal,
           productIds: productIds.map((id) => id.toString()),
           categoryIds,
+          planDurationDays,
+          isSubscription,
+          variantType:
+            planType === "SACHET"
+              ? ProductVariant.SACHETS
+              : ProductVariant.STAND_UP_POUCH,
         });
         couponDiscountTotal = couponResult.discountAmount;
       } catch (error) {
@@ -2225,6 +2282,12 @@ class CheckoutService {
           orderAmount: orderAmountForCoupon, // Use amount with tax for validation
           productIds: productIdsArray,
           categoryIds: categoryIdsArray,
+          planDurationDays: selectedPlanDays,
+          isSubscription: !isOneTimePurchase,
+          variantType:
+            selectedVariant === "SACHETS"
+              ? ProductVariant.SACHETS
+              : ProductVariant.STAND_UP_POUCH,
         });
 
         couponDiscountAmount = couponResult.discountAmount;

@@ -61,8 +61,12 @@ export const createCouponSchema = Joi.object(
       .min(1)
       .optional()
       .label("Max usage per user"),
-    validFrom: Joi.date().optional().label("Valid from date"),
+    validFrom: Joi.date()
+      .min("now")
+      .optional()
+      .label("Valid from date"),
     validUntil: Joi.date()
+      .min("now")
       .optional()
       .label("Expiry date")
       .when("validFrom", {
@@ -73,6 +77,11 @@ export const createCouponSchema = Joi.object(
     isActive: Joi.boolean().optional().label("Is active"),
     isRecurring: Joi.boolean().optional().label("Is recurring"),
     oneTimeUse: Joi.boolean().optional().label("One time use"),
+    recurringMonths: Joi.array()
+      .items(Joi.number().integer().min(1).max(12))
+      .optional()
+      .allow(null)
+      .label("Recurring months"),
     applicableProducts: Joi.array()
       .items(objectIdSchema)
       .optional()
@@ -151,8 +160,13 @@ export const updateCouponSchema = Joi.object(
       .optional()
       .allow(null)
       .label("Max usage per user"),
-    validFrom: Joi.date().optional().allow(null).label("Valid from date"),
+    validFrom: Joi.date()
+      .min("now")
+      .optional()
+      .allow(null)
+      .label("Valid from date"),
     validUntil: Joi.date()
+      .min("now")
       .optional()
       .allow(null)
       .label("Expiry date")
@@ -164,6 +178,11 @@ export const updateCouponSchema = Joi.object(
     isActive: Joi.boolean().optional().label("Is active"),
     isRecurring: Joi.boolean().optional().label("Is recurring"),
     oneTimeUse: Joi.boolean().optional().label("One time use"),
+    recurringMonths: Joi.array()
+      .items(Joi.number().integer().min(1).max(12))
+      .optional()
+      .allow(null)
+      .label("Recurring months"),
     applicableProducts: Joi.array()
       .items(objectIdSchema)
       .optional()
