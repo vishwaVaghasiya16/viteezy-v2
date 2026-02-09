@@ -18,6 +18,10 @@ import {
   SupportedLanguage,
 } from "../models/common.model";
 import { translateProductForUser, translateProductsForUser } from "../services/productTranslationCommonService";
+import {
+  getTestimonialsForProductDetail,
+  getTestimonialsForProductsListing,
+} from "../services/productTestimonialService";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -339,6 +343,19 @@ export class ProductController {
       const productsToProcess = await translateProductsForUser(result.products, req);
 
       // Calculate member prices for all products
+      const productIds = productsToProcess
+        .map((p: any) =>
+          p._id ? (typeof p._id === "string" ? p._id : p._id.toString()) : ""
+        )
+        .filter(Boolean);
+      const userLang = getUserLanguage(req);
+
+      // Fetch testimonials for all products (listing flow: uses products array)
+      const testimonialsMap = await getTestimonialsForProductsListing(
+        productIds,
+        userLang
+      );
+
       const productsWithMemberPrices = await Promise.all(
         productsToProcess.map(async (product: any) => {
           // Product is already translated if needed
@@ -400,6 +417,11 @@ export class ProductController {
           } else {
             enrichedProduct.isInCart = false;
           }
+
+          // Add testimonials (listing flow: testimonials where product is in products)
+          const pid =
+            transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.testimonials = testimonialsMap.get(pid) || [];
 
           return enrichedProduct;
         })
@@ -478,12 +500,33 @@ export class ProductController {
       );
 
       const productsToProcess = await translateProductsForUser(result.products, req);
+      const productIds = productsToProcess
+        .map((p: any) =>
+          p._id ? (typeof p._id === "string" ? p._id : p._id.toString()) : ""
+        )
+        .filter(Boolean);
+      const userLang = getUserLanguage(req);
+      const testimonialsMap = await getTestimonialsForProductsListing(
+        productIds,
+        userLang
+      );
+
+      const productsWithTestimonials = productsToProcess.map((product: any) => {
+        const productId = product._id
+          ? (typeof product._id === "string" ? product._id : product._id.toString())
+          : "";
+        return {
+          ...product,
+          testimonials: testimonialsMap.get(productId) || [],
+        };
+      });
+
       const pagination = getPaginationMeta(page, limit, result.total);
 
       res.status(200).json({
         success: true,
         message: "Products retrieved successfully",
-        data: productsToProcess,
+        data: productsWithTestimonials,
         pagination,
       });
     } catch (error) {
@@ -733,6 +776,13 @@ export class ProductController {
         enrichedProduct.isInCart = false;
       }
 
+      // Add testimonials (new flow: productsForDetailsPage first, fallback to products)
+      const userLang = getUserLanguage(req);
+      enrichedProduct.testimonials = await getTestimonialsForProductDetail(
+        id,
+        userLang
+      );
+
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
@@ -833,6 +883,13 @@ export class ProductController {
       } else {
         enrichedProduct.isInCart = false;
       }
+
+      // Add testimonials (new flow: productsForDetailsPage first, fallback to products)
+      const userLang = getUserLanguage(req);
+      enrichedProduct.testimonials = await getTestimonialsForProductDetail(
+        transformedProduct._id.toString(),
+        userLang
+      );
 
       res.status(200).json({
         success: true,
