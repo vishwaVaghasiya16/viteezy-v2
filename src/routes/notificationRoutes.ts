@@ -3,10 +3,12 @@ import { authenticate } from "@/middleware/auth";
 import {
   validateQuery,
   validateParams,
+  validateJoi,
 } from "@/middleware/joiValidation";
 import {
   getNotificationsQuerySchema,
   notificationIdParamsSchema,
+  createMockNotificationSchema,
 } from "@/validation/notificationValidation";
 import { notificationController } from "@/controllers/notificationController";
 
@@ -71,6 +73,42 @@ router.delete(
   "/:notificationId",
   validateParams(notificationIdParamsSchema),
   notificationController.deleteNotification
+);
+
+/**
+ * @route   POST /api/notifications/test
+ * @desc    Create a mock notification for testing
+ * @access  Private
+ * @body    {
+ *            userId: string (ObjectId),
+ *            category: string (NotificationCategory),
+ *            type?: string (NotificationType, default: "Normal"),
+ *            title: string (max 200 chars),
+ *            message: string (max 1000 chars),
+ *            data?: object,
+ *            redirectUrl?: string (URI),
+ *            appRoute?: string,
+ *            query?: object,
+ *            skipPush?: boolean (default: false)
+ *          }
+ * 
+ * @example
+ * POST /api/notifications/test
+ * {
+ *   "userId": "507f1f77bcf86cd799439011",
+ *   "category": "Order",
+ *   "title": "Order Confirmed",
+ *   "message": "Your order #12345 has been confirmed",
+ *   "data": { "orderId": "12345" },
+ *   "appRoute": "/orderDetail",
+ *   "query": { "orderId": "12345" },
+ *   "skipPush": true
+ * }
+ */
+router.post(
+  "/test",
+  validateJoi(createMockNotificationSchema),
+  notificationController.createMockNotification
 );
 
 export default router;

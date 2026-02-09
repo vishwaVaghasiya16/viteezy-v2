@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { notificationService } from "@/services/notificationService";
-import { NotificationCategory } from "@/models/enums";
+import { NotificationCategory, NotificationType } from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -175,6 +175,80 @@ class NotificationController {
       res.status(200).json({
         success: true,
         message: "Notification deleted successfully",
+      });
+    }
+  );
+
+  /**
+   * Create mock notification (for testing)
+   * @route POST /api/test/notifications
+   * @access Private (or public for testing)
+   * @body userId, category, title, message, and optional fields
+   */
+  createMockNotification = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const {
+        userId,
+        category,
+        type,
+        title,
+        message,
+        data,
+        redirectUrl,
+        appRoute,
+        query,
+        skipPush = false,
+      } = req.body;
+
+      // Create notification payload
+      const payload = {
+        userId,
+        category,
+        type: (type as NotificationType) || NotificationType.NORMAL,
+        title,
+        message,
+        data: data || {},
+        redirectUrl,
+        appRoute,
+        query: query || {},
+      };
+
+      // If skipPush is true, create notification without sending push
+      // Otherwise, use the real notification service
+      let notification;
+      if (skipPush) {
+        // Mock response - simulate notification creation without DB or push
+        notification = {
+          _id: new mongoose.Types.ObjectId(),
+          userId: new mongoose.Types.ObjectId(userId),
+          category,
+          type: (type as NotificationType) || NotificationType.NORMAL,
+          title,
+          message,
+          data: data || {},
+          redirectUrl,
+          appRoute,
+          query: query || {},
+          isRead: false,
+          pushSent: false,
+          isDeleted: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      } else {
+        // Use real notification service
+        notification = await notificationService.createNotification(payload);
+      }
+
+      res.status(201).json({
+        success: true,
+        message: skipPush
+          ? "Mock notification created successfully (push skipped)"
+          : "Notification created and sent successfully",
+        data: {
+          notification,
+          mock: skipPush,
+        },
       });
     }
   );
