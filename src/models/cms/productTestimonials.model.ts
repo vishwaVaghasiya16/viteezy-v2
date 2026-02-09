@@ -5,6 +5,7 @@ export interface IProductTestimonial extends Document, AuditType {
   videoUrl: string; // Video/reel URL (stored in cloud storage)
   videoThumbnail?: string; // Optional thumbnail image
   products: mongoose.Types.ObjectId[]; // Array of product IDs
+  productsForDetailsPage?: mongoose.Types.ObjectId[]; // Array of product IDs to show on product details page
   isVisibleOnHomepage: boolean; // Show on homepage or not
   isFeatured: boolean; // Featured testimonial flag
   isVisibleInLP: boolean; // Visible on landing page flag
@@ -34,6 +35,13 @@ const ProductTestimonialSchema = new Schema<IProductTestimonial>(
         type: Schema.Types.ObjectId,
         ref: "products",
         required: true,
+      },
+    ],
+    productsForDetailsPage: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "products",
+        required: false,
       },
     ],
     isVisibleOnHomepage: {
@@ -75,6 +83,7 @@ ProductTestimonialSchema.index({ isActive: 1, isVisibleOnHomepage: 1 });
 ProductTestimonialSchema.index({ isActive: 1, isFeatured: 1 });
 ProductTestimonialSchema.index({ isActive: 1, isVisibleInLP: 1 });
 ProductTestimonialSchema.index({ products: 1 });
+ProductTestimonialSchema.index({ productsForDetailsPage: 1 });
 ProductTestimonialSchema.index({ displayOrder: 1 });
 ProductTestimonialSchema.index({ isDeleted: 1 });
 ProductTestimonialSchema.index({ createdAt: -1 });

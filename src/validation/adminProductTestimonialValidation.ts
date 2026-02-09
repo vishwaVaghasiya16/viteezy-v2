@@ -8,6 +8,10 @@ export const createProductTestimonialSchema = Joi.object(
       .min(1)
       .required()
       .label("Products"),
+    productsForDetailsPage: Joi.array()
+      .items(Joi.string().hex().length(24))
+      .optional()
+      .label("Products for Details Page"),
     isVisibleOnHomepage: Joi.boolean()
       .optional()
       .default(false)
@@ -34,6 +38,10 @@ export const updateProductTestimonialSchema = Joi.object(
       .min(1)
       .optional()
       .label("Products"),
+    productsForDetailsPage: Joi.array()
+      .items(Joi.string().hex().length(24))
+      .optional()
+      .label("Products for Details Page"),
     isVisibleOnHomepage: Joi.boolean().optional().label("Visible on Homepage"),
     isFeatured: Joi.boolean().optional().label("Featured"),
     isVisibleInLP: Joi.boolean().optional().label("Visible in Landing Page"),
