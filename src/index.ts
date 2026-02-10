@@ -78,11 +78,12 @@ app.use(helmet());
 
 /**
  * CORS (Cross-Origin Resource Sharing) Configuration
- * Allows requests from configured origins with credentials support
+ * Allow all origins (no specific URL or port restriction)
+ * origin: true reflects the request origin, allowing any domain with credentials
  */
 app.use(
   cors({
-    origin: config.cors.origins,
+    origin: true, // Allow any origin
     credentials: true, // Allow cookies and authentication headers
   })
 );
