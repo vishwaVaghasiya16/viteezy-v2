@@ -39,7 +39,21 @@ interface OneSignalResponse {
   recipients: number;
   errors?: {
     invalid_player_ids?: string[];
+    [key: string]: any; // Allow other error types
   };
+  // Additional fields that OneSignal may return
+  external_id?: string;
+  warnings?: any;
+}
+
+interface OneSignalPlayer {
+  id: string;
+  app_id: string;
+  device_type: number;
+  subscribed: boolean;
+  invalid_identifier?: boolean;
+  last_active?: string;
+  [key: string]: any;
 }
 
 /**
@@ -71,7 +85,11 @@ export class OneSignalProvider implements IPushProvider {
     }
 
     this.initialized = true;
-    logger.info("OneSignal provider initialized successfully for mobile app");
+    logger.info("OneSignal provider initialized successfully for mobile app", {
+      appId: this.appId,
+      apiKeySet: !!this.apiKey,
+      apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + "..." : "not set",
+    });
   }
 
   /**
@@ -103,6 +121,57 @@ export class OneSignalProvider implements IPushProvider {
     // UUID v4 format: 8-4-4-4-12 hexadecimal characters
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(token);
+  }
+
+  /**
+   * Check player subscription status via OneSignal API
+   * This helps diagnose why a player might not receive notifications
+   */
+  async checkPlayerStatus(playerId: string): Promise<OneSignalPlayer | null> {
+    if (!this.initialized) {
+      logger.warn("OneSignal provider not initialized, cannot check player status");
+      return null;
+    }
+
+    try {
+      // OneSignal REST API requires Basic auth with base64 encoded API key
+      const encodedApiKey = Buffer.from(`${this.apiKey}:`).toString("base64");
+      
+      const response = await fetch(`${this.baseUrl}/players/${playerId}?app_id=${this.appId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${encodedApiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.warn(`Failed to check player status for ${playerId}: ${response.status} - ${errorText}`, {
+          playerId,
+          appId: this.appId,
+          error: errorText,
+          hint: response.status === 400 && errorText.includes("No player with this id found") 
+            ? "⚠️ CRITICAL: Player ID exists but NOT in this app! Check if App ID matches the dashboard."
+            : undefined,
+        });
+        return null;
+      }
+
+      const playerData = (await response.json()) as OneSignalPlayer;
+      logger.debug(`Player status for ${playerId}:`, {
+        playerId,
+        subscribed: playerData.subscribed,
+        invalid_identifier: playerData.invalid_identifier,
+        app_id: playerData.app_id,
+        device_type: playerData.device_type,
+        last_active: playerData.last_active,
+      });
+      return playerData;
+    } catch (error: any) {
+      logger.error(`Error checking player status for ${playerId}: ${error.message}`, error);
+      return null;
+    }
   }
 
   /**
@@ -207,11 +276,15 @@ export class OneSignalProvider implements IPushProvider {
       }
 
       // Send notification via OneSignal REST API
-      // OneSignal uses Basic auth with REST API Key (not base64 encoded, just the key)
+      // OneSignal REST API requires Basic auth with base64 encoded API key
+      // Format: Basic base64(apiKey:) - API key is used as password, empty username
       const requestBody = {
         app_id: this.appId,
         ...notification,
       };
+
+      // OneSignal REST API requires Basic auth with base64 encoded API key
+      const encodedApiKey = Buffer.from(`${this.apiKey}:`).toString("base64");
 
       logger.debug("Sending OneSignal notification", {
         appId: this.appId,
@@ -219,13 +292,15 @@ export class OneSignalProvider implements IPushProvider {
         notificationId: notification.include_player_ids?.length || 0,
         hasTitle: !!payload.title,
         hasBody: !!payload.body,
+        playerIds: validTokens,
+        requestBodyPreview: JSON.stringify(requestBody).substring(0, 200),
       });
 
       const response = await fetch(`${this.baseUrl}/notifications`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Basic ${this.apiKey}`,
+          Authorization: `Basic ${encodedApiKey}`,
         },
         body: JSON.stringify(requestBody),
       });
@@ -250,6 +325,17 @@ export class OneSignalProvider implements IPushProvider {
 
       const result = (await response.json()) as OneSignalResponse;
 
+      // Log the full OneSignal response for debugging
+      logger.info("OneSignal API Full Response:", {
+        fullResponse: JSON.stringify(result),
+        notificationId: result.id,
+        recipients: result.recipients,
+        errors: result.errors,
+        warnings: result.warnings,
+        appId: this.appId,
+        playerIdsSent: validTokens,
+      });
+
       // Track invalid tokens (combine pre-filtered invalid tokens with API-reported invalid tokens)
       const allInvalidTokens: string[] = [...invalidTokens];
       if (result.errors?.invalid_player_ids) {
@@ -271,22 +357,69 @@ export class OneSignalProvider implements IPushProvider {
         invalidTokensFiltered: invalidTokens.length,
         apiReportedInvalid: result.errors?.invalid_player_ids?.length || 0,
         totalTokensReceived: deviceTokens.length,
+        playerIdsSent: validTokens,
+        appId: this.appId,
+        hasErrors: !!result.errors,
+        hasWarnings: !!result.warnings,
       });
 
-      if (failureCount > 0) {
+      // IMPORTANT: If API call was successful (200 OK), consider it a success even if recipients is 0
+      // because the notification was successfully sent to OneSignal. The 0 recipients might be due to:
+      // - Player not subscribed (user preference)
+      // - Player disabled notifications
+      // - But the notification WAS sent to OneSignal successfully
+      // If response.ok is true (200-299 status), the API call was successful
+      // result.id may or may not be present, but if response is OK, the notification was sent
+      const apiCallSuccessful = response.ok;
+
+      if (apiCallSuccessful) {
+        if (successCount > 0) {
+          logger.info(
+            `OneSignal push notification sent successfully: ${successCount}/${validTokens.length} valid devices (${invalidTokens.length} invalid tokens filtered out)`
+          );
+        } else {
+          // API call succeeded but 0 recipients - notification was sent to OneSignal
+          // but player may not be subscribed or has disabled notifications
+          logger.info(
+            `OneSignal notification sent to API successfully (notification ID: ${result.id || 'N/A'}), but 0 recipients. ` +
+            `This may indicate player is not subscribed or has disabled notifications. ` +
+            `Player IDs: ${validTokens.join(", ")}. ` +
+            `Note: This is still considered a successful API call - notification was sent to OneSignal.`
+          );
+        }
+      }
+
+      if (failureCount > 0 && successCount > 0) {
         logger.warn(
           `OneSignal push notification partially failed: ${failureCount}/${deviceTokens.length} failures, ${successCount} successes`
         );
       }
 
-      if (successCount > 0) {
+      // If API call was successful (200 OK with notification ID), return success
+      // This means the notification was successfully sent to OneSignal
+      // Even if recipients is 0, it's still a successful API call
+      // Only return failure if there's an actual API error (non-200 response)
+      if (apiCallSuccessful) {
+        // API call successful - notification was sent to OneSignal
+        // Return success even if recipients is 0 (player preference issue, not API failure)
+        // The notification was successfully sent to OneSignal, even if player didn't receive it
         logger.info(
-          `OneSignal push notification sent successfully: ${successCount}/${validTokens.length} valid devices (${invalidTokens.length} invalid tokens filtered out)`
+          `OneSignal API call successful. Notification ID: ${result.id}, Recipients: ${successCount}/${validTokens.length}`
         );
+        return {
+          success: true,
+          invalidTokens: allInvalidTokens.length > 0 ? allInvalidTokens : undefined,
+          successCount: successCount,
+          failureCount: failureCount,
+        };
       }
 
-      // If all failed, return detailed error
-      if (successCount === 0) {
+      // This code should never be reached if apiCallSuccessful is true
+      // But if we reach here, it means apiCallSuccessful was false
+      // This should not happen if notifications are being sent, but handle edge cases
+      
+      // If all failed due to invalid tokens (no valid tokens to send), return detailed error
+      if (validTokens.length === 0) {
         let errorMessage = "All notifications failed to send";
         let shouldMarkAsInvalid = false;
         
@@ -295,19 +428,47 @@ export class OneSignalProvider implements IPushProvider {
           shouldMarkAsInvalid = true;
         } else if (validTokens.length > 0 && successCount === 0) {
           // Valid player IDs but 0 recipients - player not subscribed or inactive
+          // Check player status for the first player ID to get diagnostic info
+          const firstPlayerId = validTokens[0];
+          const playerStatus = await this.checkPlayerStatus(firstPlayerId);
+          
+          let diagnosticInfo = "";
+          if (playerStatus) {
+            diagnosticInfo = `Player Status Check: subscribed=${playerStatus.subscribed}, ` +
+              `invalid_identifier=${playerStatus.invalid_identifier}, ` +
+              `app_id=${playerStatus.app_id}, ` +
+              `device_type=${playerStatus.device_type}. ` +
+              (playerStatus.app_id !== this.appId 
+                ? `⚠️ CRITICAL: Player belongs to different app (${playerStatus.app_id} vs ${this.appId})! ` 
+                : "") +
+              (!playerStatus.subscribed 
+                ? `⚠️ Player is NOT subscribed to push notifications! ` 
+                : "");
+          } else {
+            // Player status check failed - most likely App ID mismatch
+            diagnosticInfo = `⚠️ CRITICAL ISSUE: Could not retrieve player status - Player ID exists in OneSignal but NOT in app "${this.appId}". ` +
+              `This means the player belongs to a DIFFERENT OneSignal app. ` +
+              `SOLUTION: Check OneSignal Dashboard → Settings → Keys & IDs → App ID. ` +
+              `Update your .env file: ONESIGNAL_APP_ID=<correct_app_id_from_dashboard>. ` +
+              `Current configured App ID: ${this.appId}. `;
+          }
+
           errorMessage = `OneSignal API returned 0 recipients for ${validTokens.length} valid player ID(s). ` +
-            `Possible reasons: 1) Player has not subscribed to push notifications, 2) Player has disabled notifications, ` +
-            `3) Player ID is inactive/expired, 4) Player ID belongs to a different OneSignal app, ` +
-            `5) OneSignal app configuration issue. ` +
-            `Note: This is not necessarily an error - player may have opted out. ` +
-            `Consider checking player subscription status in OneSignal dashboard.`;
+            `${diagnosticInfo}` +
+            `Possible reasons: 1) Player ID belongs to a different OneSignal app (verify App ID: ${this.appId}), ` +
+            `2) Player has not subscribed to push notifications, 3) Player has disabled notifications, ` +
+            `4) Player ID is inactive/expired, 5) OneSignal app configuration issue (check iOS/Android platform settings). ` +
+            `ACTION REQUIRED: Check OneSignal dashboard → Audience → All Users → Search for player ID: ${firstPlayerId} ` +
+            `to verify: a) Player exists in this app, b) Subscription status is "Subscribed", c) Platform is configured correctly.`;
           
           // Mark these tokens for potential cleanup if they consistently fail
           // But don't mark as invalid immediately - might be temporary (user disabled notifications)
           logger.warn(
-            `Valid OneSignal player IDs returned 0 recipients. Player may have opted out or is inactive. ` +
+            `Valid OneSignal player IDs returned 0 recipients. ` +
             `Player IDs: ${validTokens.join(", ")}. ` +
-            `Check OneSignal dashboard for player subscription status.`
+            `App ID: ${this.appId}. ` +
+            `${diagnosticInfo}` +
+            `Check OneSignal dashboard → Audience → All Users → Search for player ID to verify subscription status.`
           );
           shouldMarkAsInvalid = false; // Don't mark as invalid - might be user preference
         } else if (allInvalidTokens.length > 0) {
