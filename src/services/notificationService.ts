@@ -335,6 +335,16 @@ class NotificationService {
     try {
       const deviceTokens = await this.getUserDeviceTokens(payload.userId);
 
+      logger.info(`Preparing to send push notification`, {
+        userId: payload.userId,
+        deviceTokensCount: deviceTokens.length,
+        deviceTokens: deviceTokens.map(t => ({
+          token: t.token.substring(0, 20) + "...",
+          platform: t.platform,
+          provider: t.provider,
+        })),
+      });
+
       if (deviceTokens.length > 0) {
         // Build push notification payload that matches stored notification data exactly
         const pushOptions: PushNotificationOptions = {
