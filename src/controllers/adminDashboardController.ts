@@ -1032,6 +1032,14 @@ class AdminDashboardController {
           .lean(),
       ]);
 
+      // Only include products that still exist in DB (exclude deleted/missing products from old orders)
+      const existingProductIds = new Set(
+        products.map((p) => p._id.toString())
+      );
+      const productSalesExisting = productSales.filter((item) =>
+        existingProductIds.has(item.productId)
+      );
+
       // Create category map for quick lookup
       const categoryMap = new Map();
       categories.forEach((cat) => {
@@ -1048,14 +1056,14 @@ class AdminDashboardController {
         variantMap.get(id).push(v);
       });
 
-      // Calculate total revenue for percentage calculation
-      const totalRevenue = productSales.reduce(
+      // Calculate total revenue for percentage calculation (only existing products)
+      const totalRevenue = productSalesExisting.reduce(
         (sum, item) => sum + item.revenue,
         0
       );
 
-      // Build final data with additional metrics
-      const finalData = productSales.map((item) => {
+      // Build final data with additional metrics (only for products that exist in DB)
+      const finalData = productSalesExisting.map((item) => {
         const product = products.find(
           (p) => p._id.toString() === item.productId
         );

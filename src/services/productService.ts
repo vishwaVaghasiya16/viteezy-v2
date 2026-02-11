@@ -1984,13 +1984,21 @@ class ProductService {
       },
     ]);
 
-    const mapHealthGoals = (items?: Array<{ value: string }>) => {
+    const mapHealthGoals = (items?: Array<{ value: string | Record<string, string> }>) => {
       const goals = (items ?? []).map((item) => item.value);
+      // Normalize to string (healthGoals can be I18n object { en, nl, ... } or plain string)
+      const toStr = (v: string | Record<string, string> | undefined): string => {
+        if (v == null) return "";
+        if (typeof v === "string") return v;
+        if (typeof v === "object" && v !== null) return (v.en ?? v.nl ?? Object.values(v)[0] ?? "") as string;
+        return "";
+      };
       // Clean HTML tags from healthGoals for easier use
       const cleanedGoals = goals
         .map((goal) => {
+          const str = toStr(goal);
           // Remove HTML tags like <p> and </p>
-          let cleaned = goal.replace(/<[^>]*>/g, "");
+          let cleaned = str.replace(/<[^>]*>/g, "");
           // Remove escaped quotes like \"Bone Health\"
           cleaned = cleaned.replace(/\\"/g, '"').replace(/^"|"$/g, "");
           return cleaned.trim();

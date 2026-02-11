@@ -28,7 +28,10 @@ export const createCouponSchema = Joi.object(
       .required()
       .label("Coupon code"),
     name: i18nStringSchema.label("Coupon name"),
-    description: i18nStringSchema.label("Coupon description"),
+    description: Joi.alternatives()
+      .try(i18nStringSchema, Joi.string().allow("", null))
+      .optional()
+      .label("Coupon description"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .required()
@@ -53,12 +56,12 @@ export const createCouponSchema = Joi.object(
       .label("Max discount amount"),
     usageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .label("Max global usage"),
     userUsageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .label("Max usage per user"),
     validFrom: Joi.date()
@@ -120,7 +123,10 @@ export const updateCouponSchema = Joi.object(
       .optional()
       .label("Coupon code"),
     name: i18nStringSchema.label("Coupon name"),
-    description: i18nStringSchema.label("Coupon description"),
+    description: Joi.alternatives()
+      .try(i18nStringSchema, Joi.string().allow("", null))
+      .optional()
+      .label("Coupon description"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .optional()
@@ -150,23 +156,22 @@ export const updateCouponSchema = Joi.object(
       .label("Max discount amount"),
     usageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .allow(null)
       .label("Max global usage"),
     userUsageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .allow(null)
       .label("Max usage per user"),
+    // Update: do not use .min("now") so existing dates (e.g. validFrom in the past) are accepted when only other fields are changed
     validFrom: Joi.date()
-      .min("now")
       .optional()
       .allow(null)
       .label("Valid from date"),
     validUntil: Joi.date()
-      .min("now")
       .optional()
       .allow(null)
       .label("Expiry date")

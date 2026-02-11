@@ -613,7 +613,8 @@ export const updateProductSchema = Joi.object({
   isFeatured: isFeaturedSchema.optional(),
   comparisonSection: comparisonSectionSchema.optional(),
   specification: specificationSchema.optional(),
-  // Optional FAQs: max 15, each { question, answer } (string or I18n). If provided, replaces all existing FAQs.
+  // Optional FAQs: empty array [] = delete all FAQs; or 1–15 items to replace. Each item must have question and answer.
+  // Do not use .required() on the item object so that empty array [] is valid (Joi treats items().required() as "at least one item").
   faqs: Joi.array()
     .items(
       Joi.object({
@@ -637,9 +638,9 @@ export const updateProductSchema = Joi.object({
             es: Joi.string().trim().optional(),
           })
         ).required(),
-      }).required()
+      })
     )
-    .min(1)
+    .min(0)
     .max(15)
     .optional()
     .messages({
