@@ -311,7 +311,14 @@ class UserController {
       await user.save();
 
       logger.info(
-        `Device token registered for user: ${req.user._id}, platform: ${devicePlatform}, provider: ${deviceProvider}`
+        `Device token registered for user: ${req.user._id}, platform: ${devicePlatform}, provider: ${deviceProvider}`,
+        {
+          userId: req.user._id,
+          deviceToken: tokenToAdd.substring(0, 20) + "...", // Log first 20 chars for security
+          platform: devicePlatform,
+          provider: deviceProvider,
+          tokenCount: user.deviceTokenMetadata.length,
+        }
       );
 
       res.apiSuccess(
@@ -319,6 +326,7 @@ class UserController {
           tokenCount: user.deviceTokenMetadata.length,
           platform: devicePlatform,
           provider: deviceProvider,
+          tokenRegistered: true,
         },
         "Device token registered successfully"
       );
