@@ -153,7 +153,7 @@ const MODEL_I18N_FIELDS: Record<
     i18nText: [],
   },
   products: {
-    i18nString: ["title"],
+    i18nString: ["title", "shortDescription"],
     i18nText: ["description", "nutritionInfo", "howToUse"],
   },
   generalSettings: {
@@ -501,6 +501,29 @@ export const transformResponseMiddleware = (modelName: string) => {
                 ingredientFields.i18nString, // ["name"]
                 ingredientFields.i18nText // ["description"]
               );
+              // Transform nested products array with products' I18n fields (token language → single language)
+              if (
+                Array.isArray(transformed.data.ingredient.products) &&
+                transformed.data.ingredient.products.length > 0
+              ) {
+                const productFields = MODEL_I18N_FIELDS["products"] || {
+                  i18nString: ["title"],
+                  i18nText: ["description", "nutritionInfo", "howToUse"],
+                };
+                const transformedProducts = transformI18nObject(
+                  transformed.data.ingredient.products,
+                  lang,
+                  productFields.i18nString,
+                  productFields.i18nText
+                );
+                transformed.data.ingredient.products = Array.isArray(
+                  transformedProducts
+                )
+                  ? transformedProducts
+                  : Object.keys(transformedProducts)
+                      .sort((a, b) => parseInt(a) - parseInt(b))
+                      .map((k) => transformedProducts[k]);
+              }
             }
 
             // Transform data.testimonial if it exists (single product testimonial)
@@ -1285,6 +1308,29 @@ export const transformResponseMiddleware = (modelName: string) => {
               ingredientFields.i18nString, // ["name"]
               ingredientFields.i18nText // ["description"]
             );
+            // Transform nested products array with products' I18n fields (token language → single language)
+            if (
+              Array.isArray(transformed.data.ingredient.products) &&
+              transformed.data.ingredient.products.length > 0
+            ) {
+              const productFields = MODEL_I18N_FIELDS["products"] || {
+                i18nString: ["title"],
+                i18nText: ["description", "nutritionInfo", "howToUse"],
+              };
+              const transformedProducts = transformI18nObject(
+                transformed.data.ingredient.products,
+                lang,
+                productFields.i18nString,
+                productFields.i18nText
+              );
+              transformed.data.ingredient.products = Array.isArray(
+                transformedProducts
+              )
+                ? transformedProducts
+                : Object.keys(transformedProducts)
+                    .sort((a, b) => parseInt(a) - parseInt(b))
+                    .map((k) => transformedProducts[k]);
+            }
           }
 
           // Transform data.testimonial if it exists (single product testimonial)
@@ -1797,6 +1843,27 @@ export const transformResponseMiddleware = (modelName: string) => {
                   ingredientFields.i18nString, // ["name"]
                   ingredientFields.i18nText // ["description"]
                 );
+                // Transform nested products array with products' I18n fields (token language → single language)
+                if (
+                  Array.isArray(dataObj.ingredient.products) &&
+                  dataObj.ingredient.products.length > 0
+                ) {
+                  const productFields = MODEL_I18N_FIELDS["products"] || {
+                    i18nString: ["title"],
+                    i18nText: ["description", "nutritionInfo", "howToUse"],
+                  };
+                  const transformedProducts = transformI18nObject(
+                    dataObj.ingredient.products,
+                    lang,
+                    productFields.i18nString,
+                    productFields.i18nText
+                  );
+                  dataObj.ingredient.products = Array.isArray(transformedProducts)
+                    ? transformedProducts
+                    : Object.keys(transformedProducts)
+                        .sort((a, b) => parseInt(a) - parseInt(b))
+                        .map((k) => transformedProducts[k]);
+                }
               }
 
               // Transform data.testimonial if it exists (single product testimonial)

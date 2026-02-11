@@ -331,7 +331,8 @@ class AdminProductIngredientController {
   );
 
   /**
-   * Get a single ingredient by id (with linked product count)
+   * Get a single ingredient by id with full product data (like product GET by id).
+   * Populates products array with full product documents so response has complete product data.
    */
   getIngredientById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -340,11 +341,35 @@ class AdminProductIngredientController {
       const ingredient = await ProductIngredients.findOne({
         _id: id,
         isDeleted: { $ne: true },
-      }).lean();
+      })
+        .populate({
+          path: "products",
+          model: "products",
+          match: { isDeleted: false },
+          options: { lean: true },
+          populate: [
+            {
+              path: "ingredients",
+              model: "product_ingredients",
+              select: "name description image",
+            },
+            {
+              path: "categories",
+              model: "product_categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
+        })
+        .lean();
 
       if (!ingredient) {
         throw new AppError("Product ingredient not found", 404);
       }
+
+      // Ensure products is always an array (populate may leave nulls for deleted refs)
+      const products = Array.isArray(ingredient.products)
+        ? ingredient.products.filter((p: any) => p != null)
+        : [];
 
       res.status(200).json({
         success: true,
@@ -352,7 +377,8 @@ class AdminProductIngredientController {
         data: {
           ingredient: {
             ...ingredient,
-            linkedProductCount: ingredient.products?.length || 0,
+            products,
+            linkedProductCount: products.length,
           },
         },
       });

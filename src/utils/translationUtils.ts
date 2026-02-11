@@ -96,10 +96,34 @@ export const transformI18nObject = (
     return data;
   }
 
-  // Handle Mongoose ObjectId buffer (convert to string) - check this BEFORE array check
-  if (data.buffer && Array.isArray(data.buffer)) {
-    // This is a Mongoose ObjectId in buffer format
-    return data.toString ? data.toString() : String(data);
+  // Handle Mongoose ObjectId (convert to string) - check this BEFORE array check
+  // Buffer can be Array or Node Buffer; plain object with .buffer must not be stringified as "[object Object]"
+  const isObjectIdLike =
+    data &&
+    typeof data === "object" &&
+    (data as any).buffer != null &&
+    (Array.isArray((data as any).buffer) ||
+      (typeof Buffer !== "undefined" && Buffer.isBuffer((data as any).buffer))) &&
+    typeof (data as any).toString === "function";
+  if (isObjectIdLike) {
+    const idStr = (data as any).toString();
+    if (idStr && idStr.length === 24 && /^[a-f0-9]+$/.test(idStr)) {
+      return idStr;
+    }
+    return (data as any).toString();
+  }
+
+  // I18n object: only language-code keys (en, nl, de, fr, es) → single language string
+  // Ensures no multi-language object remains anywhere (benefits, comparisonSection, specification, etc.)
+  const LANG_KEYS = ["en", "nl", "de", "fr", "es"];
+  if (
+    !Array.isArray(data) &&
+    typeof data === "object" &&
+    Object.keys(data).length > 0 &&
+    Object.keys(data).every((k) => LANG_KEYS.includes(k)) &&
+    Object.keys(data).some((k) => typeof (data as any)[k] === "string")
+  ) {
+    return getTranslatedString(data as I18nStringType, lang);
   }
 
   // CRITICAL: Check for array-like objects (objects with only numeric keys) BEFORE processing
@@ -124,22 +148,31 @@ export const transformI18nObject = (
   // Handle arrays - create new array with transformed items
   // IMPORTANT: Always return an array, never convert to object
   if (Array.isArray(data)) {
-    // Use map to ensure we always return an array
     const transformedArray: any[] = [];
     for (let i = 0; i < data.length; i++) {
       const item = data[i];
+      // Mongoose ObjectId: never spread (spread loses .toString; copy can trigger String(obj) → "[object Object]")
+      const isObjectId =
+        item &&
+        typeof item === "object" &&
+        !Array.isArray(item) &&
+        (item as any).buffer != null &&
+        (Array.isArray((item as any).buffer) ||
+          (typeof Buffer !== "undefined" && Buffer.isBuffer((item as any).buffer))) &&
+        typeof (item as any).toString === "function";
+      if (isObjectId) {
+        transformedArray.push((item as any).toString());
+        continue;
+      }
       // Create a copy of the item before transforming to avoid mutating read-only properties
       let itemCopy: any = item;
       if (item && typeof item === "object" && !Array.isArray(item)) {
         try {
-          // Try to create a shallow copy
           itemCopy = { ...item };
         } catch (error) {
-          // If copying fails (read-only properties), use JSON parse/stringify
           try {
             itemCopy = JSON.parse(JSON.stringify(item));
           } catch (e) {
-            // If that also fails, use the item as is
             itemCopy = item;
           }
         }

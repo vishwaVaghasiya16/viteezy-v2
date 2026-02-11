@@ -5,10 +5,10 @@
  * @author Viteezy Development Team
  * @version 2.0.0
  */
-// Note: Module aliases are handled by:
-// - Development: tsconfig-paths/register (via nodemon exec)
-// - Production: module-alias/register (via npm start script)
-import "module-alias/register";
+// Module aliases: loaded by the run script, not here, so dev uses src and prod uses dist.
+// - npm run dev:node uses ts-node -r tsconfig-paths/register → @/* resolves to src/*
+// - npm start uses node -r module-alias/register → @/* resolves to dist/*
+// Do NOT import "module-alias/register" here or dev will resolve to dist and ignore source changes.
 import express, { Application, Request, Response } from "express";
 import { IncomingMessage, ServerResponse } from "http";
 import cors from "cors";
