@@ -29,23 +29,12 @@ const socialMediaLinksSchema = Joi.object({
   tiktok: Joi.string().uri().optional().allow(null, "").label("TikTok URL"),
 }).label("SocialMediaLinks");
 
-const addressSchema = Joi.object({
-  street: Joi.string().trim().optional().allow(null, "").label("Street"),
-  city: Joi.string().trim().optional().allow(null, "").label("City"),
-  state: Joi.string().trim().optional().allow(null, "").label("State"),
-  zip: Joi.string().trim().optional().allow(null, "").label("ZIP Code"),
-  country: Joi.string().trim().optional().allow(null, "").label("Country"),
-  addressLine1: Joi.string()
-    .trim()
-    .optional()
-    .allow(null, "")
-    .label("Address Line 1"),
-  addressLine2: Joi.string()
-    .trim()
-    .optional()
-    .allow(null, "")
-    .label("Address Line 2"),
-}).label("Address");
+const addressSchema = Joi.string()
+  .trim()
+  .optional()
+  .allow(null, "")
+  .max(500)
+  .label("Address");
 
 const languageSettingSchema = Joi.object({
   code: Joi.string()

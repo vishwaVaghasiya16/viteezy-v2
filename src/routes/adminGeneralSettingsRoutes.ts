@@ -34,7 +34,7 @@ router.get(
  * @body {String} [tagline] - Tagline or short description in English (plain string, will be auto-translated to all languages)
  * @body {String} [supportEmail] - Support email
  * @body {String} [supportPhone] - Support phone
- * @body {Object} [address] - Address object
+ * @body {String} [address] - Address string
  * @body {Object} [socialMedia] - Social media links
  * @body {Array} [languages] - Language settings array
  * @formData {File} [logoLight] - Light theme logo
@@ -48,7 +48,7 @@ router.put(
       { name: "logoDark", maxCount: 1 },
     ])
   ),
-  parseFormDataJson(["address", "socialMedia", "languages"]), // Note: "tagline" is NOT in this array - it's a plain string for auto-translation
+  parseFormDataJson(["socialMedia", "languages"]), // Note: "address" and "tagline" are NOT in this array - they are plain strings
   autoTranslateMiddleware("generalSettings"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(updateGeneralSettingsSchema),
   adminGeneralSettingsController.updateGeneralSettings

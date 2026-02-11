@@ -29,13 +29,7 @@ export interface IGeneralSettings extends Document {
   // Contact Information
   supportEmail?: string;
   supportPhone?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-    country?: string;
-  };
+  address?: string;
 
   // Social Media Links
   socialMedia?: ISocialMediaLinks;
@@ -134,7 +128,8 @@ const GeneralSettingsSchema = new Schema<IGeneralSettings>(
       default: null,
     },
     address: {
-      type: AddressSchema,
+      type: String,
+      trim: true,
       default: null,
     },
 

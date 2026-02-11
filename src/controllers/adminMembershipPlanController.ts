@@ -112,6 +112,18 @@ class AdminMembershipPlanController {
         throw new AppError("Name is required", 400);
       }
 
+      // Check maximum plans limit (max 3 plans allowed)
+      const existingPlansCount = await MembershipPlans.countDocuments({
+        isDeleted: false,
+      });
+
+      if (existingPlansCount >= 3) {
+        throw new AppError(
+          `Maximum 3 membership plans allowed. Currently ${existingPlansCount} plans exist.`,
+          400
+        );
+      }
+
       if (await this.isNameTaken(name)) {
         throw new AppError(
           "Membership plan with this name already exists",
