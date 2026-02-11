@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node -r module-alias/register dist/index.js",
     "dev": "concurrently -n \"NODE,PYTHON\" -c \"blue,green\" \"npm run dev:node\" \"npm run dev:python\"",
-    "dev:node": "nodemon src/index.ts",
+    "dev:node": "nodemon --exec \"ts-node -r tsconfig-paths/register\" src/index.ts",
     "dev:python": "node start_python_server.js",
     "build": "tsc",
     "build:watch": "tsc --watch",

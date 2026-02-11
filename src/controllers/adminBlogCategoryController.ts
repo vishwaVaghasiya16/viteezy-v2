@@ -54,11 +54,11 @@ class AdminBlogCategoryController {
   );
 
   /**
-   * Get paginated blog categories (Admin view)
+   * Get all blog categories (no pagination). Admin view.
    */
   getCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const { sort } = getPaginationOptions(req);
       const { search, status } = req.query as {
         search?: string;
         status?: "active" | "inactive" | "all";
@@ -87,51 +87,46 @@ class AdminBlogCategoryController {
         ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      const [categories, total] = await Promise.all([
-        BlogCategories.find(filter)
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        BlogCategories.countDocuments(filter),
-      ]);
+      // Fetch all categories (pagination removed)
+      const categories = await BlogCategories.find(filter)
+        .sort(sortOptions)
+        .lean();
 
       // Get category IDs to count overall blogs
       const categoryIds = categories.map((cat: any) => cat._id);
 
       // Count overall blogs per category (not deleted)
-      const blogCounts = await Blogs.aggregate([
-        {
-          $match: {
-            categoryId: { $in: categoryIds },
-            isDeleted: false, // Only count blogs that are not deleted
-          },
-        },
-        {
-          $group: {
-            _id: "$categoryId",
-            blogCount: { $sum: 1 },
-          },
-        },
-      ]);
+      const blogCounts =
+        categoryIds.length > 0
+          ? await Blogs.aggregate([
+              {
+                $match: {
+                  categoryId: { $in: categoryIds },
+                  isDeleted: false,
+                },
+              },
+              {
+                $group: {
+                  _id: "$categoryId",
+                  blogCount: { $sum: 1 },
+                },
+              },
+            ])
+          : [];
 
-      // Create a map of categoryId -> blogCount
       const blogCountMap = new Map<string, number>();
-      blogCounts.forEach((item) => {
+      blogCounts.forEach((item: any) => {
         if (item._id) {
           blogCountMap.set(item._id.toString(), item.blogCount);
         }
       });
 
-      // Add overall blog count to each category
       const categoriesWithBlogCount = categories.map((category: any) => ({
         ...category,
         blogCount: blogCountMap.get(category._id.toString()) || 0,
       }));
 
-      const pagination = getPaginationMeta(page, limit, total);
-
-      res.apiPaginated(categoriesWithBlogCount, pagination, "Categories retrieved");
+      res.apiSuccess(categoriesWithBlogCount, "Categories retrieved");
     }
   );
 

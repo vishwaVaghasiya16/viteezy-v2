@@ -20,6 +20,11 @@ import {
   SubscriptionCycle,
   OrderPlanType,
 } from "@/models/enums";
+import {
+  getTranslatedString,
+  getTranslatedText,
+  getUserLanguageCode,
+} from "@/utils/translationUtils";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -873,6 +878,14 @@ class AdminDashboardController {
 
       const limitNum = limit ? parseInt(limit as string) : 10;
 
+      // Resolve admin language from token for single-language product name/description
+      let lang: "en" | "nl" | "de" | "fr" | "es" = "en";
+      const userId = req.user?._id;
+      if (userId) {
+        const user = await User.findById(userId).select("language").lean();
+        lang = getUserLanguageCode(user?.language as string);
+      }
+
       // Date filtering (same logic as top-selling-plans)
       let start: Date;
       let end: Date;
@@ -1087,12 +1100,24 @@ class AdminDashboardController {
             ? Number(((item.revenue / totalRevenue) * 100).toFixed(2))
             : 0;
 
+        // Normalize title/description to single language (token language); DB may have I18n object
+        const rawTitle = product?.title ?? item.productName;
+        const rawDescription = product?.description ?? null;
+        const productName =
+          typeof rawTitle === "object" && rawTitle !== null
+            ? getTranslatedString(rawTitle as Record<string, string>, lang)
+            : (rawTitle as string) || item.productName;
+        const description =
+          typeof rawDescription === "object" && rawDescription !== null
+            ? getTranslatedText(rawDescription as Record<string, string>, lang)
+            : (rawDescription as string | null) ?? null;
+
         return {
           productId: item.productId,
-          productName: product?.title || item.productName,
+          productName,
           productImage: product?.productImage || null,
           slug: product?.slug || null,
-          description: product?.description || null,
+          description,
           status: product?.status !== undefined ? product.status : null,
           category: categoryName,
           price: product?.price?.amount || 0,
