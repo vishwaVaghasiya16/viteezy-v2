@@ -28,17 +28,28 @@ const mapLanguageToCode = (language: string): SupportedLanguage => {
 
 /**
  * Get user language from request
- * Priority: 1. User token 2. Default to English
- * Query parameter removed - language comes from token only
+ * Priority:
+ *  1. User token (`req.user.language`)
+ *  2. Query param (`?lang=` or `?language=`)
+ *  3. Default to English
  */
 const getUserLanguage = (req: Request): SupportedLanguage => {
-  // Check if user is authenticated and has language preference (from token)
   const authenticatedReq = req as any;
+
+  // 1) From authenticated user token
   if (authenticatedReq.user?.language) {
     return mapLanguageToCode(authenticatedReq.user.language);
   }
 
-  // Default to English if not authenticated or no language preference
+  // 2) From query param ?lang= or ?language=
+  const queryLang =
+    (req.query?.lang as string | undefined) ||
+    (req.query?.language as string | undefined);
+  if (queryLang) {
+    return mapLanguageToCode(queryLang);
+  }
+
+  // 3) Fallback to default
   return DEFAULT_LANGUAGE;
 };
 

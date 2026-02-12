@@ -10,6 +10,7 @@ import { FAQs } from "../models/cms/faqs.model";
 import { FAQStatus } from "../models/enums";
 import { Wishlists } from "../models/commerce/wishlists.model";
 import { cartService } from "./cartService";
+import { transformProductForLanguage } from "./productEnrichmentService";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
@@ -1177,14 +1178,18 @@ class LandingPageService {
           }
         }
 
-        // Replace ingredient IDs with populated objects and transform for language
+        // Replace ingredient IDs with populated objects and transform products to single language
         for (const testimonial of testimonials) {
           if (testimonial.products && Array.isArray(testimonial.products)) {
-            for (const product of testimonial.products) {
+            testimonial.products = testimonial.products.map((product: any) => {
               const productObj = product as any;
-              
-              // Transform ingredients for language (same as getAllProducts API)
-              if (productObj.ingredients && Array.isArray(productObj.ingredients) && productObj.ingredients.length > 0) {
+
+              // 1) Populate ingredients using the pre-fetched ingredientsMap
+              if (
+                productObj.ingredients &&
+                Array.isArray(productObj.ingredients) &&
+                productObj.ingredients.length > 0
+              ) {
                 const populatedIngredients = productObj.ingredients
                   .map((id: any) => {
                     const idStr = id.toString();
@@ -1205,28 +1210,47 @@ class LandingPageService {
                 productObj.ingredients = populatedIngredients;
               }
 
-              // Transform categories for language (same as getAllProducts API)
-              if (productObj.categories && Array.isArray(productObj.categories) && productObj.categories.length > 0) {
-                productObj.categories = productObj.categories.map((category: any) => ({
-                  ...category,
-                  name: getTranslatedString(category.name, lang),
-                  description: getTranslatedText(category.description, lang),
-                }));
+              // 2) Transform the entire product to a single language
+              //    This handles:
+              //    - title, description, shortDescription
+              //    - benefits, healthGoals
+              //    - nutritionInfo, howToUse
+              //    - comparisonSection (title, columns, rows.label)
+              //    - specification (main_title, items.title, items.descr)
+              //    - any other I18n fields handled by transformProductForLanguage
+              const translatedProduct = transformProductForLanguage(
+                productObj,
+                lang
+              );
+
+              // 3) Ensure categories names/descriptions are also flattened
+              if (
+                translatedProduct.categories &&
+                Array.isArray(translatedProduct.categories) &&
+                translatedProduct.categories.length > 0
+              ) {
+                translatedProduct.categories = translatedProduct.categories.map(
+                  (category: any) => ({
+                    ...category,
+                    name: getTranslatedString(category.name, lang),
+                    description: getTranslatedText(category.description, lang),
+                  })
+                );
               }
 
-              // Add is_liked and isInCart fields if user is authenticated (same as getAllProducts API)
-              if (userId) {
-                productObj.is_liked = userWishlistProductIds.has(
-                  productObj._id.toString()
-                );
-                productObj.isInCart = cartProductIds.has(
-                  productObj._id.toString()
-                );
-              } else {
-                productObj.is_liked = false;
-                productObj.isInCart = false;
-              }
-            }
+              // 4) Add is_liked and isInCart flags based on user context
+              const isLiked =
+                !!userId &&
+                userWishlistProductIds.has(translatedProduct._id.toString());
+              const isInCart =
+                !!userId && cartProductIds.has(translatedProduct._id.toString());
+
+              return {
+                ...translatedProduct,
+                is_liked: isLiked,
+                isInCart,
+              };
+            });
           }
         }
 
