@@ -1107,7 +1107,11 @@ export class ProductController {
             slug: product.slug,
             productImage: product.productImage || null,
             galleryImages: product.galleryImages || [],
-            shortDescription: product.shortDescription || "",
+            // Ensure shortDescription is always a single-language string
+            shortDescription: getTranslatedString(
+              product.shortDescription as any,
+              userLang
+            ),
           }));
 
           // Transform category for the response
