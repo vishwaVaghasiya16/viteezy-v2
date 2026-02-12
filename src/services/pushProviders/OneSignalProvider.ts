@@ -135,7 +135,7 @@ export class OneSignalProvider implements IPushProvider {
 
     try {
       // OneSignal REST API requires Basic auth with base64 encoded API key
-      const encodedApiKey = Buffer.from(`${this.apiKey}:`).toString("base64");
+      const encodedApiKey = this.apiKey
       
       const response = await fetch(`${this.baseUrl}/players/${playerId}?app_id=${this.appId}`, {
         method: "GET",
@@ -284,7 +284,7 @@ export class OneSignalProvider implements IPushProvider {
       };
 
       // OneSignal REST API requires Basic auth with base64 encoded API key
-      const encodedApiKey = Buffer.from(`${this.apiKey}:`).toString("base64");
+      const encodedApiKey = this.apiKey
 
       logger.debug("Sending OneSignal notification", {
         appId: this.appId,
