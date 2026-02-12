@@ -21,6 +21,10 @@ export const createProductTestimonialSchema = Joi.object(
       .optional()
       .default(false)
       .label("Visible in Landing Page"),
+    isActive: Joi.boolean()
+      .optional()
+      .default(true)
+      .label("Active Status"),
     displayOrder: Joi.number()
       .integer()
       .min(0)
@@ -28,7 +32,7 @@ export const createProductTestimonialSchema = Joi.object(
       .default(0)
       .label("Display Order"),
     metadata: Joi.string().optional().label("Metadata"),
-  })
+  }),
 ).label("CreateProductTestimonial");
 
 export const updateProductTestimonialSchema = Joi.object(
@@ -45,19 +49,20 @@ export const updateProductTestimonialSchema = Joi.object(
     isVisibleOnHomepage: Joi.boolean().optional().label("Visible on Homepage"),
     isFeatured: Joi.boolean().optional().label("Featured"),
     isVisibleInLP: Joi.boolean().optional().label("Visible in Landing Page"),
+    isActive: Joi.boolean().optional().label("Active Status"),
     displayOrder: Joi.number()
       .integer()
       .min(0)
       .optional()
       .label("Display Order"),
     metadata: Joi.string().optional().label("Metadata"),
-  })
+  }),
 ).label("UpdateProductTestimonial");
 
 export const productTestimonialIdParamsSchema = Joi.object(
   withFieldLabels({
     id: Joi.string().hex().length(24).required().label("Testimonial ID"),
-  })
+  }),
 ).label("ProductTestimonialIdParams");
 
 export const listProductTestimonialsQuerySchema = Joi.object(
@@ -75,5 +80,5 @@ export const listProductTestimonialsQuerySchema = Joi.object(
     isFeatured: Joi.boolean().optional().label("Featured"),
     isVisibleInLP: Joi.boolean().optional().label("Visible in Landing Page"),
     isActive: Joi.boolean().optional().label("Active Status"),
-  })
+  }),
 ).label("ListProductTestimonialsQuery");

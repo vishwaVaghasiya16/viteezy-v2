@@ -36,6 +36,7 @@ class AdminProductTestimonialController {
         req.body.isVisibleOnHomepage || false;
       const isFeatured: boolean = req.body.isFeatured || false;
       const isVisibleInLP: boolean = req.body.isVisibleInLP || false;
+      const isActive: boolean = req.body.isActive ?? true;
       const displayOrder: number = req.body.displayOrder || 0;
       const metadata: any = req.body.metadata || {};
 
@@ -126,7 +127,7 @@ class AdminProductTestimonialController {
         isVisibleOnHomepage,
         isFeatured,
         isVisibleInLP,
-        isActive: true,
+        isActive,
         displayOrder,
         metadata,
         createdBy: req.user?._id,
@@ -270,6 +271,7 @@ class AdminProductTestimonialController {
         isVisibleOnHomepage,
         isFeatured,
         isVisibleInLP,
+        isActive,
         displayOrder,
         metadata,
       } = req.body;
@@ -404,6 +406,10 @@ class AdminProductTestimonialController {
 
       if (isVisibleInLP !== undefined) {
         testimonial.isVisibleInLP = isVisibleInLP;
+      }
+
+      if (isActive !== undefined) {
+        testimonial.isActive = isActive;
       }
 
       if (displayOrder !== undefined) {
