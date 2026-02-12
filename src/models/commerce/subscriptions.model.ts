@@ -45,6 +45,9 @@ export interface ISubscription extends Document {
   // Pause/Resume
   pausedAt?: Date;
   pausedUntil?: Date; // Resume date if paused temporarily
+  // Auto-Renewal
+  isAutoRenew: boolean; // Auto-renew subscription until cancelled or paused
+  renewalCount: number; // Number of times subscription has been renewed
   // Metadata
   metadata?: Record<string, any>;
   createdAt: Date;
@@ -198,6 +201,16 @@ const SubscriptionSchema = new Schema<ISubscription>(
     pausedUntil: {
       type: Date,
       default: null,
+    },
+    // Auto-Renewal
+    isAutoRenew: {
+      type: Boolean,
+      default: true, // Default to auto-renew
+    },
+    renewalCount: {
+      type: Number,
+      default: 0, // Initial subscription is not a renewal
+      min: 0,
     },
     metadata: {
       type: Schema.Types.Mixed,

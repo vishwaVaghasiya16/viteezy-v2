@@ -11,7 +11,7 @@ import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { Subscriptions, Payments, Orders } from "@/models/commerce";
 import { User } from "@/models/core";
-import { SubscriptionStatus } from "@/models/enums";
+import { SubscriptionStatus, OrderStatus, PaymentStatus, OrderPlanType, PaymentMethod } from "@/models/enums";
 import { emailService } from "@/services/emailService";
 
 interface AuthenticatedRequest extends Request {
@@ -535,7 +535,297 @@ class AdminSubscriptionController {
         `Subscription ${subscription.subscriptionNumber} paused by admin`
       );
 
-      res.apiSuccess(null, "Subscription paused successfully");
+      res.apiSuccess(null, "Subscription paused successfully"      );
+    }
+  );
+
+  /**
+   * Process auto-renewals for due subscriptions (Admin only)
+   * @route POST /api/v1/admin/subscriptions/process-renewals
+   * @access Admin
+   * @query {Number} [limit] - Maximum number of subscriptions to process (default: 100)
+   */
+  processRenewals = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const limit = parseInt(req.query.limit as string) || 100;
+
+      const { subscriptionRenewalJob } = await import("@/jobs/subscriptionRenewalJob");
+      const result = await subscriptionRenewalJob.processRenewals(limit);
+
+      // Note: processRenewals currently returns void from the job,
+      // so we only return a generic success message.
+      // Detailed stats can be fetched via getRenewalJobStatus.
+      res.apiSuccess(
+        {
+          message: "Subscription renewal job started successfully",
+        },
+        "Subscription renewal job started successfully"
+      );
+    }
+  );
+
+  /**
+   * Get renewal history for a subscription (Admin only)
+   * @route GET /api/v1/admin/subscriptions/:id/renewal-history
+   * @access Admin
+   */
+  getRenewalHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      const { subscriptionAutoRenewalService } = await import(
+        "@/services/subscriptionAutoRenewalService"
+      );
+      const history = await subscriptionAutoRenewalService.getRenewalHistory(id, limit);
+
+      res.apiSuccess({ history }, "Renewal history retrieved successfully");
+    }
+  );
+
+  /**
+   * Get transaction history for a subscription (Admin only)
+   * @route GET /api/v1/admin/subscriptions/:id/transaction-history
+   * @access Admin
+   */
+  getTransactionHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      const { subscriptionAutoRenewalService } = await import(
+        "@/services/subscriptionAutoRenewalService"
+      );
+      const transactions = await subscriptionAutoRenewalService.getTransactionHistory(
+        id,
+        limit
+      );
+
+      res.apiSuccess(
+        { transactions },
+        "Transaction history retrieved successfully"
+      );
+    }
+  );
+
+  /**
+   * Get renewal job status (Admin only)
+   * @route GET /api/v1/admin/subscriptions/renewal-job/status
+   * @access Admin
+   */
+  getRenewalJobStatus = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { subscriptionRenewalJob } = await import("@/jobs/subscriptionRenewalJob");
+      const status = subscriptionRenewalJob.getStatus();
+
+      res.apiSuccess({ status }, "Renewal job status retrieved successfully");
+    }
+  );
+
+  /**
+   * Create test subscription for renewal testing (Admin only)
+   * @route POST /api/v1/admin/subscriptions/test-renewal
+   * @access Admin
+   * @body {String} userId - User ID for the test subscription
+   * @body {Number} [cycleDays] - Cycle days (30, 60, 90, 180) - default: 30
+   * @body {Boolean} [processRenewal] - Whether to process renewal immediately - default: true
+   */
+  createTestSubscriptionForRenewal = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { userId, cycleDays = 30, processRenewal = true } = req.body;
+
+      if (!userId) {
+        throw new AppError("userId is required", 400);
+      }
+
+      const validCycleDays = [30, 60, 90, 180];
+      if (!validCycleDays.includes(cycleDays)) {
+        throw new AppError("cycleDays must be 30, 60, 90, or 180", 400);
+      }
+
+      // Verify user exists
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Create a dummy order for the subscription
+      const testOrder = await Orders.create({
+        orderNumber: `TEST-${Date.now()}`,
+        userId: new mongoose.Types.ObjectId(userId),
+        planType: OrderPlanType.SUBSCRIPTION,
+        isOneTime: false,
+        variantType: "SACHETS",
+        selectedPlanDays: cycleDays,
+        items: [
+          {
+            productId: new mongoose.Types.ObjectId(), // Dummy product ID
+            name: "Test Product for Renewal",
+            planDays: cycleDays,
+            capsuleCount: 30,
+            amount: 49.99,
+            discountedPrice: 39.99,
+            taxRate: 0.21,
+            totalAmount: 48.39,
+            durationDays: cycleDays,
+            savingsPercentage: 20,
+            features: ["Test Feature"],
+          },
+        ],
+        subTotal: 49.99,
+        discountedPrice: 39.99,
+        taxAmount: 8.39,
+        grandTotal: 48.39,
+        currency: "EUR",
+        shippingAddressId: new mongoose.Types.ObjectId(), // Dummy address
+        billingAddressId: new mongoose.Types.ObjectId(), // Dummy address
+        paymentMethod: PaymentMethod.STRIPE,
+        paymentStatus: PaymentStatus.COMPLETED,
+        status: OrderStatus.CONFIRMED,
+        metadata: {
+          isTestOrder: true,
+          createdForRenewalTesting: true,
+        },
+      });
+
+      // Calculate dates - set nextBillingDate to today so it's due for renewal
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // Start date: 30 days ago (so subscription has been running)
+      const subscriptionStartDate = new Date(today);
+      subscriptionStartDate.setDate(subscriptionStartDate.getDate() - cycleDays);
+      
+      // End date: today
+      const subscriptionEndDate = new Date(today);
+      
+      // Next billing date: TODAY (so it's due for renewal)
+      const nextBillingDate = new Date(today);
+      
+      // Next delivery date: today
+      const nextDeliveryDate = new Date(today);
+      
+      // Initial delivery date: 30 days ago
+      const initialDeliveryDate = new Date(subscriptionStartDate);
+
+      // Create test subscription
+      const testSubscription = await Subscriptions.create({
+        userId: new mongoose.Types.ObjectId(userId),
+        orderId: testOrder._id,
+        planType: OrderPlanType.SUBSCRIPTION,
+        cycleDays: cycleDays,
+        subscriptionStartDate: subscriptionStartDate,
+        subscriptionEndDate: subscriptionEndDate,
+        items: [
+          {
+            productId: new mongoose.Types.ObjectId(), // Dummy product ID
+            name: "Test Product for Renewal",
+            planDays: cycleDays,
+            capsuleCount: 30,
+            amount: 49.99,
+            discountedPrice: 39.99,
+            taxRate: 0.21,
+            totalAmount: 48.39,
+            durationDays: cycleDays,
+            savingsPercentage: 20,
+            features: ["Test Feature"],
+          },
+        ],
+        initialDeliveryDate: initialDeliveryDate,
+        nextDeliveryDate: nextDeliveryDate,
+        nextBillingDate: nextBillingDate, // Set to today - due for renewal
+        status: SubscriptionStatus.ACTIVE,
+        isAutoRenew: true,
+        renewalCount: 0,
+        metadata: {
+          isTestSubscription: true,
+          createdForRenewalTesting: true,
+          createdAt: now.toISOString(),
+        },
+      });
+
+      logger.info(
+        `Test subscription created: ${testSubscription.subscriptionNumber} (ID: ${testSubscription._id})`
+      );
+
+      let renewalResult = null;
+
+      // Process renewal if requested
+      if (processRenewal) {
+        try {
+          const { subscriptionAutoRenewalService } = await import(
+            "@/services/subscriptionAutoRenewalService"
+          );
+          
+          // Fetch the subscription as a document (not lean) for renewal processing
+          const subscriptionDoc = await Subscriptions.findById(testSubscription._id);
+          if (subscriptionDoc) {
+            renewalResult = await subscriptionAutoRenewalService.processRenewal(
+              subscriptionDoc
+            );
+            
+            // Refresh subscription to get updated data
+            await testSubscription.populate("userId", "firstName lastName email");
+            await testSubscription.populate("orderId", "orderNumber");
+            
+            logger.info(
+              `Renewal processed for test subscription: ${testSubscription.subscriptionNumber}`
+            );
+          }
+        } catch (renewalError: any) {
+          logger.error(
+            `Failed to process renewal for test subscription: ${renewalError.message}`
+          );
+          renewalResult = {
+            success: false,
+            error: renewalError.message,
+          };
+        }
+      }
+
+      // Get renewal history if renewal was processed
+      let renewalHistory = null;
+      let transactionHistory = null;
+      
+      if (processRenewal && renewalResult?.success) {
+        try {
+          const { subscriptionAutoRenewalService } = await import(
+            "@/services/subscriptionAutoRenewalService"
+          );
+          const subscriptionId = (testSubscription._id as mongoose.Types.ObjectId).toString();
+          renewalHistory = await subscriptionAutoRenewalService.getRenewalHistory(
+            subscriptionId,
+            10
+          );
+          transactionHistory = await subscriptionAutoRenewalService.getTransactionHistory(
+            subscriptionId,
+            10
+          );
+        } catch (error: any) {
+          logger.warn(`Failed to fetch renewal/transaction history: ${error.message}`);
+        }
+      }
+
+      // Refresh subscription to get latest data
+      await testSubscription.populate("userId", "firstName lastName email");
+      await testSubscription.populate("orderId", "orderNumber");
+
+      res.apiSuccess(
+        {
+          subscription: testSubscription,
+          order: testOrder,
+          renewalResult: renewalResult,
+          renewalHistory: renewalHistory,
+          transactionHistory: transactionHistory,
+          testInfo: {
+            nextBillingDate: nextBillingDate.toISOString(),
+            isDueForRenewal: nextBillingDate <= new Date(),
+            cycleDays: cycleDays,
+            renewalProcessed: processRenewal,
+          },
+        },
+        `Test subscription created successfully${processRenewal ? " and renewal processed" : ""}`
+      );
     }
   );
 }

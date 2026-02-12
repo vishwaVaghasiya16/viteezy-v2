@@ -417,7 +417,7 @@ export class OneSignalProvider implements IPushProvider {
       // This code should never be reached if apiCallSuccessful is true
       // But if we reach here, it means apiCallSuccessful was false
       // This should not happen if notifications are being sent, but handle edge cases
-      
+
       // If all failed due to invalid tokens (no valid tokens to send), return detailed error
       if (validTokens.length === 0) {
         let errorMessage = "All notifications failed to send";

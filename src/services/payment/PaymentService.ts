@@ -1955,6 +1955,8 @@ export class PaymentService {
             nextBillingDate,
             lastBilledDate,
             status: SubscriptionStatus.ACTIVE,
+            isAutoRenew: true, // Enable auto-renewal by default
+            renewalCount: 0, // Initial subscription is not a renewal
             metadata: {
               autoCreated: true,
               createdFromPayment: payment._id

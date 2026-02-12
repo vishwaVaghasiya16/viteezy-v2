@@ -149,6 +149,8 @@ class SubscriptionController {
         nextDeliveryDate: nextDelDate,
         nextBillingDate: nextBillDate,
         status: SubscriptionStatus.ACTIVE,
+        isAutoRenew: true, // Enable auto-renewal by default
+        renewalCount: 0, // Initial subscription is not a renewal
         metadata: {
           ...(metadata || {}),
         },
