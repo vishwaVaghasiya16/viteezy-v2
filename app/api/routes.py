@@ -689,10 +689,26 @@ async def get_current_question(
         ) from e
 
 
+def _i18n_to_string(value: dict | str | None, lang: str) -> str:
+    """Return a single-language string from I18n field (dict with en/nl/de/fr/es) or plain string."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        v = value.get(lang) or value.get("en") or next((x for x in value.values() if x), None)
+        return str(v) if v is not None else ""
+    return ""
+
+
+_SUPPORTED_LANGS = frozenset({"en", "nl", "de", "fr", "es"})
+
+
 class UserLoginRequest(BaseModel):
     """Request model for user login verification."""
     user_id: str | None = Field(None, description="User ID to check (can be null or empty)")
     session_id: str = Field(..., description="Session ID to retrieve product recommendations from")
+    lang: str | None = Field(None, description="Language code for product fields (en, nl, de, fr, es). Default: en.")
 
 
 @router.post(
@@ -929,30 +945,22 @@ async def check_user_login(
                                 
                                 logging.info(f"Found {len(product_docs)} products from database")
                                 
-                                # Format product data
+                                # Language for product fields: request lang or default en
+                                user_lang = (request.lang or "en").strip().lower()
+                                if user_lang not in _SUPPORTED_LANGS:
+                                    user_lang = "en"
+                                
+                                # Format product data (single-language title and shortDescription)
                                 for product_doc in product_docs:
-                                    # Extract product _id
                                     product_id = str(product_doc.get("_id", ""))
-                                    
-                                    # Extract title.en
-                                    title_obj = product_doc.get("title", {})
-                                    if isinstance(title_obj, dict):
-                                        title_en = title_obj.get("en", "")
-                                    elif isinstance(title_obj, str):
-                                        title_en = title_obj
-                                    else:
-                                        title_en = ""
-                                    
-                                    # Extract shortDescription
-                                    short_description = product_doc.get("shortDescription", "")
-                                    
-                                    # Extract productImage
-                                    product_image = product_doc.get("productImage", "")
+                                    title_str = _i18n_to_string(product_doc.get("title"), user_lang)
+                                    short_desc_str = _i18n_to_string(product_doc.get("shortDescription"), user_lang)
+                                    product_image = product_doc.get("productImage", "") or ""
                                     
                                     products_data.append({
                                         "id": product_id,
-                                        "title": title_en,  # Return as string (en value), not object
-                                        "shortDescription": short_description,
+                                        "title": title_str,
+                                        "shortDescription": short_desc_str,
                                         "productImage": product_image
                                     })
                                     
