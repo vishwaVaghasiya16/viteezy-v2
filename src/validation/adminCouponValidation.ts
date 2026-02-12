@@ -166,14 +166,38 @@ export const updateCouponSchema = Joi.object(
       .optional()
       .allow(null)
       .label("Max usage per user"),
-    // Update: do not use .min("now") so existing dates (e.g. validFrom in the past) are accepted when only other fields are changed
+    // When editing, if validFrom or validUntil are provided, they must be future dates
     validFrom: Joi.date()
       .optional()
       .allow(null)
+      .custom((value, helpers) => {
+        // If validFrom is provided during update, it must be a future date
+        if (value) {
+          const now = new Date();
+          if (new Date(value) <= now) {
+            return helpers.error("date.min", {
+              message: "Valid from date must be a future date",
+            });
+          }
+        }
+        return value;
+      })
       .label("Valid from date"),
     validUntil: Joi.date()
       .optional()
       .allow(null)
+      .custom((value, helpers) => {
+        // If validUntil is provided during update, it must be a future date
+        if (value) {
+          const now = new Date();
+          if (new Date(value) <= now) {
+            return helpers.error("date.min", {
+              message: "Expiry date must be a future date",
+            });
+          }
+        }
+        return value;
+      })
       .label("Expiry date")
       .when("validFrom", {
         is: Joi.exist(),
