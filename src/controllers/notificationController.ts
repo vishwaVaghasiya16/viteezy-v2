@@ -4,6 +4,8 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { notificationService } from "@/services/notificationService";
 import { NotificationCategory, NotificationType } from "@/models/enums";
+import { Products, Orders, Subscriptions, Memberships } from "@/models/commerce";
+import { Experts } from "@/models/consultation";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -180,6 +182,62 @@ class NotificationController {
   );
 
   /**
+   * Validate query IDs exist in database
+   * @param query - Optional query object with IDs to validate
+   * @param appRoute - Optional app route (for reference)
+   */
+  private async validateQueryIds(
+    query?: Record<string, string> | null,
+    appRoute?: string
+  ): Promise<void> {
+    if (!query || Object.keys(query).length === 0) {
+      return;
+    }
+
+    // Map query keys to their corresponding models
+    const idValidationMap: Record<
+      string,
+      { model: any; fieldName: string }
+    > = {
+      productId: { model: Products, fieldName: "Product" },
+      orderId: { model: Orders, fieldName: "Order" },
+      subscriptionId: { model: Subscriptions, fieldName: "Subscription" },
+      membershipId: { model: Memberships, fieldName: "Membership" },
+      expertId: { model: Experts, fieldName: "Expert" },
+      // ticketId and quizSessionId validation can be added later if models exist
+    };
+
+    // Validate each ID in query
+    const validationPromises = Object.entries(query).map(
+      async ([key, value]) => {
+        if (!idValidationMap[key]) {
+          // Skip validation for keys not in map (like ticketId, quizSessionId)
+          return;
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(value)) {
+          throw new AppError(
+            `Invalid ${idValidationMap[key].fieldName} ID format: ${value}`,
+            400
+          );
+        }
+
+        const { model, fieldName } = idValidationMap[key];
+        const exists = await model.findById(value).lean();
+
+        if (!exists) {
+          throw new AppError(
+            `${fieldName} with ID ${value} not found`,
+            404
+          );
+        }
+      }
+    );
+
+    await Promise.all(validationPromises);
+  }
+
+  /**
    * Create mock notification (for testing)
    * @route POST /api/test/notifications
    * @access Private (or public for testing)
@@ -199,6 +257,11 @@ class NotificationController {
         query,
         skipPush = false,
       } = req.body;
+
+      // Validate query IDs exist in database if query is provided
+      if (query && Object.keys(query).length > 0) {
+        await this.validateQueryIds(query, appRoute);
+      }
 
       // Create notification payload
       const payload = {

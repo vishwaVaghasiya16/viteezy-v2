@@ -10,7 +10,7 @@ import { SoftDelete } from "../common.model";
 /**
  * Get valid query keys for a given app route
  */
-function getValidQueryKeysForRoute(route: string): string[] {
+export function getValidQueryKeysForRoute(route: string): string[] {
   const routeQueryMap: Record<string, string[]> = {
     "/product-detail": ["productId"],
     "/orderDetail": ["orderId"],

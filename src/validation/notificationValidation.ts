@@ -5,6 +5,7 @@ import {
   NOTIFICATION_TYPE_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
+import { getValidQueryKeysForRoute } from "@/models/core/notifications.model";
 
 // Joi Schemas
 const objectIdSchema = Joi.string()
@@ -104,7 +105,44 @@ export const createMockNotificationSchema = Joi.object(
       .messages({
         "any.only": "Invalid app route",
       }),
-    query: Joi.object().pattern(Joi.string(), Joi.string()).optional(),
+    query: Joi.object()
+      .pattern(Joi.string(), Joi.string())
+      .optional()
+      .allow(null)
+      .custom((value, helpers) => {
+        // Get appRoute from parent object
+        const parent = helpers.state.ancestors?.[0];
+        const appRoute = parent?.appRoute;
+        
+        // For test API: both appRoute and query are optional
+        // Only validate query if both appRoute and query are provided
+        if (appRoute && appRoute !== "/dashboard" && value && Object.keys(value).length > 0) {
+          const validKeys = getValidQueryKeysForRoute(appRoute);
+          const queryKeys = Object.keys(value);
+          
+          // Check if all query keys are valid
+          const invalidKeys = queryKeys.filter(key => !validKeys.includes(key));
+          if (invalidKeys.length > 0) {
+            return helpers.error("any.invalid", {
+              message: `Invalid query keys for route ${appRoute}: ${invalidKeys.join(", ")}. Valid keys are: ${validKeys.join(", ")}`,
+            });
+          }
+          
+          // Check if all required keys are present
+          const missingKeys = validKeys.filter(key => !queryKeys.includes(key));
+          if (missingKeys.length > 0) {
+            return helpers.error("any.invalid", {
+              message: `Missing required query keys for route ${appRoute}: ${missingKeys.join(", ")}`,
+            });
+          }
+        }
+        
+        // If appRoute is provided but query is not, that's fine for test API (optional)
+        return value;
+      })
+      .messages({
+        "any.invalid": "Invalid query keys for the specified app route",
+      }),
     skipPush: Joi.boolean().optional().default(false),
   })
 ).label("CreateMockNotification");
