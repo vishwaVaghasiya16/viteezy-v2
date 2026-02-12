@@ -4,11 +4,10 @@ import { Payments } from "@/models/commerce/payments.model";
 import { SubscriptionRenewalHistory } from "@/models/commerce/subscriptionRenewalHistory.model";
 import { Orders } from "@/models/commerce/orders.model";
 import { User } from "@/models/core";
-import { SubscriptionStatus, PaymentStatus, PaymentMethod } from "@/models/enums";
+import { SubscriptionStatus, PaymentStatus, PaymentMethod, OrderStatus } from "@/models/enums";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { PaymentService } from "./payment/PaymentService";
-import { IPaymentGateway, PaymentIntentData } from "./payment/interfaces/IPaymentGateway";
 
 interface RenewalResult {
   success: boolean;
@@ -236,61 +235,8 @@ export class SubscriptionAutoRenewalService {
           await payment.save({ session });
           
           paymentResult = paymentServiceResult.result;
-          
-          // Create payment intent for renewal
-          // In production, you should use saved payment methods or subscriptions
-          const paymentIntentData = {
-            orderId: (subscription.orderId as mongoose.Types.ObjectId).toString(),
-            userId: (subscription.userId as mongoose.Types.ObjectId).toString(),
-            customerEmail: (await User.findById(subscription.userId).lean())?.email || "",
-            amount: {
-              value: totalAmount,
-              currency: currency,
-            },
-            description: `Subscription renewal for ${subscription.subscriptionNumber}`,
-            returnUrl: `${process.env.FRONTEND_URL || "http://localhost:8080"}/subscription/renewal/success`,
-            cancelUrl: `${process.env.FRONTEND_URL || "http://localhost:8080"}/subscription/renewal/cancel`,
-            metadata: {
-              subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
-              subscriptionNumber: subscription.subscriptionNumber,
-              renewalNumber: (subscription.renewalCount + 1).toString(),
-              isRenewal: "true",
-              originalPaymentId: originalPayment?._id?.toString() || "",
-            },
-            lineItems: subscription.items.map((item) => ({
-              name: item.name,
-              quantity: 1,
-              price: {
-                amount: item.totalAmount,
-                currency: currency,
-              },
-            })),
-          };
-
-          paymentResult = await gateway.createPaymentIntent(paymentIntentData);
 
           if (paymentResult.success) {
-            // Update payment with gateway details
-            payment.gatewayTransactionId = paymentResult.gatewayTransactionId || paymentResult.paymentId;
-            payment.gatewaySessionId = paymentResult.sessionId;
-            payment.gatewayResponse = paymentResult.gatewayResponse || {};
-            payment.status = paymentResult.status;
-            payment.transactionId = paymentResult.gatewayTransactionId || paymentResult.paymentId;
-
-            // For automatic renewals, if payment is completed immediately, mark as processed
-            // Otherwise, it will be updated via webhook
-            if (paymentResult.status === PaymentStatus.COMPLETED) {
-              payment.processedAt = new Date();
-              paymentProcessed = true;
-            } else {
-              // Payment is pending - will be updated via webhook
-              logger.info(
-                `Renewal payment created but pending gateway confirmation. Transaction ID: ${payment.gatewayTransactionId}`
-              );
-            }
-
-            await payment.save({ session });
-
             logger.info(
               `Renewal payment processed via gateway. Transaction ID: ${payment.gatewayTransactionId}, Status: ${payment.status}`
             );
