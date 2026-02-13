@@ -37,6 +37,37 @@ router.get(
 );
 
 /**
+ * @route POST /api/v1/admin/subscriptions/process-renewals
+ * @desc Process auto-renewals for due subscriptions (Admin only)
+ * @access Admin
+ * @query {Number} [limit] - Maximum number of subscriptions to process (default: 100)
+ */
+router.post(
+  "/process-renewals",
+  adminSubscriptionController.processRenewals
+);
+
+/**
+ * @route GET /api/v1/admin/subscriptions/renewal-job/status
+ * @desc Get renewal job status (Admin only)
+ * @access Admin
+ */
+router.get(
+  "/renewal-job/status",
+  adminSubscriptionController.getRenewalJobStatus
+);
+
+/**
+ * @route POST /api/v1/admin/subscriptions/test-renewal
+ * @desc Create test subscription for renewal testing (Admin only)
+ * @access Admin
+ */
+router.post(
+  "/test-renewal",
+  adminSubscriptionController.createTestSubscriptionForRenewal
+);
+
+/**
  * @route GET /api/v1/admin/subscriptions/:id
  * @desc Get subscription detail by ID with payment/transaction logs
  * @access Admin
@@ -78,17 +109,6 @@ router.post(
 );
 
 /**
- * @route POST /api/v1/admin/subscriptions/process-renewals
- * @desc Process auto-renewals for due subscriptions (Admin only)
- * @access Admin
- * @query {Number} [limit] - Maximum number of subscriptions to process (default: 100)
- */
-router.post(
-  "/process-renewals",
-  adminSubscriptionController.processRenewals
-);
-
-/**
  * @route GET /api/v1/admin/subscriptions/:id/renewal-history
  * @desc Get renewal history for a subscription (Admin only)
  * @access Admin
@@ -112,29 +132,6 @@ router.get(
   "/:id/transaction-history",
   validateParams(subscriptionIdParamsSchema),
   adminSubscriptionController.getTransactionHistory
-);
-
-/**
- * @route GET /api/v1/admin/subscriptions/renewal-job/status
- * @desc Get renewal job status (Admin only)
- * @access Admin
- */
-router.get(
-  "/renewal-job/status",
-  adminSubscriptionController.getRenewalJobStatus
-);
-
-/**
- * @route POST /api/v1/admin/subscriptions/test-renewal
- * @desc Create test subscription for renewal testing (Admin only)
- * @access Admin
- * @body {String} userId - User ID for the test subscription
- * @body {Number} [cycleDays] - Cycle days (30, 60, 90, 180) - default: 30
- * @body {Boolean} [processRenewal] - Whether to process renewal immediately - default: true
- */
-router.post(
-  "/test-renewal",
-  adminSubscriptionController.createTestSubscriptionForRenewal
 );
 
 export default router;

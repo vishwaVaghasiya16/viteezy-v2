@@ -246,7 +246,7 @@ class AdminSubscriptionController {
       })
         .populate("userId", "firstName lastName email phone")
         .populate("items.productId", "title slug description media")
-        .populate("orderId", "orderNumber paymentStatus paymentMethod")
+        .populate("orderId", "orderNumber paymentStatus paymentMethod grandTotal currency")
         .populate("cancelledBy", "firstName lastName email")
         .lean();
 
@@ -327,6 +327,8 @@ class AdminSubscriptionController {
               orderNumber: (subscription.orderId as any).orderNumber || null,
               paymentStatus: (subscription.orderId as any).paymentStatus || null,
               paymentMethod: (subscription.orderId as any).paymentMethod || null,
+              grandTotal: (subscription.orderId as any).grandTotal ?? null,
+              currency: (subscription.orderId as any).currency ?? null,
             }
           : null,
         items: subscription.items.map((item: any) => ({
@@ -652,16 +654,24 @@ class AdminSubscriptionController {
       const limit = parseInt(req.query.limit as string) || 100;
 
       const { subscriptionRenewalJob } = await import("@/jobs/subscriptionRenewalJob");
-      const result = await subscriptionRenewalJob.processRenewals(limit);
+      await subscriptionRenewalJob.processRenewals(limit);
+      const status = subscriptionRenewalJob.getStatus();
 
-      // Note: processRenewals currently returns void from the job,
-      // so we only return a generic success message.
-      // Detailed stats can be fetched via getRenewalJobStatus.
       res.apiSuccess(
         {
-          message: "Subscription renewal job started successfully",
+          message: "Subscription renewal job completed",
+          isRunning: status.isRunning,
+          lastRunDate: status.lastRunDate,
+          result: status.lastRunResult
+            ? {
+                processed: status.lastRunResult.processed,
+                successful: status.lastRunResult.successful,
+                failed: status.lastRunResult.failed,
+                results: status.lastRunResult.results,
+              }
+            : null,
         },
-        "Subscription renewal job started successfully"
+        "Subscription renewal job completed"
       );
     }
   );
