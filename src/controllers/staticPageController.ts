@@ -49,12 +49,13 @@ export const getStaticPages = asyncHandler(
         status: page.status,
         seo: page.seo || {},
         route: page.route,
+        lang: lang, // Include language in response
         createdAt: page.createdAt,
         updatedAt: page.updatedAt,
       };
     });
 
-    logger.info(`Retrieved ${transformedPages.length} active static pages`);
+    logger.info(`Retrieved ${transformedPages.length} active static pages for language: ${lang}`);
 
     res.status(200).json({
       success: true,
@@ -62,6 +63,7 @@ export const getStaticPages = asyncHandler(
       data: {
         pages: transformedPages,
         count: transformedPages.length,
+        lang: lang, // Include language in response
       },
     });
   }
@@ -117,17 +119,19 @@ export const getStaticPageByIdOrSlug = asyncHandler(
       status: page.status,
       seo: page.seo || {},
       route: page.route,
+      lang: lang, // Include language in response
       createdAt: page.createdAt,
       updatedAt: page.updatedAt,
     };
 
-    logger.info(`Retrieved static page: ${page.slug} (${isObjectId ? "by ID" : "by slug"})`);
+    logger.info(`Retrieved static page: ${page.slug} (${isObjectId ? "by ID" : "by slug"}) for language: ${lang}`);
 
     res.status(200).json({
       success: true,
       message: "Static page retrieved successfully",
       data: {
         page: transformedPage,
+        lang: lang, // Include language in response
       },
     });
   }
