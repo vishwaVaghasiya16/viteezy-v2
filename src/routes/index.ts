@@ -58,6 +58,7 @@ import stateRoutes from "./stateRoutes";
 import generalSettingsRoutes from "./generalSettingsRoutes";
 import headerBannerRoutes from "./headerBannerRoutes";
 import notificationRoutes from "./notificationRoutes";
+import staticPageRoutes from "./staticPageRoutes";
 import contactRoutes from "./contactRoutes";
 import adminContactRoutes from "./adminContactRoutes";
 
@@ -125,6 +126,7 @@ router.use("/general-settings", generalSettingsRoutes);
 router.use("/header-banner", headerBannerRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/membership-cms", membershipCmsRoutes);
+router.use("/static-pages", staticPageRoutes);
 router.use("/contact", contactRoutes);
 router.use("/admin/contacts", adminContactRoutes);
 

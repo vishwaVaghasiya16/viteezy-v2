@@ -309,6 +309,7 @@ export enum SubscriptionStatus {
   CANCELLED = "Cancelled",
   EXPIRED = "Expired",
   SUSPENDED = "Suspended",
+  PAST_DUE = "Past Due", // Payment failed but subscription still active
 }
 
 // Subscription Cycle Intervals (in days)

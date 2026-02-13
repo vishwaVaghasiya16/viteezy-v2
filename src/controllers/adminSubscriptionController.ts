@@ -10,6 +10,7 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { Subscriptions, Payments, Orders } from "@/models/commerce";
+import { SubscriptionRenewalHistory } from "@/models/commerce/subscriptionRenewalHistory.model";
 import { User } from "@/models/core";
 import { SubscriptionStatus, OrderStatus, PaymentStatus, OrderPlanType, PaymentMethod } from "@/models/enums";
 import { emailService } from "@/services/emailService";
@@ -254,15 +255,49 @@ class AdminSubscriptionController {
       }
 
       // Get payment/transaction logs for this subscription
-      // Payments are linked to orders, so we get payments for the subscription's order
-      const orderId = subscription.orderId?._id || subscription.orderId;
-      const payments = await Payments.find({
-        orderId: orderId,
+      // Get payments linked to subscription (renewal payments)
+      const subscriptionId = subscription._id;
+      const subscriptionPayments = await Payments.find({
+        subscriptionId: subscriptionId,
         isDeleted: { $ne: true },
       })
         .populate("userId", "firstName lastName email")
+        .populate("orderId", "orderNumber status")
         .sort({ createdAt: -1 })
         .lean();
+
+      // Also get initial payment from order
+      const orderId = subscription.orderId?._id || subscription.orderId;
+      const initialPayments = orderId
+        ? await Payments.find({
+            orderId: orderId,
+            subscriptionId: { $exists: false }, // Initial payment, not renewal
+            isDeleted: { $ne: true },
+          })
+            .populate("userId", "firstName lastName email")
+            .sort({ createdAt: -1 })
+            .lean()
+        : [];
+
+      // Combine all payments (initial + renewals)
+      const allPayments = [...initialPayments, ...subscriptionPayments].sort(
+        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      // Get renewal history
+      const { subscriptionAutoRenewalService } = await import(
+        "@/services/subscriptionAutoRenewalService"
+      );
+      const renewalHistory = await subscriptionAutoRenewalService.getRenewalHistory(
+        (subscriptionId as mongoose.Types.ObjectId).toString(),
+        50
+      );
+
+      // Get transaction history (all payments related to subscription)
+      const transactionHistory = await subscriptionAutoRenewalService.getTransactionHistory(
+        (subscriptionId as mongoose.Types.ObjectId).toString(),
+        50
+      );
 
       const user = subscription.userId as any;
       const isPopulatedUser =
@@ -334,7 +369,7 @@ class AdminSubscriptionController {
         pausedAt: subscription.pausedAt,
         pausedUntil: subscription.pausedUntil,
         metadata: subscription.metadata,
-        payments: payments.map((payment: any) => ({
+        payments: allPayments.map((payment: any) => ({
           id: payment._id,
           paymentMethod: payment.paymentMethod,
           status: payment.status,
@@ -348,8 +383,75 @@ class AdminSubscriptionController {
           refundReason: payment.refundReason,
           refundedAt: payment.refundedAt,
           processedAt: payment.processedAt,
+          isRenewalPayment: payment.isRenewalPayment || false,
+          renewalCycleNumber: payment.renewalCycleNumber || null,
+          order: payment.orderId
+            ? {
+                id: payment.orderId._id || payment.orderId,
+                orderNumber: (payment.orderId as any).orderNumber || null,
+                status: (payment.orderId as any).status || null,
+              }
+            : null,
           createdAt: payment.createdAt,
           updatedAt: payment.updatedAt,
+        })),
+        renewalHistory: renewalHistory.map((renewal: any) => ({
+          id: renewal._id,
+          renewalNumber: renewal.renewalNumber,
+          previousBillingDate: renewal.previousBillingDate,
+          newBillingDate: renewal.newBillingDate,
+          previousDeliveryDate: renewal.previousDeliveryDate,
+          newDeliveryDate: renewal.newDeliveryDate,
+          payment: renewal.paymentId
+            ? {
+                id: renewal.paymentId._id || renewal.paymentId,
+                status: (renewal.paymentId as any).status || null,
+                amount: (renewal.paymentId as any).amount || null,
+                currency: (renewal.paymentId as any).currency || null,
+                transactionId: (renewal.paymentId as any).transactionId || null,
+              }
+            : null,
+          order: renewal.orderId
+            ? {
+                id: renewal.orderId._id || renewal.orderId,
+                orderNumber: (renewal.orderId as any).orderNumber || null,
+                status: (renewal.orderId as any).status || null,
+              }
+            : null,
+          amount: renewal.amount,
+          status: renewal.status,
+          renewalDate: renewal.renewalDate,
+          failureReason: renewal.failureReason,
+          retryCount: renewal.retryCount,
+          nextRetryDate: renewal.nextRetryDate,
+          createdAt: renewal.createdAt,
+          updatedAt: renewal.updatedAt,
+        })),
+        transactionHistory: transactionHistory.map((transaction: any) => ({
+          id: transaction._id,
+          paymentMethod: transaction.paymentMethod,
+          status: transaction.status,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          transactionId: transaction.transactionId,
+          gatewayTransactionId: transaction.gatewayTransactionId,
+          gatewaySessionId: transaction.gatewaySessionId,
+          failureReason: transaction.failureReason,
+          refundAmount: transaction.refundAmount,
+          refundReason: transaction.refundReason,
+          refundedAt: transaction.refundedAt,
+          processedAt: transaction.processedAt,
+          isRenewalPayment: transaction.isRenewalPayment || false,
+          renewalCycleNumber: transaction.renewalCycleNumber || null,
+          order: transaction.orderId
+            ? {
+                id: transaction.orderId._id || transaction.orderId,
+                orderNumber: (transaction.orderId as any).orderNumber || null,
+                status: (transaction.orderId as any).status || null,
+              }
+            : null,
+          createdAt: transaction.createdAt,
+          updatedAt: transaction.updatedAt,
         })),
         createdAt: subscription.createdAt,
         updatedAt: subscription.updatedAt,
@@ -688,11 +790,45 @@ class AdminSubscriptionController {
         },
       });
 
+      // Create a test payment for the order (required for renewal processing)
+      const testPayment = await Payments.create({
+        orderId: testOrder._id,
+        userId: new mongoose.Types.ObjectId(userId),
+        paymentMethod: PaymentMethod.STRIPE,
+        status: PaymentStatus.COMPLETED,
+        amount: {
+          amount: 48.39,
+          currency: "EUR",
+          taxRate: 0.21,
+        },
+        currency: "EUR",
+        gatewayTransactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
+        gatewaySessionId: `TEST_SESSION_${Date.now()}_${testOrder._id}`,
+        transactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
+        processedAt: new Date(),
+        gatewayResponse: {
+          test: true,
+          autoCompleted: true,
+          metadata: {
+            isTestPayment: true,
+            createdForRenewalTesting: true,
+          },
+        },
+        metadata: {
+          isTestPayment: true,
+          createdForRenewalTesting: true,
+        },
+      });
+
+      logger.info(
+        `Test payment created: ${testPayment._id} for order: ${testOrder.orderNumber}`
+      );
+
       // Calculate dates - set nextBillingDate to today so it's due for renewal
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      // Start date: 30 days ago (so subscription has been running)
+      // Start date: cycleDays ago (so subscription has been running)
       const subscriptionStartDate = new Date(today);
       subscriptionStartDate.setDate(subscriptionStartDate.getDate() - cycleDays);
       
@@ -705,10 +841,35 @@ class AdminSubscriptionController {
       // Next delivery date: today
       const nextDeliveryDate = new Date(today);
       
-      // Initial delivery date: 30 days ago
+      // Initial delivery date: cycleDays ago
       const initialDeliveryDate = new Date(subscriptionStartDate);
 
-      // Create test subscription
+      // Create gateway subscription (Stripe/Mollie) for auto-renewal
+      const { subscriptionGatewayService } = await import("@/services/subscriptionGatewayService");
+      const totalAmount = testOrder.grandTotal * 100; // Convert to cents
+      
+      const gatewayResult = await subscriptionGatewayService.createSubscription({
+        userId: userId,
+        orderId: (testOrder._id as mongoose.Types.ObjectId).toString(),
+        paymentMethod: PaymentMethod.STRIPE, // Use Stripe for test
+        amount: totalAmount,
+        currency: testOrder.currency,
+        cycleDays: cycleDays,
+        customerEmail: user.email,
+        customerName: `${user.firstName} ${user.lastName}`.trim(),
+        metadata: {
+          isTestSubscription: "true",
+          createdForRenewalTesting: "true",
+          orderNumber: testOrder.orderNumber,
+        },
+      });
+
+      if (!gatewayResult.success) {
+        logger.warn(`Failed to create gateway subscription: ${gatewayResult.error}`);
+        // Continue without gateway subscription for testing purposes
+      }
+
+      // Create test subscription with gateway subscription details
       const testSubscription = await Subscriptions.create({
         userId: new mongoose.Types.ObjectId(userId),
         orderId: testOrder._id,
@@ -737,10 +898,18 @@ class AdminSubscriptionController {
         status: SubscriptionStatus.ACTIVE,
         isAutoRenew: true,
         renewalCount: 0,
+        // Gateway subscription details
+        gatewaySubscriptionId: gatewayResult.gatewaySubscriptionId || undefined,
+        gatewayCustomerId: gatewayResult.gatewayCustomerId || undefined,
+        gatewayPaymentMethodId: gatewayResult.gatewayPaymentMethodId || undefined,
+        cancelAtPeriodEnd: false,
+        retryCount: 0,
         metadata: {
           isTestSubscription: true,
           createdForRenewalTesting: true,
           createdAt: now.toISOString(),
+          gatewaySubscriptionCreated: gatewayResult.success,
+          gatewayError: gatewayResult.error || undefined,
         },
       });
 
@@ -748,9 +917,61 @@ class AdminSubscriptionController {
         `Test subscription created: ${testSubscription.subscriptionNumber} (ID: ${testSubscription._id})`
       );
 
+      if (gatewayResult.success) {
+        logger.info(
+          `Gateway subscription created: ${gatewayResult.gatewaySubscriptionId} for test subscription: ${testSubscription.subscriptionNumber}`
+        );
+      } else {
+        logger.warn(
+          `Gateway subscription creation failed for test subscription: ${testSubscription.subscriptionNumber}. Error: ${gatewayResult.error}`
+        );
+      }
+
+      // Create initial renewal history record for the test subscription
+      // This represents the initial subscription payment (renewalNumber: 0)
+      let initialRenewalHistory = null;
+      try {
+        initialRenewalHistory = await SubscriptionRenewalHistory.create({
+          subscriptionId: testSubscription._id as mongoose.Types.ObjectId,
+          userId: new mongoose.Types.ObjectId(userId),
+          renewalNumber: 0, // 0 represents the initial subscription payment
+          previousBillingDate: subscriptionStartDate, // No previous billing for initial
+          newBillingDate: nextBillingDate, // First billing date
+          previousDeliveryDate: subscriptionStartDate, // No previous delivery for initial
+          newDeliveryDate: initialDeliveryDate, // First delivery date
+          paymentId: testPayment._id as mongoose.Types.ObjectId,
+          orderId: testOrder._id as mongoose.Types.ObjectId,
+          amount: {
+            amount: testOrder.grandTotal,
+            currency: testOrder.currency,
+            taxRate: testOrder.items[0]?.taxRate || 0.21,
+          },
+          status: PaymentStatus.COMPLETED,
+          renewalDate: now,
+          retryCount: 0,
+          metadata: {
+            isTestSubscription: true,
+            isInitialPayment: true,
+            createdForRenewalTesting: true,
+            cycleDays: cycleDays,
+          },
+        });
+
+        logger.info(
+          `Initial renewal history record created for test subscription: ${testSubscription.subscriptionNumber} (Renewal #0)`
+        );
+      } catch (renewalHistoryError: any) {
+        logger.error(
+          `Failed to create initial renewal history record: ${renewalHistoryError.message}`
+        );
+        // Continue even if renewal history creation fails
+      }
+
       let renewalResult = null;
+      let renewalPayment = null;
 
       // Process renewal if requested
+      // For testing purposes, always process a renewal to create renewal history record
       if (processRenewal) {
         try {
           const { subscriptionAutoRenewalService } = await import(
@@ -764,13 +985,42 @@ class AdminSubscriptionController {
               subscriptionDoc
             );
             
+            // Fetch the renewal payment record if renewal was successful
+            if (renewalResult?.success && renewalResult?.paymentId) {
+              renewalPayment = await Payments.findById(renewalResult.paymentId);
+              
+              // Update payment metadata to mark it as test payment
+              if (renewalPayment) {
+                renewalPayment.metadata = {
+                  ...(renewalPayment.metadata || {}),
+                  isTestPayment: true,
+                  isRenewalPayment: true,
+                  createdForRenewalTesting: true,
+                  subscriptionNumber: testSubscription.subscriptionNumber,
+                };
+                await renewalPayment.save();
+                
+                logger.info(
+                  `Renewal payment record updated with test metadata: ${renewalPayment._id}`
+                );
+              }
+            }
+            
             // Refresh subscription to get updated data
             await testSubscription.populate("userId", "firstName lastName email");
             await testSubscription.populate("orderId", "orderNumber");
             
-            logger.info(
-              `Renewal processed for test subscription: ${testSubscription.subscriptionNumber}`
-            );
+            if (gatewayResult.success && gatewayResult.gatewaySubscriptionId) {
+              logger.info(
+                `Test renewal processed for subscription: ${testSubscription.subscriptionNumber}. ` +
+                `Gateway subscription exists (${gatewayResult.gatewaySubscriptionId}). ` +
+                `Future renewals will be handled automatically via webhooks.`
+              );
+            } else {
+              logger.info(
+                `Manual renewal processed for test subscription: ${testSubscription.subscriptionNumber}`
+              );
+            }
           }
         } catch (renewalError: any) {
           logger.error(
@@ -783,30 +1033,32 @@ class AdminSubscriptionController {
         }
       }
 
-      // Get renewal history if renewal was processed
+      // Get renewal history (includes initial record + any processed renewals)
       let renewalHistory = null;
       let transactionHistory = null;
       
-      if (processRenewal && renewalResult?.success) {
-        try {
-          const { subscriptionAutoRenewalService } = await import(
-            "@/services/subscriptionAutoRenewalService"
-          );
-          const subscriptionId = (testSubscription._id as mongoose.Types.ObjectId).toString();
-          renewalHistory = await subscriptionAutoRenewalService.getRenewalHistory(
-            subscriptionId,
-            10
-          );
-          transactionHistory = await subscriptionAutoRenewalService.getTransactionHistory(
-            subscriptionId,
-            10
-          );
-        } catch (error: any) {
-          logger.warn(`Failed to fetch renewal/transaction history: ${error.message}`);
-        }
+      try {
+        const { subscriptionAutoRenewalService } = await import(
+          "@/services/subscriptionAutoRenewalService"
+        );
+        const subscriptionId = (testSubscription._id as mongoose.Types.ObjectId).toString();
+        renewalHistory = await subscriptionAutoRenewalService.getRenewalHistory(
+          subscriptionId,
+          10
+        );
+        transactionHistory = await subscriptionAutoRenewalService.getTransactionHistory(
+          subscriptionId,
+          10
+        );
+      } catch (error: any) {
+        logger.warn(`Failed to fetch renewal/transaction history: ${error.message}`);
       }
 
       // Refresh subscription to get latest data
+      await testSubscription.populate("userId", "firstName lastName email");
+      await testSubscription.populate("orderId", "orderNumber");
+
+      // Refresh subscription to get latest data including gateway details
       await testSubscription.populate("userId", "firstName lastName email");
       await testSubscription.populate("orderId", "orderNumber");
 
@@ -814,7 +1066,19 @@ class AdminSubscriptionController {
         {
           subscription: testSubscription,
           order: testOrder,
+          payment: testPayment,
+          renewalPayment: renewalPayment,
+          gatewaySubscription: gatewayResult.success ? {
+            gatewaySubscriptionId: gatewayResult.gatewaySubscriptionId,
+            gatewayCustomerId: gatewayResult.gatewayCustomerId,
+            gatewayPaymentMethodId: gatewayResult.gatewayPaymentMethodId,
+            success: true,
+          } : {
+            success: false,
+            error: gatewayResult.error,
+          },
           renewalResult: renewalResult,
+          initialRenewalHistory: initialRenewalHistory,
           renewalHistory: renewalHistory,
           transactionHistory: transactionHistory,
           testInfo: {
@@ -822,9 +1086,13 @@ class AdminSubscriptionController {
             isDueForRenewal: nextBillingDate <= new Date(),
             cycleDays: cycleDays,
             renewalProcessed: processRenewal,
+            gatewaySubscriptionCreated: gatewayResult.success,
+            note: gatewayResult.success 
+              ? "Gateway subscription created. Renewals will be handled automatically via webhooks (invoice.paid, invoice.payment_failed, etc.)"
+              : "Gateway subscription creation failed. Manual renewal will be used for testing.",
           },
         },
-        `Test subscription created successfully${processRenewal ? " and renewal processed" : ""}`
+        `Test subscription created successfully${gatewayResult.success ? " with gateway subscription" : ""}${processRenewal ? " and renewal processed" : ""}`
       );
     }
   );

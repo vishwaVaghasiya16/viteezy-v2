@@ -426,6 +426,35 @@ export class PaymentService {
         );
       }
 
+      // Check if this is a subscription-related event that should be handled by subscription webhook service
+      const subscriptionEventTypes = [
+        "invoice.paid",
+        "invoice.payment_failed",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+        "customer.subscription.paused",
+        "customer.subscription.resumed",
+        "customer.subscription.created",
+      ];
+
+      const isSubscriptionEvent = subscriptionEventTypes.includes(payload?.type);
+      
+      // For subscription events, they're already handled by subscription webhook service in StripeAdapter
+      // If payment not found, it's okay - subscription events don't always have payment records
+      if (isSubscriptionEvent) {
+        console.log(
+          "ℹ️ [PAYMENT SERVICE] - Subscription event detected, handled by subscription webhook service"
+        );
+        // Return a dummy payment object to acknowledge the webhook
+        return {
+          _id: "subscription_event",
+          status: PaymentStatus.PENDING,
+          orderId: null,
+          userId: null,
+          paymentMethod: paymentMethod,
+        } as any;
+      }
+
       // Find payment by gateway transaction ID or session ID
       console.log(
         "🟢 [PAYMENT SERVICE] Step 4: Searching for payment in database"
@@ -447,6 +476,63 @@ export class PaymentService {
         });
       }
 
+      // Check if this might be a subscription payment intent (from subscription creation)
+      // These might not have payment records yet, so we should handle gracefully
+      if (!payment && result.gatewayTransactionId) {
+        // Check if this payment intent is related to a subscription
+        try {
+          const { Subscriptions } = await import("@/models/commerce/subscriptions.model");
+          const subscription = await Subscriptions.findOne({
+            $or: [
+              { "metadata.paymentIntentId": result.gatewayTransactionId },
+              { "metadata.gatewayTransactionId": result.gatewayTransactionId },
+            ],
+            isDeleted: false,
+          }).lean();
+
+          if (subscription) {
+            console.log(
+              "ℹ️ [PAYMENT SERVICE] - Payment intent is related to subscription, handled by subscription webhook"
+            );
+            // Return dummy payment to acknowledge webhook
+            return {
+              _id: "subscription_payment_intent",
+              status: result.status,
+              orderId: subscription.orderId,
+              userId: subscription.userId,
+              paymentMethod: paymentMethod,
+            } as any;
+          }
+        } catch (error: any) {
+          // If check fails, continue with normal flow
+          console.log("ℹ️ [PAYMENT SERVICE] - Could not check subscription relation:", error.message);
+        }
+      }
+
+      // For certain event types that don't require payment records, acknowledge gracefully
+      const informationalEventTypes = [
+        "checkout.session.expired",
+        "payment_intent.canceled", // Can happen for subscription setup payments
+        "charge.refunded", // Might be handled elsewhere
+      ];
+
+      if (!payment && informationalEventTypes.includes(payload?.type)) {
+        console.log(
+          `ℹ️ [PAYMENT SERVICE] - Informational event (${payload?.type}), acknowledging without payment record`
+        );
+        logger.info(
+          `Webhook event ${payload?.type} acknowledged (no payment record found): ${result.gatewayTransactionId || result.sessionId}`
+        );
+        // Return dummy payment to acknowledge webhook
+        return {
+          _id: "informational_event",
+          status: result.status || PaymentStatus.CANCELLED,
+          orderId: null,
+          userId: null,
+          paymentMethod: paymentMethod,
+        } as any;
+      }
+
       if (!payment) {
         console.error(
           "❌ [PAYMENT SERVICE] ERROR: Payment not found in database"
@@ -456,9 +542,26 @@ export class PaymentService {
           result.gatewayTransactionId
         );
         console.error("❌ [PAYMENT SERVICE] - Session ID:", result.sessionId);
+        console.error("❌ [PAYMENT SERVICE] - Event Type:", payload?.type);
         logger.warn(
-          `Payment not found for gateway transaction: ${result.gatewayTransactionId}`
+          `Payment not found for gateway transaction: ${result.gatewayTransactionId}, Event: ${payload?.type}`
         );
+        
+        // For subscription-related payment intents or other edge cases, don't throw error
+        // Just log and acknowledge the webhook
+        if (payload?.type?.includes("subscription") || payload?.type?.includes("invoice")) {
+          console.log(
+            "ℹ️ [PAYMENT SERVICE] - Subscription-related event, acknowledging without payment record"
+          );
+          return {
+            _id: "subscription_related_event",
+            status: result.status || PaymentStatus.PENDING,
+            orderId: null,
+            userId: null,
+            paymentMethod: paymentMethod,
+          } as any;
+        }
+        
         throw new AppError("Payment not found", 404);
       }
 

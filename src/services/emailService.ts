@@ -1604,6 +1604,168 @@ This is an automated message, please do not reply to this email.
   }
 
   /**
+   * Send subscription payment failed email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param data - Payment failed data
+   */
+  async sendSubscriptionPaymentFailedEmail(
+    email: string,
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] Subscription payment failed email for ${email}: Subscription ${data.subscriptionNumber}`
+        );
+        return true;
+      }
+
+      const subject = "Payment Failed - Action Required - Viteezy";
+      const html = this.getSubscriptionPaymentFailedEmailTemplate(name, data);
+      const text = this.getSubscriptionPaymentFailedEmailText(name, data);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Subscription payment failed email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send subscription payment failed email via SendGrid:", {
+        email,
+        subscriptionNumber: data.subscriptionNumber,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get subscription payment failed email HTML template
+   */
+  private getSubscriptionPaymentFailedEmailTemplate(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): string {
+    const formattedAmount = `${data.currency} ${data.amount.toFixed(2)}`;
+    const nextRetryDate = new Date(data.nextRetryDate).toLocaleDateString();
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Failed - Viteezy</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h1 style="color: #dc3545; margin-top: 0;">Payment Failed</h1>
+          <p>Dear ${name},</p>
+          <p>We were unable to process your subscription payment for <strong>${data.subscriptionNumber}</strong>.</p>
+          
+          <div style="background-color: #fff; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #dc3545;">
+            <p style="margin: 0;"><strong>Amount:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Retry Attempt:</strong> ${data.retryCount}</p>
+            <p style="margin: 5px 0;"><strong>Next Retry:</strong> ${nextRetryDate}</p>
+            ${data.failureReason ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${data.failureReason}</p>` : ''}
+          </div>
+
+          <p><strong>What happens next?</strong></p>
+          <ul>
+            <li>We will automatically retry the payment on ${nextRetryDate}</li>
+            <li>Please ensure your payment method has sufficient funds</li>
+            <li>Update your payment method if needed</li>
+          </ul>
+
+          <p>If the payment continues to fail, your subscription may be cancelled.</p>
+
+          <p style="margin-top: 30px;">
+            <a href="${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions" 
+               style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Update Payment Method
+            </a>
+          </p>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">
+            If you have any questions, please contact our support team.
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get subscription payment failed email text version
+   */
+  private getSubscriptionPaymentFailedEmailText(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): string {
+    const formattedAmount = `${data.currency} ${data.amount.toFixed(2)}`;
+    const nextRetryDate = new Date(data.nextRetryDate).toLocaleDateString();
+
+    return `
+Payment Failed - Action Required
+
+Dear ${name},
+
+We were unable to process your subscription payment for ${data.subscriptionNumber}.
+
+Amount: ${formattedAmount}
+Retry Attempt: ${data.retryCount}
+Next Retry: ${nextRetryDate}
+${data.failureReason ? `Reason: ${data.failureReason}` : ''}
+
+What happens next?
+- We will automatically retry the payment on ${nextRetryDate}
+- Please ensure your payment method has sufficient funds
+- Update your payment method if needed
+
+If the payment continues to fail, your subscription may be cancelled.
+
+Update your payment method: ${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions
+
+If you have any questions, please contact our support team.
+
+Best regards,
+Viteezy Team
+    `;
+  }
+
+  /**
    * Get subscription cancellation email HTML template
    */
   private getSubscriptionCancellationEmailTemplate(
