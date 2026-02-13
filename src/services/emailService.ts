@@ -170,6 +170,61 @@ class EmailService {
   }
 
   /**
+   * Send contact form confirmation to user (after "Ask us a question" submit)
+   */
+  async sendContactConfirmationEmail(
+    email: string,
+    name?: string,
+    subject?: string
+  ): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Contact confirmation for ${email}`);
+        return true;
+      }
+      const displayName = name || "there";
+      const emailSubject = "We received your message - Viteezy";
+      const html = this.getContactConfirmationTemplate(displayName, subject);
+      const text = `Hello ${displayName},\n\nThank you for contacting us. We have received your message${subject ? ` regarding "${subject}"` : ""} and will get back to you soon.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({ to: email, subject: emailSubject, html, text });
+      logger.info(`Contact confirmation sent to ${email} via SendGrid`);
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send contact confirmation via SendGrid:", {
+        email,
+        error: error?.message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send welcome / promotional email when user enters email in footer
+   */
+  async sendFooterWelcomeEmail(email: string): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Footer welcome email for ${email}`);
+        return true;
+      }
+      const subject = "Welcome to Viteezy – Tips, offers & more";
+      const html = this.getFooterWelcomeEmailTemplate();
+      const text = `Welcome to Viteezy!\n\nThank you for signing up. You'll receive our latest news, wellness tips, and exclusive offers.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({ to: email, subject, html, text });
+      logger.info(`Footer welcome email sent to ${email} via SendGrid`);
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send footer welcome email via SendGrid:", {
+        email,
+        error: error?.message,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Send password reset email (OTP-based - kept for backward compatibility)
    */
   async sendPasswordResetEmail(email: string, otp: string): Promise<boolean> {
@@ -812,6 +867,89 @@ The Viteezy Team
           <div class="footer">
             <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
             <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Contact form confirmation template (Ask us a question)
+   */
+  private getContactConfirmationTemplate(name: string, subject?: string): string {
+    const subjectLine = subject ? `<p><strong>Subject:</strong> ${subject}</p>` : "";
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>We received your message</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f4f4f4; margin: 0; padding: 0; }
+          .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
+          .header { background: #0d9488; color: #fff; padding: 24px 20px; text-align: center; }
+          .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+          .content { padding: 32px 24px; }
+          .content p { margin: 0 0 12px 0; font-size: 15px; }
+          .footer { text-align: center; padding: 20px; background: #f9fafb; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+        </style>
+      </head>
+      <body>
+        <div class="wrapper">
+          <div class="header"><h1>We received your message</h1></div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>Thank you for getting in touch. We have received your message and will respond as soon as possible.</p>
+            ${subjectLine}
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Footer welcome / promotional email template (newsletter signup)
+   */
+  private getFooterWelcomeEmailTemplate(): string {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to Viteezy</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f4f4f4; margin: 0; padding: 0; }
+          .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
+          .header { background: #0d9488; color: #fff; padding: 28px 20px; text-align: center; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 32px 24px; }
+          .content p { margin: 0 0 14px 0; font-size: 15px; }
+          .cta { margin: 24px 0; text-align: center; }
+          .cta a { display: inline-block; background: #0d9488; color: #fff !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; }
+          .footer { text-align: center; padding: 20px; background: #f9fafb; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+        </style>
+      </head>
+      <body>
+        <div class="wrapper">
+          <div class="header"><h1>Welcome to Viteezy</h1></div>
+          <div class="content">
+            <p>Thank you for signing up! You're now part of the Viteezy community.</p>
+            <p>We'll send you wellness tips, product updates, and exclusive offers. Stay tuned for our best content.</p>
+            <p>If you have any questions, just reply to this email or visit our contact page.</p>
+            <div class="cta"><a href="#">Explore our products</a></div>
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>You received this email because you signed up at viteezy.com.</p>
           </div>
         </div>
       </body>

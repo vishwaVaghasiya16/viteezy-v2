@@ -58,6 +58,8 @@ import stateRoutes from "./stateRoutes";
 import generalSettingsRoutes from "./generalSettingsRoutes";
 import headerBannerRoutes from "./headerBannerRoutes";
 import notificationRoutes from "./notificationRoutes";
+import contactRoutes from "./contactRoutes";
+import adminContactRoutes from "./adminContactRoutes";
 
 const router = Router();
 
@@ -123,5 +125,7 @@ router.use("/general-settings", generalSettingsRoutes);
 router.use("/header-banner", headerBannerRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/membership-cms", membershipCmsRoutes);
+router.use("/contact", contactRoutes);
+router.use("/admin/contacts", adminContactRoutes);
 
 export default router;

@@ -27,6 +27,7 @@ export interface GroupedFaqResponse {
   categoryId: string | null;
   categoryTitle: string;
   categorySlug: string | null;
+  categoryImage: string | null;
   faqs: GroupedFaqItem[];
 }
 
@@ -206,6 +207,7 @@ class FaqService {
           this.resolveI18nField(category.title, lang) ||
           this.fallbackCategoryTitle,
         categorySlug: category.slug || null,
+        categoryImage: category.icon || null,
         faqs: [],
       });
     });
@@ -235,6 +237,7 @@ class FaqService {
           categoryId: faq.categoryId ? faq.categoryId.toString() : null,
           categoryTitle: faq.category || this.fallbackCategoryTitle,
           categorySlug: this.slugify(faq.category),
+          categoryImage: null,
           faqs: [],
         });
         fallbackKeys.push(fallbackKey);

@@ -15,3 +15,5 @@ export { OurTeamPage } from "./ourTeamPage.model";
 export { BlogBanner } from "./blogBanner.model";
 export { HeaderBanner } from "./headerBanner.model";
 export { MembershipCms } from "./membershipCms.model";
+export { ContactInquiry } from "./contactInquiry.model";
+export { FooterSubscription } from "./footerSubscription.model";
