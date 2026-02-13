@@ -108,12 +108,12 @@ export class SubscriptionAutoRenewalService {
         isDeleted: false,
       }).lean();
 
-      // Process payment via payment gateway
+      // Process payment via payment gateway (real-time payment for all subscriptions including test)
       let paymentResult: any = null;
       let paymentProcessed = false;
 
       try {
-        // Try to process payment through gateway
+        // Process payment through gateway for all subscriptions (including test subscriptions)
         if (originalPayment?.gatewayTransactionId) {
           logger.info(
             `Processing renewal payment via ${paymentMethod} for subscription: ${subscription.subscriptionNumber}`
@@ -293,67 +293,83 @@ export class SubscriptionAutoRenewalService {
         );
       }
 
-      // Create renewal order (optional - for tracking purposes)
+      // Get renewal order from payment if it was created during payment processing
       let renewalOrder: any = null;
-      try {
-        const orderNumber = `REN-${subscription.subscriptionNumber}-${subscription.renewalCount + 1}`;
-        renewalOrder = await Orders.create(
-          [
-            {
-              orderNumber: orderNumber,
-              userId: subscription.userId,
-              planType: subscription.planType,
-              isOneTime: false, // Renewal is still a subscription
-              variantType: originalOrder?.variantType,
-              selectedPlanDays: subscription.cycleDays,
-              items: subscription.items.map((item) => ({
-                productId: item.productId,
-                name: item.name,
-                planDays: item.planDays,
-                capsuleCount: item.capsuleCount,
-                amount: item.amount,
-                discountedPrice: item.discountedPrice,
-                taxRate: item.taxRate,
-                totalAmount: item.totalAmount,
-                durationDays: item.durationDays,
-                savingsPercentage: item.savingsPercentage,
-                features: item.features || [],
-              })),
-              subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
-              discountedPrice: subscription.items.reduce(
-                (sum, item) => sum + item.discountedPrice,
-                0
-              ),
-              taxAmount: subscription.items.reduce(
-                (sum, item) => sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
-                0
-              ),
-              grandTotal: totalAmount,
-              currency: currency,
-              shippingAddressId: originalOrder?.shippingAddressId,
-              billingAddressId: originalOrder?.billingAddressId,
-              paymentMethod: paymentMethod,
-              paymentStatus: PaymentStatus.COMPLETED,
-              paymentId: (payment._id as mongoose.Types.ObjectId).toString(),
-              metadata: {
-                isRenewalOrder: true,
-                subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
-                renewalNumber: subscription.renewalCount + 1,
-                originalOrderId: (subscription.orderId as mongoose.Types.ObjectId).toString(),
-              },
-            },
-          ],
-          { session }
-        ).then((docs) => docs[0] as any);
-
+      if (payment.orderId) {
+        renewalOrder = await Orders.findById(payment.orderId).lean();
         if (renewalOrder) {
-          logger.info(`Created renewal order: ${renewalOrder.orderNumber}`);
+          logger.info(`Using existing renewal order: ${renewalOrder.orderNumber}`);
         }
-      } catch (orderError: any) {
-        logger.warn(
-          `Failed to create renewal order for subscription ${subscription.subscriptionNumber}: ${orderError.message}`
-        );
-        // Continue without order - payment and renewal history are more important
+      }
+
+      // Create renewal order if it wasn't created during payment processing
+      if (!renewalOrder) {
+        try {
+          const orderNumber = `REN-${subscription.subscriptionNumber}-${subscription.renewalCount + 1}`;
+          renewalOrder = await Orders.create(
+            [
+              {
+                orderNumber: orderNumber,
+                userId: subscription.userId,
+                planType: subscription.planType,
+                isOneTime: false, // Renewal is still a subscription
+                variantType: originalOrder?.variantType,
+                selectedPlanDays: subscription.cycleDays,
+                items: subscription.items.map((item) => ({
+                  productId: item.productId,
+                  name: item.name,
+                  planDays: item.planDays,
+                  capsuleCount: item.capsuleCount,
+                  amount: item.amount,
+                  discountedPrice: item.discountedPrice,
+                  taxRate: item.taxRate,
+                  totalAmount: item.totalAmount,
+                  durationDays: item.durationDays,
+                  savingsPercentage: item.savingsPercentage,
+                  features: item.features || [],
+                })),
+                subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
+                discountedPrice: subscription.items.reduce(
+                  (sum, item) => sum + item.discountedPrice,
+                  0
+                ),
+                taxAmount: subscription.items.reduce(
+                  (sum, item) => sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
+                  0
+                ),
+                grandTotal: totalAmount,
+                currency: currency,
+                shippingAddressId: originalOrder?.shippingAddressId,
+                billingAddressId: originalOrder?.billingAddressId,
+                paymentMethod: paymentMethod,
+                paymentStatus: PaymentStatus.COMPLETED,
+                paymentId: (payment._id as mongoose.Types.ObjectId).toString(),
+                metadata: {
+                  isRenewalOrder: true,
+                  subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+                  renewalNumber: subscription.renewalCount + 1,
+                  originalOrderId: (subscription.orderId as mongoose.Types.ObjectId).toString(),
+                },
+              },
+            ],
+            { session }
+          ).then((docs) => docs[0] as any);
+
+          // Link payment to renewal order if not already linked
+          if (!payment.orderId) {
+            payment.orderId = renewalOrder._id as mongoose.Types.ObjectId;
+            await payment.save({ session });
+          }
+
+          if (renewalOrder) {
+            logger.info(`Created renewal order: ${renewalOrder.orderNumber}`);
+          }
+        } catch (orderError: any) {
+          logger.warn(
+            `Failed to create renewal order for subscription ${subscription.subscriptionNumber}: ${orderError.message}`
+          );
+          // Continue without order - payment and renewal history are more important
+        }
       }
 
       // Update subscription

@@ -688,11 +688,45 @@ class AdminSubscriptionController {
         },
       });
 
+      // Create a test payment for the order (required for renewal processing)
+      const testPayment = await Payments.create({
+        orderId: testOrder._id,
+        userId: new mongoose.Types.ObjectId(userId),
+        paymentMethod: PaymentMethod.STRIPE,
+        status: PaymentStatus.COMPLETED,
+        amount: {
+          amount: 48.39,
+          currency: "EUR",
+          taxRate: 0.21,
+        },
+        currency: "EUR",
+        gatewayTransactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
+        gatewaySessionId: `TEST_SESSION_${Date.now()}_${testOrder._id}`,
+        transactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
+        processedAt: new Date(),
+        gatewayResponse: {
+          test: true,
+          autoCompleted: true,
+          metadata: {
+            isTestPayment: true,
+            createdForRenewalTesting: true,
+          },
+        },
+        metadata: {
+          isTestPayment: true,
+          createdForRenewalTesting: true,
+        },
+      });
+
+      logger.info(
+        `Test payment created: ${testPayment._id} for order: ${testOrder.orderNumber}`
+      );
+
       // Calculate dates - set nextBillingDate to today so it's due for renewal
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      // Start date: 30 days ago (so subscription has been running)
+      // Start date: cycleDays ago (so subscription has been running)
       const subscriptionStartDate = new Date(today);
       subscriptionStartDate.setDate(subscriptionStartDate.getDate() - cycleDays);
       
@@ -705,10 +739,35 @@ class AdminSubscriptionController {
       // Next delivery date: today
       const nextDeliveryDate = new Date(today);
       
-      // Initial delivery date: 30 days ago
+      // Initial delivery date: cycleDays ago
       const initialDeliveryDate = new Date(subscriptionStartDate);
 
-      // Create test subscription
+      // Create gateway subscription (Stripe/Mollie) for auto-renewal
+      const { subscriptionGatewayService } = await import("@/services/subscriptionGatewayService");
+      const totalAmount = testOrder.grandTotal * 100; // Convert to cents
+      
+      const gatewayResult = await subscriptionGatewayService.createSubscription({
+        userId: userId,
+        orderId: (testOrder._id as mongoose.Types.ObjectId).toString(),
+        paymentMethod: PaymentMethod.STRIPE, // Use Stripe for test
+        amount: totalAmount,
+        currency: testOrder.currency,
+        cycleDays: cycleDays,
+        customerEmail: user.email,
+        customerName: `${user.firstName} ${user.lastName}`.trim(),
+        metadata: {
+          isTestSubscription: "true",
+          createdForRenewalTesting: "true",
+          orderNumber: testOrder.orderNumber,
+        },
+      });
+
+      if (!gatewayResult.success) {
+        logger.warn(`Failed to create gateway subscription: ${gatewayResult.error}`);
+        // Continue without gateway subscription for testing purposes
+      }
+
+      // Create test subscription with gateway subscription details
       const testSubscription = await Subscriptions.create({
         userId: new mongoose.Types.ObjectId(userId),
         orderId: testOrder._id,
@@ -737,10 +796,18 @@ class AdminSubscriptionController {
         status: SubscriptionStatus.ACTIVE,
         isAutoRenew: true,
         renewalCount: 0,
+        // Gateway subscription details
+        gatewaySubscriptionId: gatewayResult.gatewaySubscriptionId || undefined,
+        gatewayCustomerId: gatewayResult.gatewayCustomerId || undefined,
+        gatewayPaymentMethodId: gatewayResult.gatewayPaymentMethodId || undefined,
+        cancelAtPeriodEnd: false,
+        retryCount: 0,
         metadata: {
           isTestSubscription: true,
           createdForRenewalTesting: true,
           createdAt: now.toISOString(),
+          gatewaySubscriptionCreated: gatewayResult.success,
+          gatewayError: gatewayResult.error || undefined,
         },
       });
 
@@ -748,29 +815,57 @@ class AdminSubscriptionController {
         `Test subscription created: ${testSubscription.subscriptionNumber} (ID: ${testSubscription._id})`
       );
 
+      if (gatewayResult.success) {
+        logger.info(
+          `Gateway subscription created: ${gatewayResult.gatewaySubscriptionId} for test subscription: ${testSubscription.subscriptionNumber}`
+        );
+      } else {
+        logger.warn(
+          `Gateway subscription creation failed for test subscription: ${testSubscription.subscriptionNumber}. Error: ${gatewayResult.error}`
+        );
+      }
+
       let renewalResult = null;
 
       // Process renewal if requested
+      // Note: With gateway subscriptions, renewals are handled automatically via webhooks
+      // This manual renewal is for testing purposes only
       if (processRenewal) {
         try {
-          const { subscriptionAutoRenewalService } = await import(
-            "@/services/subscriptionAutoRenewalService"
-          );
-          
-          // Fetch the subscription as a document (not lean) for renewal processing
-          const subscriptionDoc = await Subscriptions.findById(testSubscription._id);
-          if (subscriptionDoc) {
-            renewalResult = await subscriptionAutoRenewalService.processRenewal(
-              subscriptionDoc
-            );
-            
-            // Refresh subscription to get updated data
-            await testSubscription.populate("userId", "firstName lastName email");
-            await testSubscription.populate("orderId", "orderNumber");
-            
+          // If gateway subscription exists, renewal will be handled by webhooks
+          // For testing, we can still trigger manual renewal
+          if (gatewayResult.success && gatewayResult.gatewaySubscriptionId) {
             logger.info(
-              `Renewal processed for test subscription: ${testSubscription.subscriptionNumber}`
+              `Gateway subscription exists. Renewals will be handled automatically via webhooks. ` +
+              `To test renewal, wait for the next billing cycle or trigger a webhook manually.`
             );
+            renewalResult = {
+              success: true,
+              message: "Gateway subscription created. Renewals will be handled automatically via webhooks.",
+              gatewaySubscriptionId: gatewayResult.gatewaySubscriptionId,
+              note: "For testing, you can simulate webhook events or wait for the next billing cycle",
+            };
+          } else {
+            // Fallback to manual renewal if gateway subscription creation failed
+            const { subscriptionAutoRenewalService } = await import(
+              "@/services/subscriptionAutoRenewalService"
+            );
+            
+            // Fetch the subscription as a document (not lean) for renewal processing
+            const subscriptionDoc = await Subscriptions.findById(testSubscription._id);
+            if (subscriptionDoc) {
+              renewalResult = await subscriptionAutoRenewalService.processRenewal(
+                subscriptionDoc
+              );
+              
+              // Refresh subscription to get updated data
+              await testSubscription.populate("userId", "firstName lastName email");
+              await testSubscription.populate("orderId", "orderNumber");
+              
+              logger.info(
+                `Manual renewal processed for test subscription: ${testSubscription.subscriptionNumber}`
+              );
+            }
           }
         } catch (renewalError: any) {
           logger.error(
@@ -810,10 +905,24 @@ class AdminSubscriptionController {
       await testSubscription.populate("userId", "firstName lastName email");
       await testSubscription.populate("orderId", "orderNumber");
 
+      // Refresh subscription to get latest data including gateway details
+      await testSubscription.populate("userId", "firstName lastName email");
+      await testSubscription.populate("orderId", "orderNumber");
+
       res.apiSuccess(
         {
           subscription: testSubscription,
           order: testOrder,
+          payment: testPayment,
+          gatewaySubscription: gatewayResult.success ? {
+            gatewaySubscriptionId: gatewayResult.gatewaySubscriptionId,
+            gatewayCustomerId: gatewayResult.gatewayCustomerId,
+            gatewayPaymentMethodId: gatewayResult.gatewayPaymentMethodId,
+            success: true,
+          } : {
+            success: false,
+            error: gatewayResult.error,
+          },
           renewalResult: renewalResult,
           renewalHistory: renewalHistory,
           transactionHistory: transactionHistory,
@@ -822,9 +931,13 @@ class AdminSubscriptionController {
             isDueForRenewal: nextBillingDate <= new Date(),
             cycleDays: cycleDays,
             renewalProcessed: processRenewal,
+            gatewaySubscriptionCreated: gatewayResult.success,
+            note: gatewayResult.success 
+              ? "Gateway subscription created. Renewals will be handled automatically via webhooks (invoice.paid, invoice.payment_failed, etc.)"
+              : "Gateway subscription creation failed. Manual renewal will be used for testing.",
           },
         },
-        `Test subscription created successfully${processRenewal ? " and renewal processed" : ""}`
+        `Test subscription created successfully${gatewayResult.success ? " with gateway subscription" : ""}${processRenewal ? " and renewal processed" : ""}`
       );
     }
   );
