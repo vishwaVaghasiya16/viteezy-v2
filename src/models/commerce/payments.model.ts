@@ -32,6 +32,7 @@ export interface IPayment extends Document {
   membershipId?: mongoose.Types.ObjectId;
   isRenewalPayment?: boolean; // Flag to identify renewal payments
   renewalCycleNumber?: number; // Which renewal cycle this payment is for
+  metadata?: Record<string, any>; // Additional metadata for payments
   createdAt: Date;
   updatedAt: Date;
 }
@@ -127,6 +128,10 @@ const PaymentSchema = new Schema<IPayment>(
       type: Number,
       default: null,
       min: 1,
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
     },
     ...SoftDelete,
     ...AuditSchema.obj,

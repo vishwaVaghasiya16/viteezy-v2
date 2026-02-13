@@ -58,6 +58,7 @@ import stateRoutes from "./stateRoutes";
 import generalSettingsRoutes from "./generalSettingsRoutes";
 import headerBannerRoutes from "./headerBannerRoutes";
 import notificationRoutes from "./notificationRoutes";
+import staticPageRoutes from "./staticPageRoutes";
 
 const router = Router();
 
@@ -123,5 +124,6 @@ router.use("/general-settings", generalSettingsRoutes);
 router.use("/header-banner", headerBannerRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/membership-cms", membershipCmsRoutes);
+router.use("/static-pages", staticPageRoutes);
 
 export default router;
