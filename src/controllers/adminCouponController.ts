@@ -20,6 +20,35 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+/**
+ * Parse date string to Date object in UTC to avoid timezone conversion issues
+ * Extracts date components directly from ISO string and creates UTC date
+ * This ensures the date stored in DB matches the date sent in the request
+ */
+const parseDateWithoutTimezone = (dateValue: any): Date | undefined => {
+  if (!dateValue) return undefined;
+  
+  if (typeof dateValue === 'string') {
+    // Extract date components from ISO format: "2026-02-20T00:00:00.000Z" or "2026-02-20"
+    const dateMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      const [, year, month, day] = dateMatch;
+      // Create date in UTC to avoid timezone conversion when storing in DB
+      // Date.UTC creates timestamp, then new Date converts to Date object
+      return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+    }
+  }
+  
+  // Fallback for Date objects - extract UTC components
+  if (dateValue instanceof Date) {
+    return new Date(Date.UTC(dateValue.getUTCFullYear(), dateValue.getUTCMonth(), dateValue.getUTCDate()));
+  }
+  
+  // Fallback: parse and use UTC components
+  const date = new Date(dateValue);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+};
+
 const sanitizeObjectIdArray = (
   arr?: string[]
 ): mongoose.Types.ObjectId[] | undefined => {
@@ -77,20 +106,23 @@ class AdminCouponController {
       }
 
       const now = new Date();
+      // Normalize now to start of day for comparison (to allow today's date)
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Parse dates if provided
-      const parsedValidFrom = validFrom ? new Date(validFrom) : undefined;
-      const parsedValidUntil = validUntil ? new Date(validUntil) : undefined;
+      // Parse dates without timezone conversion
+      const parsedValidFrom = parseDateWithoutTimezone(validFrom);
+      const parsedValidUntil = parseDateWithoutTimezone(validUntil);
 
-      // Ensure validFrom and validUntil are not in the past (must be current or future date)
-      if (parsedValidFrom && parsedValidFrom < now) {
+      // Ensure validFrom and validUntil are not in the past (must be today or future date)
+      // Use <= to allow today's date
+      if (parsedValidFrom && parsedValidFrom < todayStart) {
         throw new AppError(
           "Valid from date must be today or a future date",
           400
         );
       }
 
-      if (parsedValidUntil && parsedValidUntil < now) {
+      if (parsedValidUntil && parsedValidUntil < todayStart) {
         throw new AppError(
           "Expiry date must be today or a future date",
           400
@@ -102,8 +134,8 @@ class AdminCouponController {
         throw new AppError("Expiry date must be after valid from date", 400);
       }
 
-      // Set defaults
-      const finalValidFrom = parsedValidFrom || now;
+      // Set defaults - use todayStart for consistency
+      const finalValidFrom = parsedValidFrom || todayStart;
       const finalMinOrderAmount =
         minOrderAmount !== undefined && minOrderAmount !== null
           ? minOrderAmount
@@ -517,10 +549,13 @@ class AdminCouponController {
       if (userUsageLimit !== undefined) coupon.userUsageLimit = userUsageLimit;
       // Handle and validate dates
       const nowUpdate = new Date();
+      // Normalize now to start of day for comparison (to allow today's date)
+      const todayStartUpdate = new Date(nowUpdate.getFullYear(), nowUpdate.getMonth(), nowUpdate.getDate());
 
       if (validFrom !== undefined) {
-        const parsedValidFromUpdate = validFrom ? new Date(validFrom) : undefined;
-        if (parsedValidFromUpdate && parsedValidFromUpdate < nowUpdate) {
+        const parsedValidFromUpdate = parseDateWithoutTimezone(validFrom);
+        // Use <= to allow today's date
+        if (parsedValidFromUpdate && parsedValidFromUpdate < todayStartUpdate) {
           throw new AppError(
             "Valid from date must be today or a future date",
             400
@@ -530,8 +565,9 @@ class AdminCouponController {
       }
 
       if (validUntil !== undefined) {
-        const parsedValidUntilUpdate = validUntil ? new Date(validUntil) : undefined;
-        if (parsedValidUntilUpdate && parsedValidUntilUpdate < nowUpdate) {
+        const parsedValidUntilUpdate = parseDateWithoutTimezone(validUntil);
+        // Use <= to allow today's date
+        if (parsedValidUntilUpdate && parsedValidUntilUpdate < todayStartUpdate) {
           throw new AppError(
             "Expiry date must be today or a future date",
             400
