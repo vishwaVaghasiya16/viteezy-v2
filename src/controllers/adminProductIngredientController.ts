@@ -392,7 +392,7 @@ class AdminProductIngredientController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
       const requesterId = req.user?._id;
-      const { name, description, products, isActive } = req.body;
+      let { name, description, products, isActive } = req.body;
 
       const existing = await ProductIngredients.findOne({
         _id: id,
@@ -403,18 +403,19 @@ class AdminProductIngredientController {
         throw new AppError("Product ingredient not found", 404);
       }
 
+      // Normalize name: allow plain string from validation (e.g. when translation didn't run)
+      if (typeof name === "string" && name.trim()) {
+        name = { en: name.trim() };
+      }
+
       // Handle name update - merge with existing if provided
       const existingEnglishName = existing.name?.en;
       let finalName = existing.name || {};
-      if (name) {
-        // Check if English name is being changed
+      if (name && typeof name === "object") {
         const newEnglishName = name.en;
-
         if (newEnglishName && newEnglishName !== existingEnglishName) {
           await this.assertNameUnique(newEnglishName, id);
         }
-
-        // Merge name fields
         finalName = {
           ...finalName,
           ...name,
@@ -430,29 +431,34 @@ class AdminProductIngredientController {
         };
       }
 
-      // Validate products if provided
-      const oldProductIds = existing.products || [];
+      // Normalize and validate products if provided (allow array of IDs or array of objects with _id)
+      const oldProductIds = Array.isArray(existing.products)
+        ? existing.products.map((p: any) =>
+            p instanceof mongoose.Types.ObjectId ? p : new mongoose.Types.ObjectId(p?.toString?.() ?? p)
+          )
+        : [];
       let productIds = oldProductIds;
-      if (products && Array.isArray(products)) {
+      if (products !== undefined && Array.isArray(products)) {
         if (products.length === 0) {
-          throw new AppError("At least one product must be selected", 400);
-        }
+          // Empty array = keep current products (no change)
+          productIds = oldProductIds;
+        } else {
+          productIds = products.map((item: any) => {
+            const productId =
+              typeof item === "string" ? item : item?._id ?? item?.id;
+            if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+              throw new AppError(`Invalid product ID: ${productId}`, 400);
+            }
+            return new mongoose.Types.ObjectId(productId);
+          });
 
-        productIds = products.map((productId: string) => {
-          if (!mongoose.Types.ObjectId.isValid(productId)) {
-            throw new AppError(`Invalid product ID: ${productId}`, 400);
+          const existingProducts = await Products.find({
+            _id: { $in: productIds },
+            isDeleted: false,
+          });
+          if (existingProducts.length !== productIds.length) {
+            throw new AppError("One or more products not found", 404);
           }
-          return new mongoose.Types.ObjectId(productId);
-        });
-
-        // Verify products exist
-        const existingProducts = await Products.find({
-          _id: { $in: productIds },
-          isDeleted: false,
-        });
-
-        if (existingProducts.length !== productIds.length) {
-          throw new AppError("One or more products not found", 404);
         }
       }
 
