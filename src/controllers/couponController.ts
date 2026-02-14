@@ -141,8 +141,8 @@ class CouponController {
           throw new AppError("This coupon has expired", 400);
         }
 
-        // Check global usage limit
-        if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+        // Check global usage limit (0 means infinite, so skip check if 0 or undefined)
+        if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
           // Remove coupon from cart if usage limit reached
           await Carts.findByIdAndUpdate(
             cart._id,
@@ -156,8 +156,8 @@ class CouponController {
           throw new AppError("This coupon has reached its usage limit", 400);
         }
 
-        // Check user usage limit
-        if (coupon.userUsageLimit) {
+        // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
+        if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
           const userCouponUsageCount = await Orders.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
             couponCode: coupon.code,

@@ -219,11 +219,13 @@ const validateCouponForOrder = async ({
     throw new AppError("This coupon has expired", 400);
   }
 
-  if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+  // Check usage limit (0 means infinite, so skip check if 0 or undefined)
+  if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
     throw new AppError("This coupon has reached its usage limit", 400);
   }
 
-  if (coupon.userUsageLimit) {
+  // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
+  if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
     const userUsageCount = await Orders.countDocuments({
       userId: new mongoose.Types.ObjectId(userId),
       couponCode: coupon.code,
