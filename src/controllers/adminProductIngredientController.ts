@@ -408,26 +408,41 @@ class AdminProductIngredientController {
         name = { en: name.trim() };
       }
 
+      // Convert existing I18n subdocuments to plain objects so merge works (Mongoose subdocuments have getters)
+      const existingNamePlain =
+        existing.name && typeof existing.name === "object"
+          ? (existing.name as any).toObject
+            ? (existing.name as any).toObject()
+            : { ...(existing.name as object) }
+          : {};
+      const existingDescPlain =
+        existing.description && typeof existing.description === "object"
+          ? (existing.description as any).toObject
+            ? (existing.description as any).toObject()
+            : { ...(existing.description as object) }
+          : {};
+
       // Handle name update - merge with existing if provided
-      const existingEnglishName = existing.name?.en;
-      let finalName = existing.name || {};
+      const existingEnglishName = existingNamePlain.en;
+      let finalName: Record<string, string> = { ...existingNamePlain };
       if (name && typeof name === "object") {
         const newEnglishName = name.en;
         if (newEnglishName && newEnglishName !== existingEnglishName) {
           await this.assertNameUnique(newEnglishName, id);
         }
-        finalName = {
-          ...finalName,
-          ...name,
-        };
+        finalName = { ...finalName, ...name };
       }
 
-      // Handle description update - merge with existing if provided
-      let finalDescription = existing.description || {};
+      // Handle description update - merge with existing if provided (description can be I18n object or plain string from form)
+      let finalDescription: Record<string, string> = { ...existingDescPlain };
       if (description !== undefined) {
+        const descObj =
+          typeof description === "string"
+            ? { en: description }
+            : description;
         finalDescription = {
           ...finalDescription,
-          ...description,
+          ...(descObj && typeof descObj === "object" ? descObj : {}),
         };
       }
 
@@ -488,28 +503,60 @@ class AdminProductIngredientController {
         }
       }
 
-      // Transform image type to match Mongoose enum (capitalized) if imageData changed
+      // Transform image type to match Mongoose enum (capitalized) only when image actually changed
       const transformedImage =
         imageData && imageData !== existing.image
           ? {
               ...imageData,
               type: imageData.type === "image" ? "Image" : "Video",
             }
-          : imageData;
+          : undefined;
 
-      const updateData: any = {};
-      if (name !== undefined) updateData.name = finalName;
-      if (description !== undefined) updateData.description = finalDescription;
+      // Build only the fields we want to set; use $set so DB is updated correctly (partial update).
+      // Name and description are I18n subdocuments - set via dot notation so Mongoose/MongoDB persist them reliably.
+      const updateData: Record<string, any> = {};
+      const I18N_LANGS: Array<"en" | "nl" | "de" | "fr" | "es"> = ["en", "nl", "de", "fr", "es"];
+      if (name !== undefined) {
+        const plainName =
+          (typeof finalName === "object" && finalName !== null && !Array.isArray(finalName)
+            ? { ...finalName }
+            : { en: String(finalName ?? "") }) as Record<string, string>;
+        I18N_LANGS.forEach((lang) => {
+          const val = plainName[lang];
+          if (val !== undefined && val !== null) {
+            updateData[`name.${lang}`] = String(val).trim();
+          }
+        });
+      }
+      if (description !== undefined) {
+        const plainDesc =
+          (typeof finalDescription === "object" && finalDescription !== null && !Array.isArray(finalDescription)
+            ? { ...finalDescription }
+            : { en: String(finalDescription ?? "") }) as Record<string, string>;
+        I18N_LANGS.forEach((lang) => {
+          const val = plainDesc[lang];
+          if (val !== undefined && val !== null) {
+            updateData[`description.${lang}`] = String(val).trim();
+          }
+        });
+      }
       if (products !== undefined) updateData.products = productIds;
       if (isActive !== undefined) updateData.isActive = isActive;
-      if (imageData !== undefined) updateData.image = transformedImage;
-      updateData.updatedBy = requesterId
-        ? new mongoose.Types.ObjectId(requesterId)
-        : undefined;
+      if (transformedImage !== undefined) updateData.image = transformedImage;
+      if (requesterId) updateData.updatedBy = new mongoose.Types.ObjectId(requesterId);
+
+      if (Object.keys(updateData).length === 0) {
+        res.status(200).json({
+          success: true,
+          message: "No changes to update",
+          data: { ingredient: existing.toObject ? existing.toObject() : existing },
+        });
+        return;
+      }
 
       const updated = await ProductIngredients.findByIdAndUpdate(
         id,
-        updateData,
+        { $set: updateData },
         { new: true, runValidators: true }
       ).lean();
 
