@@ -825,28 +825,24 @@ class ProductService {
           $match: regexSearchMatch,
         });
 
-        // Add relevance score for regex search
+        // Add relevance score for regex search (title can be string or I18n object - $regexMatch needs string input)
+        const titleAsString = {
+          $cond: [
+            { $eq: [{ $type: "$title" }, "string"] },
+            { $ifNull: ["$title", ""] },
+            { $ifNull: ["$title.en", ""] },
+          ],
+        };
         pipeline.push({
           $addFields: {
             relevanceScore: {
               $cond: [
                 {
-                  $or: [
-                    {
-                      $regexMatch: {
-                        input: { $ifNull: ["$title", ""] },
-                        regex: escapedSearchTerm,
-                        options: "i",
-                      },
-                    },
-                    {
-                      $regexMatch: {
-                        input: { $ifNull: ["$title.en", ""] },
-                        regex: escapedSearchTerm,
-                        options: "i",
-                      },
-                    },
-                  ],
+                  $regexMatch: {
+                    input: titleAsString,
+                    regex: escapedSearchTerm,
+                    options: "i",
+                  },
                 },
                 10,
                 5,
@@ -942,7 +938,14 @@ class ProductService {
           },
         });
 
-        // Add relevance score - use textScore if available, otherwise use regex match priority
+        // Add relevance score - use textScore if available, otherwise use regex match (title can be I18n object - $regexMatch needs string)
+        const titleAsString = {
+          $cond: [
+            { $eq: [{ $type: "$title" }, "string"] },
+            { $ifNull: ["$title", ""] },
+            { $ifNull: ["$title.en", ""] },
+          ],
+        };
         pipeline.push({
           $addFields: {
             relevanceScore: {
@@ -951,22 +954,11 @@ class ProductService {
                 {
                   $cond: [
                     {
-                      $or: [
-                        {
-                          $regexMatch: {
-                            input: { $ifNull: ["$title", ""] },
-                            regex: escapedSearchTerm,
-                            options: "i",
-                          },
-                        },
-                        {
-                          $regexMatch: {
-                            input: { $ifNull: ["$title.en", ""] },
-                            regex: escapedSearchTerm,
-                            options: "i",
-                          },
-                        },
-                      ],
+                      $regexMatch: {
+                        input: titleAsString,
+                        regex: escapedSearchTerm,
+                        options: "i",
+                      },
                     },
                     10,
                     5,
