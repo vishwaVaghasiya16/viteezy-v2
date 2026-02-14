@@ -81,9 +81,17 @@ class ProductTestimonialController {
     async (req: Request, res: Response): Promise<void> => {
       const authenticatedReq = req as AuthenticatedRequest;
 
-      // Get user's language preference from token if authenticated
+      // Get language from query parameter first, then fallback to token/user preference
       let userLang: "en" | "nl" | "de" | "fr" | "es" = "en";
-      if (authenticatedReq.user?._id) {
+      
+      // Priority 1: Query parameter lang
+      if (req.query.lang && typeof req.query.lang === 'string') {
+        const validLangs = ["en", "nl", "de", "fr", "es"];
+        if (validLangs.includes(req.query.lang)) {
+          userLang = req.query.lang as "en" | "nl" | "de" | "fr" | "es";
+        }
+      } else if (authenticatedReq.user?._id) {
+        // Priority 2: User's language preference from token if authenticated
         const user = await User.findById(authenticatedReq.user._id)
           .select("language")
           .lean();
@@ -215,7 +223,7 @@ class ProductTestimonialController {
       res.apiPaginated(
         transformedTestimonials,
         pagination,
-        "Testimonials retrieved"
+        `Testimonials retrieved (lang: ${userLang})`
       );
     }
   );

@@ -86,7 +86,7 @@ const CouponSchema = new Schema<ICoupon>(
     },
     usageLimit: {
       type: Number,
-      min: 1,
+      min: 0, // 0 means infinite usage
       default: null,
     },
     usageCount: {
@@ -96,7 +96,7 @@ const CouponSchema = new Schema<ICoupon>(
     },
     userUsageLimit: {
       type: Number,
-      min: 1,
+      min: 0, // 0 means infinite usage
       default: null,
     },
     applicableProducts: [
