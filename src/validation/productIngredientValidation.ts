@@ -161,11 +161,58 @@ const productsArrayOptionalSchema = Joi.alternatives()
   )
   .optional();
 
+// Update: allow empty array (keep current) or array of ObjectIds / objects with _id
+const productsArrayUpdateSchema = Joi.alternatives()
+  .try(
+    Joi.array()
+      .items(
+        Joi.alternatives().try(
+          Joi.string().pattern(objectIdPattern),
+          Joi.object({ _id: Joi.string().pattern(objectIdPattern) }).unknown(true),
+          Joi.object({ id: Joi.string().pattern(objectIdPattern) }).unknown(true)
+        )
+      )
+      .optional(),
+    Joi.string().custom((value, helpers) => {
+      if (!value || value.trim() === "") {
+        return undefined;
+      }
+      try {
+        const parsed = JSON.parse(value.trim());
+        if (!Array.isArray(parsed)) {
+          return helpers.error("any.invalid", {
+            message: "Products must be an array",
+          });
+        }
+        for (const item of parsed) {
+          const id = typeof item === "string" ? item : item?._id ?? item?.id;
+          if (!id || !objectIdPattern.test(String(id))) {
+            return helpers.error("any.invalid", {
+              message: `Invalid product ID: ${item}`,
+            });
+          }
+        }
+        return parsed;
+      } catch (err) {
+        return helpers.error("any.invalid", {
+          message: "Invalid JSON format for products",
+        });
+      }
+    })
+  )
+  .optional();
+
 export const updateProductIngredientSchema = Joi.object(
   withFieldLabels({
-    name: i18nStringSchema.optional().label("Ingredient name"),
+    name: Joi.alternatives()
+      .try(
+        i18nStringSchema,
+        Joi.string().trim().min(1).max(200)
+      )
+      .optional()
+      .label("Ingredient name"),
     description: i18nTextSchema.label("Description"),
-    products: productsArrayOptionalSchema.label("Products"),
+    products: productsArrayUpdateSchema.label("Products"),
     isActive: Joi.alternatives()
       .try(
         Joi.boolean(),
