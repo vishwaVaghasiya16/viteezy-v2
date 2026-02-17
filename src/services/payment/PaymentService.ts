@@ -202,11 +202,29 @@ export class PaymentService {
         },
         returnUrl: data.returnUrl,
         cancelUrl: data.cancelUrl,
-        webhookUrl:
-          data.webhookUrl ||
-          `${
-            process.env.APP_BASE_URL || "http://localhost:8080"
-          }/api/v1/payments/webhook/${data.paymentMethod}`,
+        webhookUrl: (() => {
+          // If webhook URL is explicitly provided, use it
+          if (data.webhookUrl) {
+            return data.webhookUrl;
+          }
+          
+          // Get base URL from environment or default to localhost
+          const baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
+          
+          // Skip webhook URL for localhost URLs (Mollie cannot reach them)
+          // Only set webhook URL if it's a public URL (not localhost or 127.0.0.1)
+          if (
+            baseUrl.includes("localhost") ||
+            baseUrl.includes("127.0.0.1") ||
+            baseUrl.startsWith("http://localhost") ||
+            baseUrl.startsWith("http://127.0.0.1")
+          ) {
+            return undefined; // MollieAdapter will skip webhook URL if undefined
+          }
+          
+          // Use the public URL for webhook
+          return `${baseUrl}/api/v1/payments/webhook/${data.paymentMethod}`;
+        })(),
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
         shippingCountry: orderCountry,

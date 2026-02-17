@@ -24,6 +24,13 @@ export class MollieAdapter implements IPaymentGateway {
       throw new AppError("MOLLIE_API_KEY is required", 500);
     }
 
+    // Validate API key format
+    if (!apiKey.startsWith("test_") && !apiKey.startsWith("live_")) {
+      logger.warn(
+        "Mollie API key format appears invalid. Expected format: test_... or live_..."
+      );
+    }
+
     this.mollieClient = createMollieClient({ apiKey });
     this.baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
 
@@ -80,10 +87,23 @@ export class MollieAdapter implements IPaymentGateway {
       };
     } catch (error: any) {
       logger.error("Mollie payment creation failed:", error);
+      
+      // Provide more helpful error messages for common issues
+      let errorMessage = error.message || "Failed to create payment";
+      if (error.statusCode === 401) {
+        errorMessage =
+          "Mollie authentication failed. Please check your MOLLIE_API_KEY environment variable. " +
+          "Ensure it's a valid API key from your Mollie dashboard (starts with 'test_' for test mode or 'live_' for live mode).";
+      } else if (error.statusCode === 422 && error.field === "webhookUrl") {
+        errorMessage =
+          "Mollie webhook URL validation failed. For local development, webhook URLs are automatically skipped. " +
+          "For production, ensure your APP_BASE_URL is a publicly accessible HTTPS URL.";
+      }
+      
       return {
         success: false,
         status: PaymentStatus.FAILED,
-        error: error.message || "Failed to create payment",
+        error: errorMessage,
         gatewayResponse: error as any,
       };
     }
