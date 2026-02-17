@@ -16,6 +16,7 @@ interface AuthenticatedRequest {
     id?: string;
   };
   userId?: string;
+  query?: { lang?: string };
 }
 
 /**
@@ -37,16 +38,19 @@ const mapLanguageToCode = (language?: string): SupportedLanguage => {
   return languageMap[language] || DEFAULT_LANGUAGE;
 };
 
+const SUPPORTED_LANG_CODES: SupportedLanguage[] = ["en", "nl", "de", "fr", "es"];
+
 /**
- * Get user language from request (from token if authenticated, otherwise default to English)
+ * Get user language from request: query param (lang) > token/profile > default English
  */
 const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
-  // Check if user is authenticated and has language preference
+  const queryLang = req.query?.lang;
+  if (typeof queryLang === "string" && SUPPORTED_LANG_CODES.includes(queryLang as SupportedLanguage)) {
+    return queryLang as SupportedLanguage;
+  }
   if (req.user?.language) {
     return mapLanguageToCode(req.user.language);
   }
-
-  // Default to English if not authenticated or no language preference
   return DEFAULT_LANGUAGE;
 };
 
