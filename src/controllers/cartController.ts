@@ -110,9 +110,12 @@ export class CartController {
       if (!userId) {
         throw new AppError("User authentication required", 401);
       }
-      const items: Array<{ productId: string; variantType: ProductVariant }> =
-        [];
-      const { productId, variantType } = req.body;
+      const items: Array<{
+        productId: string;
+        variantType: ProductVariant;
+        quantity?: number;
+      }> = [];
+      const { productId, variantType, quantity } = req.body;
 
       if (productId || variantType) {
         if (!productId || !variantType) {
@@ -121,6 +124,7 @@ export class CartController {
         items.push({
           productId,
           variantType: variantType as ProductVariant,
+          quantity: quantity ? Number(quantity) : undefined,
         });
       }
 
@@ -128,14 +132,17 @@ export class CartController {
       Object.keys(req.body || {}).forEach((key) => {
         const productMatch = key.match(/^productId_(\d+)$/);
         const variantMatch = key.match(/^variantType_(\d+)$/);
+        const quantityMatch = key.match(/^quantity_(\d+)$/);
         if (productMatch) indexSet.add(Number(productMatch[1]));
         if (variantMatch) indexSet.add(Number(variantMatch[1]));
+        if (quantityMatch) indexSet.add(Number(quantityMatch[1]));
       });
 
       const sortedIndexes = Array.from(indexSet).sort((a, b) => a - b);
       sortedIndexes.forEach((index) => {
         const indexedProductId = req.body[`productId_${index}`];
         const indexedVariantType = req.body[`variantType_${index}`];
+        const indexedQuantity = req.body[`quantity_${index}`];
         if (!indexedProductId || !indexedVariantType) {
           throw new AppError(
             `productId_${index} and variantType_${index} are required`,
@@ -145,6 +152,7 @@ export class CartController {
         items.push({
           productId: indexedProductId,
           variantType: indexedVariantType as ProductVariant,
+          quantity: indexedQuantity ? Number(indexedQuantity) : undefined,
         });
       });
 
@@ -152,15 +160,36 @@ export class CartController {
         throw new AppError("productId and variantType are required", 400);
       }
 
+      // Validate quantity rules
+      for (const item of items) {
+        if (item.variantType === ProductVariant.SACHETS) {
+          if (item.quantity !== undefined) {
+            throw new AppError(
+              "quantity is not allowed for SACHETS products (subscription-based)",
+              400
+            );
+          }
+        } else if (item.variantType === ProductVariant.STAND_UP_POUCH) {
+          if (item.quantity !== undefined && item.quantity < 1) {
+            throw new AppError(
+              "STAND_UP_POUCH products require a quantity of at least 1",
+              400
+            );
+          }
+        }
+      }
+
       const firstItem = items[0] as {
         productId: string;
         variantType: ProductVariant;
+        quantity?: number;
       };
       let result = await cartService.addItem(userId, firstItem);
       for (let i = 1; i < items.length; i += 1) {
         const nextItem = items[i] as {
           productId: string;
           variantType: ProductVariant;
+          quantity?: number;
         };
         result = await cartService.addItem(userId, nextItem);
       }
@@ -191,7 +220,7 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, variantType } = req.body;
+      const { productId, variantType, quantity } = req.body;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
@@ -201,9 +230,27 @@ export class CartController {
         throw new AppError("variantType is required", 400);
       }
 
+      // Validate quantity rules
+      if (variantType === ProductVariant.SACHETS) {
+        if (quantity !== undefined) {
+          throw new AppError(
+            "quantity is not allowed for SACHETS products (subscription-based)",
+            400
+          );
+        }
+      } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+        if (quantity !== undefined && quantity < 1) {
+          throw new AppError(
+            "STAND_UP_POUCH products require a quantity of at least 1",
+            400
+          );
+        }
+      }
+
       const result = await cartService.updateItem(userId, {
         productId,
         variantType: variantType as ProductVariant,
+        quantity: quantity ? Number(quantity) : undefined,
       });
 
       res.status(200).json({

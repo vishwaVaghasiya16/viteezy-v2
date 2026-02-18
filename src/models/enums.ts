@@ -103,6 +103,7 @@ export enum PaymentMethod {
 export enum OrderPlanType {
   ONE_TIME = "One-Time",
   SUBSCRIPTION = "Subscription",
+  MIXED = "Mixed", // Order contains both subscription (SACHETS) and one-time (STAND_UP_POUCH) items
 }
 
 // Shipment Status

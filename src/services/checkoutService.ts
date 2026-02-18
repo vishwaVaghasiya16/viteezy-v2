@@ -1705,6 +1705,10 @@ class CheckoutService {
       };
       standUpPouch?: {
         capsuleCount: 30 | 60;
+        itemQuantities?: Array<{
+          productId: string;
+          quantity: number;
+        }>;
       };
       couponCode?: string;
       shippingAddressId?: string | null;
@@ -1850,6 +1854,180 @@ class CheckoutService {
     const selectedPlanDays = sachetsConfig?.planDurationDays || 180;
     const selectedCapsuleCount = standUpPouchConfig?.capsuleCount || 30;
     const isOneTimePurchase = sachetsConfig?.isOneTime || false;
+
+    // Update cart item quantities for STAND_UP_POUCH if provided
+    if (
+      standUpPouchConfig?.itemQuantities &&
+      standUpPouchConfig.itemQuantities.length > 0
+    ) {
+      const updatedItems = [...cart.items];
+      let hasUpdates = false;
+
+      // Fetch products to get pricing
+      const allProductIds = cart.items.map((item: any) => item.productId);
+      const productsForUpdate = await Products.find({
+        _id: { $in: allProductIds },
+        isDeleted: false,
+        status: true,
+      }).lean();
+
+      const productMapForUpdate = new Map(
+        productsForUpdate.map((p: any) => [p._id.toString(), p])
+      );
+
+      for (const itemQty of standUpPouchConfig.itemQuantities) {
+        const itemIndex = updatedItems.findIndex(
+          (item: any) =>
+            item.productId.toString() === itemQty.productId &&
+            item.variantType === ProductVariant.STAND_UP_POUCH
+        );
+
+        if (itemIndex >= 0 && itemQty.quantity >= 1) {
+          const item = updatedItems[itemIndex];
+          const product = productMapForUpdate.get(item.productId.toString());
+
+          if (product && product.standupPouchPrice) {
+            const standupPrice = product.standupPouchPrice as any;
+            const selectedCountPrice =
+              selectedCapsuleCount === 60
+                ? standupPrice.count60
+                : standupPrice.count30;
+
+            if (selectedCountPrice) {
+              const unitPrice =
+                selectedCountPrice.discountedPrice ||
+                selectedCountPrice.amount ||
+                0;
+              const totalAmount = unitPrice * itemQty.quantity;
+
+              updatedItems[itemIndex] = {
+                ...item,
+                quantity: itemQty.quantity,
+                totalAmount: totalAmount,
+                price: {
+                  ...item.price,
+                  amount: unitPrice,
+                },
+              };
+              hasUpdates = true;
+            }
+          }
+        }
+      }
+
+      if (hasUpdates) {
+        // Recalculate cart totals manually
+        let subtotalAmount = 0;
+        let totalTaxAmount = 0;
+        let totalDiscount = 0;
+
+        updatedItems.forEach((item: any) => {
+          const product = productMapForUpdate.get(item.productId.toString());
+          if (!product) return;
+
+          const itemVariantType = item.variantType || ProductVariant.SACHETS;
+          const itemQuantity = item.quantity || 1;
+
+          let originalAmount = 0;
+          let discountedPrice = 0;
+          let taxRate = 0;
+
+          if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+            const thirtyDaysPlan = product.sachetPrices.thirtyDays;
+            if (thirtyDaysPlan) {
+              originalAmount =
+                thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
+              discountedPrice =
+                thirtyDaysPlan.discountedPrice ||
+                thirtyDaysPlan.amount ||
+                thirtyDaysPlan.totalAmount ||
+                0;
+              taxRate = thirtyDaysPlan.taxRate || 0;
+            }
+          } else if (
+            itemVariantType === ProductVariant.STAND_UP_POUCH &&
+            product.standupPouchPrice
+          ) {
+            const standupPrice = product.standupPouchPrice as any;
+            const selectedCountPrice =
+              selectedCapsuleCount === 60
+                ? standupPrice.count60
+                : standupPrice.count30;
+            if (selectedCountPrice) {
+              originalAmount = selectedCountPrice.amount || 0;
+              discountedPrice =
+                selectedCountPrice.discountedPrice ||
+                selectedCountPrice.amount ||
+                0;
+              taxRate = selectedCountPrice.taxRate || 0;
+            } else if (standupPrice.amount) {
+              originalAmount = standupPrice.amount || 0;
+              discountedPrice =
+                standupPrice.discountedPrice || standupPrice.amount || 0;
+              taxRate = standupPrice.taxRate || 0;
+            }
+          } else {
+            originalAmount = item.price?.amount || 0;
+            discountedPrice = item.price?.amount || 0;
+            taxRate = item.price?.taxRate || 0;
+          }
+
+          subtotalAmount += originalAmount * itemQuantity;
+          totalTaxAmount += taxRate * itemQuantity;
+          const itemDiscount = (originalAmount - discountedPrice) * itemQuantity;
+          totalDiscount += itemDiscount;
+        });
+
+        // Round all amounts
+        subtotalAmount = Math.round(subtotalAmount * 100) / 100;
+        totalTaxAmount = Math.round(totalTaxAmount * 100) / 100;
+        totalDiscount = Math.round(totalDiscount * 100) / 100;
+        const couponDiscountAmount = Math.round(
+          (cart.couponDiscountAmount || 0) * 100
+        ) / 100;
+
+        const total =
+          Math.round(
+            (subtotalAmount +
+              totalTaxAmount -
+              totalDiscount -
+              couponDiscountAmount) *
+              100
+          ) / 100;
+
+        // Update cart with new quantities and recalculated totals
+        await Carts.findByIdAndUpdate(
+          cart._id,
+          {
+            items: updatedItems,
+            subtotal: subtotalAmount,
+            tax: totalTaxAmount,
+            discount: totalDiscount,
+            total: Math.max(0, total),
+            updatedAt: new Date(),
+          },
+          { new: true }
+        );
+
+        // Refresh cart from database
+        const updatedCart = await Carts.findOne({
+          _id: cart._id,
+          userId: new mongoose.Types.ObjectId(userId),
+          isDeleted: false,
+        }).lean();
+
+        if (updatedCart) {
+          // Re-assign cart and re-separate items after update
+          Object.assign(cart, updatedCart);
+          // Re-separate items after update
+          const updatedStandupPouchItems = cart.items.filter(
+            (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+          );
+          standupPouchItems.length = 0;
+          standupPouchItems.push(...updatedStandupPouchItems);
+        }
+      }
+    }
 
     // Fetch all products
     const allProductIds = cart.items.map((item: any) => item.productId);
@@ -2049,15 +2227,17 @@ class CheckoutService {
           ? memberPriceResult.discountAmount
           : 0;
 
+        const itemQuantity = item.quantity || 1;
+
         return {
           productId: product._id.toString(),
           title: productTitle,
           image: product.productImage || "",
           variant: ProductVariant.STAND_UP_POUCH,
-          quantity: 1,
+          quantity: itemQuantity,
           basePlanPrice,
-          membershipDiscount: this.roundAmount(membershipDiscount),
-          taxRate: basePlanPrice.taxRate || 0,
+          membershipDiscount: this.roundAmount(membershipDiscount * itemQuantity),
+          taxRate: (basePlanPrice.taxRate || 0) * itemQuantity,
         };
       }
     );
@@ -2243,7 +2423,7 @@ class CheckoutService {
             (item: any) => item.productId.toString() === product._id.toString()
           );
           if (!cartItem) continue;
-          const quantity = 1; // Quantity removed from cart, each item is 1
+          const quantity = (cartItem as any).quantity || 1; // Quantity from cart for stand-up pouch
 
           for (const planInfo of standupPouchPlans) {
             const planData = standupPrice[planInfo.key];
@@ -2319,13 +2499,9 @@ class CheckoutService {
           // Determine if this plan is selected
           let isSelected = false;
           if (variantType === "SACHETS") {
-            if (isOneTimePurchase) {
-              isSelected =
-                plan.durationDays === selectedPlanDays && !plan.isSubscription;
-            } else {
-              isSelected =
-                plan.durationDays === selectedPlanDays && plan.isSubscription;
-            }
+            // SACHETS are subscription-only
+            isSelected =
+              plan.durationDays === selectedPlanDays && plan.isSubscription;
           } else {
             // STAND_UP_POUCH
             const planCapsuleCount =
@@ -2388,12 +2564,12 @@ class CheckoutService {
             (p) => p.durationDays === selectedPlanDays && !p.isSubscription
           ) ||
           sachetsPlans?.find((p) => p.planKey === "oneTime60") ||
-          sachetsPlans?.[0]
+          sachetsPlans?.find((p) => p.durationDays > 0)
         : sachetsPlans?.find(
             (p) => p.durationDays === selectedPlanDays && p.isSubscription
           ) ||
           sachetsPlans?.find((p) => p.planKey === "oneEightyDays") ||
-          sachetsPlans?.[0];
+          sachetsPlans?.find((p) => p.durationDays > 0);
 
       if (selectedSachetPlan) {
         sachetSubtotal = selectedSachetPlan.totalAmount;
@@ -2453,11 +2629,14 @@ class CheckoutService {
       } else {
         // Calculate from cart items if plan not found
         standupPouchSubtotal = standupPouchCartItems.reduce(
-          (sum, item: any) => sum + (item.basePlanPrice.amount || 0),
+          (sum, item: any) =>
+            sum + (item.basePlanPrice.amount || 0) * (item.quantity || 1),
           0
         );
         standupPouchDiscountedPrice = standupPouchCartItems.reduce(
-          (sum, item: any) => sum + (item.basePlanPrice.discountedPrice || 0),
+          (sum, item: any) =>
+            sum +
+            (item.basePlanPrice.discountedPrice || 0) * (item.quantity || 1),
           0
         );
       }

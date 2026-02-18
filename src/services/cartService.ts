@@ -19,11 +19,13 @@ import { fetchAndEnrichProducts } from "./productEnrichmentService";
 interface AddCartItemData {
   productId: string;
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
+  quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
 }
 
 interface UpdateCartItemData {
   productId: string;
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
+  quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
 }
 
 interface RemoveCartItemData {
@@ -93,6 +95,7 @@ class CartService {
 
       // Use item-level variantType if available, otherwise fallback to cart-level variantType
       const itemVariantType = item.variantType || variantType;
+      const itemQuantity = item.quantity || 1; // Default to 1 if not specified
 
       let originalAmount = 0;
       let discountedPrice = 0;
@@ -137,10 +140,11 @@ class CartService {
         taxRate = item.price?.taxRate || 0;
       }
 
-      subtotalAmount += originalAmount;
-      totalTaxAmount += taxRate; // taxRate is already an amount, not percentage
+      // Multiply by quantity for total amounts
+      subtotalAmount += originalAmount * itemQuantity;
+      totalTaxAmount += taxRate * itemQuantity; // taxRate is already an amount, not percentage
       // Calculate discount as difference: amount - discountedPrice
-      const itemDiscount = originalAmount - discountedPrice;
+      const itemDiscount = (originalAmount - discountedPrice) * itemQuantity;
       totalDiscount += itemDiscount;
     });
 
@@ -369,6 +373,7 @@ class CartService {
 
       // Use item-level variantType, fallback to SACHETS if not present
       const itemVariantType = item.variantType || ProductVariant.SACHETS;
+      const itemQuantity = item.quantity || 1; // Get quantity from cart item
 
       // Calculate price based on item-level variantType
       let originalAmount = 0;
@@ -424,10 +429,18 @@ class CartService {
         discountedPrice = item.price?.amount || 0;
       }
 
+      // Calculate unit price and total price (unit * quantity)
+      const unitPrice = discountedPrice;
+      const totalPrice = unitPrice * itemQuantity;
+      const unitTaxRate = taxRate;
+      const totalTaxRate = unitTaxRate * itemQuantity;
+
       const calculatedPrice = {
         currency,
-        amount: discountedPrice, // Use discounted price for display
-        taxRate,
+        amount: unitPrice, // Unit price (per item)
+        taxRate: unitTaxRate, // Unit tax rate
+        totalAmount: totalPrice, // Total price (unit * quantity)
+        totalTaxRate: totalTaxRate, // Total tax (unit tax * quantity)
       };
 
       // Add isInCart: true and variants array since this product is in the cart
@@ -451,7 +464,9 @@ class CartService {
       // Build item object
       return {
         productId: item.productId,
-        price: calculatedPrice, // Update with calculated price
+        price: calculatedPrice, // Update with calculated price (includes unit and total)
+        quantity: itemQuantity, // Include quantity in response
+        totalAmount: item.totalAmount || totalPrice, // Include totalAmount from cart or calculated
         addedAt: item.addedAt,
         variantType: item.variantType,
         _id: item._id,
@@ -532,20 +547,62 @@ class CartService {
     userId: string,
     data: AddCartItemData
   ): Promise<{ cart: any; message: string }> {
-    const { productId, variantType } = data;
+    const { productId, variantType, quantity } = data;
+
+    // Validate variant-specific rules
+    if (variantType === ProductVariant.SACHETS) {
+      // SACHETS: Always subscription, quantity must NOT be provided by client
+      if (quantity !== undefined) {
+        throw new AppError(
+          "quantity is not allowed for SACHETS products (subscription-based)",
+          400
+        );
+      }
+    } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+      // STAND_UP_POUCH: Always one-time, quantity required (min 1)
+      const qty = quantity || 1;
+      if (qty < 1) {
+        throw new AppError(
+          "STAND_UP_POUCH products require a quantity of at least 1",
+          400
+        );
+      }
+    }
 
     // Validate and get pricing
     const { product, price } = await this.validateAndGetPricing(productId);
 
+    // Validate product supports the requested variant
+    if (variantType === ProductVariant.SACHETS && !product.sachetPrices) {
+      throw new AppError(
+        "This product does not support SACHETS variant",
+        400
+      );
+    }
+    if (
+      variantType === ProductVariant.STAND_UP_POUCH &&
+      !product.hasStandupPouch &&
+      !product.standupPouchPrice
+    ) {
+      throw new AppError(
+        "This product does not support STAND_UP_POUCH variant",
+        400
+      );
+    }
+
     const cart = await this.getOrCreateCart(userId);
     const productObjectId = new mongoose.Types.ObjectId(productId);
 
-    // Check if item already exists in cart
+    // Check if item already exists in cart with same variantType
     const existingItemIndex = cart.items.findIndex(
-      (item: any) => item.productId.toString() === productId
+      (item: any) =>
+        item.productId.toString() === productId &&
+        item.variantType === variantType
     );
 
     let updatedItems = [...(cart.items || [])];
+    const finalQuantity =
+      variantType === ProductVariant.SACHETS ? 1 : quantity || 1;
 
     // Calculate price based on variantType (same as getCart)
     let calculatedPrice = price; // Default to validated price
@@ -596,19 +653,37 @@ class CartService {
       }
     }
 
+    // Calculate totalAmount (unit price * quantity) for STAND_UP_POUCH
+    const totalAmount =
+      variantType === ProductVariant.STAND_UP_POUCH
+        ? (calculatedPrice.amount || 0) * finalQuantity
+        : calculatedPrice.amount || 0; // For SACHETS, totalAmount = unit price (quantity always 1)
+
     if (existingItemIndex >= 0) {
-      // Item already exists, update price and variantType with calculated price
-      updatedItems[existingItemIndex] = {
-        ...updatedItems[existingItemIndex],
-        variantType: variantType, // Update variantType
-        price: calculatedPrice, // Update with calculated price based on variantType
-      };
+      // Item already exists with same variantType, update quantity for STAND_UP_POUCH
+      if (variantType === ProductVariant.STAND_UP_POUCH) {
+        updatedItems[existingItemIndex] = {
+          ...updatedItems[existingItemIndex],
+          quantity: finalQuantity,
+          price: calculatedPrice, // Update with calculated price
+          totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
+        };
+      } else {
+        // SACHETS: Update price only (quantity always 1)
+        updatedItems[existingItemIndex] = {
+          ...updatedItems[existingItemIndex],
+          price: calculatedPrice, // Update with calculated price
+          totalAmount: totalAmount, // Store totalAmount (same as unit price for SACHETS)
+        };
+      }
     } else {
-      // Add new item with calculated price and variantType
+      // Add new item with calculated price, variantType, quantity, and totalAmount
       updatedItems.push({
         productId: productObjectId,
         variantType: variantType, // Store variantType in item
+        quantity: finalQuantity, // Store quantity (1 for SACHETS, user-provided for STAND_UP_POUCH)
         price: calculatedPrice,
+        totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
         addedAt: new Date(),
       });
     }
@@ -714,11 +789,33 @@ class CartService {
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantType } = data;
+    const { productId, variantType, quantity } = data;
 
-    // Find the item in cart by productId
+    // Validate variant-specific rules
+    if (variantType === ProductVariant.SACHETS) {
+      // SACHETS: Always subscription, quantity must NOT be provided by client
+      if (quantity !== undefined) {
+        throw new AppError(
+          "quantity is not allowed for SACHETS products (subscription-based)",
+          400
+        );
+      }
+    } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+      // STAND_UP_POUCH: Always one-time, quantity required (min 1)
+      const qty = quantity || 1;
+      if (qty < 1) {
+        throw new AppError(
+          "STAND_UP_POUCH products require a quantity of at least 1",
+          400
+        );
+      }
+    }
+
+    // Find the item in cart by productId and variantType
     const itemIndex = cart.items.findIndex(
-      (item: any) => item.productId.toString() === productId
+      (item: any) =>
+        item.productId.toString() === productId &&
+        item.variantType === variantType
     );
 
     if (itemIndex === -1) {
@@ -726,6 +823,8 @@ class CartService {
     }
 
     const item = cart.items[itemIndex];
+    const finalQuantity =
+      variantType === ProductVariant.SACHETS ? 1 : quantity || item.quantity || 1;
 
     // Validate and get updated pricing
     const { product, price } = await this.validateAndGetPricing(productId);
@@ -779,11 +878,12 @@ class CartService {
       }
     }
 
-    // Update item price and variantType
+    // Update item price, variantType, and quantity
     const updatedItems = [...(cart.items || [])];
     updatedItems[itemIndex] = {
       ...item,
       variantType: variantType, // Update variantType
+      quantity: finalQuantity, // Update quantity
       price: calculatedPrice, // Update with calculated price based on variantType
     };
 

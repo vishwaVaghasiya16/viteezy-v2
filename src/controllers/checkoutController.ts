@@ -964,6 +964,7 @@ class CheckoutController {
         standUpPouch: standUpPouch
           ? {
               capsuleCount: standUpPouch.capsuleCount as 30 | 60,
+              itemQuantities: standUpPouch.itemQuantities || undefined,
             }
           : undefined,
         couponCode: couponCode || undefined,

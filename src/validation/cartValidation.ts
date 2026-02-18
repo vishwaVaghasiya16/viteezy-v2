@@ -22,13 +22,21 @@ const variantTypeSchema = Joi.string()
     "any.only": "Variant type must be either SACHETS or STAND_UP_POUCH",
   });
 
+const quantitySchema = Joi.number().integer().min(1).messages({
+  "number.base": "Quantity must be a number",
+  "number.integer": "Quantity must be an integer",
+  "number.min": "Quantity must be at least 1",
+});
+
 // Add item to cart schema (supports single and multiple items)
 export const addCartItemSchema = Joi.object({
   productId: productIdSchema.optional(),
   variantType: variantTypeSchema.optional(),
+  quantity: quantitySchema.optional(),
 })
   .pattern(/^productId_\d+$/, productIdSchema)
   .pattern(/^variantType_\d+$/, variantTypeSchema)
+  .pattern(/^quantity_\d+$/, quantitySchema)
   .custom((value, helpers) => {
     const hasBaseProduct = !!value.productId;
     const hasBaseVariant = !!value.variantType;
@@ -43,16 +51,20 @@ export const addCartItemSchema = Joi.object({
     Object.keys(value).forEach((key) => {
       const productMatch = key.match(/^productId_(\d+)$/);
       const variantMatch = key.match(/^variantType_(\d+)$/);
+      const qtyMatch = key.match(/^quantity_(\d+)$/);
       if (productMatch) indexSet.add(Number(productMatch[1]));
       if (variantMatch) indexSet.add(Number(variantMatch[1]));
+      if (qtyMatch) indexSet.add(Number(qtyMatch[1]));
     });
 
     let hasAny = hasBaseProduct;
     for (const index of indexSet) {
       const productKey = `productId_${index}`;
       const variantKey = `variantType_${index}`;
+      const qtyKey = `quantity_${index}`;
       const hasProduct = !!value[productKey];
       const hasVariant = !!value[variantKey];
+      const hasQty = value[qtyKey] !== undefined;
 
       if (hasProduct !== hasVariant) {
         return helpers.error("any.custom", {
@@ -62,12 +74,31 @@ export const addCartItemSchema = Joi.object({
       if (hasProduct && hasVariant) {
         hasAny = true;
       }
+
+      // quantity rules per indexed payload
+      if (hasQty) {
+        const vt = value[variantKey];
+        if (vt === ProductVariant.SACHETS) {
+          return helpers.error("any.custom", {
+            message: `${qtyKey} is not allowed for SACHETS variantType`,
+          });
+        }
+      }
     }
 
     if (!hasAny) {
       return helpers.error("any.custom", {
         message: "productId and variantType are required",
       });
+    }
+
+    // quantity rules for base payload
+    if (value.quantity !== undefined) {
+      if (value.variantType === ProductVariant.SACHETS) {
+        return helpers.error("any.custom", {
+          message: "quantity is not allowed for SACHETS variantType",
+        });
+      }
     }
 
     return value;
@@ -96,6 +127,17 @@ export const updateCartItemSchema = Joi.object({
   variantType: variantTypeSchema.required().messages({
     "any.required": "Variant type is required",
   }),
+  quantity: Joi.alternatives()
+    .conditional("variantType", {
+      is: ProductVariant.SACHETS,
+      then: Joi.forbidden().messages({
+        "any.unknown": "quantity is not allowed for SACHETS variantType",
+      }),
+      otherwise: quantitySchema.optional().default(1),
+    })
+    .messages({
+      "any.unknown": "Invalid quantity",
+    }),
 });
 
 // Validation middleware

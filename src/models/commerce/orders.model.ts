@@ -26,13 +26,15 @@ export interface IOrder extends Document {
   items: Array<{
     productId: mongoose.Types.ObjectId;
     name: string;
-    planDays?: number; // Plan days for this specific item
-    capsuleCount?: number; // Capsule count for this specific item
+    variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
+    quantity?: number; // Quantity for STAND_UP_POUCH items (default: 1)
+    planDays?: number; // Plan days for this specific item (SACHETS subscription)
+    capsuleCount?: number; // Capsule count for this specific item (STAND_UP_POUCH)
     // Additional pricing and plan details
-    amount: number; // Original amount
-    discountedPrice: number; // Discounted price
-    taxRate: number; // Tax rate
-    totalAmount: number; // Total amount
+    amount: number; // Original amount per unit
+    discountedPrice: number; // Discounted price per unit
+    taxRate: number; // Tax rate per unit
+    totalAmount: number; // Total amount (amount * quantity)
     durationDays?: number; // Duration in days (for subscription plans)
     savingsPercentage?: number; // Savings percentage
     features?: string[]; // Plan features
@@ -115,6 +117,16 @@ const OrderSchema = new Schema<IOrder>(
         capsuleCount: {
           type: Number,
           default: null,
+        },
+        variantType: {
+          type: String,
+          enum: Object.values(ProductVariant),
+          required: true,
+        },
+        quantity: {
+          type: Number,
+          default: 1,
+          min: 1,
         },
         // Additional pricing and plan details
         amount: {

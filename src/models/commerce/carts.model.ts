@@ -13,7 +13,9 @@ export interface ICart extends Document {
   items: Array<{
     productId: mongoose.Types.ObjectId;
     variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
+    quantity?: number; // Quantity for STAND_UP_POUCH items (default: 1, always 1 for SACHETS)
     price: PriceType;
+    totalAmount?: number; // Total amount (unit price * quantity) for STAND_UP_POUCH items
     addedAt: Date;
   }>;
   subtotal: number; // Sum of all product amounts
@@ -50,8 +52,17 @@ const CartSchema = new Schema<ICart>(
           enum: Object.values(ProductVariant),
           required: true,
         },
+        quantity: {
+          type: Number,
+          default: 1,
+          min: 1,
+        },
         price: {
           type: PriceSchema,
+        },
+        totalAmount: {
+          type: Number,
+          default: null,
         },
         addedAt: {
           type: Date,

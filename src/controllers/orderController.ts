@@ -428,61 +428,61 @@ class OrderController {
         throw new AppError("Cart is empty", 400);
       }
 
-      // Validate variantType
-      if (
-        !variantType ||
-        !Object.values(ProductVariant).includes(variantType)
-      ) {
+      // Separate cart items by variantType
+      const sachetItems = cart.items.filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS
+      );
+      const standupPouchItems = cart.items.filter(
+        (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+      );
+
+      if (sachetItems.length === 0 && standupPouchItems.length === 0) {
         throw new AppError(
-          "Valid variantType (SACHETS or STAND_UP_POUCH) is required",
+          "Cart must contain at least one item with a valid variantType",
           400
         );
       }
 
-      // Validate that all cart items have the same variantType as order variantType
-      if (cart.items && cart.items.length > 0) {
-        const hasDifferentVariantType = cart.items.some(
-          (item: any) => item.variantType && item.variantType !== variantType
-        );
-        if (hasDifferentVariantType) {
-          throw new AppError(
-            `Some cart items have a different variantType than the order variantType (${variantType}). All items in cart must have the same variant type.`,
-            400
-          );
-        }
-      } else {
-        // If cart is empty, log a warning
-        logger.warn(
-          `Cart ${cartId} does not have variantType set. Using variantType from order request: ${variantType}`
+      // Validate variant-specific rules
+      // SACHETS: Always subscription (no one-time)
+      // STAND_UP_POUCH: Always one-time (with quantity)
+      if (sachetItems.length > 0 && isOneTime) {
+        throw new AppError(
+          "SACHETS products are subscription-only. Cannot create one-time order with SACHETS items.",
+          400
         );
       }
 
-      // Determine planType from isOneTime
-      const planType: OrderPlanType = isOneTime
-        ? OrderPlanType.ONE_TIME
-        : OrderPlanType.SUBSCRIPTION;
-
-      // Validate planDurationDays based on isOneTime
-      if (isOneTime) {
-        // For one-time purchase, planDurationDays must be 30 or 60
-        // if (!planDurationDays || ![30, 60].includes(planDurationDays)) {
-        //   throw new AppError(
-        //     "For one-time purchase, planDurationDays must be 30 or 60",
-        //     400
-        //   );
-        // }
+      // Determine planType based on order contents
+      let planType: OrderPlanType;
+      if (sachetItems.length > 0 && standupPouchItems.length > 0) {
+        planType = OrderPlanType.MIXED; // Both variants present
+      } else if (sachetItems.length > 0) {
+        planType = OrderPlanType.SUBSCRIPTION; // Only SACHETS (subscription)
       } else {
-        // For subscription, planDurationDays must be 30, 60, 90, or 180
+        planType = OrderPlanType.ONE_TIME; // Only STAND_UP_POUCH (one-time)
+      }
+
+      // Determine isOneTime based on order contents
+      // If order has SACHETS items, it's subscription (isOneTime = false)
+      // If order has only STAND_UP_POUCH items, it's one-time (isOneTime = true)
+      // If order has both, isOneTime = false (because subscriptions are primary)
+      const orderIsOneTime = standupPouchItems.length > 0 && sachetItems.length === 0;
+
+      // Validate planDurationDays based on order contents
+      if (sachetItems.length > 0) {
+        // For SACHETS (subscription), planDurationDays must be 30, 60, 90, or 180
         if (
           !planDurationDays ||
           ![30, 60, 90, 180].includes(planDurationDays)
         ) {
           throw new AppError(
-            "For subscription plans, planDurationDays must be 30, 60, 90, or 180",
+            "For SACHETS subscription plans, planDurationDays must be 30, 60, 90, or 180",
             400
           );
         }
       }
+      // STAND_UP_POUCH items don't need planDurationDays (they use capsuleCount)
 
       // Validate and fetch shipping address
       if (!shippingAddressId) {
@@ -534,32 +534,12 @@ class OrderController {
       // Use planDurationDays from body (already validated above)
       const planDays = planDurationDays;
 
-      // For SACHETS one-time, use planDurationDays as capsuleCount
-      // For STAND_UP_POUCH, use capsuleCount from body
-      let effectiveCapsuleCount: number | undefined;
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        effectiveCapsuleCount = capsuleCount;
-      } else if (variantType === ProductVariant.SACHETS && isOneTime) {
-        // For SACHETS one-time, planDurationDays represents capsuleCount
-        effectiveCapsuleCount = planDurationDays;
-      }
+      // STAND_UP_POUCH items use capsuleCount from body (default to 30 if not provided)
+      const effectiveCapsuleCount = capsuleCount || 30;
 
-      // Additional validation: Subscription plans only for SACHETS
-      if (!isOneTime && variantType !== ProductVariant.SACHETS) {
-        throw new AppError(
-          "Subscription plans are only available for SACHETS variant type",
-          400
-        );
-      }
-
-      // Fetch products with pricing information based on variantType and planType
-      let selectFields = "title slug skuRoot categories price variant";
-      if (variantType === ProductVariant.SACHETS) {
-        selectFields += " sachetPrices";
-      }
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        selectFields += " standupPouchPrice hasStandupPouch";
-      }
+      // Fetch products with pricing information for both variantTypes
+      const selectFields =
+        "title slug skuRoot categories price variant sachetPrices standupPouchPrice hasStandupPouch";
 
       const products = await Products.find({
         _id: { $in: productObjectIds },
@@ -588,13 +568,17 @@ class OrderController {
         );
       });
 
-      // Build order items with prices calculated from product pricing based on variantType and planType
+      // Build order items with prices calculated from product pricing based on item-level variantType
       const orderItems = cart.items.map((cartItem: any) => {
         const product = productMap.get(cartItem.productId.toString());
 
         if (!product) {
           throw new AppError("Invalid product in cart", 400);
         }
+
+        // Get variantType from cart item
+        const itemVariantType = cartItem.variantType || variantType;
+        const itemQuantity = cartItem.quantity || 1; // Get quantity from cart item
 
         let itemPlanDays: number | undefined;
         let itemCapsuleCount: number | undefined;
@@ -606,8 +590,8 @@ class OrderController {
         let itemSavingsPercentage: number | undefined;
         let itemFeatures: string[] = [];
 
-        // Calculate price based on variantType and planType with proper validations
-        if (variantType === ProductVariant.SACHETS) {
+        // Calculate price based on item-level variantType
+        if (itemVariantType === ProductVariant.SACHETS) {
           if (!product.sachetPrices) {
             throw new AppError(
               `Product ${
@@ -680,65 +664,8 @@ class OrderController {
             itemFeatures = Array.isArray(selectedPlan.features)
               ? selectedPlan.features
               : [];
-          } else {
-            // Use one-time pricing based on effectiveCapsuleCount (which is planDurationDays for SACHETS one-time)
-            itemCapsuleCount = effectiveCapsuleCount || 30; // Default to 30 if not provided
-            const oneTimePlan = product.sachetPrices.oneTime;
-
-            if (!oneTimePlan) {
-              throw new AppError(
-                `Product ${
-                  product.title?.en || product.slug || product._id
-                } does not support one-time purchase for SACHETS variant`,
-                400
-              );
-            }
-
-            if (itemCapsuleCount === 60) {
-              if (!oneTimePlan.count60) {
-                throw new AppError(
-                  `Product ${
-                    product.title?.en || product.slug || product._id
-                  } does not support 60-count one-time purchase. Only 30-count is available.`,
-                  400
-                );
-              }
-              // Extract all pricing details for count60
-              const count60Plan = oneTimePlan.count60;
-              itemAmount = count60Plan.amount || 0;
-              itemDiscountedPrice = count60Plan.discountedPrice || itemAmount;
-              itemTaxRate = count60Plan.taxRate || 0;
-              itemTotalAmount = count60Plan.discountedPrice || itemAmount;
-              itemCapsuleCount = count60Plan.capsuleCount || 60;
-              itemSavingsPercentage =
-                count60Plan.savingsPercentage || undefined;
-              itemFeatures = Array.isArray(count60Plan.features)
-                ? count60Plan.features
-                : [];
-            } else {
-              if (!oneTimePlan.count30) {
-                throw new AppError(
-                  `Product ${
-                    product.title?.en || product.slug || product._id
-                  } does not support one-time purchase for SACHETS variant`,
-                  400
-                );
-              }
-              // Extract all pricing details for count30
-              const count30Plan = oneTimePlan.count30;
-              itemAmount = count30Plan.amount || 0;
-              itemDiscountedPrice = count30Plan.discountedPrice || itemAmount;
-              itemTaxRate = count30Plan.taxRate || 0;
-              itemTotalAmount = count30Plan.discountedPrice || itemAmount;
-              itemCapsuleCount = count30Plan.capsuleCount || 30;
-              itemSavingsPercentage =
-                count30Plan.savingsPercentage || undefined;
-              itemFeatures = Array.isArray(count30Plan.features)
-                ? count30Plan.features
-                : [];
-            }
           }
-        } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+        } else if (itemVariantType === ProductVariant.STAND_UP_POUCH) {
           // Validate that product supports stand-up pouch
           if (!product.hasStandupPouch || !product.standupPouchPrice) {
             throw new AppError(
@@ -749,7 +676,7 @@ class OrderController {
             );
           }
 
-          itemCapsuleCount = capsuleCount;
+          itemCapsuleCount = effectiveCapsuleCount;
           const standupPrice = product.standupPouchPrice as any;
 
           if (itemCapsuleCount === 60) {
@@ -825,17 +752,20 @@ class OrderController {
           );
         }
 
+        // Multiply by quantity for total amounts
         return {
           productId: new mongoose.Types.ObjectId(cartItem.productId),
           name:
             product.title?.en || product.title?.nl || product.slug || "Product",
+          variantType: itemVariantType, // Include variantType in order item
+          quantity: itemQuantity, // Include quantity in order item
           planDays: itemPlanDays,
           capsuleCount: itemCapsuleCount,
-          // Additional pricing and plan details
+          // Additional pricing and plan details (per unit)
           amount: roundAmount(itemAmount),
           discountedPrice: roundAmount(itemDiscountedPrice),
           taxRate: roundAmount(itemTaxRate),
-          totalAmount: roundAmount(itemTotalAmount),
+          totalAmount: roundAmount(itemTotalAmount * itemQuantity), // Total = unit price * quantity
           durationDays: itemDurationDays,
           savingsPercentage: itemSavingsPercentage,
           features: itemFeatures,
@@ -887,22 +817,24 @@ class OrderController {
 
       // Build plan details from new structure
       const planDetails: Record<string, any> = {
-        planDurationDays,
-        isOneTime,
-        variantType,
+        planType,
+        isOneTime: orderIsOneTime,
       };
 
-      if (variantType === ProductVariant.STAND_UP_POUCH && capsuleCount) {
-        planDetails.capsuleCount = capsuleCount;
-      } else if (variantType === ProductVariant.SACHETS && isOneTime) {
-        // For SACHETS one-time, planDurationDays is the capsuleCount
-        planDetails.capsuleCount = planDurationDays;
+      // Add SACHETS plan details if present
+      if (sachetItems.length > 0 && planDurationDays) {
+        planDetails.sachets = {
+          planDurationDays,
+          interval: planDurationDays.toString(),
+          cycleDays: planDurationDays,
+        };
       }
 
-      if (!isOneTime) {
-        // For subscription plans, add interval
-        planDetails.interval = planDurationDays.toString();
-        planDetails.cycleDays = planDurationDays;
+      // Add STAND_UP_POUCH plan details if present
+      if (standupPouchItems.length > 0) {
+        planDetails.standUpPouch = {
+          capsuleCount: effectiveCapsuleCount,
+        };
       }
 
       const sanitizedPlanDetails = Object.entries(planDetails).reduce(
@@ -922,16 +854,13 @@ class OrderController {
       // Store membership metadata if provided
       const membershipMetadata = membership?.metadata || {};
 
-      // Determine plan type from body
-      const orderPlanType: OrderPlanType = planType as OrderPlanType;
-
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
-        planType: orderPlanType,
-        isOneTime,
-        variantType: variantType as ProductVariant,
-        selectedPlanDays: !isOneTime ? planDurationDays : undefined,
+        planType: planType,
+        isOneTime: orderIsOneTime,
+        variantType: sachetItems.length > 0 ? ProductVariant.SACHETS : ProductVariant.STAND_UP_POUCH, // Primary variantType
+        selectedPlanDays: sachetItems.length > 0 ? planDurationDays : undefined,
         items: orderItems,
         subTotal: roundAmount(subTotal),
         discountedPrice: roundAmount(discountedPrice),

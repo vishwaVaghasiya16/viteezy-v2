@@ -142,23 +142,22 @@ export const createOrderSchema = Joi.object(
     cartId: objectIdSchema.required().label("Cart ID"),
     variantType: Joi.string()
       .valid(...PRODUCT_VARIANT_VALUES)
-      .required()
-      .label("Variant Type"),
+      .optional()
+      .label("Variant Type"), // Optional - will be determined from cart items
     planDurationDays: Joi.number()
       .integer()
       .valid(30, 60, 90, 180)
-      .when("variantType", {
-        is: "STAND_UP_POUCH",
-        then: Joi.optional(),
-        otherwise: Joi.when("isOneTime", {
-          is: true,
-          then: Joi.valid(30, 60).required(),
-          otherwise: Joi.valid(30, 60, 90, 180).required(),
-        }),
-      })
-      .label("Plan Duration Days"),
-    isOneTime: Joi.boolean().required().label("Is One Time Purchase"),
-    capsuleCount: Joi.number().integer().label("Capsule Count"),
+      .optional()
+      .label("Plan Duration Days"), // Required only if cart has SACHETS items
+    isOneTime: Joi.boolean()
+      .optional()
+      .label("Is One Time Purchase"), // Will be determined from cart contents
+    capsuleCount: Joi.number()
+      .integer()
+      .valid(30, 60)
+      .optional()
+      .default(30)
+      .label("Capsule Count"), // Required only if cart has STAND_UP_POUCH items
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
     // Pricing fields as numbers with separate currency

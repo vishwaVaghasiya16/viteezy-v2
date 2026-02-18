@@ -170,6 +170,33 @@ export const checkoutPageSummaryBodySchema = Joi.object(
           "any.only": "Capsule count must be 30 or 60",
           "any.required": "capsuleCount is required for STAND_UP_POUCH variant",
         }),
+      // Quantity updates for STAND_UP_POUCH items (optional, updates cart item quantity)
+      itemQuantities: Joi.array()
+        .items(
+          Joi.object({
+            productId: Joi.string()
+              .pattern(/^[0-9a-fA-F]{24}$/)
+              .required()
+              .messages({
+                "string.pattern.base": "Product ID must be a valid MongoDB ObjectId",
+                "any.required": "productId is required",
+              }),
+            quantity: Joi.number()
+              .integer()
+              .min(1)
+              .required()
+              .messages({
+                "number.base": "Quantity must be a number",
+                "number.integer": "Quantity must be an integer",
+                "number.min": "Quantity must be at least 1",
+                "any.required": "quantity is required",
+              }),
+          })
+        )
+        .optional()
+        .messages({
+          "array.base": "itemQuantities must be an array",
+        }),
     })
       .optional()
       .messages({
