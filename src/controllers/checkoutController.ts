@@ -955,17 +955,18 @@ class CheckoutController {
         billingAddressId,
       } = req.body;
 
-      // Validate variant type only if cart has a variantType set
-      // If cart variantType is null/undefined, allow the request to proceed
-      if (
-        findCart.variantType &&
-        variantType &&
-        findCart.variantType !== variantType
-      ) {
-        throw new AppError(
-          "Cart variant type does not match the request variant type",
-          400
+      // Validate variant type - check if all items have the same variantType as requested
+      // Since cart can have multiple variantTypes, we validate based on items
+      if (variantType && findCart.items && findCart.items.length > 0) {
+        const hasDifferentVariantType = findCart.items.some(
+          (item: any) => item.variantType && item.variantType !== variantType
         );
+        if (hasDifferentVariantType) {
+          throw new AppError(
+            "Some cart items have a different variant type than the requested variant type",
+            400
+          );
+        }
       }
 
       const result = await checkoutService.getCheckoutPageSummary(userId, {

@@ -191,14 +191,19 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId } = req.body;
+      const { productId, variantType } = req.body;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
       }
 
+      if (!variantType) {
+        throw new AppError("variantType is required", 400);
+      }
+
       const result = await cartService.updateItem(userId, {
         productId,
+        variantType: variantType as ProductVariant,
       });
 
       res.status(200).json({

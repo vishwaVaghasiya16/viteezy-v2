@@ -93,6 +93,9 @@ export const updateCartItemSchema = Joi.object({
       "any.required": "Product ID is required",
       "any.invalid": "Product ID must be a valid MongoDB ObjectId",
     }),
+  variantType: variantTypeSchema.required().messages({
+    "any.required": "Variant type is required",
+  }),
 });
 
 // Validation middleware

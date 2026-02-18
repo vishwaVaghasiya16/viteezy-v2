@@ -10,9 +10,9 @@ import { ProductVariant } from "../enums";
 export interface ICart extends Document {
   userId: mongoose.Types.ObjectId;
   sessionId?: string;
-  variantType?: ProductVariant; // Variant type for all items in cart (SACHETS or STAND_UP_POUCH)
   items: Array<{
     productId: mongoose.Types.ObjectId;
+    variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
     price: PriceType;
     addedAt: Date;
   }>;
@@ -39,16 +39,16 @@ const CartSchema = new Schema<ICart>(
       type: String,
       trim: true,
     },
-    variantType: {
-      type: String,
-      enum: Object.values(ProductVariant),
-      default: null,
-    },
     items: [
       {
         productId: {
           type: Schema.Types.ObjectId,
           ref: "products",
+        },
+        variantType: {
+          type: String,
+          enum: Object.values(ProductVariant),
+          required: true,
         },
         price: {
           type: PriceSchema,

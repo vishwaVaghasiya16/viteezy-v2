@@ -184,9 +184,13 @@ class CouponController {
 
         // Calculate order amount (discounted price total before coupon) - same logic as cartService.applyCoupon
         // We need to calculate totals without coupon to get the base amount for validation
+        // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+        const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+          ? cart.items[0].variantType 
+          : ProductVariant.SACHETS;
         const totalsWithoutCoupon = await (cartService as any).calculateCartTotalsWithVariantType(
           cart.items,
-          cart.variantType as ProductVariant,
+          firstItemVariantType,
           0 // No coupon discount
         );
 
@@ -219,9 +223,11 @@ class CouponController {
 
         // Additional validation: recurringMonths for subscription sachet plans
         // This ensures coupon only applies to specific subscription plan durations
+        // Use overrideVariantType or first item's variantType
+        const effectiveVariantType = overrideVariantType || firstItemVariantType;
         if (
           isSubscription &&
-          (overrideVariantType || cart.variantType) === ProductVariant.SACHETS &&
+          effectiveVariantType === ProductVariant.SACHETS &&
           Array.isArray((coupon as any).recurringMonths) &&
           (coupon as any).recurringMonths.length > 0
         ) {

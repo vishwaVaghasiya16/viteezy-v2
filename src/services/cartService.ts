@@ -23,6 +23,7 @@ interface AddCartItemData {
 
 interface UpdateCartItemData {
   productId: string;
+  variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
 }
 
 interface RemoveCartItemData {
@@ -37,6 +38,7 @@ interface CartItemWithDetails {
     taxRate: number;
   };
   addedAt: Date;
+  variantType: ProductVariant;
   product?: any;
   variant?: any;
 }
@@ -45,12 +47,12 @@ class CartService {
   private readonly LOW_STOCK_THRESHOLD = 10; // Warn if stock < 10
 
   /**
-   * Calculate cart totals based on variantType pricing
+   * Calculate cart totals based on item-level variantType pricing
    * Returns numbers for all price fields and currency separately
    */
   private async calculateCartTotalsWithVariantType(
     items: any[],
-    variantType: ProductVariant,
+    variantType: ProductVariant, // Kept for backward compatibility, but now uses item-level variantType
     couponDiscountAmount: number = 0
   ): Promise<{
     subtotal: number; // Sum of all product amounts
@@ -79,7 +81,7 @@ class CartService {
 
     const productMap = new Map(products.map((p: any) => [p._id.toString(), p]));
 
-    // Calculate subtotal, tax, and discount based on variantType
+    // Calculate subtotal, tax, and discount based on item-level variantType
     let subtotalAmount = 0;
     let totalTaxAmount = 0;
     let totalDiscount = 0; // Sum of (amount - discountedPrice) for all products
@@ -89,11 +91,14 @@ class CartService {
       const product = productMap.get(item.productId.toString());
       if (!product) return;
 
+      // Use item-level variantType if available, otherwise fallback to cart-level variantType
+      const itemVariantType = item.variantType || variantType;
+
       let originalAmount = 0;
       let discountedPrice = 0;
       let taxRate = 0;
 
-      if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
+      if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
         // Use 30 days plan price for SACHETS
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
@@ -107,7 +112,7 @@ class CartService {
           taxRate = thirtyDaysPlan.taxRate || 0;
         }
       } else if (
-        variantType === ProductVariant.STAND_UP_POUCH &&
+        itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
         // Use count30 price for STAND_UP_POUCH
@@ -352,10 +357,7 @@ class CartService {
       enrichedProducts.map((p: any) => [p._id.toString(), p])
     );
 
-    // Get cart variantType
-    const cartVariantType = cart.variantType as ProductVariant;
-
-    // Build items with full product details and calculate prices based on variantType
+    // Build items with full product details and calculate prices based on item-level variantType
     const itemsWithDetails = (cart.items || []).map((item: any) => {
       const product = productMap.get(item.productId.toString());
       if (!product) {
@@ -365,13 +367,16 @@ class CartService {
         };
       }
 
-      // Calculate price based on cart variantType
+      // Use item-level variantType, fallback to SACHETS if not present
+      const itemVariantType = item.variantType || ProductVariant.SACHETS;
+
+      // Calculate price based on item-level variantType
       let originalAmount = 0;
       let discountedPrice = 0;
       let currency = "EUR";
       let taxRate = 0;
 
-      if (cartVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+      if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
         // Use 30 days plan price for SACHETS
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
@@ -388,7 +393,7 @@ class CartService {
             0;
         }
       } else if (
-        cartVariantType === ProductVariant.STAND_UP_POUCH &&
+        itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
         // Use count30 price for STAND_UP_POUCH
@@ -448,6 +453,7 @@ class CartService {
         productId: item.productId,
         price: calculatedPrice, // Update with calculated price
         addedAt: item.addedAt,
+        variantType: item.variantType,
         _id: item._id,
         product: productWithCartFlag, // Already enriched with full details from common service
       };
@@ -534,64 +540,12 @@ class CartService {
     const cart = await this.getOrCreateCart(userId);
     const productObjectId = new mongoose.Types.ObjectId(productId);
 
-    // Get product variant type
-    const productVariantType = product.variant as ProductVariant;
-
-    // Validate that product supports the requested variantType
-    // A product supports STAND_UP_POUCH if:
-    // 1. product.variant === "STAND_UP_POUCH", OR
-    // 2. product.variant === "SACHETS" AND product.hasStandupPouch === true
-    // A product supports SACHETS if:
-    // 1. product.variant === "SACHETS"
-    let isVariantSupported = false;
-
-    if (variantType === ProductVariant.STAND_UP_POUCH) {
-      // Check if product supports STAND_UP_POUCH
-      isVariantSupported =
-        productVariantType === ProductVariant.STAND_UP_POUCH ||
-        (productVariantType === ProductVariant.SACHETS &&
-          product.hasStandupPouch === true);
-    } else if (variantType === ProductVariant.SACHETS) {
-      // Check if product supports SACHETS
-      isVariantSupported = productVariantType === ProductVariant.SACHETS;
-    }
-
-    if (!isVariantSupported) {
-      throw new AppError(
-        `Product does not support variant type "${variantType}". Product has variant type "${productVariantType}"${
-          product.hasStandupPouch ? " with stand-up pouch support" : ""
-        }.`,
-        400
-      );
-    }
-
     // Check if item already exists in cart
     const existingItemIndex = cart.items.findIndex(
       (item: any) => item.productId.toString() === productId
     );
 
     let updatedItems = [...(cart.items || [])];
-    let updatedVariantType: ProductVariant;
-
-    // Manage variantType based on cart state
-    if (cart.items && cart.items.length > 0) {
-      // Cart already has items, validate that new item's variantType matches cart's variantType
-      if (cart.variantType && cart.variantType !== variantType) {
-        throw new AppError(
-          `You can only add ${
-            cart.variantType === ProductVariant.SACHETS
-              ? "sachets"
-              : "stand-up pouch"
-          } products to this cart. Please clear your cart or remove existing items to add different variant types.`,
-          400
-        );
-      }
-      // Keep existing variantType (should always exist if cart has items)
-      updatedVariantType = cart.variantType || variantType;
-    } else {
-      // Cart is empty, set variantType from first item being added
-      updatedVariantType = variantType;
-    }
 
     // Calculate price based on variantType (same as getCart)
     let calculatedPrice = price; // Default to validated price
@@ -643,24 +597,30 @@ class CartService {
     }
 
     if (existingItemIndex >= 0) {
-      // Item already exists, update price with calculated price
+      // Item already exists, update price and variantType with calculated price
       updatedItems[existingItemIndex] = {
         ...updatedItems[existingItemIndex],
+        variantType: variantType, // Update variantType
         price: calculatedPrice, // Update with calculated price based on variantType
       };
     } else {
-      // Add new item with calculated price
+      // Add new item with calculated price and variantType
       updatedItems.push({
         productId: productObjectId,
+        variantType: variantType, // Store variantType in item
         price: calculatedPrice,
         addedAt: new Date(),
       });
     }
 
     // Calculate totals first without coupon to get order amount
+    // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+    const firstItemVariantType = updatedItems.length > 0 && updatedItems[0].variantType 
+      ? updatedItems[0].variantType 
+      : variantType;
     const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      updatedVariantType,
+      firstItemVariantType,
       0 // Calculate without coupon first
     );
 
@@ -717,7 +677,7 @@ class CartService {
     // Calculate final totals with coupon discount
     const totals = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      updatedVariantType,
+      firstItemVariantType,
       couponDiscountAmount
     );
 
@@ -726,7 +686,6 @@ class CartService {
       cart._id,
       {
         items: updatedItems,
-        variantType: updatedVariantType,
         subtotal: totals.subtotal,
         tax: totals.tax,
         discount: totals.discount,
@@ -755,7 +714,7 @@ class CartService {
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId } = data;
+    const { productId, variantType } = data;
 
     // Find the item in cart by productId
     const itemIndex = cart.items.findIndex(
@@ -771,58 +730,69 @@ class CartService {
     // Validate and get updated pricing
     const { product, price } = await this.validateAndGetPricing(productId);
 
-    // Get cart variantType
-    const cartVariantType = cart.variantType as ProductVariant;
+    // Calculate price based on variantType
+    let calculatedPrice = price; // Default to validated price
+    let currency = "EUR";
+    let taxRate = 0;
 
-    // Calculate price based on variantType (same as getCart)
-    let calculatedPrice = price;
-    if (cartVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+    if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
+      // Use 30 days plan price for SACHETS
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
+        currency = thirtyDaysPlan.currency || "EUR";
+        taxRate = thirtyDaysPlan.taxRate || 0;
         calculatedPrice = {
-          currency: thirtyDaysPlan.currency || "EUR",
+          currency,
           amount:
             thirtyDaysPlan.discountedPrice ||
             thirtyDaysPlan.totalAmount ||
             thirtyDaysPlan.amount ||
             0,
-          taxRate: thirtyDaysPlan.taxRate || 0,
+          taxRate,
         };
       }
     } else if (
-      cartVariantType === ProductVariant.STAND_UP_POUCH &&
+      variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
+      // Use count30 price for STAND_UP_POUCH
       const standupPrice = product.standupPouchPrice as any;
       if (standupPrice.count30) {
+        currency = standupPrice.count30.currency || "EUR";
+        taxRate = standupPrice.count30.taxRate || 0;
         calculatedPrice = {
-          currency: standupPrice.count30.currency || "EUR",
+          currency,
           amount:
             standupPrice.count30.discountedPrice ||
             standupPrice.count30.amount ||
             0,
-          taxRate: standupPrice.count30.taxRate || 0,
+          taxRate,
         };
       } else if (standupPrice.amount) {
+        currency = standupPrice.currency || "EUR";
+        taxRate = standupPrice.taxRate || 0;
         calculatedPrice = {
-          currency: standupPrice.currency || "EUR",
+          currency,
           amount: standupPrice.discountedPrice || standupPrice.amount || 0,
-          taxRate: standupPrice.taxRate || 0,
+          taxRate,
         };
       }
     }
 
-    // Update item price
+    // Update item price and variantType
     const updatedItems = [...(cart.items || [])];
     updatedItems[itemIndex] = {
       ...item,
+      variantType: variantType, // Update variantType
       price: calculatedPrice, // Update with calculated price based on variantType
     };
 
     // Calculate totals first without coupon to get order amount
+    // Use item's variantType (method uses item-level variantType anyway)
+    const itemVariantType = variantType;
     const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      cartVariantType,
+      itemVariantType,
       0 // Calculate without coupon first
     );
 
@@ -879,7 +849,7 @@ class CartService {
     // Calculate final totals with coupon discount
     const totals = await this.calculateCartTotalsWithVariantType(
       updatedItems,
-      cartVariantType,
+      itemVariantType,
       couponDiscountAmount
     );
 
@@ -932,12 +902,6 @@ class CartService {
     const updatedItems = [...(cart.items || [])];
     updatedItems.splice(itemIndex, 1);
 
-    // If cart is empty, clear variantType
-    let updatedVariantType = cart.variantType;
-    if (updatedItems.length === 0) {
-      updatedVariantType = undefined;
-    }
-
     // Calculate totals first without coupon to get order amount
     let totals;
     let couponDiscountAmount = 0;
@@ -951,9 +915,13 @@ class CartService {
         currency: "EUR",
       };
     } else {
+      // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+      const firstItemVariantType = updatedItems.length > 0 && updatedItems[0].variantType 
+        ? updatedItems[0].variantType 
+        : ProductVariant.SACHETS;
       const totalsWithoutCoupon = await this.calculateCartTotalsWithVariantType(
         updatedItems,
-        updatedVariantType as ProductVariant,
+        firstItemVariantType,
         0 // Calculate without coupon first
       );
 
@@ -1009,7 +977,7 @@ class CartService {
       // Calculate final totals with coupon discount
       totals = await this.calculateCartTotalsWithVariantType(
         updatedItems,
-        updatedVariantType as ProductVariant,
+        firstItemVariantType,
         couponDiscountAmount
       );
     }
@@ -1019,7 +987,6 @@ class CartService {
       cart._id,
       {
         items: updatedItems,
-        variantType: updatedVariantType,
         subtotal: totals.subtotal,
         tax: totals.tax,
         discount: totals.discount,
@@ -1141,9 +1108,13 @@ class CartService {
     }
 
     // Calculate order amount (discounted price total before coupon)
+    // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+    const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+      ? cart.items[0].variantType 
+      : ProductVariant.SACHETS;
     const totals = await this.calculateCartTotalsWithVariantType(
       cart.items,
-      cart.variantType as ProductVariant,
+      firstItemVariantType,
       0 // Calculate without coupon first
     );
 
@@ -1184,7 +1155,7 @@ class CartService {
     // Recalculate totals with coupon discount
     const finalTotals = await this.calculateCartTotalsWithVariantType(
       cart.items,
-      cart.variantType as ProductVariant,
+      firstItemVariantType,
       couponDiscountAmount
     );
 
@@ -1222,9 +1193,13 @@ class CartService {
     const cart = await this.getOrCreateCart(userId);
 
     // Recalculate totals without coupon
+    // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+    const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+      ? cart.items[0].variantType 
+      : ProductVariant.SACHETS;
     const totals = await this.calculateCartTotalsWithVariantType(
       cart.items,
-      cart.variantType as ProductVariant,
+      firstItemVariantType,
       0 // No coupon discount
     );
 
@@ -1265,7 +1240,6 @@ class CartService {
       {
         $set: {
           items: [],
-          variantType: undefined,
           subtotal: 0,
           tax: 0,
           discount: 0,
@@ -1803,6 +1777,7 @@ class CartService {
         categories: product.categories || [],
         ingredients: product.ingredients || [],
         addedAt: item.addedAt,
+        variantType: item.variantType as ProductVariant,
       };
     });
 

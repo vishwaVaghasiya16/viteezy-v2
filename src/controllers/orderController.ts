@@ -439,18 +439,19 @@ class OrderController {
         );
       }
 
-      // Validate that cart variantType matches order variantType
-      if (cart.variantType) {
-        if (cart.variantType !== variantType) {
+      // Validate that all cart items have the same variantType as order variantType
+      if (cart.items && cart.items.length > 0) {
+        const hasDifferentVariantType = cart.items.some(
+          (item: any) => item.variantType && item.variantType !== variantType
+        );
+        if (hasDifferentVariantType) {
           throw new AppError(
-            `Cart variantType (${cart.variantType}) does not match order variantType (${variantType}). All items in cart must have the same variant type.`,
+            `Some cart items have a different variantType than the order variantType (${variantType}). All items in cart must have the same variant type.`,
             400
           );
         }
       } else {
-        // If cart doesn't have variantType set, it means cart is empty or was created before variantType was added
-        // In this case, we'll use the variantType from the order request
-        // But we should log a warning or handle this edge case
+        // If cart is empty, log a warning
         logger.warn(
           `Cart ${cartId} does not have variantType set. Using variantType from order request: ${variantType}`
         );
