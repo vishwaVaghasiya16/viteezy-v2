@@ -49,10 +49,12 @@ router.get("/purchase-plans", CheckoutController.getPurchasePlans);
  * @route   POST /api/v1/checkout/page-summary
  * @desc    Get comprehensive checkout page summary with products, plans, pricing, tax, discounts, and coupon verification
  * @access  Private
- * @body    planDurationDays (optional) - 30 | 60 | 90 | 180 (defaults to 180)
- * @body    variantType (optional) - SACHETS | STAND_UP_POUCH (defaults to SACHETS)
- * @body    capsuleCount (optional) - 30 | 60 (for STAND_UP_POUCH variant)
+ * @body    sachets (required if cart has SACHETS items) - { planDurationDays: 30|60|90|180, isOneTime: boolean }
+ * @body    standUpPouch (required if cart has STAND_UP_POUCH items) - { capsuleCount: 30|60 }
  * @body    couponCode (optional) - Coupon code to apply
+ * @body    shippingAddressId (optional) - Shipping address ID
+ * @body    billingAddressId (optional) - Billing address ID
+ * @note    Returns separate pricing for SACHETS and STAND_UP_POUCH, plus overall combined pricing
  */
 router.post(
   "/page-summary",

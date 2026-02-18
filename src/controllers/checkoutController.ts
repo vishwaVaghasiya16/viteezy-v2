@@ -944,37 +944,29 @@ class CheckoutController {
         throw new AppError("Cart is empty", 400);
       }
 
-      // Extract body parameters (with defaults applied by Joi validation)
+      // Extract body parameters
       const {
-        planDurationDays = 180,
-        variantType = "SACHETS",
-        capsuleCount,
+        sachets,
+        standUpPouch,
         couponCode,
-        isOneTime,
         shippingAddressId,
         billingAddressId,
       } = req.body;
 
-      // Validate variant type - check if all items have the same variantType as requested
-      // Since cart can have multiple variantTypes, we validate based on items
-      if (variantType && findCart.items && findCart.items.length > 0) {
-        const hasDifferentVariantType = findCart.items.some(
-          (item: any) => item.variantType && item.variantType !== variantType
-        );
-        if (hasDifferentVariantType) {
-          throw new AppError(
-            "Some cart items have a different variant type than the requested variant type",
-            400
-          );
-        }
-      }
-
+      // Service handles both variantTypes together with separate configurations
       const result = await checkoutService.getCheckoutPageSummary(userId, {
-        planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
-        variantType: variantType as "SACHETS" | "STAND_UP_POUCH",
-        capsuleCount: capsuleCount as 30 | 60 | undefined,
+        sachets: sachets
+          ? {
+              planDurationDays: sachets.planDurationDays as 30 | 60 | 90 | 180,
+              isOneTime: sachets.isOneTime || false,
+            }
+          : undefined,
+        standUpPouch: standUpPouch
+          ? {
+              capsuleCount: standUpPouch.capsuleCount as 30 | 60,
+            }
+          : undefined,
         couponCode: couponCode || undefined,
-        isOneTime: isOneTime || false,
         shippingAddressId: shippingAddressId || null,
         billingAddressId: billingAddressId || null,
       });

@@ -1,9 +1,10 @@
 import { Products } from "../models/commerce/products.model";
 import { Carts } from "../models/commerce/carts.model";
+import { Subscriptions } from "../models/commerce/subscriptions.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
-import { ProductVariant } from "../models/enums";
+import { ProductVariant, SubscriptionStatus } from "../models/enums";
 import { Coupons } from "../models/commerce/coupons.model";
 import { CouponType } from "../models/enums";
 import { Orders } from "../models/commerce/orders.model";
@@ -1698,11 +1699,14 @@ class CheckoutService {
   async getCheckoutPageSummary(
     userId: string,
     options: {
-      planDurationDays?: 30 | 60 | 90 | 180;
-      variantType?: "SACHETS" | "STAND_UP_POUCH";
-      capsuleCount?: 30 | 60;
+      sachets?: {
+        planDurationDays: 30 | 60 | 90 | 180;
+        isOneTime?: boolean;
+      };
+      standUpPouch?: {
+        capsuleCount: 30 | 60;
+      };
       couponCode?: string;
-      isOneTime?: boolean; // true for one-time purchase, false/undefined for subscription
       shippingAddressId?: string | null;
       billingAddressId?: string | null;
     } = {}
@@ -1726,7 +1730,23 @@ class CheckoutService {
         }>;
         cartId: string;
       };
-      subscriptionPlans: Array<{
+      sachetsPlans?: Array<{
+        planKey: string;
+        label: string;
+        durationDays: number;
+        capsuleCount: number;
+        totalAmount: number;
+        discountedPrice: number;
+        savePercentage: number;
+        supplementsCount: number;
+        perMonthAmount: number;
+        perDeliveryAmount: number;
+        features: string[];
+        isRecommended: boolean;
+        isSelected: boolean;
+        isSubscription: boolean;
+      }>;
+      standUpPouchPlans?: Array<{
         planKey: string;
         label: string;
         durationDays: number;
@@ -1743,14 +1763,33 @@ class CheckoutService {
         isSubscription: boolean;
       }>;
       pricing: {
-        subTotal: number;
-        discountedPrice: number;
-        couponDiscountAmount: number;
-        membershipDiscountAmount: number;
-        subscriptionPlanDiscountAmount: number;
-        taxAmount: number;
-        grandTotal: number;
-        currency: string;
+        sachets?: {
+          subTotal: number;
+          discountedPrice: number;
+          membershipDiscountAmount: number;
+          subscriptionPlanDiscountAmount: number;
+          taxAmount: number;
+          total: number;
+          currency: string;
+        };
+        standUpPouch?: {
+          subTotal: number;
+          discountedPrice: number;
+          membershipDiscountAmount: number;
+          taxAmount: number;
+          total: number;
+          currency: string;
+        };
+        overall: {
+          subTotal: number;
+          discountedPrice: number;
+          couponDiscountAmount: number;
+          membershipDiscountAmount: number;
+          subscriptionPlanDiscountAmount: number;
+          taxAmount: number;
+          grandTotal: number;
+          currency: string;
+        };
       };
       coupon?: {
         code: string;
@@ -1767,13 +1806,7 @@ class CheckoutService {
       }>;
     };
   }> {
-    // Default to 180-day plan and SACHETS variant
-    const selectedPlanDays = options.planDurationDays || 180;
-    const selectedVariant = options.variantType || "SACHETS";
-    const selectedCapsuleCount = options.capsuleCount || 60; // Default to 60 for standup pouch
-    const isOneTimePurchase = options.isOneTime || false; // Default to subscription
-
-    // Get user's cart
+    // Get user's cart first
     const cart = await Carts.findOne({
       userId: new mongoose.Types.ObjectId(userId),
       isDeleted: false,
@@ -1783,10 +1816,45 @@ class CheckoutService {
       throw new AppError("Cart is empty", 400);
     }
 
-    // Fetch all products in cart
-    const productIds = cart.items.map((item: any) => item.productId);
+    // Separate items by variantType
+    const sachetItems = cart.items.filter(
+      (item: any) => item.variantType === ProductVariant.SACHETS
+    );
+    const standupPouchItems = cart.items.filter(
+      (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+    );
+
+    if (sachetItems.length === 0 && standupPouchItems.length === 0) {
+      throw new AppError("No valid items found in cart", 400);
+    }
+
+    // Extract values from options - validate that required configs are provided based on cart items
+    const sachetsConfig = options.sachets;
+    const standUpPouchConfig = options.standUpPouch;
+
+    // Validate that configs are provided for items in cart
+    if (sachetItems.length > 0 && !sachetsConfig) {
+      throw new AppError(
+        "sachets configuration is required when cart contains SACHETS items",
+        400
+      );
+    }
+    if (standupPouchItems.length > 0 && !standUpPouchConfig) {
+      throw new AppError(
+        "standUpPouch configuration is required when cart contains STAND_UP_POUCH items",
+        400
+      );
+    }
+
+    // Use provided configs or defaults
+    const selectedPlanDays = sachetsConfig?.planDurationDays || 180;
+    const selectedCapsuleCount = standUpPouchConfig?.capsuleCount || 30;
+    const isOneTimePurchase = sachetsConfig?.isOneTime || false;
+
+    // Fetch all products
+    const allProductIds = cart.items.map((item: any) => item.productId);
     const products = await Products.find({
-      _id: { $in: productIds },
+      _id: { $in: allProductIds },
       isDeleted: false,
       status: true,
     }).lean();
@@ -1795,64 +1863,134 @@ class CheckoutService {
       throw new AppError("No valid products found in cart", 404);
     }
 
+    // For SACHETS with subscription: Check if user already has an active subscription with same cycleDays
+    let existingSubscription = null;
+    if (
+      sachetItems.length > 0 &&
+      !isOneTimePurchase &&
+      [30, 60, 90, 180].includes(selectedPlanDays)
+    ) {
+      existingSubscription = await Subscriptions.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        cycleDays: selectedPlanDays,
+        status: SubscriptionStatus.ACTIVE,
+        isDeleted: false,
+      }).lean();
+
+      if (existingSubscription) {
+        logger.info(
+          `User ${userId} already has an active ${selectedPlanDays}-day subscription. Products will be added to existing subscription.`
+        );
+      }
+    }
+
     const currency = "EUR";
 
-    // Determine plan key based on selected plan duration
+    // Determine plan key based on selected plan duration for SACHETS
     const planKey = this.getPlanKey(selectedPlanDays, true); // true for subscription
 
     // Build cart items with selected plan price and membership discount
-    const cartItemsPromises = cart.items.map(async (item: any) => {
+    // Process SACHETS items
+    const sachetCartItemsPromises = sachetItems.map(async (item: any) => {
       const product = products.find(
         (p) => p._id.toString() === item.productId.toString()
       );
 
-      if (!product) return null;
+      if (!product || !product.sachetPrices) return null;
 
       const productTitle =
         typeof product.title === "string"
           ? product.title
           : product.title?.en || product.title?.nl || "Product";
 
-      // Get selected plan price based on variant and plan duration
+      const sachetPrices = product.sachetPrices as any;
+      const selectedPlanData = sachetPrices[planKey];
+
       let basePlanPrice = {
         currency,
         amount: 0,
         discountedPrice: 0,
-        totalAmount: 0, // Total amount from product pricing
+        totalAmount: 0,
         planType: `${selectedPlanDays} Day Plan`,
-        taxRate: 0, // Store taxRate from product pricing
+        taxRate: 0,
       };
 
-      if (selectedVariant === "SACHETS" && product.sachetPrices) {
-        const sachetPrices = product.sachetPrices as any;
-        const selectedPlanData = sachetPrices[planKey];
+      if (selectedPlanData) {
+        let discountedPrice =
+          selectedPlanData.discountedPrice || selectedPlanData.amount || 0;
 
-        if (selectedPlanData) {
-          let discountedPrice =
-            selectedPlanData.discountedPrice || selectedPlanData.amount || 0;
-
-          // Apply 90-day bonus discount (15% extra) on discountedPrice
-          if (selectedPlanDays === 90) {
-            // Apply 15% discount on the existing discountedPrice
-            discountedPrice = discountedPrice * 0.85; // 15% discount on discountedPrice
-          }
-
-          basePlanPrice = {
-            currency: selectedPlanData.currency || currency,
-            amount: selectedPlanData.amount || 0,
-            discountedPrice,
-            totalAmount:
-              selectedPlanData.totalAmount || selectedPlanData.amount || 0, // Get totalAmount from plan data
-            planType: `${selectedPlanDays} Day Plan`,
-            taxRate: selectedPlanData.taxRate || 0, // Get taxRate from plan data
-          };
+        // Apply 90-day bonus discount (15% extra) on discountedPrice
+        if (selectedPlanDays === 90) {
+          discountedPrice = discountedPrice * 0.85; // 15% discount on discountedPrice
         }
-      } else if (
-        selectedVariant === "STAND_UP_POUCH" &&
-        product.hasStandupPouch &&
-        product.standupPouchPrice
-      ) {
+
+        basePlanPrice = {
+          currency: selectedPlanData.currency || currency,
+          amount: selectedPlanData.amount || 0,
+          discountedPrice,
+          totalAmount:
+            selectedPlanData.totalAmount || selectedPlanData.amount || 0,
+          planType: `${selectedPlanDays} Day Plan`,
+          taxRate: selectedPlanData.taxRate || 0,
+        };
+      }
+
+      // Calculate membership discount
+      const productPriceSource: ProductPriceSource = {
+        price: {
+          currency,
+          amount: basePlanPrice.discountedPrice,
+          taxRate: 0,
+        },
+        memberPrice: (product as any).metadata?.memberPrice,
+        memberDiscountOverride: (product as any).metadata?.memberDiscountOverride,
+      };
+
+      const memberPriceResult = await calculateMemberPrice(
+        productPriceSource,
+        userId
+      );
+
+      const membershipDiscount = memberPriceResult.isMember
+        ? memberPriceResult.discountAmount
+        : 0;
+
+      return {
+        productId: product._id.toString(),
+        title: productTitle,
+        image: product.productImage || "",
+        variant: ProductVariant.SACHETS,
+        quantity: 1,
+        basePlanPrice,
+        membershipDiscount: this.roundAmount(membershipDiscount),
+        taxRate: basePlanPrice.taxRate || 0,
+      };
+    });
+
+    // Process STAND_UP_POUCH items
+    const standupPouchCartItemsPromises = standupPouchItems.map(
+      async (item: any) => {
+        const product = products.find(
+          (p) => p._id.toString() === item.productId.toString()
+        );
+
+        if (!product || !product.hasStandupPouch || !product.standupPouchPrice)
+          return null;
+
+        const productTitle =
+          typeof product.title === "string"
+            ? product.title
+            : product.title?.en || product.title?.nl || "Product";
+
         const standupPrice = product.standupPouchPrice as any;
+        let basePlanPrice = {
+          currency,
+          amount: 0,
+          discountedPrice: 0,
+          totalAmount: 0,
+          planType: `Stand-up Pouch (${selectedCapsuleCount} count)`,
+          taxRate: 0,
+        };
 
         // Check if count30 or count60 pricing exists
         if (standupPrice.count30 || standupPrice.count60) {
@@ -1872,9 +2010,9 @@ class CheckoutService {
               totalAmount:
                 selectedCountPrice.totalAmount ||
                 selectedCountPrice.amount ||
-                0, // Get totalAmount from plan data
+                0,
               planType: `Stand-up Pouch (${selectedCapsuleCount} count)`,
-              taxRate: selectedCountPrice.taxRate || 0, // Get taxRate from plan data
+              taxRate: selectedCountPrice.taxRate || 0,
             };
           }
         } else {
@@ -1884,58 +2022,57 @@ class CheckoutService {
             amount: standupPrice.amount || 0,
             discountedPrice:
               standupPrice.discountedPrice || standupPrice.amount || 0,
-            totalAmount: standupPrice.totalAmount || standupPrice.amount || 0, // Get totalAmount from price object
+            totalAmount: standupPrice.totalAmount || standupPrice.amount || 0,
             planType: "Stand-up Pouch",
-            taxRate: standupPrice.taxRate || 0, // Get taxRate from price object
+            taxRate: standupPrice.taxRate || 0,
           };
         }
+
+        // Calculate membership discount
+        const productPriceSource: ProductPriceSource = {
+          price: {
+            currency,
+            amount: basePlanPrice.discountedPrice,
+            taxRate: 0,
+          },
+          memberPrice: (product as any).metadata?.memberPrice,
+          memberDiscountOverride: (product as any).metadata
+            ?.memberDiscountOverride,
+        };
+
+        const memberPriceResult = await calculateMemberPrice(
+          productPriceSource,
+          userId
+        );
+
+        const membershipDiscount = memberPriceResult.isMember
+          ? memberPriceResult.discountAmount
+          : 0;
+
+        return {
+          productId: product._id.toString(),
+          title: productTitle,
+          image: product.productImage || "",
+          variant: ProductVariant.STAND_UP_POUCH,
+          quantity: 1,
+          basePlanPrice,
+          membershipDiscount: this.roundAmount(membershipDiscount),
+          taxRate: basePlanPrice.taxRate || 0,
+        };
       }
+    );
 
-      // Calculate membership discount for this product
-      const productPriceSource: ProductPriceSource = {
-        price: {
-          currency,
-          amount: basePlanPrice.discountedPrice,
-          taxRate: 0,
-        },
-        memberPrice: (product as any).metadata?.memberPrice,
-        memberDiscountOverride: (product as any).metadata
-          ?.memberDiscountOverride,
-      };
-
-      const memberPriceResult = await calculateMemberPrice(
-        productPriceSource,
-        userId
-      );
-
-      const membershipDiscount = memberPriceResult.isMember
-        ? memberPriceResult.discountAmount // Quantity removed from cart, each item is 1
-        : 0;
-
-      return {
-        productId: product._id.toString(),
-        title: productTitle,
-        image: product.productImage || "",
-        variant: product.variant || "SACHETS",
-        quantity: 1, // Quantity removed from cart, each item is 1
-        basePlanPrice,
-        membershipDiscount: this.roundAmount(membershipDiscount),
-        taxRate: basePlanPrice.taxRate || 0, // Include taxRate in cart item
-      };
-    });
-
-    const cartItems = (await Promise.all(cartItemsPromises)).filter(
+    // Combine all cart items
+    const sachetCartItems = (await Promise.all(sachetCartItemsPromises)).filter(
       (item) => item !== null
     );
+    const standupPouchCartItems = (
+      await Promise.all(standupPouchCartItemsPromises)
+    ).filter((item) => item !== null);
+    const cartItems = [...sachetCartItems, ...standupPouchCartItems];
 
-    // Calculate total membership discount
-    const membershipDiscountTotal = cartItems.reduce(
-      (sum, item: any) => sum + item.membershipDiscount,
-      0
-    );
-
-    // Build subscription plans listing based on selected variant
-    const subscriptionPlansMap = new Map<
+    // Build subscription plans listing - separate maps for each variantType
+    const sachetsPlansMap = new Map<
       string,
       {
         planKey: string;
@@ -1950,14 +2087,30 @@ class CheckoutService {
       }
     >();
 
-    // Only build plans for SACHETS variant
-    if (selectedVariant === "SACHETS") {
+    const standUpPouchPlansMap = new Map<
+      string,
+      {
+        planKey: string;
+        label: string;
+        durationDays: number;
+        totalAmount: number;
+        discountedPrice: number;
+        capsuleCount: number;
+        supplementsCount: number;
+        features: Set<string>;
+        isSubscription: boolean;
+      }
+    >();
+
+    // Build plans for SACHETS variant
+    if (sachetItems.length > 0) {
       for (const product of products) {
         if (product.sachetPrices) {
           const sachetPrices = product.sachetPrices as any;
-          const cartItem = cart.items.find(
+          const cartItem = sachetItems.find(
             (item: any) => item.productId.toString() === product._id.toString()
           );
+          if (!cartItem) continue;
           const quantity = 1; // Quantity removed from cart, each item is 1
 
           const plans = [
@@ -2024,7 +2177,7 @@ class CheckoutService {
             }
 
             if (planData) {
-              const existing = subscriptionPlansMap.get(planInfo.key);
+              const existing = sachetsPlansMap.get(planInfo.key);
 
               let planPrice = planData.totalAmount || planData.amount || 0;
               let discountedPrice = planData.discountedPrice || planPrice;
@@ -2057,7 +2210,7 @@ class CheckoutService {
                   planData.features.forEach((f: string) => featuresSet.add(f));
                 }
 
-                subscriptionPlansMap.set(planInfo.key, {
+                sachetsPlansMap.set(planInfo.key, {
                   planKey: planInfo.key,
                   label: planInfo.label,
                   durationDays: planInfo.days,
@@ -2073,7 +2226,10 @@ class CheckoutService {
           }
         }
       }
-    } else if (selectedVariant === "STAND_UP_POUCH") {
+    }
+
+    // Build plans for STAND_UP_POUCH variant
+    if (standupPouchItems.length > 0) {
       // For STAND_UP_POUCH, create plans from standupPouchPrice
       const standupPouchPlans = [
         { key: "count30", label: "30 Count", count: 30 },
@@ -2083,15 +2239,16 @@ class CheckoutService {
       for (const product of products) {
         if (product.hasStandupPouch && product.standupPouchPrice) {
           const standupPrice = product.standupPouchPrice as any;
-          const cartItem = cart.items.find(
+          const cartItem = standupPouchItems.find(
             (item: any) => item.productId.toString() === product._id.toString()
           );
+          if (!cartItem) continue;
           const quantity = 1; // Quantity removed from cart, each item is 1
 
           for (const planInfo of standupPouchPlans) {
             const planData = standupPrice[planInfo.key];
             if (planData) {
-              const existing = subscriptionPlansMap.get(planInfo.key);
+              const existing = standUpPouchPlansMap.get(planInfo.key);
 
               const planPrice = planData.amount || 0;
               const discountedPrice = planData.discountedPrice || planPrice;
@@ -2105,7 +2262,7 @@ class CheckoutService {
                 existing.capsuleCount += capsuleCount;
                 existing.supplementsCount += capsuleCount;
               } else {
-                subscriptionPlansMap.set(planInfo.key, {
+                standUpPouchPlansMap.set(planInfo.key, {
                   planKey: planInfo.key,
                   label: planInfo.label,
                   durationDays: 0, // Not applicable for stand-up pouch
@@ -2123,129 +2280,216 @@ class CheckoutService {
       }
     }
 
-    // Convert subscription plans to array with calculated fields
-    const subscriptionPlans = Array.from(subscriptionPlansMap.values()).map(
-      (plan) => {
-        const saveAmount = plan.totalAmount - plan.discountedPrice;
-        const savePercentage =
-          plan.totalAmount > 0
-            ? Math.round((saveAmount / plan.totalAmount) * 100 * 100) / 100
-            : 0;
-
-        // Calculate per month amount
-        const months = plan.durationDays / 30;
-        const perMonthAmount =
-          months > 0
-            ? Math.round((plan.discountedPrice / months) * 100) / 100
-            : plan.discountedPrice;
-
-        // Calculate per delivery amount (this is the total amount for the plan duration)
-        // For subscription plans, this is what user pays every delivery cycle
-        // 30 days = pay every 1 month, 60 days = every 2 months, etc.
-        const perDeliveryAmount = this.roundAmount(plan.discountedPrice);
-
-        // Determine if this plan is selected
-        let isSelected = false;
-        if (selectedVariant === "SACHETS") {
-          // For SACHETS, check if durationDays matches AND subscription type matches
-          if (isOneTimePurchase) {
-            // OneTime plan selected: match by days and isSubscription=false
-            isSelected =
-              plan.durationDays === selectedPlanDays && !plan.isSubscription;
-          } else {
-            // Subscription plan selected: match by days and isSubscription=true
-            isSelected =
-              plan.durationDays === selectedPlanDays && plan.isSubscription;
-          }
-        } else if (selectedVariant === "STAND_UP_POUCH") {
-          // For STAND_UP_POUCH, check if capsuleCount matches
-          const planCapsuleCount =
-            plan.planKey === "count30"
-              ? 30
-              : plan.planKey === "count60"
-              ? 60
-              : 0;
-          isSelected = planCapsuleCount === selectedCapsuleCount;
+    // Helper function to convert plan map to array with calculated fields
+    const convertPlansToArray = (
+      plansMap: Map<
+        string,
+        {
+          planKey: string;
+          label: string;
+          durationDays: number;
+          totalAmount: number;
+          discountedPrice: number;
+          capsuleCount: number;
+          supplementsCount: number;
+          features: Set<string>;
+          isSubscription: boolean;
         }
+      >,
+      variantType: "SACHETS" | "STAND_UP_POUCH"
+    ) => {
+      return Array.from(plansMap.values())
+        .map((plan) => {
+          const saveAmount = plan.totalAmount - plan.discountedPrice;
+          const savePercentage =
+            plan.totalAmount > 0
+              ? Math.round((saveAmount / plan.totalAmount) * 100 * 100) / 100
+              : 0;
 
-        return {
-          planKey: plan.planKey,
-          label: plan.label,
-          durationDays: plan.durationDays,
-          capsuleCount: plan.capsuleCount,
-          totalAmount: this.roundAmount(plan.totalAmount),
-          discountedPrice: this.roundAmount(plan.discountedPrice),
-          savePercentage,
-          supplementsCount: plan.supplementsCount,
-          perMonthAmount,
-          perDeliveryAmount, // Amount to pay per delivery cycle
-          features: Array.from(plan.features),
-          isRecommended: plan.planKey === "ninetyDays", // 90-day is recommended
-          isSelected, // Mark if this plan is currently selected
-          isSubscription: plan.isSubscription, // Mark if this is a subscription or one-time plan
-        };
+          // Calculate per month amount
+          const months = plan.durationDays / 30;
+          const perMonthAmount =
+            months > 0
+              ? Math.round((plan.discountedPrice / months) * 100) / 100
+              : plan.discountedPrice;
+
+          // Calculate per delivery amount
+          const perDeliveryAmount = this.roundAmount(plan.discountedPrice);
+
+          // Determine if this plan is selected
+          let isSelected = false;
+          if (variantType === "SACHETS") {
+            if (isOneTimePurchase) {
+              isSelected =
+                plan.durationDays === selectedPlanDays && !plan.isSubscription;
+            } else {
+              isSelected =
+                plan.durationDays === selectedPlanDays && plan.isSubscription;
+            }
+          } else {
+            // STAND_UP_POUCH
+            const planCapsuleCount =
+              plan.planKey === "count30"
+                ? 30
+                : plan.planKey === "count60"
+                ? 60
+                : 0;
+            isSelected = planCapsuleCount === selectedCapsuleCount;
+          }
+
+          return {
+            planKey: plan.planKey,
+            label: plan.label,
+            durationDays: plan.durationDays,
+            capsuleCount: plan.capsuleCount,
+            totalAmount: this.roundAmount(plan.totalAmount),
+            discountedPrice: this.roundAmount(plan.discountedPrice),
+            savePercentage,
+            supplementsCount: plan.supplementsCount,
+            perMonthAmount,
+            perDeliveryAmount,
+            features: Array.from(plan.features),
+            isRecommended: plan.planKey === "ninetyDays",
+            isSelected,
+            isSubscription: plan.isSubscription,
+          };
+        })
+        .sort((a, b) => a.durationDays - b.durationDays);
+    };
+
+    // Convert SACHETS plans to array
+    const sachetsPlans =
+      sachetsPlansMap.size > 0
+        ? convertPlansToArray(sachetsPlansMap, "SACHETS")
+        : undefined;
+
+    // Convert STAND_UP_POUCH plans to array
+    const standUpPouchPlans =
+      standUpPouchPlansMap.size > 0
+        ? convertPlansToArray(standUpPouchPlansMap, "STAND_UP_POUCH")
+        : undefined;
+
+    // For backward compatibility, create combined array for plan selection logic
+    const allPlans = [
+      ...(sachetsPlans || []),
+      ...(standUpPouchPlans || []),
+    ];
+
+    // Calculate separate pricing for SACHETS items
+    let sachetSubtotal = 0;
+    let sachetDiscountedPrice = 0;
+    let sachetMembershipDiscount = 0;
+    let sachetSubscriptionPlanDiscountAmount = 0;
+    let sachetTaxAmount = 0;
+
+    if (sachetItems.length > 0) {
+      const selectedSachetPlan = isOneTimePurchase
+        ? sachetsPlans?.find(
+            (p) => p.durationDays === selectedPlanDays && !p.isSubscription
+          ) ||
+          sachetsPlans?.find((p) => p.planKey === "oneTime60") ||
+          sachetsPlans?.[0]
+        : sachetsPlans?.find(
+            (p) => p.durationDays === selectedPlanDays && p.isSubscription
+          ) ||
+          sachetsPlans?.find((p) => p.planKey === "oneEightyDays") ||
+          sachetsPlans?.[0];
+
+      if (selectedSachetPlan) {
+        sachetSubtotal = selectedSachetPlan.totalAmount;
+        sachetDiscountedPrice = selectedSachetPlan.discountedPrice;
+
+        // Calculate 15% discount for 90-day SACHETS subscription plan
+        if (
+          selectedPlanDays === 90 &&
+          !isOneTimePurchase &&
+          sachetDiscountedPrice > 0
+        ) {
+          sachetSubscriptionPlanDiscountAmount = this.roundAmount(
+            sachetDiscountedPrice * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100)
+          );
+        }
+      } else {
+        // Calculate from cart items if plan not found
+        sachetSubtotal = sachetCartItems.reduce(
+          (sum, item: any) => sum + (item.basePlanPrice.amount || 0),
+          0
+        );
+        sachetDiscountedPrice = sachetCartItems.reduce(
+          (sum, item: any) => sum + (item.basePlanPrice.discountedPrice || 0),
+          0
+        );
       }
-    );
 
-    // Sort plans by duration
-    subscriptionPlans.sort((a, b) => a.durationDays - b.durationDays);
+      // Calculate SACHETS membership discount
+      sachetMembershipDiscount = sachetCartItems.reduce(
+        (sum, item: any) => sum + (item.membershipDiscount || 0),
+        0
+      );
 
-    // Calculate overall pricing based on selected plan
-    const selectedPlan = isOneTimePurchase
-      ? subscriptionPlans.find(
-          (p) => p.durationDays === selectedPlanDays && !p.isSubscription
-        ) ||
-        subscriptionPlans.find((p) => p.planKey === "oneTime60") ||
-        subscriptionPlans[0]
-      : subscriptionPlans.find(
-          (p) => p.durationDays === selectedPlanDays && p.isSubscription
-        ) ||
-        subscriptionPlans.find((p) => p.planKey === "oneEightyDays") ||
-        subscriptionPlans[0];
-
-    const subtotal = selectedPlan ? selectedPlan.totalAmount : 0;
-    const totalDiscountedPrice = selectedPlan
-      ? selectedPlan.discountedPrice
-      : 0;
-    const savePercentage = selectedPlan ? selectedPlan.savePercentage : 0;
-
-    // Calculate subscription plan discount amount
-    // Only apply 15% discount for 90-day SACHETS subscription plan
-    let subscriptionPlanDiscountAmount = 0;
-
-    if (
-      selectedPlanDays === 90 &&
-      selectedVariant === "SACHETS" &&
-      !isOneTimePurchase &&
-      totalDiscountedPrice > 0
-    ) {
-      // Calculate 15% discount on the discountedPrice (not original amount)
-      // This is the discount amount that will be shown in subscriptionPlanDiscountAmount
-      subscriptionPlanDiscountAmount = this.roundAmount(
-        totalDiscountedPrice * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100)
+      // Calculate SACHETS tax
+      sachetTaxAmount = sachetCartItems.reduce(
+        (sum, item: any) => sum + (item.taxRate || 0),
+        0
       );
     }
-    // For all other plans (30, 60, 180 days, STAND_UP_POUCH, one-time), subscriptionPlanDiscountAmount = 0
 
-    // Calculate plan discount (difference between subtotal and discounted price)
-    // This includes all plan-level discounts
-    const planDiscount = this.roundAmount(subtotal - totalDiscountedPrice);
+    // Calculate separate pricing for STAND_UP_POUCH items
+    let standupPouchSubtotal = 0;
+    let standupPouchDiscountedPrice = 0;
+    let standupPouchMembershipDiscount = 0;
+    let standupPouchTaxAmount = 0;
 
-    // Calculate plan discount percentage
-    const planDiscountPercentage = selectedPlanDays === 90 ? 15 : 0;
+    if (standupPouchItems.length > 0) {
+      const selectedStandupPlan = standUpPouchPlans?.find(
+        (p) =>
+          (p.planKey === "count30" && selectedCapsuleCount === 30) ||
+          (p.planKey === "count60" && selectedCapsuleCount === 60)
+      );
+
+      if (selectedStandupPlan) {
+        standupPouchSubtotal = selectedStandupPlan.totalAmount;
+        standupPouchDiscountedPrice = selectedStandupPlan.discountedPrice;
+      } else {
+        // Calculate from cart items if plan not found
+        standupPouchSubtotal = standupPouchCartItems.reduce(
+          (sum, item: any) => sum + (item.basePlanPrice.amount || 0),
+          0
+        );
+        standupPouchDiscountedPrice = standupPouchCartItems.reduce(
+          (sum, item: any) => sum + (item.basePlanPrice.discountedPrice || 0),
+          0
+        );
+      }
+
+      // Calculate STAND_UP_POUCH membership discount
+      standupPouchMembershipDiscount = standupPouchCartItems.reduce(
+        (sum, item: any) => sum + (item.membershipDiscount || 0),
+        0
+      );
+
+      // Calculate STAND_UP_POUCH tax
+      standupPouchTaxAmount = standupPouchCartItems.reduce(
+        (sum, item: any) => sum + (item.taxRate || 0),
+        0
+      );
+    }
+
+    // Calculate overall totals from both variantTypes
+    const subtotal = this.roundAmount(sachetSubtotal + standupPouchSubtotal);
+    const totalDiscountedPrice = this.roundAmount(
+      sachetDiscountedPrice + standupPouchDiscountedPrice
+    );
+    const membershipDiscountTotal = this.roundAmount(
+      sachetMembershipDiscount + standupPouchMembershipDiscount
+    );
+    const subscriptionPlanDiscountAmount = sachetSubscriptionPlanDiscountAmount;
+    const taxAmount = this.roundAmount(sachetTaxAmount + standupPouchTaxAmount);
 
     // Calculate subtotal after plan discount and membership discount
     const subtotalAfterDiscounts = this.roundAmount(
       totalDiscountedPrice - membershipDiscountTotal
     );
-
-    // Calculate tax by summing taxRate from all products in cart
-    // taxRate is already an amount (not percentage) from product pricing
-    const totalTaxAmount = cartItems.reduce(
-      (sum, item: any) => sum + (item.taxRate || 0),
-      0
-    );
-    const taxAmount = this.roundAmount(totalTaxAmount);
 
     // Calculate order amount for coupon validation (before coupon, after all discounts + tax)
     // This should match the grandTotal before coupon is applied
@@ -2278,6 +2522,12 @@ class CheckoutService {
           .map((p) => (p as any).category?.toString())
           .filter((c) => c) as string[];
 
+        // For coupon validation, use SACHETS if we have sachet items, otherwise STAND_UP_POUCH
+        const couponVariantType =
+          sachetItems.length > 0
+            ? ProductVariant.SACHETS
+            : ProductVariant.STAND_UP_POUCH;
+
         const couponResult = await this.validateCouponForSummary({
           couponCode: couponCodeToProcess,
           userId,
@@ -2286,10 +2536,7 @@ class CheckoutService {
           categoryIds: categoryIdsArray,
           planDurationDays: selectedPlanDays,
           isSubscription: !isOneTimePurchase,
-          variantType:
-            selectedVariant === "SACHETS"
-              ? ProductVariant.SACHETS
-              : ProductVariant.STAND_UP_POUCH,
+          variantType: couponVariantType,
         });
 
         couponDiscountAmount = couponResult.discountAmount;
@@ -2361,6 +2608,7 @@ class CheckoutService {
     const grandTotal = this.roundAmount(finalSubtotalAfterCoupon + taxAmount);
 
     // Calculate total discount amount (plan discount + membership discount + coupon discount)
+    const planDiscount = this.roundAmount(subtotal - totalDiscountedPrice);
     const totalDiscountAmount = this.roundAmount(
       planDiscount + membershipDiscountTotal + couponDiscountAmount
     );
@@ -2368,7 +2616,7 @@ class CheckoutService {
     // Get suggested products (3-5 products not in cart)
     const suggestedProducts = await this.getSuggestedProductsForCheckout(
       userId,
-      productIds,
+      allProductIds,
       3,
       5
     );
@@ -2380,18 +2628,71 @@ class CheckoutService {
           items: cartItems as any,
           cartId: cart._id.toString(),
         },
-        subscriptionPlans,
+        ...(sachetsPlans && { sachetsPlans }),
+        ...(standUpPouchPlans && { standUpPouchPlans }),
+        // Include existing subscription info for SACHETS subscription plans
+        existingSubscription:
+          existingSubscription && sachetItems.length > 0 && !isOneTimePurchase
+            ? {
+                subscriptionId: existingSubscription._id.toString(),
+                subscriptionNumber: existingSubscription.subscriptionNumber,
+                cycleDays: existingSubscription.cycleDays,
+                status: existingSubscription.status,
+                message:
+                  "You already have an active subscription with this cycle. Products will be added to your existing subscription.",
+              }
+            : null,
         pricing: {
-          subTotal: this.roundAmount(subtotal),
-          discountedPrice: this.roundAmount(totalDiscountedPrice),
-          couponDiscountAmount: this.roundAmount(couponDiscountAmount),
-          membershipDiscountAmount: this.roundAmount(membershipDiscountTotal),
-          subscriptionPlanDiscountAmount: this.roundAmount(
-            subscriptionPlanDiscountAmount
-          ), // 15% discount for 90-day sachets, 0 for others
-          taxAmount: this.roundAmount(taxAmount),
-          grandTotal: this.roundAmount(grandTotal),
-          currency,
+          // SACHETS pricing (only if SACHETS items exist)
+          ...(sachetItems.length > 0 && {
+            sachets: {
+              subTotal: this.roundAmount(sachetSubtotal),
+              discountedPrice: this.roundAmount(sachetDiscountedPrice),
+              membershipDiscountAmount: this.roundAmount(
+                sachetMembershipDiscount
+              ),
+              subscriptionPlanDiscountAmount: this.roundAmount(
+                sachetSubscriptionPlanDiscountAmount
+              ),
+              taxAmount: this.roundAmount(sachetTaxAmount),
+              total: this.roundAmount(
+                sachetDiscountedPrice -
+                  sachetMembershipDiscount +
+                  sachetTaxAmount
+              ),
+              currency,
+            },
+          }),
+          // STAND_UP_POUCH pricing (only if STAND_UP_POUCH items exist)
+          ...(standupPouchItems.length > 0 && {
+            standUpPouch: {
+              subTotal: this.roundAmount(standupPouchSubtotal),
+              discountedPrice: this.roundAmount(standupPouchDiscountedPrice),
+              membershipDiscountAmount: this.roundAmount(
+                standupPouchMembershipDiscount
+              ),
+              taxAmount: this.roundAmount(standupPouchTaxAmount),
+              total: this.roundAmount(
+                standupPouchDiscountedPrice -
+                  standupPouchMembershipDiscount +
+                  standupPouchTaxAmount
+              ),
+              currency,
+            },
+          }),
+          // Overall combined pricing
+          overall: {
+            subTotal: this.roundAmount(subtotal),
+            discountedPrice: this.roundAmount(totalDiscountedPrice),
+            couponDiscountAmount: this.roundAmount(couponDiscountAmount),
+            membershipDiscountAmount: this.roundAmount(membershipDiscountTotal),
+            subscriptionPlanDiscountAmount: this.roundAmount(
+              subscriptionPlanDiscountAmount
+            ), // 15% discount for 90-day sachets, 0 for others
+            taxAmount: this.roundAmount(taxAmount),
+            grandTotal: this.roundAmount(grandTotal),
+            currency,
+          },
         },
         shippingAddressId: options.shippingAddressId || null,
         billingAddressId: options.billingAddressId || null,

@@ -134,45 +134,46 @@ export const checkoutPageSummarySchema = Joi.object({
  */
 export const checkoutPageSummaryBodySchema = Joi.object(
   withFieldLabels({
-    // Product variant type: SACHETS or STAND_UP_POUCH - defaults to SACHETS
-    variantType: Joi.string()
-      .valid("SACHETS", "STAND_UP_POUCH")
-      .default("SACHETS")
+    // SACHETS variant configuration - OPTIONAL (required if cart has SACHETS items)
+    sachets: Joi.object({
+      planDurationDays: Joi.number()
+        .integer()
+        .valid(30, 60, 90, 180)
+        .default(180)
+        .required()
+        .messages({
+          "number.base": "Plan duration must be a number",
+          "any.only": "Plan duration must be 30, 60, 90, or 180 days",
+          "any.required": "planDurationDays is required for SACHETS variant",
+        }),
+      isOneTime: Joi.boolean()
+        .optional()
+        .default(false)
+        .messages({
+          "boolean.base": "isOneTime must be a boolean",
+        }),
+    })
+      .optional()
       .messages({
-        "string.base": "Variant type must be a string",
-        "any.only": "Variant type must be SACHETS or STAND_UP_POUCH",
+        "object.base": "sachets must be an object",
       }),
 
-    // Plan duration in days - REQUIRED for SACHETS, NOT ALLOWED for STAND_UP_POUCH
-    planDurationDays: Joi.number()
-      .integer()
-      .valid(30, 60, 90, 180)
-      .when("variantType", {
-        is: "SACHETS",
-        then: Joi.number().integer().valid(30, 60, 90, 180).default(180),
-        otherwise: Joi.forbidden(),
-      })
+    // STAND_UP_POUCH variant configuration - OPTIONAL (required if cart has STAND_UP_POUCH items)
+    standUpPouch: Joi.object({
+      capsuleCount: Joi.number()
+        .integer()
+        .valid(30, 60)
+        .default(30)
+        .required()
+        .messages({
+          "number.base": "Capsule count must be a number",
+          "any.only": "Capsule count must be 30 or 60",
+          "any.required": "capsuleCount is required for STAND_UP_POUCH variant",
+        }),
+    })
+      .optional()
       .messages({
-        "number.base": "Plan duration must be a number",
-        "any.only": "Plan duration must be 30, 60, 90, or 180 days",
-        "any.unknown":
-          "Plan duration is not allowed for STAND_UP_POUCH variant",
-      }),
-
-    // Capsule count - REQUIRED for STAND_UP_POUCH, NOT ALLOWED for SACHETS
-    capsuleCount: Joi.number()
-      .integer()
-      .valid(30, 60)
-      .when("variantType", {
-        is: "STAND_UP_POUCH",
-        then: Joi.required(),
-        otherwise: Joi.forbidden(),
-      })
-      .messages({
-        "number.base": "Capsule count must be a number",
-        "any.only": "Capsule count must be 30 or 60",
-        "any.required": "Capsule count is required for STAND_UP_POUCH variant",
-        "any.unknown": "Capsule count is not allowed for SACHETS variant",
+        "object.base": "standUpPouch must be an object",
       }),
 
     // Coupon code - OPTIONAL
@@ -188,11 +189,6 @@ export const checkoutPageSummaryBodySchema = Joi.object(
         "string.min": "Coupon code must be at least 3 characters",
         "string.max": "Coupon code cannot exceed 50 characters",
       }),
-
-    // Is one-time purchase - OPTIONAL (default: false for subscription)
-    isOneTime: Joi.boolean().optional().default(false).messages({
-      "boolean.base": "isOneTime must be a boolean",
-    }),
 
     // Shipping Address ID - OPTIONAL
     shippingAddressId: Joi.string()
