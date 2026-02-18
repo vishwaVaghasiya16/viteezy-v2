@@ -12,6 +12,7 @@ import {
   updatePaymentStatusSchema,
   updateTrackingNumberSchema,
   getAllOrdersQuerySchema,
+  createManualOrderSchema,
 } from "@/validation/adminOrderValidation";
 
 const router = Router();
@@ -110,6 +111,33 @@ router.delete(
   "/:id",
   validateParams(orderIdParamsSchema),
   adminOrderController.deleteOrder
+);
+
+/**
+ * @route POST /api/v1/admin/orders/manual
+ * @desc Create manual order (Admin Panel)
+ * @access Admin
+ * @body {String} userId - User ID (MongoDB ObjectId)
+ * @body {String} orderType - Order type: "already_paid" or "pending_payment"
+ * @body {Array} items - Order items array
+ * @body {String} shippingAddressId - Shipping address ID (MongoDB ObjectId)
+ * @body {String} [billingAddressId] - Billing address ID (MongoDB ObjectId, optional)
+ * @body {Number} subTotal - Subtotal amount
+ * @body {Number} discountedPrice - Discounted price
+ * @body {Number} grandTotal - Grand total amount
+ * @body {String} [currency] - Currency code (default: "EUR")
+ * @body {String} [couponCode] - Coupon code (optional)
+ * @body {String} [paymentMethod] - Payment method (optional)
+ * @body {String} [notes] - Order notes (optional)
+ * @body {String} planType - Plan type (One-Time, Subscription, Mixed)
+ * @body {Boolean} isOneTime - Whether order is one-time purchase
+ * @note For "already_paid": Order is created with payment status "Completed"
+ * @note For "pending_payment": Order is created with payment status "Pending", cart is created, payment link is generated, and payment request email is sent to customer
+ */
+router.post(
+  "/manual",
+  validateJoi(createManualOrderSchema),
+  adminOrderController.createManualOrder
 );
 
 export default router;

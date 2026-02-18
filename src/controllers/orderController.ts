@@ -334,6 +334,9 @@ class OrderController {
 
       const {
         cartId,
+        sachets,
+        standUpPouch,
+        // Legacy fields (for backward compatibility)
         variantType,
         planDurationDays,
         isOneTime,
@@ -443,14 +446,45 @@ class OrderController {
         );
       }
 
-      // Validate variant-specific rules
-      // SACHETS: Always subscription (no one-time)
-      // STAND_UP_POUCH: Always one-time (with quantity)
-      if (sachetItems.length > 0 && isOneTime) {
+      // Extract plan selection from new structure (similar to checkout page summary)
+      // Validate that required configs are provided based on cart items
+      if (sachetItems.length > 0 && !sachets) {
         throw new AppError(
-          "SACHETS products are subscription-only. Cannot create one-time order with SACHETS items.",
+          "sachets configuration is required when cart contains SACHETS items",
           400
         );
+      }
+      if (standupPouchItems.length > 0 && !standUpPouch) {
+        throw new AppError(
+          "standUpPouch configuration is required when cart contains STAND_UP_POUCH items",
+          400
+        );
+      }
+
+      // Extract plan selection values (use new structure if provided, fallback to legacy fields)
+      const selectedPlanDays = sachets?.planDurationDays || planDurationDays;
+      const selectedIsOneTime = sachets?.isOneTime !== undefined ? sachets.isOneTime : isOneTime;
+      const selectedCapsuleCount = standUpPouch?.capsuleCount || capsuleCount || 30;
+
+      // Validate variant-specific rules
+      // SACHETS: Can be subscription or one-time (based on isOneTime)
+      // STAND_UP_POUCH: Always one-time (with quantity)
+      if (sachetItems.length > 0 && selectedIsOneTime === true) {
+        // SACHETS one-time purchase is allowed (30 or 60 days only)
+        if (!selectedPlanDays || ![30, 60].includes(selectedPlanDays)) {
+          throw new AppError(
+            "For SACHETS one-time purchases, planDurationDays must be 30 or 60",
+            400
+          );
+        }
+      } else if (sachetItems.length > 0 && selectedIsOneTime === false) {
+        // SACHETS subscription (30, 60, 90, or 180 days)
+        if (!selectedPlanDays || ![30, 60, 90, 180].includes(selectedPlanDays)) {
+          throw new AppError(
+            "For SACHETS subscription plans, planDurationDays must be 30, 60, 90, or 180",
+            400
+          );
+        }
       }
 
       // Determine planType based on order contents
@@ -458,31 +492,18 @@ class OrderController {
       if (sachetItems.length > 0 && standupPouchItems.length > 0) {
         planType = OrderPlanType.MIXED; // Both variants present
       } else if (sachetItems.length > 0) {
-        planType = OrderPlanType.SUBSCRIPTION; // Only SACHETS (subscription)
+        planType = OrderPlanType.SUBSCRIPTION; // Only SACHETS (subscription or one-time)
       } else {
         planType = OrderPlanType.ONE_TIME; // Only STAND_UP_POUCH (one-time)
       }
 
       // Determine isOneTime based on order contents
-      // If order has SACHETS items, it's subscription (isOneTime = false)
       // If order has only STAND_UP_POUCH items, it's one-time (isOneTime = true)
+      // If order has SACHETS items, use selectedIsOneTime from request
       // If order has both, isOneTime = false (because subscriptions are primary)
-      const orderIsOneTime = standupPouchItems.length > 0 && sachetItems.length === 0;
-
-      // Validate planDurationDays based on order contents
-      if (sachetItems.length > 0) {
-        // For SACHETS (subscription), planDurationDays must be 30, 60, 90, or 180
-        if (
-          !planDurationDays ||
-          ![30, 60, 90, 180].includes(planDurationDays)
-        ) {
-          throw new AppError(
-            "For SACHETS subscription plans, planDurationDays must be 30, 60, 90, or 180",
-            400
-          );
-        }
-      }
-      // STAND_UP_POUCH items don't need planDurationDays (they use capsuleCount)
+      const orderIsOneTime = standupPouchItems.length > 0 && sachetItems.length === 0 
+        ? true 
+        : (sachetItems.length > 0 ? selectedIsOneTime : false);
 
       // Validate and fetch shipping address
       if (!shippingAddressId) {
@@ -531,11 +552,11 @@ class OrderController {
         (item: any) => new mongoose.Types.ObjectId(item.productId)
       );
 
-      // Use planDurationDays from body (already validated above)
-      const planDays = planDurationDays;
+      // Use planDurationDays from new structure or legacy field (already validated above)
+      const planDays = selectedPlanDays;
 
-      // STAND_UP_POUCH items use capsuleCount from body (default to 30 if not provided)
-      const effectiveCapsuleCount = capsuleCount || 30;
+      // STAND_UP_POUCH items use capsuleCount from new structure or legacy field
+      const effectiveCapsuleCount = selectedCapsuleCount;
 
       // Fetch products with pricing information for both variantTypes
       const selectFields =
@@ -601,35 +622,57 @@ class OrderController {
             );
           }
 
-          if (planType === OrderPlanType.SUBSCRIPTION && planDays) {
-            // Use subscription pricing based on planDays
+          // Use plan selection from request (subscription or one-time)
+          if (planDays) {
             itemPlanDays = planDays;
             let selectedPlan: any = null;
             let planKey = "";
 
-            // Map planDays to sachetPrices field
-            switch (planDays) {
-              case 30:
-                selectedPlan = product.sachetPrices.thirtyDays;
-                planKey = "thirtyDays";
-                break;
-              case 60:
-                selectedPlan = product.sachetPrices.sixtyDays;
-                planKey = "sixtyDays";
-                break;
-              case 90:
-                selectedPlan = product.sachetPrices.ninetyDays;
-                planKey = "ninetyDays";
-                break;
-              case 180:
-                selectedPlan = product.sachetPrices.oneEightyDays;
-                planKey = "oneEightyDays";
-                break;
-              default:
+            // Check if this is a one-time purchase for SACHETS
+            const isSachetOneTime = sachetItems.length > 0 && orderIsOneTime && selectedIsOneTime === true;
+
+            // Map planDays to sachetPrices field (supports both subscription and one-time)
+            if (isSachetOneTime) {
+              // One-time purchase (30 or 60 days only)
+              if (planDays === 30 && product.sachetPrices.oneTime?.count30) {
+                selectedPlan = product.sachetPrices.oneTime.count30;
+                planKey = "oneTime30";
+              } else if (planDays === 60 && product.sachetPrices.oneTime?.count60) {
+                selectedPlan = product.sachetPrices.oneTime.count60;
+                planKey = "oneTime60";
+              } else {
                 throw new AppError(
-                  `Invalid planDays: ${planDays}. Must be 30, 60, 90, or 180 for subscription plans`,
+                  `Product ${
+                    product.title?.en || product.slug || product._id
+                  } does not support ${planDays}-day one-time plan. Available one-time plans: 30, 60`,
                   400
                 );
+              }
+            } else {
+              // Subscription pricing
+              switch (planDays) {
+                case 30:
+                  selectedPlan = product.sachetPrices.thirtyDays;
+                  planKey = "thirtyDays";
+                  break;
+                case 60:
+                  selectedPlan = product.sachetPrices.sixtyDays;
+                  planKey = "sixtyDays";
+                  break;
+                case 90:
+                  selectedPlan = product.sachetPrices.ninetyDays;
+                  planKey = "ninetyDays";
+                  break;
+                case 180:
+                  selectedPlan = product.sachetPrices.oneEightyDays;
+                  planKey = "oneEightyDays";
+                  break;
+                default:
+                  throw new AppError(
+                    `Invalid planDays: ${planDays}. Must be 30, 60, 90, or 180 for subscription plans`,
+                    400
+                  );
+              }
             }
 
             // Validate that the product supports the selected plan
@@ -822,11 +865,12 @@ class OrderController {
       };
 
       // Add SACHETS plan details if present
-      if (sachetItems.length > 0 && planDurationDays) {
+      if (sachetItems.length > 0 && selectedPlanDays) {
         planDetails.sachets = {
-          planDurationDays,
-          interval: planDurationDays.toString(),
-          cycleDays: planDurationDays,
+          planDurationDays: selectedPlanDays,
+          isOneTime: selectedIsOneTime,
+          interval: selectedPlanDays.toString(),
+          cycleDays: selectedPlanDays,
         };
       }
 
@@ -860,7 +904,7 @@ class OrderController {
         planType: planType,
         isOneTime: orderIsOneTime,
         variantType: sachetItems.length > 0 ? ProductVariant.SACHETS : ProductVariant.STAND_UP_POUCH, // Primary variantType
-        selectedPlanDays: sachetItems.length > 0 ? planDurationDays : undefined,
+        selectedPlanDays: sachetItems.length > 0 ? selectedPlanDays : undefined,
         items: orderItems,
         subTotal: roundAmount(subTotal),
         discountedPrice: roundAmount(discountedPrice),

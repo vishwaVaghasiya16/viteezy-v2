@@ -140,6 +140,47 @@ const planSchema = Joi.object(
 export const createOrderSchema = Joi.object(
   withFieldLabels({
     cartId: objectIdSchema.required().label("Cart ID"),
+    // SACHETS variant configuration - OPTIONAL (required if cart has SACHETS items)
+    sachets: Joi.object({
+      planDurationDays: Joi.number()
+        .integer()
+        .valid(30, 60, 90, 180)
+        .default(180)
+        .required()
+        .messages({
+          "number.base": "Plan duration days must be a number",
+          "any.only": "Plan duration days must be 30, 60, 90, or 180",
+          "any.required": "planDurationDays is required for SACHETS variant",
+        }),
+      isOneTime: Joi.boolean()
+        .optional()
+        .default(false)
+        .messages({
+          "boolean.base": "isOneTime must be a boolean",
+        }),
+    })
+      .optional()
+      .messages({
+        "object.base": "sachets must be an object",
+      }),
+    // STAND_UP_POUCH variant configuration - OPTIONAL (required if cart has STAND_UP_POUCH items)
+    standUpPouch: Joi.object({
+      capsuleCount: Joi.number()
+        .integer()
+        .valid(30, 60)
+        .default(30)
+        .required()
+        .messages({
+          "number.base": "Capsule count must be a number",
+          "any.only": "Capsule count must be 30 or 60",
+          "any.required": "capsuleCount is required for STAND_UP_POUCH variant",
+        }),
+    })
+      .optional()
+      .messages({
+        "object.base": "standUpPouch must be an object",
+      }),
+    // Legacy fields (deprecated, kept for backward compatibility)
     variantType: Joi.string()
       .valid(...PRODUCT_VARIANT_VALUES)
       .optional()
@@ -148,16 +189,16 @@ export const createOrderSchema = Joi.object(
       .integer()
       .valid(30, 60, 90, 180)
       .optional()
-      .label("Plan Duration Days"), // Required only if cart has SACHETS items
+      .label("Plan Duration Days"), // Deprecated - use sachets.planDurationDays
     isOneTime: Joi.boolean()
       .optional()
-      .label("Is One Time Purchase"), // Will be determined from cart contents
+      .label("Is One Time Purchase"), // Deprecated - use sachets.isOneTime
     capsuleCount: Joi.number()
       .integer()
       .valid(30, 60)
       .optional()
       .default(30)
-      .label("Capsule Count"), // Required only if cart has STAND_UP_POUCH items
+      .label("Capsule Count"), // Deprecated - use standUpPouch.capsuleCount
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
     // Pricing fields as numbers with separate currency

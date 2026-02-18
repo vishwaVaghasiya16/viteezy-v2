@@ -3,13 +3,16 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
-import { Orders, Payments, Products, Subscriptions } from "@/models/commerce";
+import { Orders, Payments, Products, Subscriptions, Carts } from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
 import {
   OrderStatus,
   PaymentStatus,
   OrderPlanType,
+  ProductVariant,
 } from "@/models/enums";
+import { emailService } from "@/services/emailService";
+import { cartService } from "@/services/cartService";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -824,6 +827,430 @@ class AdminOrderController {
       res.apiSuccess(null, "Order deleted successfully");
     }
   );
+
+  /**
+   * Create manual order (Admin Panel)
+   * @route POST /api/v1/admin/orders/manual
+   * @access Admin
+   */
+  createManualOrder = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const {
+        userId,
+        orderType,
+        items,
+        shippingAddressId,
+        billingAddressId,
+        subTotal,
+        discountedPrice,
+        couponDiscountAmount,
+        membershipDiscountAmount,
+        subscriptionPlanDiscountAmount,
+        taxAmount,
+        grandTotal,
+        currency,
+        couponCode,
+        paymentMethod,
+        notes,
+        planType,
+        isOneTime,
+        variantType,
+        selectedPlanDays,
+      } = req.body;
+
+      // Validate user exists
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Validate addresses exist
+      const shippingAddress = await Addresses.findById(shippingAddressId);
+      if (!shippingAddress) {
+        throw new AppError("Shipping address not found", 404);
+      }
+
+      let billingAddress = null;
+      if (billingAddressId) {
+        billingAddress = await Addresses.findById(billingAddressId);
+        if (!billingAddress) {
+          throw new AppError("Billing address not found", 404);
+        }
+      }
+
+      // Fetch products and build order items
+      const productIds = items.map((item: any) => item.productId);
+      const products = await Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      }).lean();
+
+      if (products.length !== productIds.length) {
+        throw new AppError("One or more products not found", 404);
+      }
+
+      const productMap = new Map(
+        products.map((p: any) => [p._id.toString(), p])
+      );
+
+      // Build order items with product details
+      const orderItems = items.map((item: any) => {
+        const product = productMap.get(item.productId);
+        if (!product) {
+          throw new AppError(`Product ${item.productId} not found`, 404);
+        }
+
+        const productTitle =
+          typeof product.title === "string"
+            ? product.title
+            : product.title?.en || product.title?.nl || product.slug || "Product";
+
+        // Calculate pricing based on variant type
+        let amount = 0;
+        let discountedPricePerUnit = 0;
+        let taxRate = 0;
+
+        if (item.variantType === ProductVariant.SACHETS && product.sachetPrices) {
+          const planKey = item.planDays
+            ? this.getPlanKeyFromDays(item.planDays)
+            : "thirtyDays";
+          const planData = (product.sachetPrices as any)[planKey];
+          if (planData) {
+            amount = planData.amount || planData.totalAmount || 0;
+            discountedPricePerUnit =
+              planData.discountedPrice ||
+              planData.amount ||
+              planData.totalAmount ||
+              0;
+            taxRate = planData.taxRate || 0;
+          }
+        } else if (
+          item.variantType === ProductVariant.STAND_UP_POUCH &&
+          product.standupPouchPrice
+        ) {
+          const standupPrice = product.standupPouchPrice as any;
+          const countKey = item.capsuleCount === 60 ? "count60" : "count30";
+          const countData = standupPrice[countKey];
+          if (countData) {
+            amount = countData.amount || 0;
+            discountedPricePerUnit =
+              countData.discountedPrice || countData.amount || 0;
+            taxRate = countData.taxRate || 0;
+          } else if (standupPrice.amount) {
+            amount = standupPrice.amount || 0;
+            discountedPricePerUnit =
+              standupPrice.discountedPrice || standupPrice.amount || 0;
+            taxRate = standupPrice.taxRate || 0;
+          }
+        }
+
+        const quantity = item.quantity || 1;
+        const totalAmount = discountedPricePerUnit * quantity;
+
+        return {
+          productId: new mongoose.Types.ObjectId(item.productId),
+          name: productTitle,
+          variantType: item.variantType,
+          quantity: quantity,
+          planDays: item.planDays || null,
+          capsuleCount: item.capsuleCount || null,
+          amount: amount,
+          discountedPrice: discountedPricePerUnit,
+          taxRate: taxRate,
+          totalAmount: totalAmount,
+        };
+      });
+
+      // Generate order number
+      const generateOrderNumber = (): string => {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 9000) + 1000;
+        return `ORD-${timestamp}-${random}`;
+      };
+
+      // Determine payment status based on order type
+      const paymentStatus =
+        orderType === "already_paid"
+          ? PaymentStatus.COMPLETED
+          : PaymentStatus.PENDING;
+
+      // Create order
+      const order = await Orders.create({
+        orderNumber: generateOrderNumber(),
+        userId: new mongoose.Types.ObjectId(userId),
+        status: OrderStatus.PENDING,
+        planType: planType,
+        isOneTime: isOneTime,
+        variantType: variantType || null,
+        selectedPlanDays: selectedPlanDays || null,
+        items: orderItems,
+        subTotal: subTotal,
+        discountedPrice: discountedPrice,
+        couponDiscountAmount: couponDiscountAmount || 0,
+        membershipDiscountAmount: membershipDiscountAmount || 0,
+        subscriptionPlanDiscountAmount: subscriptionPlanDiscountAmount || 0,
+        taxAmount: taxAmount || 0,
+        grandTotal: grandTotal,
+        currency: currency || "EUR",
+        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        billingAddressId: billingAddressId
+          ? new mongoose.Types.ObjectId(billingAddressId)
+          : null,
+        paymentMethod: paymentMethod || null,
+        paymentStatus: paymentStatus,
+        couponCode: couponCode || null,
+        notes: notes || null,
+        metadata: {
+          isManualOrder: true,
+          createdBy: req.user?._id || null,
+          orderType: orderType,
+        },
+      });
+
+      let paymentLink = null;
+      let cartId = null;
+
+      // If pending payment, create cart and generate payment link
+      if (orderType === "pending_payment") {
+        try {
+          // Clear existing cart for user (if any)
+          try {
+            await cartService.clearCart(userId);
+          } catch (error) {
+            // Cart might not exist, continue
+            logger.info(`No existing cart to clear for user ${userId}`);
+          }
+
+          // Add items to cart
+          for (const item of items) {
+            try {
+              await cartService.addItem(userId, {
+                productId: item.productId,
+                variantType: item.variantType,
+                quantity: item.quantity || 1,
+              });
+            } catch (error: any) {
+              logger.error(
+                `Failed to add item ${item.productId} to cart: ${error.message}`
+              );
+              throw new AppError(
+                `Failed to add item to cart: ${error.message}`,
+                500
+              );
+            }
+          }
+
+          // Apply coupon if provided
+          if (couponCode) {
+            try {
+              await cartService.applyCoupon(userId, couponCode);
+            } catch (error: any) {
+              logger.warn(`Failed to apply coupon ${couponCode}: ${error.message}`);
+              // Continue even if coupon fails
+            }
+          }
+
+          // Get updated cart
+          const updatedCart = await Carts.findOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            isDeleted: false,
+          }).lean();
+
+          cartId = updatedCart?._id ? String(updatedCart._id) : null;
+        } catch (error: any) {
+          logger.error(`Failed to create cart for manual order: ${error.message}`);
+          // Continue even if cart creation fails - we'll still generate a payment link
+        }
+
+        // Always generate payment link (even if cart creation failed)
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+        if (cartId) {
+          paymentLink = `${frontendUrl}/checkout?orderId=${order._id}&cartId=${cartId}`;
+        } else {
+          // Fallback: generate link with just orderId if cart creation failed
+          paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
+        }
+
+        logger.info(`Generated payment link for order ${order.orderNumber}: ${paymentLink}`);
+
+        // Send payment request email
+        try {
+          await this.sendPaymentRequestEmail(user, order, paymentLink);
+          logger.info(`Payment request email sent to ${user.email} for order ${order.orderNumber}`);
+        } catch (error: any) {
+          logger.error(
+            `Failed to send payment request email: ${error.message}`
+          );
+          // Don't fail order creation if email fails
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          order: {
+            _id: order._id,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            grandTotal: order.grandTotal,
+            currency: order.currency,
+            orderType: orderType,
+            paymentLink: paymentLink,
+            cartId: cartId,
+          },
+        },
+        message:
+          orderType === "already_paid"
+            ? "Order created successfully (Already Paid)"
+            : "Order created successfully. Payment request email sent to customer.",
+      });
+    }
+  );
+
+  /**
+   * Helper method to get plan key from days
+   */
+  private getPlanKeyFromDays(days: number): string {
+    switch (days) {
+      case 30:
+        return "thirtyDays";
+      case 60:
+        return "sixtyDays";
+      case 90:
+        return "ninetyDays";
+      case 180:
+        return "oneEightyDays";
+      default:
+        return "thirtyDays";
+    }
+  }
+
+  /**
+   * Send payment request email to customer
+   */
+  private async sendPaymentRequestEmail(
+    user: any,
+    order: any,
+    paymentLink: string | null
+  ): Promise<void> {
+    const userName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
+    const orderNumber = order.orderNumber;
+    const orderTotal = `${order.currency || "EUR"} ${order.grandTotal.toFixed(2)}`;
+
+    // Ensure paymentLink is always provided for pending payment orders
+    if (!paymentLink) {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
+      logger.warn(`Payment link was null, generated fallback link: ${paymentLink}`);
+    }
+
+    const emailSubject = `Payment Request for Order ${orderNumber}`;
+
+    // Escape HTML in user input to prevent XSS
+    const escapeHtml = (text: string): string => {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+
+    const safeUserName = escapeHtml(userName);
+    const safeOrderNumber = escapeHtml(orderNumber);
+    const safeOrderTotal = escapeHtml(orderTotal);
+    const safePaymentLink = escapeHtml(paymentLink);
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Request</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h1 style="color: #2c3e50; margin-top: 0;">Payment Request</h1>
+  </div>
+  
+  <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
+    <p>Dear ${safeUserName},</p>
+    
+    <p>We have created an order for you and require payment to proceed with processing and shipping.</p>
+    
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+      <h2 style="color: #2c3e50; margin-top: 0; font-size: 18px;">Order Details</h2>
+      <p style="margin: 5px 0;"><strong>Order Number:</strong> ${safeOrderNumber}</p>
+      <p style="margin: 5px 0;"><strong>Total Amount:</strong> ${safeOrderTotal}</p>
+      <p style="margin: 5px 0;"><strong>Status:</strong> Pending Payment</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${paymentLink}" 
+         style="background-color: #007bff; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+        Complete Payment
+      </a>
+    </div>
+    
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      Or copy and paste this link into your browser:<br>
+      <a href="${paymentLink}" style="color: #007bff; word-break: break-all; text-decoration: underline;">${safePaymentLink}</a>
+    </p>
+    
+    <p style="margin-top: 30px;">If you have any questions or concerns, please don't hesitate to contact our support team.</p>
+    
+    <p>Thank you for your business!</p>
+    
+    <p style="margin-top: 30px;">
+      Best regards,<br>
+      <strong>The Viteezy Team</strong>
+    </p>
+  </div>
+  
+  <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+    <p>This is an automated email. Please do not reply to this message.</p>
+  </div>
+</body>
+</html>
+    `;
+
+    const emailText = `
+Payment Request
+
+Dear ${userName},
+
+We have created an order for you and require payment to proceed with processing and shipping.
+
+Order Details:
+- Order Number: ${orderNumber}
+- Total Amount: ${orderTotal}
+- Status: Pending Payment
+
+Complete your payment by visiting: ${paymentLink}
+
+If you have any questions or concerns, please don't hesitate to contact our support team.
+
+Thank you for your business!
+
+Best regards,
+The Viteezy Team
+
+---
+This is an automated email. Please do not reply to this message.
+    `;
+
+    logger.info(`Sending payment request email to ${user.email} with payment link: ${paymentLink}`);
+
+    await emailService.sendCustomEmail(
+      user.email,
+      emailSubject,
+      emailHtml,
+      emailText
+    );
+  }
 }
 
 export const adminOrderController = new AdminOrderController();

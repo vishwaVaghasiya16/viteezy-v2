@@ -23,6 +23,14 @@ router.use(authenticate);
  * @route   POST /api/orders
  * @desc    Create a new order record prior to payment
  * @access  Private
+ * @body    cartId - Cart ID (required)
+ * @body    sachets - { planDurationDays: 30|60|90|180, isOneTime: boolean } (required if cart has SACHETS items)
+ * @body    standUpPouch - { capsuleCount: 30|60 } (required if cart has STAND_UP_POUCH items)
+ * @body    shippingAddressId - Shipping address ID (required)
+ * @body    billingAddressId - Billing address ID (optional)
+ * @body    pricing fields - subTotal, discountedPrice, grandTotal, etc. (required)
+ * @note    Plan selection works similar to checkout page summary API
+ * @note    Legacy fields (variantType, planDurationDays, isOneTime, capsuleCount) are still supported for backward compatibility
  */
 router.post("/", validateJoi(createOrderSchema), orderController.createOrder);
 
