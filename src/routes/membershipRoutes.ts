@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { authenticate } from "@/middleware/auth";
-import { validateJoi, validateQuery } from "@/middleware/joiValidation";
+import { validateJoi, validateQuery, validateParams } from "@/middleware/joiValidation";
 import {
   buyMembershipSchema,
   getMembershipPlansSchema,
+  getMembershipDetailsParamsSchema,
+  getMembershipsQuerySchema,
+  cancelMembershipSchema,
 } from "@/validation/membershipValidation";
 import { membershipController } from "@/controllers/membershipController";
 
@@ -32,6 +35,37 @@ router.get(
 router.use(authenticate);
 
 /**
+ * @route   GET /api/memberships
+ * @desc    Get user's memberships (Paginated)
+ * @access  Private
+ * @query   status, page, limit
+ */
+router.get(
+  "/",
+  validateQuery(getMembershipsQuerySchema),
+  membershipController.getUserMemberships
+);
+
+/**
+ * @route   GET /api/memberships/widget/overview
+ * @desc    Widget data for user dashboard membership section
+ * @access  Private
+ */
+router.get("/widget/overview", membershipController.getMembershipWidget);
+
+/**
+ * @route   GET /api/memberships/:membershipId
+ * @desc    Get membership details by ID
+ * @access  Private
+ * @params  membershipId
+ */
+router.get(
+  "/:membershipId",
+  validateParams(getMembershipDetailsParamsSchema),
+  membershipController.getMembershipDetails
+);
+
+/**
  * @route   POST /api/memberships/buy
  * @desc    Buy membership plan
  * @access  Private
@@ -40,6 +74,19 @@ router.post(
   "/buy",
   validateJoi(buyMembershipSchema),
   membershipController.buyMembership
+);
+
+/**
+ * @route   POST /api/memberships/:membershipId/cancel
+ * @desc    Cancel membership
+ * @access  Private
+ * @params  membershipId
+ */
+router.post(
+  "/:membershipId/cancel",
+  validateParams(getMembershipDetailsParamsSchema),
+  validateJoi(cancelMembershipSchema),
+  membershipController.cancelMembership
 );
 
 export default router;

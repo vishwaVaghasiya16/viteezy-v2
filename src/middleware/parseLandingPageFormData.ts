@@ -70,15 +70,18 @@ const buildNestedStructure = (body: any): any => {
         key === "heroSection_media_url" ||
         key === "heroSectionMedia" ||
         key === "heroBackgroundImage" ||
-        key === "membershipBackgroundImage" || 
+        key === "membershipBackgroundImage" ||
         key === "missionBackgroundImage" ||
         key === "howItWorksStepImages" ||
         key === "designedByScienceStepImages" ||
+        key.startsWith("howItWorksStepImages_") ||
+        key.startsWith("designedByScienceStepImages_") ||
         key === "featureIcons" ||
-        key.startsWith("featureIcons_") || // Skip indexed featureIcons (featureIcons_0, featureIcons_1, etc.)
+        key.startsWith("featureIcons_") ||
         key === "heroPrimaryCTAImages" ||
+        key.startsWith("heroPrimaryCTAImages_") ||
         key === "communityBackgroundImage" ||
-        key.startsWith("membershipSection_benefits_") && key.endsWith("_icon")) { // Skip indexed membershipSection benefits icons
+        (key.startsWith("membershipSection_benefits_") && key.endsWith("_icon"))) {
       continue;
     }
     
@@ -188,9 +191,14 @@ export const parseLandingPageFormData = (
         key === "missionBackgroundImage" ||
         key === "howItWorksStepImages" ||
         key === "designedByScienceStepImages" ||
+        key.startsWith("howItWorksStepImages_") ||
+        key.startsWith("designedByScienceStepImages_") ||
         key === "featureIcons" ||
+        key.startsWith("featureIcons_") ||
         key === "heroPrimaryCTAImages" ||
-        key === "communityBackgroundImage"
+        key.startsWith("heroPrimaryCTAImages_") ||
+        key === "communityBackgroundImage" ||
+        (key.startsWith("membershipSection_benefits_") && key.endsWith("_icon"))
       ) {
         continue;
       }

@@ -168,7 +168,13 @@ const baseProductCategorySectionSchema = Joi.object({
   title: baseStringSchema.required(),
   subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
-  // productCategoryIds removed - categories are fetched dynamically in GET APIs
+  productCategoryIds: Joi.array()
+    .items(Joi.string().trim().min(1))
+    .max(10)
+    .optional()
+    .messages({
+      "array.max": "Maximum 10 product category IDs allowed",
+    }),
   isEnabled: Joi.boolean().optional(),
   order: Joi.number().integer().min(0).optional(),
 });

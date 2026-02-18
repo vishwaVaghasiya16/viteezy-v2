@@ -509,6 +509,13 @@ class LandingPageService {
 
     // Convert product category section strings to I18n format
     if (data.productCategorySection) {
+      const productCategoryIds =
+        Array.isArray((data.productCategorySection as any).productCategoryIds) &&
+        (data.productCategorySection as any).productCategoryIds.length > 0
+          ? (data.productCategorySection as any).productCategoryIds.map(
+              (id: string) => new mongoose.Types.ObjectId(id)
+            )
+          : undefined;
       landingPageData.productCategorySection = {
         title:
           typeof data.productCategorySection.title === "string"
@@ -524,7 +531,7 @@ class LandingPageService {
             ? { en: data.productCategorySection.subTitle }
             : (data.productCategorySection as any).subTitle
           : undefined,
-        // productCategoryIds removed - categories are fetched dynamically in GET APIs
+        ...(productCategoryIds && { productCategoryIds }),
         isEnabled:
           data.productCategorySection.isEnabled !== undefined
             ? data.productCategorySection.isEnabled
@@ -751,6 +758,7 @@ class LandingPageService {
 
   /**
    * Get all landing pages with optional filters
+   * Returns landing pages with single language (default: English)
    */
   async getAllLandingPages(filters: {
     isActive?: boolean;
@@ -767,7 +775,12 @@ class LandingPageService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return { landingPages };
+    // Transform each landing page to single language (default: English)
+    const transformedLandingPages = landingPages.map((landingPage) =>
+      this.transformToLanguage(landingPage, "en")
+    );
+
+    return { landingPages: transformedLandingPages };
   }
 
   /**
@@ -1922,6 +1935,16 @@ class LandingPageService {
                   any
                 >),
               };
+      }
+
+      if (
+        (data.productCategorySection as any).productCategoryIds !== undefined
+      ) {
+        const ids = (data.productCategorySection as any).productCategoryIds;
+        (landingPage.productCategorySection as any).productCategoryIds =
+          Array.isArray(ids) && ids.length > 0
+            ? ids.map((id: string) => new mongoose.Types.ObjectId(id))
+            : [];
       }
     }
 

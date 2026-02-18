@@ -1,6 +1,25 @@
 import { Request, Response, NextFunction } from "express";
 import { fileStorageService } from "@/services/fileStorageService";
 
+/** Collect indexed file fields (e.g. heroPrimaryCTAImages_0, heroPrimaryCTAImages_1) into sorted array by index */
+function collectIndexedFiles(
+  files: { [fieldname: string]: Express.Multer.File[] } | undefined,
+  baseName: string,
+  maxIndex: number
+): { index: number; file: Express.Multer.File }[] {
+  const result: { index: number; file: Express.Multer.File }[] = [];
+  if (!files) return result;
+  for (let i = 0; i <= maxIndex; i++) {
+    const fieldName = `${baseName}_${i}`;
+    const fileArray = files[fieldName];
+    if (fileArray && fileArray.length > 0) {
+      result.push({ index: i, file: fileArray[0] });
+    }
+  }
+  result.sort((a, b) => a.index - b.index);
+  return result;
+}
+
 export const handleLandingPageImageUpload = async (
   req: Request,
   _res: Response,
@@ -94,10 +113,11 @@ export const handleLandingPageImageUpload = async (
       req.body.missionSection.backgroundImage = imageUrl;
     }
 
-    // Handle howItWorksStepImages (multiple files for steps)
-    if (files?.howItWorksStepImages && files.howItWorksStepImages.length > 0) {
+    // Handle howItWorksStepImages (indexed: howItWorksStepImages_0, howItWorksStepImages_1, ...)
+    const howItWorksStepFiles = collectIndexedFiles(files, "howItWorksStepImages", 9);
+    if (howItWorksStepFiles.length > 0) {
       const stepImageUrls = await Promise.all(
-        files.howItWorksStepImages.map((file) => fileStorageService.uploadFile("landing-pages", file))
+        howItWorksStepFiles.map(({ file }) => fileStorageService.uploadFile("landing-pages", file))
       );
       if (!req.body.howItWorksSection) {
         req.body.howItWorksSection = {};
@@ -105,19 +125,19 @@ export const handleLandingPageImageUpload = async (
       if (!req.body.howItWorksSection.steps) {
         req.body.howItWorksSection.steps = [];
       }
-      // Assign images to steps by index
-      stepImageUrls.forEach((url, index) => {
+      howItWorksStepFiles.forEach(({ index }, urlIndex) => {
         if (!req.body.howItWorksSection.steps[index]) {
           req.body.howItWorksSection.steps[index] = {};
         }
-        req.body.howItWorksSection.steps[index].image = url;
+        req.body.howItWorksSection.steps[index].image = stepImageUrls[urlIndex];
       });
     }
 
-    // Handle designedByScienceStepImages (multiple files for steps)
-    if (files?.designedByScienceStepImages && files.designedByScienceStepImages.length > 0) {
+    // Handle designedByScienceStepImages (indexed: designedByScienceStepImages_0, designedByScienceStepImages_1, ...)
+    const designedByScienceStepFiles = collectIndexedFiles(files, "designedByScienceStepImages", 9);
+    if (designedByScienceStepFiles.length > 0) {
       const stepImageUrls = await Promise.all(
-        files.designedByScienceStepImages.map((file) => fileStorageService.uploadFile("landing-pages", file))
+        designedByScienceStepFiles.map(({ file }) => fileStorageService.uploadFile("landing-pages", file))
       );
       if (!req.body.designedByScienceSection) {
         req.body.designedByScienceSection = {};
@@ -125,12 +145,11 @@ export const handleLandingPageImageUpload = async (
       if (!req.body.designedByScienceSection.steps) {
         req.body.designedByScienceSection.steps = [];
       }
-      // Assign images to steps by index
-      stepImageUrls.forEach((url, index) => {
+      designedByScienceStepFiles.forEach(({ index }, urlIndex) => {
         if (!req.body.designedByScienceSection.steps[index]) {
           req.body.designedByScienceSection.steps[index] = {};
         }
-        req.body.designedByScienceSection.steps[index].image = url;
+        req.body.designedByScienceSection.steps[index].image = stepImageUrls[urlIndex];
       });
     }
 
@@ -197,10 +216,11 @@ export const handleLandingPageImageUpload = async (
       });
     }
 
-    // Handle hero primary CTA images (multiple files for up to 3 CTAs)
-    if (files?.heroPrimaryCTAImages && files.heroPrimaryCTAImages.length > 0) {
+    // Handle hero primary CTA images (indexed: heroPrimaryCTAImages_0, heroPrimaryCTAImages_1, heroPrimaryCTAImages_2)
+    const heroCtaFiles = collectIndexedFiles(files, "heroPrimaryCTAImages", 2);
+    if (heroCtaFiles.length > 0) {
       const ctaImageUrls = await Promise.all(
-        files.heroPrimaryCTAImages.map((file) =>
+        heroCtaFiles.map(({ file }) =>
           fileStorageService.uploadFile("landing-pages", file)
         )
       );
@@ -210,11 +230,11 @@ export const handleLandingPageImageUpload = async (
       if (!req.body.heroSection.primaryCTA) {
         req.body.heroSection.primaryCTA = [];
       }
-      ctaImageUrls.forEach((url, index) => {
+      heroCtaFiles.forEach(({ index }, urlIndex) => {
         if (!req.body.heroSection.primaryCTA[index]) {
           req.body.heroSection.primaryCTA[index] = {};
         }
-        req.body.heroSection.primaryCTA[index].image = url;
+        req.body.heroSection.primaryCTA[index].image = ctaImageUrls[urlIndex];
       });
     }
 
