@@ -117,3 +117,41 @@ export const getAllOrdersQuerySchema = paginationQuerySchema.keys(
   })
 ).label("GetAllOrdersQuery");
 
+/**
+ * Schema for partial refund request
+ * Admin can refund specific products from an order
+ */
+export const partialRefundSchema = Joi.object(
+  withFieldLabels({
+    productIds: Joi.array()
+      .items(Joi.string().pattern(objectIdRegex).required())
+      .min(1)
+      .required()
+      .messages({
+        "array.min": "At least one product ID is required",
+        "any.required": "Product IDs are required",
+      })
+      .label("Product IDs to refund"),
+    
+    refundAmount: Joi.number()
+      .positive()
+      .optional()
+      .label("Refund amount (optional, will calculate automatically if not provided)"),
+    
+    refundMethod: Joi.string()
+      .valid("manual", "gateway")
+      .default("gateway")
+      .label("Refund method"),
+    
+    reason: Joi.string()
+      .trim()
+      .max(500)
+      .optional()
+      .label("Refund reason"),
+    
+    metadata: Joi.object()
+      .optional()
+      .label("Additional metadata"),
+  })
+).label("PartialRefundPayload");
+
