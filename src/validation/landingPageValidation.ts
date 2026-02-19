@@ -67,22 +67,18 @@ const baseMediaSchema = Joi.object({
 // Hero Section Schema
 const basePrimaryCTASchema = Joi.object({
   label: baseStringSchema.required(),
-  image: Joi.string().uri().optional(),
+  image: Joi.string().trim().optional().allow("", null), // Allow image URL or text
   link: Joi.string().trim().optional().allow(""), // Allow any string value, not just URIs
   order: Joi.number().integer().min(0).optional().default(0),
 });
 
 const baseHeroSectionSchema = Joi.object({
   media: baseMediaSchema.optional(),
-  imageUrl: Joi.string().uri().optional().allow("", null).messages({
-    "string.uri": "Image URL must be a valid URL",
-  }),
+  imageUrl: Joi.string().trim().optional().allow("", null), // Allow image URL or text
   videoUrl: Joi.string().uri().optional().allow("", null).messages({
     "string.uri": "Video URL must be a valid URL",
   }),
-  backgroundImage: Joi.string().uri().optional().allow("", null).messages({
-    "string.uri": "Background image must be a valid URL",
-  }),
+  backgroundImage: Joi.string().trim().optional().allow("", null), // Allow image URL or text
   title: baseStringSchema.required(),
   // subTitle removed from create API
   description: baseTextSchema.optional(),
@@ -116,17 +112,16 @@ const baseHeroSectionSchema = Joi.object({
 
 // Membership Section Schema
 const baseMembershipBenefitSchema = Joi.object({
-  icon: Joi.string().trim().optional(),
+  icon: Joi.string().trim().optional().allow("", null), // Allow icon URL or text
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
   order: Joi.number().integer().min(0).optional().default(0),
 });
 
 const baseMembershipSectionSchema = Joi.object({
-  backgroundImage: Joi.string().uri().required().messages({
-    "string.uri": "Background image must be a valid URL",
+  backgroundImage: Joi.string().trim().required().messages({
     "any.required": "Background image is required",
-  }),
+  }), // Allow image URL or text
   title: baseStringSchema.required(),
   subTitle: baseStringSchema.optional(),
   description: baseTextSchema.optional(),
@@ -137,10 +132,9 @@ const baseMembershipSectionSchema = Joi.object({
 
 // How It Works Step Schema
 const baseHowItWorksStepSchema = Joi.object({
-  image: Joi.string().uri().required().messages({
-    "string.uri": "Step image must be a valid URL",
+  image: Joi.string().trim().required().messages({
     "any.required": "Step image is required",
-  }),
+  }), // Allow image URL or text
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
   order: Joi.number().integer().min(0).optional().default(0),
@@ -181,10 +175,9 @@ const baseProductCategorySectionSchema = Joi.object({
 
 // Mission Section Schema
 const baseMissionSectionSchema = Joi.object({
-  backgroundImage: Joi.string().uri().required().messages({
-    "string.uri": "Background image must be a valid URL",
+  backgroundImage: Joi.string().trim().required().messages({
     "any.required": "Background image is required",
-  }),
+  }), // Allow image URL or text
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
   isEnabled: Joi.boolean().optional(),
@@ -195,7 +188,7 @@ const baseMissionSectionSchema = Joi.object({
 const baseFeatureSchema = Joi.object({
   icon: Joi.string().trim().required().messages({
     "any.required": "Feature icon is required",
-  }),
+  }), // Allow icon URL or text
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
   order: Joi.number().integer().min(0).optional().default(0),
@@ -216,10 +209,9 @@ const baseFeaturesSectionSchema = Joi.object({
 
 // Designed by Science Step Schema
 const baseDesignedByScienceStepSchema = Joi.object({
-  image: Joi.string().uri().required().messages({
-    "string.uri": "Step image must be a valid URL",
+  image: Joi.string().trim().required().messages({
     "any.required": "Step image is required",
-  }),
+  }), // Allow image URL or text
   title: baseStringSchema.required(),
   description: baseTextSchema.optional(),
   order: Joi.number().integer().min(0).optional().default(0),
@@ -252,10 +244,9 @@ const baseCommunityMetricSchema = Joi.object({
 });
 
 const baseCommunitySectionSchema = Joi.object({
-  backgroundImage: Joi.string().uri().required().messages({
-    "string.uri": "Background image must be a valid URL",
+  backgroundImage: Joi.string().trim().required().messages({
     "any.required": "Background image is required",
-  }),
+  }), // Allow image URL or text
   title: baseStringSchema.required(),
   subTitle: baseStringSchema.optional(),
   metrics: Joi.array()
