@@ -279,50 +279,85 @@ export class PaymentService {
         `Payment created for order ${order.orderNumber}: ${paymentId} via ${data.paymentMethod}`
       );
 
-      // ========== DEVELOPMENT/TEST MODE: Immediate Subscription Check ==========
-      // In development, optionally create subscription immediately for testing
-      // In production, subscription is created via webhook after payment completion
+      // ========== AUTO-CREATE SUBSCRIPTION ON PAYMENT SUCCESS ==========
+      // Create subscription automatically when:
+      // 1. AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT env variable is "true"
+      // 2. Payment status is COMPLETED (payment successful) - check both result.status and payment.status
+      // 3. Order's planType is SUBSCRIPTION
       if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
         console.log(
-          "🟡 [DEV MODE] Attempting immediate subscription creation for testing..."
+          "🟢 [SUBSCRIPTION] Checking for subscription auto-creation after payment creation..."
         );
-        try {
-          const freshOrder = await Orders.findById(order._id)
-            .select(
-              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-            )
-            .lean();
+        console.log(
+          `🟢 [SUBSCRIPTION] Gateway Result Status: ${result.status}, Payment Status: ${payment.status}, Order PlanType: ${order.planType}`
+        );
 
-          if (freshOrder) {
-            const paymentData = payment.toObject ? payment.toObject() : payment;
-            const subscription = await this.createSubscriptionFromOrder(
-              freshOrder,
-              paymentData
-            );
+        // Only create subscription if payment is COMPLETED and order is SUBSCRIPTION type
+        // Check both result.status (from gateway) and payment.status (saved in DB)
+        const isPaymentCompleted =
+          result.status === PaymentStatus.COMPLETED ||
+          payment.status === PaymentStatus.COMPLETED;
 
-            if (subscription) {
-              console.log(
-                "✅ [DEV MODE] Subscription created immediately:",
-                subscription.subscriptionNumber
+        if (isPaymentCompleted && order.planType === OrderPlanType.SUBSCRIPTION) {
+          console.log(
+            "✅ [SUBSCRIPTION] Payment is COMPLETED and order is SUBSCRIPTION type. Creating subscription..."
+          );
+          try {
+            const freshOrder = await Orders.findById(order._id)
+              .select(
+                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+              )
+              .lean();
+
+            if (freshOrder) {
+              const paymentData = payment.toObject
+                ? payment.toObject()
+                : payment;
+              const subscription = await this.createSubscriptionFromOrder(
+                freshOrder,
+                paymentData
               );
-              logger.info(
-                `[DEV MODE] Subscription ${subscription.subscriptionNumber} created immediately for testing`
-              );
+
+              if (subscription) {
+                console.log(
+                  "✅ [SUBSCRIPTION] Subscription created successfully:",
+                  subscription.subscriptionNumber
+                );
+                logger.info(
+                  `Subscription ${subscription.subscriptionNumber} created automatically for order ${order.orderNumber} (payment completed)`
+                );
+              } else {
+                console.log(
+                  "ℹ️ [SUBSCRIPTION] Subscription not created (order not eligible or already exists)"
+                );
+                logger.info(
+                  `Subscription not created for order ${order.orderNumber} (not eligible or already exists)`
+                );
+              }
             } else {
-              console.log(
-                "ℹ️ [DEV MODE] Order not eligible for subscription or already exists"
+              console.warn(
+                "⚠️ [SUBSCRIPTION] Could not fetch fresh order for subscription creation"
+              );
+              logger.warn(
+                `Could not fetch fresh order ${order._id} for subscription creation`
               );
             }
+          } catch (subError: any) {
+            console.error(
+              "❌ [SUBSCRIPTION] Subscription creation failed:",
+              subError.message
+            );
+            console.error("❌ [SUBSCRIPTION] Stack:", subError.stack);
+            logger.error(
+              `Failed to create subscription for order ${order.orderNumber}: ${subError.message}`,
+              subError
+            );
+            // Don't throw error - subscription creation failure shouldn't break payment flow
           }
-        } catch (subError: any) {
-          console.error(
-            "⚠️ [DEV MODE] Immediate subscription creation failed:",
-            subError.message
+        } else {
+          console.log(
+            `ℹ️ [SUBSCRIPTION] Subscription not created: Payment status is ${payment.status} (needs COMPLETED) or Order planType is ${order.planType} (needs SUBSCRIPTION)`
           );
-          logger.warn(
-            `[DEV MODE] Immediate subscription creation failed: ${subError.message}`
-          );
-          // Don't throw error - this is just for testing convenience
         }
       }
 
@@ -803,52 +838,74 @@ export class PaymentService {
           }
 
           // ========== SUBSCRIPTION CREATION LOGIC ==========
-          // Auto-create subscription if order is eligible
+          // Auto-create subscription when payment status becomes COMPLETED (via webhook)
+          // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
           // Conditions:
           // 1. Order must be a subscription order (isOneTime = false OR planType = SUBSCRIPTION)
           // 2. Order must be for SACHETS variant
           // 3. Order must have valid selectedPlanDays (30, 60, 90, or 180)
           // 4. No duplicate subscription should exist for this order
           console.log(
-            "🟢 [PAYMENT SERVICE] Step 10: Checking for subscription auto-creation"
+            "🟢 [PAYMENT SERVICE] Step 10: Checking for subscription auto-creation (webhook - payment completed)"
           );
 
-          // Refresh order from database to ensure we have latest data with all fields
-          const freshOrder = await Orders.findById(order._id)
-            .select(
-              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-            )
-            .lean();
-
-          if (freshOrder) {
-            // Convert payment to plain object if it's a mongoose document
-            const paymentData = payment.toObject ? payment.toObject() : payment;
+          if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
             console.log(
-              "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder..."
+              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
             );
 
-            // Call the reusable subscription creation function
-            const subscription = await this.createSubscriptionFromOrder(
-              freshOrder,
-              paymentData
-            );
+            if (order.planType === OrderPlanType.SUBSCRIPTION) {
+              // Refresh order from database to ensure we have latest data with all fields
+              const freshOrder = await Orders.findById(order._id)
+                .select(
+                  "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+                )
+                .lean();
 
-            if (subscription) {
-              console.log(
-                "✅ [PAYMENT SERVICE] - Subscription created:",
-                subscription.subscriptionNumber
-              );
+              if (freshOrder) {
+                // Convert payment to plain object if it's a mongoose document
+                const paymentData = payment.toObject
+                  ? payment.toObject()
+                  : payment;
+                console.log(
+                  "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (webhook - payment completed)..."
+                );
+
+                // Call the reusable subscription creation function
+                const subscription = await this.createSubscriptionFromOrder(
+                  freshOrder,
+                  paymentData
+                );
+
+                if (subscription) {
+                  console.log(
+                    "✅ [PAYMENT SERVICE] - Subscription created:",
+                    subscription.subscriptionNumber
+                  );
+                  logger.info(
+                    `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (webhook - payment completed)`
+                  );
+                } else {
+                  console.log(
+                    "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
+                  );
+                }
+              } else {
+                console.warn(
+                  "⚠️ [PAYMENT SERVICE] - Could not fetch fresh order for subscription creation"
+                );
+                logger.warn(
+                  `Could not fetch fresh order ${order._id} for subscription creation`
+                );
+              }
             } else {
               console.log(
-                "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
+                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
               );
             }
           } else {
-            console.warn(
-              "⚠️ [PAYMENT SERVICE] - Could not fetch fresh order for subscription creation"
-            );
-            logger.warn(
-              `Could not fetch fresh order ${order._id} for subscription creation`
+            console.log(
+              "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
             );
           }
         } else {
@@ -1434,37 +1491,64 @@ export class PaymentService {
             }
 
             // ========== SUBSCRIPTION CREATION LOGIC ==========
-            // Auto-create subscription if order is eligible
-            // Refresh order from database to ensure we have latest data with all fields
-            const freshOrder = await Orders.findById(order._id)
-              .select(
-                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-              )
-              .lean();
-            if (freshOrder) {
-              // Convert payment to plain object if it's a mongoose document
-              const paymentData = payment.toObject
-                ? payment.toObject()
-                : payment;
+            // Auto-create subscription when payment status becomes COMPLETED
+            // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
+            if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
               console.log(
-                "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder..."
+                "🟢 [PAYMENT SERVICE] Payment status is COMPLETED. Checking for subscription creation..."
+              );
+              console.log(
+                `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
               );
 
-              // Call the reusable subscription creation function
-              const subscription = await this.createSubscriptionFromOrder(
-                freshOrder,
-                paymentData
-              );
+              if (order.planType === OrderPlanType.SUBSCRIPTION) {
+                // Refresh order from database to ensure we have latest data with all fields
+                const freshOrder = await Orders.findById(order._id)
+                  .select(
+                    "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+                  )
+                  .lean();
+                if (freshOrder) {
+                  // Convert payment to plain object if it's a mongoose document
+                  const paymentData = payment.toObject
+                    ? payment.toObject()
+                    : payment;
+                  console.log(
+                    "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed)..."
+                  );
 
-              if (subscription) {
+                  // Call the reusable subscription creation function
+                  const subscription = await this.createSubscriptionFromOrder(
+                    freshOrder,
+                    paymentData
+                  );
+
+                  if (subscription) {
+                    console.log(
+                      "✅ [PAYMENT SERVICE] - Subscription created:",
+                      subscription.subscriptionNumber
+                    );
+                    logger.info(
+                      `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
+                    );
+                  } else {
+                    console.log(
+                      "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    `Could not fetch fresh order ${order._id} for subscription creation`
+                  );
+                }
+              } else {
                 console.log(
-                  "✅ [PAYMENT SERVICE] - Subscription created:",
-                  subscription.subscriptionNumber
+                  `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
                 );
               }
             } else {
-              logger.warn(
-                `Could not fetch fresh order ${order._id} for subscription creation`
+              console.log(
+                "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
               );
             }
           } else if (previousOrderPaymentStatus !== PaymentStatus.COMPLETED) {
@@ -1475,36 +1559,63 @@ export class PaymentService {
             );
 
             // ========== SUBSCRIPTION CREATION LOGIC ==========
-            // Auto-create subscription if order is eligible (even if order was already confirmed)
-            const freshOrder = await Orders.findById(order._id)
-              .select(
-                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-              )
-              .lean();
-            if (freshOrder) {
-              // Convert payment to plain object if it's a mongoose document
-              const paymentData = payment.toObject
-                ? payment.toObject()
-                : payment;
+            // Auto-create subscription when payment status becomes COMPLETED
+            // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
+            if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
               console.log(
-                "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (already confirmed)..."
+                "🟢 [PAYMENT SERVICE] Payment status updated to COMPLETED. Checking for subscription creation..."
+              );
+              console.log(
+                `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
               );
 
-              // Call the reusable subscription creation function
-              const subscription = await this.createSubscriptionFromOrder(
-                freshOrder,
-                paymentData
-              );
+              if (order.planType === OrderPlanType.SUBSCRIPTION) {
+                const freshOrder = await Orders.findById(order._id)
+                  .select(
+                    "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+                  )
+                  .lean();
+                if (freshOrder) {
+                  // Convert payment to plain object if it's a mongoose document
+                  const paymentData = payment.toObject
+                    ? payment.toObject()
+                    : payment;
+                  console.log(
+                    "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed, order already confirmed)..."
+                  );
 
-              if (subscription) {
+                  // Call the reusable subscription creation function
+                  const subscription = await this.createSubscriptionFromOrder(
+                    freshOrder,
+                    paymentData
+                  );
+
+                  if (subscription) {
+                    console.log(
+                      "✅ [PAYMENT SERVICE] - Subscription created:",
+                      subscription.subscriptionNumber
+                    );
+                    logger.info(
+                      `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
+                    );
+                  } else {
+                    console.log(
+                      "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    `Could not fetch fresh order ${order._id} for subscription creation`
+                  );
+                }
+              } else {
                 console.log(
-                  "✅ [PAYMENT SERVICE] - Subscription created:",
-                  subscription.subscriptionNumber
+                  `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
                 );
               }
             } else {
-              logger.warn(
-                `Could not fetch fresh order ${order._id} for subscription creation`
+              console.log(
+                "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
               );
             }
           }
@@ -2061,35 +2172,39 @@ export class PaymentService {
         "🟢 [SUBSCRIPTION] Step 6: Creating subscription in database..."
       );
 
-      const subscription = await Subscriptions.create(
-        [
-          {
-            userId: order.userId,
-            orderId: order._id,
-            planType: OrderPlanType.SUBSCRIPTION,
-            cycleDays: cycleDays as SubscriptionCycle,
-            subscriptionStartDate,
-            subscriptionEndDate,
-            items: subscriptionItems,
-            initialDeliveryDate,
-            nextDeliveryDate,
-            nextBillingDate,
-            lastBilledDate,
-            status: SubscriptionStatus.ACTIVE,
-            isAutoRenew: true, // Enable auto-renewal by default
-            renewalCount: 0, // Initial subscription is not a renewal
-            metadata: {
-              autoCreated: true,
-              createdFromPayment: payment._id
-                ? payment._id.toString()
-                : payment.id || payment._id,
-              orderNumber: order.orderNumber,
-              createdAt: now.toISOString(),
-            },
-          },
-        ],
-        { session }
-      );
+      // Build subscription data
+      // Note: gatewaySubscriptionId is intentionally omitted for subscriptions created from orders
+      // This allows multiple subscriptions with null gatewaySubscriptionId (sparse index allows this)
+      const subscriptionData = {
+        userId: order.userId,
+        orderId: order._id,
+        planType: OrderPlanType.SUBSCRIPTION,
+        cycleDays: cycleDays as SubscriptionCycle,
+        subscriptionStartDate,
+        subscriptionEndDate,
+        items: subscriptionItems,
+        initialDeliveryDate,
+        nextDeliveryDate,
+        nextBillingDate,
+        lastBilledDate,
+        status: SubscriptionStatus.ACTIVE,
+        isAutoRenew: true, // Enable auto-renewal by default
+        renewalCount: 0, // Initial subscription is not a renewal
+        metadata: {
+          autoCreated: true,
+          createdFromPayment: payment._id
+            ? payment._id.toString()
+            : payment.id || payment._id,
+          orderNumber: order.orderNumber,
+          createdAt: now.toISOString(),
+        },
+        // gatewaySubscriptionId is not set - will be null/undefined, which is allowed by sparse index
+        // Only set gatewaySubscriptionId when subscription is created via gateway (Stripe/Mollie)
+      };
+
+      const subscription = await Subscriptions.create([subscriptionData], {
+        session,
+      });
 
       console.log("✅ [SUBSCRIPTION] - Subscription created successfully!");
       console.log(

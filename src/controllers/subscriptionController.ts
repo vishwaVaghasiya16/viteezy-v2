@@ -319,7 +319,7 @@ class SubscriptionController {
         userId,
         isDeleted: false,
       })
-        .populate("orderId", "orderNumber status planType")
+        .populate("orderId", "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency")
         .lean();
 
       if (!subscription) {

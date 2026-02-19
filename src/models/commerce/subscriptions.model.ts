@@ -224,7 +224,7 @@ const SubscriptionSchema = new Schema<ISubscription>(
     gatewaySubscriptionId: {
       type: String,
       trim: true,
-      default: null,
+      default: undefined, // Use undefined instead of null to avoid sparse index conflicts
       sparse: true,
     },
     gatewayCustomerId: {
@@ -300,7 +300,11 @@ SubscriptionSchema.index({ userId: 1, status: 1 });
 SubscriptionSchema.index({ orderId: 1 });
 SubscriptionSchema.index({ status: 1, nextBillingDate: 1 });
 SubscriptionSchema.index({ status: 1, nextDeliveryDate: 1 });
-SubscriptionSchema.index({ gatewaySubscriptionId: 1 }, { sparse: true });
+// Sparse unique index: allows multiple null values, but ensures unique non-null values
+SubscriptionSchema.index(
+  { gatewaySubscriptionId: 1 },
+  { sparse: true, unique: true }
+);
 SubscriptionSchema.index({ gatewayCustomerId: 1 }, { sparse: true });
 SubscriptionSchema.index({ createdAt: -1 });
 
