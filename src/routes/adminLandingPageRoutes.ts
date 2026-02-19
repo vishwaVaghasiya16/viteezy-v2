@@ -31,6 +31,7 @@ router.post(
       { name: "heroSection_image_url", maxCount: 1 },
       { name: "heroSection_video_url", maxCount: 1 },
       { name: "heroBackgroundImage", maxCount: 1 },
+      { name: "heroPrimaryCTAImages", maxCount: 3 },
       { name: "heroPrimaryCTAImages_0", maxCount: 1 },
       { name: "heroPrimaryCTAImages_1", maxCount: 1 },
       { name: "heroPrimaryCTAImages_2", maxCount: 1 },
@@ -57,6 +58,7 @@ router.post(
       { name: "designedByScienceStepImages_7", maxCount: 1 },
       { name: "designedByScienceStepImages_8", maxCount: 1 },
       { name: "designedByScienceStepImages_9", maxCount: 1 },
+      { name: "designedByScienceStepImages", maxCount: 10 },
       { name: "featureIcons_0", maxCount: 1 },
       { name: "featureIcons_1", maxCount: 1 },
       { name: "featureIcons_2", maxCount: 1 },
@@ -81,7 +83,7 @@ router.post(
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages_0, heroPrimaryCTAImages_1, heroPrimaryCTAImages_2, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages_0..9, featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
+                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages (or heroPrimaryCTAImages_0/1/2), membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages (or designedByScienceStepImages_0..9), featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
                 400
               )
             );
@@ -125,6 +127,7 @@ router.put(
       { name: "heroSection_image_url", maxCount: 1 },
       { name: "heroSection_video_url", maxCount: 1 },
       { name: "heroBackgroundImage", maxCount: 1 },
+      { name: "heroPrimaryCTAImages", maxCount: 3 },
       { name: "heroPrimaryCTAImages_0", maxCount: 1 },
       { name: "heroPrimaryCTAImages_1", maxCount: 1 },
       { name: "heroPrimaryCTAImages_2", maxCount: 1 },
@@ -151,6 +154,7 @@ router.put(
       { name: "designedByScienceStepImages_7", maxCount: 1 },
       { name: "designedByScienceStepImages_8", maxCount: 1 },
       { name: "designedByScienceStepImages_9", maxCount: 1 },
+      { name: "designedByScienceStepImages", maxCount: 10 },
       { name: "featureIcons_0", maxCount: 1 },
       { name: "featureIcons_1", maxCount: 1 },
       { name: "featureIcons_2", maxCount: 1 },
@@ -175,7 +179,7 @@ router.put(
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages_0, heroPrimaryCTAImages_1, heroPrimaryCTAImages_2, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages_0..9, featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
+                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages (or heroPrimaryCTAImages_0/1/2), membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages (or designedByScienceStepImages_0..9), featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
                 400
               )
             );

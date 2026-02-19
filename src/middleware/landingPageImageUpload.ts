@@ -133,8 +133,11 @@ export const handleLandingPageImageUpload = async (
       });
     }
 
-    // Handle designedByScienceStepImages (indexed: designedByScienceStepImages_0, designedByScienceStepImages_1, ...)
-    const designedByScienceStepFiles = collectIndexedFiles(files, "designedByScienceStepImages", 9);
+    // Handle designedByScienceStepImages: non-indexed (designedByScienceStepImages as array) or indexed (designedByScienceStepImages_0..9)
+    const designedByScienceArray = files?.designedByScienceStepImages && Array.isArray(files.designedByScienceStepImages) ? files.designedByScienceStepImages : [];
+    const designedByScienceStepFiles = designedByScienceArray.length > 0
+      ? designedByScienceArray.map((file, index) => ({ index, file }))
+      : collectIndexedFiles(files, "designedByScienceStepImages", 9);
     if (designedByScienceStepFiles.length > 0) {
       const stepImageUrls = await Promise.all(
         designedByScienceStepFiles.map(({ file }) => fileStorageService.uploadFile("landing-pages", file))
@@ -216,11 +219,14 @@ export const handleLandingPageImageUpload = async (
       });
     }
 
-    // Handle hero primary CTA images (indexed: heroPrimaryCTAImages_0, heroPrimaryCTAImages_1, heroPrimaryCTAImages_2)
-    const heroCtaFiles = collectIndexedFiles(files, "heroPrimaryCTAImages", 2);
-    if (heroCtaFiles.length > 0) {
+    // Handle hero primary CTA images: non-indexed (heroPrimaryCTAImages as array) or indexed (heroPrimaryCTAImages_0, _1, _2)
+    const heroCtaArray = files?.heroPrimaryCTAImages && Array.isArray(files.heroPrimaryCTAImages) ? files.heroPrimaryCTAImages : [];
+    const heroCtaFilesFromArray = heroCtaArray.length > 0
+      ? heroCtaArray.map((file, index) => ({ index, file }))
+      : collectIndexedFiles(files, "heroPrimaryCTAImages", 2);
+    if (heroCtaFilesFromArray.length > 0) {
       const ctaImageUrls = await Promise.all(
-        heroCtaFiles.map(({ file }) =>
+        heroCtaFilesFromArray.map(({ file }) =>
           fileStorageService.uploadFile("landing-pages", file)
         )
       );
@@ -230,7 +236,7 @@ export const handleLandingPageImageUpload = async (
       if (!req.body.heroSection.primaryCTA) {
         req.body.heroSection.primaryCTA = [];
       }
-      heroCtaFiles.forEach(({ index }, urlIndex) => {
+      heroCtaFilesFromArray.forEach(({ index }, urlIndex) => {
         if (!req.body.heroSection.primaryCTA[index]) {
           req.body.heroSection.primaryCTA[index] = {};
         }

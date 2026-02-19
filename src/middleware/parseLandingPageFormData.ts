@@ -17,6 +17,16 @@ const getValue = (value: any): string | undefined => {
   return String(value);
 };
 
+/** True if value means "clear/remove image" (null, "null", empty) */
+const isClearImageValue = (value: any): boolean => {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") {
+    const t = value.trim().toLowerCase();
+    return t === "" || t === "null" || t === "undefined";
+  }
+  return false;
+};
+
 /**
  * Simple field mapping - converts flat form-data fields to nested structure
  * Supports underscore notation: heroSection_title, howItWorksSection_steps_0_title
@@ -123,6 +133,94 @@ export const parseLandingPageFormData = (
   try {
     // Parse nested fields from form-data
     const parsed = buildNestedStructure(req.body);
+    const body = req.body;
+
+    // --- Clear image when any image field is sent as null / "null" / empty (all image upload fields) ---
+
+    // Hero: imageUrl, videoUrl, backgroundImage
+    if (body.heroSection_image_url !== undefined && isClearImageValue(body.heroSection_image_url)) {
+      if (!parsed.heroSection) parsed.heroSection = {};
+      parsed.heroSection.imageUrl = null;
+    }
+    if (body.heroSection_video_url !== undefined && isClearImageValue(body.heroSection_video_url)) {
+      if (!parsed.heroSection) parsed.heroSection = {};
+      parsed.heroSection.videoUrl = null;
+    }
+    if (body.heroBackgroundImage !== undefined && isClearImageValue(body.heroBackgroundImage)) {
+      if (!parsed.heroSection) parsed.heroSection = {};
+      parsed.heroSection.backgroundImage = null;
+    }
+    // Hero primary CTA images (0, 1, 2)
+    for (let i = 0; i <= 2; i++) {
+      const key = `heroPrimaryCTAImages_${i}`;
+      if (body[key] !== undefined && isClearImageValue(body[key])) {
+        if (!parsed.heroSection) parsed.heroSection = {};
+        if (!Array.isArray(parsed.heroSection.primaryCTA)) parsed.heroSection.primaryCTA = [];
+        while (parsed.heroSection.primaryCTA.length <= i) parsed.heroSection.primaryCTA.push({});
+        parsed.heroSection.primaryCTA[i].image = null;
+      }
+    }
+
+    // Membership: backgroundImage
+    if (body.membershipBackgroundImage !== undefined && isClearImageValue(body.membershipBackgroundImage)) {
+      if (!parsed.membershipSection) parsed.membershipSection = {};
+      parsed.membershipSection.backgroundImage = null;
+    }
+    // Membership benefits icons (0..4)
+    for (let i = 0; i <= 4; i++) {
+      const key = `membershipSection_benefits_${i}_icon`;
+      if (body[key] !== undefined && isClearImageValue(body[key])) {
+        if (!parsed.membershipSection) parsed.membershipSection = {};
+        if (!Array.isArray(parsed.membershipSection.benefits)) parsed.membershipSection.benefits = [];
+        while (parsed.membershipSection.benefits.length <= i) parsed.membershipSection.benefits.push({});
+        parsed.membershipSection.benefits[i].icon = null;
+      }
+    }
+
+    // Mission: backgroundImage
+    if (body.missionBackgroundImage !== undefined && isClearImageValue(body.missionBackgroundImage)) {
+      if (!parsed.missionSection) parsed.missionSection = {};
+      parsed.missionSection.backgroundImage = null;
+    }
+
+    // Community: backgroundImage
+    if (body.communityBackgroundImage !== undefined && isClearImageValue(body.communityBackgroundImage)) {
+      if (!parsed.communitySection) parsed.communitySection = {};
+      parsed.communitySection.backgroundImage = null;
+    }
+
+    // How it works: step images (0..9)
+    for (let i = 0; i <= 9; i++) {
+      const key = `howItWorksStepImages_${i}`;
+      if (body[key] !== undefined && isClearImageValue(body[key])) {
+        if (!parsed.howItWorksSection) parsed.howItWorksSection = {};
+        if (!Array.isArray(parsed.howItWorksSection.steps)) parsed.howItWorksSection.steps = [];
+        while (parsed.howItWorksSection.steps.length <= i) parsed.howItWorksSection.steps.push({});
+        parsed.howItWorksSection.steps[i].image = null;
+      }
+    }
+
+    // Designed by science: step images (0..9)
+    for (let i = 0; i <= 9; i++) {
+      const key = `designedByScienceStepImages_${i}`;
+      if (body[key] !== undefined && isClearImageValue(body[key])) {
+        if (!parsed.designedByScienceSection) parsed.designedByScienceSection = {};
+        if (!Array.isArray(parsed.designedByScienceSection.steps)) parsed.designedByScienceSection.steps = [];
+        while (parsed.designedByScienceSection.steps.length <= i) parsed.designedByScienceSection.steps.push({});
+        parsed.designedByScienceSection.steps[i].image = null;
+      }
+    }
+
+    // Features: feature icons (0..9)
+    for (let i = 0; i <= 9; i++) {
+      const key = `featureIcons_${i}`;
+      if (body[key] !== undefined && isClearImageValue(body[key])) {
+        if (!parsed.featuresSection) parsed.featuresSection = {};
+        if (!Array.isArray(parsed.featuresSection.features)) parsed.featuresSection.features = [];
+        while (parsed.featuresSection.features.length <= i) parsed.featuresSection.features.push({});
+        parsed.featuresSection.features[i].icon = null;
+      }
+    }
 
     // Normalize heroSection.highlightedText coming from keys like:
     // heroSection_highlightedText_0, heroSection_highlightedText_1, ...
