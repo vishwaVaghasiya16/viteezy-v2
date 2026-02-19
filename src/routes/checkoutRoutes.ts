@@ -56,6 +56,7 @@ router.get("/purchase-plans", CheckoutController.getPurchasePlans);
  * @body    billingAddressId (optional) - Billing address ID
  * @note    STAND_UP_POUCH quantity can be updated via itemQuantities array. If provided, quantities are updated in cart and totals are recalculated.
  * @note    SACHETS do not support quantity (always 1). Returns separate pricing for SACHETS and STAND_UP_POUCH, plus overall combined pricing.
+ * @note    If user has an active subscription with the same cycle days, a warning (sachetsWarning) will be returned indicating they must cancel existing subscription first.
  */
 router.post(
   "/page-summary",

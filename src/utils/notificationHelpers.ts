@@ -826,6 +826,38 @@ export const subscriptionNotifications = {
   },
 
   /**
+   * Subscription updated (products added to existing subscription)
+   * Route: /subscription, Query: { subscriptionId }
+   * This notification is sent when products are added to an existing active subscription
+   */
+  async subscriptionUpdated(
+    userId: string | mongoose.Types.ObjectId,
+    subscriptionId: string,
+    subscriptionNumber?: string,
+    createdBy?: string | mongoose.Types.ObjectId
+  ): Promise<void> {
+    validateNotificationPayload(NotificationType.REDIRECTION, NotificationCategory.MEMBERSHIP, { subscriptionId });
+    const { appRoute, query } = buildMobileAppRoute("subscription", { subscriptionId });
+    
+    const message = subscriptionNumber
+      ? `New products have been added to your subscription ${subscriptionNumber}.`
+      : "New products have been added to your subscription.";
+    
+    await notificationService.createNotification({
+      userId,
+      category: NotificationCategory.MEMBERSHIP,
+      type: NotificationType.REDIRECTION,
+      title: "Subscription Updated",
+      message,
+      redirectUrl: buildRedirectUrl("subscription", { subscriptionId }),
+      appRoute,
+      query,
+      data: { subscriptionId, subscriptionNumber },
+      createdBy,
+    });
+  },
+
+  /**
    * Upcoming subscription delivery
    * Route: /dashboard, Query: {}
    */

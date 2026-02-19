@@ -1892,84 +1892,48 @@ export class PaymentService {
       console.log("🟢 [SUBSCRIPTION] Order ID:", order?._id);
       console.log("🟢 [SUBSCRIPTION] Payment ID:", payment?._id);
 
-      // ========== STEP 1: Validate Order Eligibility ==========
-      console.log("🟢 [SUBSCRIPTION] Step 1: Validating order eligibility...");
+      // ========== STEP 1: Check for SACHETS Items in Order ==========
+      console.log("🟢 [SUBSCRIPTION] Step 1: Checking for SACHETS items in order...");
 
-      // Check if order is eligible for subscription creation
-      // Only create subscription if:
-      // 1. isOneTime is false (subscription order) OR planType is SUBSCRIPTION
-      // 2. variantType is SACHETS
-      // 3. selectedPlanDays is valid (30, 60, 90, or 180)
+      // Check if order has SACHETS items (for mixed orders, check items array)
+      // This is the primary check - if SACHETS items exist, create subscription for them
+      const sachetItems = (order.items || []).filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS
+      );
 
+      console.log("🟢 [SUBSCRIPTION] - Total order items:", order.items?.length || 0);
+      console.log("🟢 [SUBSCRIPTION] - SACHETS items found:", sachetItems.length);
       console.log("🟢 [SUBSCRIPTION] - isOneTime:", order?.isOneTime);
       console.log("🟢 [SUBSCRIPTION] - planType:", order?.planType);
-      console.log("🟢 [SUBSCRIPTION] - variantType:", order?.variantType);
       console.log(
         "🟢 [SUBSCRIPTION] - selectedPlanDays:",
         order?.selectedPlanDays
       );
 
-      // Check isOneTime - must be explicitly false OR planType must be SUBSCRIPTION
-      const isSubscriptionOrder =
-        order.isOneTime === false ||
-        order.planType === OrderPlanType.SUBSCRIPTION;
-
-      if (!isSubscriptionOrder) {
+      if (sachetItems.length === 0) {
         console.log(
-          `⚠️ [SUBSCRIPTION] - Order is one-time purchase. isOneTime: ${order.isOneTime}, planType: ${order.planType}`
+          `⚠️ [SUBSCRIPTION] - No SACHETS items found in order, skipping subscription creation`
         );
         logger.info(
-          `Order ${order.orderNumber} is one-time purchase, skipping subscription creation`
+          `Order ${order.orderNumber} has no SACHETS items, skipping subscription creation`
         );
         await session.abortTransaction();
         return null;
       }
 
-      // Check variantType - must be SACHETS
-      if (!order.variantType || order.variantType !== ProductVariant.SACHETS) {
-        console.log(
-          `⚠️ [SUBSCRIPTION] - variantType is ${order.variantType}, subscription only available for SACHETS`
-        );
-        logger.info(
-          `Order ${order.orderNumber} variantType is ${order.variantType}, subscription only available for SACHETS`
-        );
-        await session.abortTransaction();
-        return null;
-      }
-
-      console.log("✅ [SUBSCRIPTION] - Order is eligible for subscription");
-
-      // ========== STEP 2: Check for Duplicate Subscription ==========
       console.log(
-        "🟢 [SUBSCRIPTION] Step 2: Checking for duplicate subscription..."
+        `✅ [SUBSCRIPTION] - Found ${sachetItems.length} SACHETS item(s) in order. Will create subscription for these items only.`
       );
 
-      const existingSubscription = await Subscriptions.findOne({
-        orderId: order._id,
-        isDeleted: false,
-      })
-        .session(session)
-        .lean();
-
-      if (existingSubscription) {
+      // Log SACHETS items details
+      sachetItems.forEach((item: any, index: number) => {
         console.log(
-          "⚠️ [SUBSCRIPTION] - Subscription already exists, skipping creation"
+          `   [SUBSCRIPTION] SACHETS Item ${index + 1}: ${item.name || item.productId} (Plan Days: ${item.planDays || "N/A"})`
         );
-        console.log(
-          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
-          existingSubscription._id
-        );
-        logger.info(
-          `Subscription already exists for order ${order.orderNumber}, skipping creation`
-        );
-        await session.abortTransaction();
-        return null;
-      }
+      });
 
-      console.log("✅ [SUBSCRIPTION] - No duplicate found, proceeding...");
-
-      // ========== STEP 3: Validate Plan Duration ==========
-      console.log("🟢 [SUBSCRIPTION] Step 3: Validating plan duration...");
+      // ========== STEP 2: Validate Plan Duration ==========
+      console.log("🟢 [SUBSCRIPTION] Step 2: Validating plan duration...");
 
       const cycleDays = order.selectedPlanDays;
       console.log("🟢 [SUBSCRIPTION] - cycleDays from order:", cycleDays);
@@ -1986,6 +1950,69 @@ export class PaymentService {
       }
 
       console.log("✅ [SUBSCRIPTION] - Valid cycleDays:", cycleDays);
+
+      // ========== STEP 3: Check for Existing Active Subscription with Same Cycle Days ==========
+      console.log(
+        "🟢 [SUBSCRIPTION] Step 3: Checking for existing active subscription with same cycle days..."
+      );
+
+      // Check if user already has an active subscription with the same cycleDays
+      const existingActiveSubscription = await Subscriptions.findOne({
+        userId: order.userId,
+        cycleDays: cycleDays,
+        status: SubscriptionStatus.ACTIVE,
+        isDeleted: false,
+      })
+        .session(session)
+        .lean();
+
+      if (existingActiveSubscription) {
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Found existing active subscription with same cycle days"
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
+          existingActiveSubscription._id
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription Number:",
+          existingActiveSubscription.subscriptionNumber
+        );
+        logger.warn(
+          `User already has an active ${cycleDays}-day subscription (${existingActiveSubscription.subscriptionNumber}). Cannot create duplicate subscription. User must cancel existing subscription first.`
+        );
+
+        // Do NOT create subscription or add products - user must cancel existing subscription first
+        await session.abortTransaction();
+        return null;
+      }
+
+      // Check for duplicate subscription for this specific order
+      const existingSubscriptionForOrder = await Subscriptions.findOne({
+        orderId: order._id,
+        isDeleted: false,
+      })
+        .session(session)
+        .lean();
+
+      if (existingSubscriptionForOrder) {
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Subscription already exists for this order, skipping creation"
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
+          existingSubscriptionForOrder._id
+        );
+        logger.info(
+          `Subscription already exists for order ${order.orderNumber}, skipping creation`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      console.log(
+        "✅ [SUBSCRIPTION] - No existing subscription found, creating new subscription..."
+      );
 
       // ========== STEP 4: Calculate Subscription Dates ==========
       console.log(
@@ -2034,10 +2061,11 @@ export class PaymentService {
       console.log("   - nextDeliveryDate:", nextDeliveryDate.toISOString());
       console.log("   - nextBillingDate:", nextBillingDate.toISOString());
 
-      // ========== STEP 5: Map Order Items to Subscription Items ==========
-      console.log("🟢 [SUBSCRIPTION] Step 5: Mapping order items...");
+      // ========== STEP 5: Map SACHETS Order Items to Subscription Items ==========
+      console.log("🟢 [SUBSCRIPTION] Step 5: Mapping SACHETS order items...");
 
-      const subscriptionItems = order.items.map((item: any) => ({
+      // Only include SACHETS items in subscription (filter out STAND_UP_POUCH items)
+      const subscriptionItems = sachetItems.map((item: any) => ({
         productId: new mongoose.Types.ObjectId(item.productId),
         name: item.name,
         planDays: item.planDays,

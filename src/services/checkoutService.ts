@@ -2042,6 +2042,7 @@ class CheckoutService {
     }
 
     // For SACHETS with subscription: Check if user already has an active subscription with same cycleDays
+    // Show warning if user tries to create a subscription plan that already exists
     let existingSubscription = null;
     if (
       sachetItems.length > 0 &&
@@ -2056,8 +2057,8 @@ class CheckoutService {
       }).lean();
 
       if (existingSubscription) {
-        logger.info(
-          `User ${userId} already has an active ${selectedPlanDays}-day subscription. Products will be added to existing subscription.`
+        logger.warn(
+          `User ${userId} already has an active ${selectedPlanDays}-day subscription (${existingSubscription.subscriptionNumber}). User cannot create a new subscription with the same cycle days. They must cancel existing subscription first.`
         );
       }
     }
@@ -2809,16 +2810,24 @@ class CheckoutService {
         },
         ...(sachetsPlans && { sachetsPlans }),
         ...(standUpPouchPlans && { standUpPouchPlans }),
-        // Include existing subscription info for SACHETS subscription plans
-        existingSubscription:
+        // Include existing subscription warning for SACHETS subscription plans
+        sachetsWarning:
           existingSubscription && sachetItems.length > 0 && !isOneTimePurchase
             ? {
+                hasActiveSubscription: true,
                 subscriptionId: existingSubscription._id.toString(),
                 subscriptionNumber: existingSubscription.subscriptionNumber,
                 cycleDays: existingSubscription.cycleDays,
                 status: existingSubscription.status,
+                nextBillingDate: existingSubscription.nextBillingDate
+                  ? new Date(existingSubscription.nextBillingDate).toISOString()
+                  : null,
+                nextDeliveryDate: existingSubscription.nextDeliveryDate
+                  ? new Date(existingSubscription.nextDeliveryDate).toISOString()
+                  : null,
                 message:
-                  "You already have an active subscription with this cycle. Products will be added to your existing subscription.",
+                  `You already have an active ${selectedPlanDays}-day subscription plan. You cannot create a new subscription with the same cycle days. If you want to proceed with this plan, please cancel your existing subscription first, then you can continue with this plan.`,
+                actionRequired: "cancel_existing_subscription",
               }
             : null,
         pricing: {
