@@ -10,6 +10,7 @@ import {
   PaymentStatus,
   OrderPlanType,
 } from "@/models/enums";
+import { orderService } from "@/services/orderService";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -822,6 +823,64 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess(null, "Order deleted successfully");
+    }
+  );
+
+  /**
+   * Process partial refund for specific products in an order
+   * @route POST /api/v1/admin/orders/:id/partial-refund
+   * @access Admin
+   * 
+   * This endpoint allows admin to:
+   * - Refund specific products from an order
+   * - Remove refunded products from the order
+   * - Remove refunded products from associated subscription (if applicable)
+   * - Process refund via gateway or mark for manual processing
+   */
+  processPartialRefund = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const { productIds, refundAmount, refundMethod = "gateway", reason, metadata } = req.body;
+
+      if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+        throw new AppError("At least one product ID is required", 400);
+      }
+
+      const adminId = req.user?._id;
+
+      const result = await orderService.processPartialRefund({
+        orderId: id,
+        productIds,
+        refundAmount,
+        refundMethod,
+        reason,
+        metadata,
+        adminId: adminId ? String(adminId) : undefined,
+      });
+
+      // Fetch updated order
+      const updatedOrder = await Orders.findOne({
+        _id: id,
+        isDeleted: { $ne: true },
+      })
+        .populate("userId", "firstName lastName email")
+        .populate("items.productId", "title slug")
+        .lean();
+
+      res.apiSuccess(
+        {
+          refund: {
+            refundedItems: result.refundedItems,
+            refundAmount: result.refundAmount,
+            refundMethod,
+            orderUpdated: result.orderUpdated,
+            subscriptionUpdated: result.subscriptionUpdated,
+            refundProcessed: result.refundProcessed,
+          },
+          order: updatedOrder,
+        },
+        result.message
+      );
     }
   );
 }

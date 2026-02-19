@@ -509,6 +509,13 @@ class LandingPageService {
 
     // Convert product category section strings to I18n format
     if (data.productCategorySection) {
+      const productCategoryIds =
+        Array.isArray((data.productCategorySection as any).productCategoryIds) &&
+        (data.productCategorySection as any).productCategoryIds.length > 0
+          ? (data.productCategorySection as any).productCategoryIds.map(
+              (id: string) => new mongoose.Types.ObjectId(id)
+            )
+          : undefined;
       landingPageData.productCategorySection = {
         title:
           typeof data.productCategorySection.title === "string"
@@ -524,7 +531,7 @@ class LandingPageService {
             ? { en: data.productCategorySection.subTitle }
             : (data.productCategorySection as any).subTitle
           : undefined,
-        // productCategoryIds removed - categories are fetched dynamically in GET APIs
+        ...(productCategoryIds && { productCategoryIds }),
         isEnabled:
           data.productCategorySection.isEnabled !== undefined
             ? data.productCategorySection.isEnabled
@@ -751,6 +758,7 @@ class LandingPageService {
 
   /**
    * Get all landing pages with optional filters
+   * Returns landing pages with single language (default: English)
    */
   async getAllLandingPages(filters: {
     isActive?: boolean;
@@ -767,7 +775,12 @@ class LandingPageService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return { landingPages };
+    // Transform each landing page to single language (default: English)
+    const transformedLandingPages = landingPages.map((landingPage) =>
+      this.transformToLanguage(landingPage, "en")
+    );
+
+    return { landingPages: transformedLandingPages };
   }
 
   /**
@@ -1779,6 +1792,36 @@ class LandingPageService {
                 ...(data.heroSection.description as Record<string, any>),
               };
       }
+      if (data.heroSection.imageUrl !== undefined) {
+        (landingPage.heroSection as any).imageUrl = data.heroSection.imageUrl ?? "";
+      }
+      if (data.heroSection.backgroundImage !== undefined) {
+        (landingPage.heroSection as any).backgroundImage = data.heroSection.backgroundImage ?? "";
+      }
+      if (Array.isArray(data.heroSection.primaryCTA)) {
+        const existingCTA = (landingPage.heroSection as any).primaryCTA || [];
+        const maxLen = Math.max(existingCTA.length, data.heroSection.primaryCTA.length, 3);
+        const updatedCTA: any[] = [];
+        for (let index = 0; index < maxLen; index++) {
+          const cta = data.heroSection.primaryCTA[index];
+          const existing = existingCTA[index] || {};
+          if (cta === undefined) {
+            updatedCTA.push(existing);
+            continue;
+          }
+          const label =
+            cta.label !== undefined
+              ? typeof cta.label === "string"
+                ? { en: cta.label }
+                : (cta as any).label ?? existing.label ?? {}
+              : existing.label ?? {};
+          const image = cta.image !== undefined ? (cta.image == null ? "" : cta.image) : (existing.image ?? "");
+          const link = cta.link !== undefined ? cta.link : (existing.link ?? "");
+          const order = cta.order !== undefined ? cta.order : (existing.order ?? index);
+          updatedCTA.push({ label, image, link, order });
+        }
+        (landingPage.heroSection as any).primaryCTA = updatedCTA.slice(0, 3);
+      }
     }
 
     // Update membership section
@@ -1789,7 +1832,40 @@ class LandingPageService {
 
       if (data.membershipSection.backgroundImage !== undefined) {
         (landingPage.membershipSection as any).backgroundImage =
-          data.membershipSection.backgroundImage;
+          data.membershipSection.backgroundImage ?? "";
+      }
+      if (Array.isArray(data.membershipSection.benefits)) {
+        const existingBenefits = (landingPage.membershipSection as any).benefits || [];
+        const maxLen = Math.max(existingBenefits.length, data.membershipSection.benefits.length);
+        const updatedBenefits: any[] = [];
+        for (let index = 0; index < maxLen; index++) {
+          const benefit = data.membershipSection.benefits[index];
+          const existing = existingBenefits[index] || {};
+          if (benefit === undefined) {
+            updatedBenefits.push(existing);
+            continue;
+          }
+          const icon = benefit.icon !== undefined ? (benefit.icon == null ? "" : benefit.icon) : (existing.icon ?? "");
+          const title = benefit.title !== undefined
+            ? (typeof benefit.title === "string" ? { en: benefit.title } : (benefit as any).title ?? existing.title ?? {})
+            : existing.title ?? {};
+          const existingDesc = existing.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          const description =
+            benefit.description !== undefined
+              ? typeof benefit.description === "string"
+                ? { ...descObj, en: benefit.description }
+                : { ...descObj, ...((benefit as any).description || {}) }
+              : existingDesc ?? {};
+          const order = benefit.order !== undefined ? benefit.order : (existing.order ?? index);
+          updatedBenefits.push({ icon, title, description, order });
+        }
+        (landingPage.membershipSection as any).benefits = updatedBenefits.slice(0, 5);
       }
 
       if (data.membershipSection.title) {
@@ -1852,7 +1928,7 @@ class LandingPageService {
 
           return {
             image:
-              step.image !== undefined ? step.image : existingStep.image || "",
+              step.image !== undefined ? (step.image == null ? "" : step.image) : (existingStep.image ?? ""),
             title: step.title
               ? typeof step.title === "string"
                 ? { ...titleObj, en: step.title }
@@ -1923,6 +1999,16 @@ class LandingPageService {
                 >),
               };
       }
+
+      if (
+        (data.productCategorySection as any).productCategoryIds !== undefined
+      ) {
+        const ids = (data.productCategorySection as any).productCategoryIds;
+        (landingPage.productCategorySection as any).productCategoryIds =
+          Array.isArray(ids) && ids.length > 0
+            ? ids.map((id: string) => new mongoose.Types.ObjectId(id))
+            : [];
+      }
     }
 
     // Update mission section
@@ -1933,7 +2019,7 @@ class LandingPageService {
 
       if (data.missionSection.backgroundImage !== undefined) {
         (landingPage.missionSection as any).backgroundImage =
-          data.missionSection.backgroundImage;
+          data.missionSection.backgroundImage ?? "";
       }
 
       if (data.missionSection.title) {
@@ -1968,6 +2054,67 @@ class LandingPageService {
                 ...descObj,
                 ...(data.missionSection.description as Record<string, any>),
               };
+      }
+    }
+
+    // Update community section
+    if (data.communitySection) {
+      if (!landingPage.communitySection) {
+        (landingPage as any).communitySection = {};
+      }
+      if (data.communitySection.backgroundImage !== undefined) {
+        (landingPage.communitySection as any).backgroundImage =
+          data.communitySection.backgroundImage ?? "";
+      }
+      if (data.communitySection.title) {
+        const existingTitle = (landingPage.communitySection as any)?.title;
+        const titleObj =
+          existingTitle &&
+          typeof existingTitle === "object" &&
+          !Array.isArray(existingTitle)
+            ? (existingTitle as Record<string, any>)
+            : {};
+        (landingPage.communitySection as any).title =
+          typeof data.communitySection.title === "string"
+            ? { ...titleObj, en: data.communitySection.title }
+            : {
+                ...titleObj,
+                ...(data.communitySection.title as Record<string, any>),
+              };
+      }
+      if (data.communitySection.subTitle !== undefined) {
+        const existingSub = (landingPage.communitySection as any)?.subTitle;
+        const subObj =
+          existingSub &&
+          typeof existingSub === "object" &&
+          !Array.isArray(existingSub)
+            ? (existingSub as Record<string, any>)
+            : {};
+        (landingPage.communitySection as any).subTitle =
+          typeof data.communitySection.subTitle === "string"
+            ? { ...subObj, en: data.communitySection.subTitle }
+            : {
+                ...subObj,
+                ...(data.communitySection.subTitle as Record<string, any>),
+              };
+      }
+      if (Array.isArray(data.communitySection.metrics)) {
+        (landingPage.communitySection as any).metrics = data.communitySection.metrics.map(
+          (metric: any, index: number) => ({
+            label:
+              typeof metric.label === "string"
+                ? { en: metric.label }
+                : (metric as any).label ?? {},
+            value: metric.value ?? "",
+            order: metric.order ?? index,
+          })
+        );
+      }
+      if (data.communitySection.isEnabled !== undefined) {
+        (landingPage.communitySection as any).isEnabled = data.communitySection.isEnabled;
+      }
+      if (data.communitySection.order !== undefined) {
+        (landingPage.communitySection as any).order = data.communitySection.order;
       }
     }
 
@@ -2037,8 +2184,8 @@ class LandingPageService {
             return {
               icon:
                 feature.icon !== undefined
-                  ? feature.icon
-                  : existingFeature.icon || "",
+                  ? (feature.icon == null ? "" : feature.icon)
+                  : (existingFeature.icon ?? ""),
               title: feature.title
                 ? typeof feature.title === "string"
                   ? { ...titleObj, en: feature.title }
@@ -2141,8 +2288,8 @@ class LandingPageService {
             return {
               image:
                 step.image !== undefined
-                  ? step.image
-                  : existingStep.image || "",
+                  ? (step.image == null ? "" : step.image)
+                  : (existingStep.image ?? ""),
               title: step.title
                 ? typeof step.title === "string"
                   ? { ...titleObj, en: step.title }
