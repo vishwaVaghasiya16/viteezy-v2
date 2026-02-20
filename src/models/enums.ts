@@ -113,6 +113,7 @@ export enum ShipmentStatus {
   PICKED_UP = "Picked Up",
   IN_TRANSIT = "In Transit",
   OUT_FOR_DELIVERY = "Out for Delivery",
+  AT_PICKUP_POINT = "AT_PICKUP_POINT",
   DELIVERED = "Delivered",
   EXCEPTION = "Exception",
   RETURNED = "Returned",
