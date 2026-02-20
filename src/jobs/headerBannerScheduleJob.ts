@@ -47,11 +47,13 @@ export class HeaderBannerScheduleJob {
       let activated = 0;
       let deactivated = 0;
 
-      // Find banners that should be activated (startDate <= now and not active)
+      // Find banners that should be activated only when now is INSIDE [startDate, endDate]
+      // startDate <= now <= endDate (so we don't activate if end time already passed)
       const bannersToActivate = await HeaderBanner.find({
         isDeleted: { $ne: true },
         isScheduled: true,
         startDate: { $lte: now },
+        endDate: { $gte: now },
         isActive: false,
       }).lean();
 
