@@ -24,6 +24,7 @@ import {
   getSubscriptionPriceFromProduct,
   getBaseSubtotalForSubscription,
 } from "@/utils/productSubscriptionPrice";
+import { getTranslatedString } from "@/utils/translationUtils";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -357,6 +358,9 @@ class OrderController {
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
 
+      // Get user language for feature translation
+      const userLang = await getUserLanguage(req, req.user._id.toString());
+
       // Delete any existing pending orders with pending payment status
       // This ensures only one pending order exists at a time
       const pendingOrders = await Orders.find({
@@ -677,7 +681,9 @@ class OrderController {
             itemCapsuleCount = selectedPlan.capsuleCount || undefined;
             itemSavingsPercentage = selectedPlan.savingsPercentage || undefined;
             itemFeatures = Array.isArray(selectedPlan.features)
-              ? selectedPlan.features
+              ? selectedPlan.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang)
+                )
               : [];
           } else {
             // Use one-time pricing based on effectiveCapsuleCount (which is planDurationDays for SACHETS one-time)
@@ -712,7 +718,9 @@ class OrderController {
               itemSavingsPercentage =
                 count60Plan.savingsPercentage || undefined;
               itemFeatures = Array.isArray(count60Plan.features)
-                ? count60Plan.features
+                ? count60Plan.features.map((feature: any) =>
+                    getTranslatedString(feature, userLang)
+                  )
                 : [];
             } else {
               if (!oneTimePlan.count30) {
@@ -733,7 +741,9 @@ class OrderController {
               itemSavingsPercentage =
                 count30Plan.savingsPercentage || undefined;
               itemFeatures = Array.isArray(count30Plan.features)
-                ? count30Plan.features
+                ? count30Plan.features.map((feature: any) =>
+                    getTranslatedString(feature, userLang)
+                  )
                 : [];
             }
           }
@@ -773,7 +783,9 @@ class OrderController {
             itemSavingsPercentage =
               standupPrice.count60.savingsPercentage || undefined;
             itemFeatures = Array.isArray(standupPrice.count60.features)
-              ? standupPrice.count60.features
+              ? standupPrice.count60.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang)
+                )
               : [];
           } else {
             if (!standupPrice.count30) {
@@ -789,7 +801,9 @@ class OrderController {
                   itemAmount;
                 itemCapsuleCount = 30;
                 itemFeatures = Array.isArray(standupPrice.features)
-                  ? standupPrice.features
+                  ? standupPrice.features.map((feature: any) =>
+                      getTranslatedString(feature, userLang)
+                    )
                   : [];
               } else {
                 throw new AppError(
@@ -813,7 +827,9 @@ class OrderController {
               itemSavingsPercentage =
                 standupPrice.count30.savingsPercentage || undefined;
               itemFeatures = Array.isArray(standupPrice.count30.features)
-                ? standupPrice.count30.features
+                ? standupPrice.count30.features.map((feature: any) =>
+                    getTranslatedString(feature, userLang)
+                  )
                 : [];
             }
           }
@@ -1100,7 +1116,11 @@ class OrderController {
           durationDays: item.durationDays,
           capsuleCount: item.capsuleCount,
           savingsPercentage: item.savingsPercentage,
-          features: item.features,
+          features: Array.isArray(item.features)
+            ? item.features.map((feature: any) =>
+                getTranslatedString(feature, userLang)
+              )
+            : item.features,
         })),
         pricing: {
           subTotal: order.subTotal,
@@ -1217,7 +1237,11 @@ class OrderController {
         durationDays: item.durationDays,
         capsuleCount: item.capsuleCount,
         savingsPercentage: item.savingsPercentage,
-        features: item.features,
+        features: Array.isArray(item.features)
+          ? item.features.map((feature: any) =>
+              getTranslatedString(feature, userLang)
+            )
+          : item.features,
       }));
 
       // Build response

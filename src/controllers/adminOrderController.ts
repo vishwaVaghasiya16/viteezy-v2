@@ -11,6 +11,9 @@ import {
   OrderPlanType,
 } from "@/models/enums";
 import { orderService } from "@/services/orderService";
+import { getTranslatedString } from "@/utils/translationUtils";
+import { getUserLanguageCode } from "@/utils/translationUtils";
+import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -398,11 +401,30 @@ class AdminOrderController {
         .limit(limit)
         .lean();
 
+      // Get user languages for all orders (for feature translation)
+      const userIds = orders
+        .map((order: any) => order.userId?._id || order.userId)
+        .filter((id: any) => id);
+      const users = await User.find({ _id: { $in: userIds } })
+        .select("_id language")
+        .lean();
+      const userLanguageMap = new Map<string, SupportedLanguage>();
+      users.forEach((user: any) => {
+        const lang = user.language
+          ? getUserLanguageCode(user.language)
+          : DEFAULT_LANGUAGE;
+        userLanguageMap.set(user._id.toString(), lang);
+      });
+
       // Transform orders for response
       const transformedOrders = orders.map((order: any) => {
         // Type guard for populated user
         const user = order.userId as any;
         const isPopulatedUser = user && typeof user === 'object' && user.firstName !== undefined;
+        
+        // Get user language for feature translation
+        const userId = user?._id?.toString() || order.userId?.toString();
+        const userLang = userId ? (userLanguageMap.get(userId) || DEFAULT_LANGUAGE) : DEFAULT_LANGUAGE;
 
         return {
           id: order._id,
@@ -439,7 +461,11 @@ class AdminOrderController {
           durationDays: item.durationDays,
           capsuleCount: item.capsuleCount,
           savingsPercentage: item.savingsPercentage,
-          features: item.features,
+          features: Array.isArray(item.features)
+            ? item.features.map((feature: any) =>
+                getTranslatedString(feature, userLang)
+              )
+            : item.features,
         })),
         pricing: {
           subTotal: order.subTotal,
@@ -517,6 +543,18 @@ class AdminOrderController {
         .select("paymentMethod status gatewayTransactionId")
         .lean();
   
+      // Get user language for feature translation
+      let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
+      if (user?._id) {
+        try {
+          const userData = await User.findById(user._id).select("language").lean();
+          if (userData?.language) {
+            userLang = getUserLanguageCode(userData.language);
+          }
+        } catch (error) {
+          // Use default language if fetch fails
+        }
+      }
 
       const totalOrders = await Orders.countDocuments({
         userId: order.userId,
@@ -581,7 +619,11 @@ class AdminOrderController {
               durationDays: item.durationDays,
               capsuleCount: item.capsuleCount,
               savingsPercentage: item.savingsPercentage,
-              features: item.features,
+              features: Array.isArray(item.features)
+                ? item.features.map((feature: any) =>
+                    getTranslatedString(feature, userLang)
+                  )
+                : item.features,
             }))
           : [],
         pricing: {
