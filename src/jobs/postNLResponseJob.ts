@@ -35,7 +35,10 @@ export class PostNLResponseJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  private readonly XML_FOLDER = process.env.POSTNL_RESPONSE_XML_FOLDER || "/data/xml/responses";
+  // Use path.join for cross-platform compatibility (Windows/Linux)
+  private readonly XML_FOLDER = process.env.POSTNL_RESPONSE_XML_FOLDER 
+    ? path.resolve(process.env.POSTNL_RESPONSE_XML_FOLDER)
+    : path.join(process.cwd(), "data", "xml", "responses");
   private readonly SFTP_RESPONSE_DIR = "/Shipment/";
 
   /**
@@ -291,15 +294,21 @@ export class PostNLResponseJob {
 // Create singleton instance
 export const postNLResponseJob = new PostNLResponseJob();
 
-// Schedule the job to run every 5 minutes
-const cronSchedule = process.env.POSTNL_RESPONSE_JOB_SCHEDULE || "*/5 * * * *";
+// Schedule the job to run every 1 minute (or as configured)
+const cronSchedule = process.env.POSTNL_RESPONSE_JOB_SCHEDULE || "* * * * *";
 
-cron.schedule(cronSchedule, async () => {
-  try {
-    await postNLResponseJob.processResponses();
-  } catch (error: any) {
-    logger.error(`Error in scheduled PostNL Response job: ${error.message}`);
-  }
-});
+// Validate cron schedule
+if (!cron.validate(cronSchedule)) {
+  logger.error(`❌ Invalid cron schedule for PostNL Response job: ${cronSchedule}`);
+} else {
+  cron.schedule(cronSchedule, async () => {
+    try {
+      logger.info("🕐 [CRON] Scheduled PostNL Response job triggered");
+      await postNLResponseJob.processResponses();
+    } catch (error: any) {
+      logger.error(`Error in scheduled PostNL Response job: ${error.message}`);
+    }
+  });
 
-logger.info(`✅ PostNL Response cron job scheduled: ${cronSchedule}`);
+  logger.info(`✅ PostNL Response cron job scheduled: ${cronSchedule}`);
+}

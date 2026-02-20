@@ -29,7 +29,10 @@ export class PostNLFulfilmentJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  private readonly XML_FOLDER = process.env.POSTNL_XML_FOLDER || "/data/xml";
+  // Use path.join for cross-platform compatibility (Windows/Linux)
+  private readonly XML_FOLDER = process.env.POSTNL_XML_FOLDER 
+    ? path.resolve(process.env.POSTNL_XML_FOLDER)
+    : path.join(process.cwd(), "data", "xml");
   private readonly XML_FILE_EXTENSION = ".xml";
   private readonly SHIPPING_NL = "03085";
   private readonly SHIPPING_BE = "04946";
@@ -205,7 +208,10 @@ export class PostNLFulfilmentJob {
       const filePath = path.join(this.XML_FOLDER, fileName);
       fs.writeFileSync(filePath, xmlContent, "utf-8");
 
-      logger.info(`Created XML file: ${fileName} for order ${order.orderNumber}`);
+      logger.info(`Created XML file: ${fileName} for order ${order.orderNumber}`, {
+        filePath: filePath,
+        storageLocation: this.XML_FOLDER,
+      });
       return filePath;
     } catch (error: any) {
       logger.error(`Failed to create XML for order ${order.orderNumber}: ${error.message}`);
@@ -266,11 +272,25 @@ export class PostNLFulfilmentJob {
 
       await uploadToSFTP(filePath, remotePath);
 
-      logger.info(`Uploaded XML file ${fileName} to PostNL for order ${order.orderNumber}`);
+      logger.info(`Uploaded XML file ${fileName} to PostNL for order ${order.orderNumber}`, {
+        localPath: filePath,
+        remotePath: remotePath,
+      });
       
       // Note: We don't update order status here - that happens when barcode is received (Step 5)
     } catch (error: any) {
-      logger.error(`Failed to upload XML file ${filePath}: ${error.message}`);
+      logger.error(`Failed to upload XML file ${filePath}: ${error.message}`, {
+        error: error.message,
+        localPath: filePath,
+        storageLocation: this.XML_FOLDER,
+      });
+      // Log where the file is stored for manual upload
+      logger.warn(`⚠️ XML file saved locally at: ${filePath}`, {
+        fileName: fileName,
+        fullPath: filePath,
+        storageFolder: this.XML_FOLDER,
+        note: "Configure SFTP_PRIVATEKEY_FILENAME or SFTP_PRIVATE_KEY in .env to enable automatic upload",
+      });
       throw error;
     }
   }
@@ -300,16 +320,22 @@ export class PostNLFulfilmentJob {
 // Create singleton instance
 export const postNLFulfilmentJob = new PostNLFulfilmentJob();
 
-// Schedule the job to run every 5 minutes
+// Schedule the job to run every 1 minute (or as configured)
 const cronSchedule =
-  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "*/5 * * * *";
+  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "* * * * *";
 
-cron.schedule(cronSchedule, async () => {
-  try {
-    await postNLFulfilmentJob.processOrders();
-  } catch (error: any) {
-    logger.error(`Error in scheduled PostNL Fulfilment job: ${error.message}`);
-  }
-});
+// Validate cron schedule
+if (!cron.validate(cronSchedule)) {
+  logger.error(`❌ Invalid cron schedule for PostNL Fulfilment job: ${cronSchedule}`);
+} else {
+  cron.schedule(cronSchedule, async () => {
+    try {
+      logger.info("🕐 [CRON] Scheduled PostNL Fulfilment job triggered");
+      await postNLFulfilmentJob.processOrders();
+    } catch (error: any) {
+      logger.error(`Error in scheduled PostNL Fulfilment job: ${error.message}`);
+    }
+  });
 
-logger.info(`✅ PostNL Fulfilment cron job scheduled: ${cronSchedule}`);
+  logger.info(`✅ PostNL Fulfilment cron job scheduled: ${cronSchedule}`);
+}

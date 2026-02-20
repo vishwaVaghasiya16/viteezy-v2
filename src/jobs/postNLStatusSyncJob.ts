@@ -115,20 +115,34 @@ export class PostNLStatusSyncJob {
 
   /**
    * Fetch updated shipments from PostNL API
+   * Matches Java implementation: uses LocalDateTime format (YYYY-MM-DDTHH:mm:ss.SSS)
+   * and both parameters named 'period'
    */
   private async fetchUpdatedShipments(): Promise<PostNLShipmentStatus[]> {
     try {
       const now = new Date();
       const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
-      const url = `${this.POSTNL_API_URL}/shipment/v2/status/${this.CUSTOMER_NUMBER}/updatedshipments`;
-      const params = {
-        period: twoHoursAgo.toISOString(),
-        period2: now.toISOString(),
+      // Format date as LocalDateTime (YYYY-MM-DDTHH:mm:ss.SSS) without timezone
+      // Java LocalDateTime.toString() format
+      const formatLocalDateTime = (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const hours = String(date.getHours()).padStart(2, "0");
+        const minutes = String(date.getMinutes()).padStart(2, "0");
+        const seconds = String(date.getSeconds()).padStart(2, "0");
+        const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
+        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}`;
       };
 
+      const period1 = formatLocalDateTime(twoHoursAgo);
+      const period2 = formatLocalDateTime(now);
+
+      // Build URL with both parameters named 'period' (matching Java implementation)
+      const url = `${this.POSTNL_API_URL}/shipment/v2/status/${this.CUSTOMER_NUMBER}/updatedshipments?period=${encodeURIComponent(period1)}&period=${encodeURIComponent(period2)}`;
+
       const response = await axios.get(url, {
-        params,
         headers: {
           Accept: "application/json",
           apikey: this.POSTNL_SHIPMENT_API_KEY,
@@ -333,15 +347,21 @@ export class PostNLStatusSyncJob {
 // Create singleton instance
 export const postNLStatusSyncJob = new PostNLStatusSyncJob();
 
-// Schedule the job to run every 30 minutes
-const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "*/30 * * * *";
+// Schedule the job to run every 1 minute (or as configured)
+const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "* * * * *";
 
-cron.schedule(cronSchedule, async () => {
-  try {
-    await postNLStatusSyncJob.syncStatuses();
-  } catch (error: any) {
-    logger.error(`Error in scheduled PostNL Status Sync job: ${error.message}`);
-  }
-});
+// Validate cron schedule
+if (!cron.validate(cronSchedule)) {
+  logger.error(`❌ Invalid cron schedule for PostNL Status Sync job: ${cronSchedule}`);
+} else {
+  cron.schedule(cronSchedule, async () => {
+    try {
+      logger.info("🕐 [CRON] Scheduled PostNL Status Sync job triggered");
+      await postNLStatusSyncJob.syncStatuses();
+    } catch (error: any) {
+      logger.error(`Error in scheduled PostNL Status Sync job: ${error.message}`);
+    }
+  });
 
-logger.info(`✅ PostNL Status Sync cron job scheduled: ${cronSchedule}`);
+  logger.info(`✅ PostNL Status Sync cron job scheduled: ${cronSchedule}`);
+}
