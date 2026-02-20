@@ -11,8 +11,9 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
-import { I18nStringType } from "../models/common.model";
-import { getTranslatedString } from "../utils/translationUtils";
+import { I18nStringType, SupportedLanguage, DEFAULT_LANGUAGE } from "../models/common.model";
+import { getTranslatedString, getUserLanguageCode } from "../utils/translationUtils";
+import { User } from "../models/core";
 
 interface PurchasePlan {
   planType: "oneTime" | "subscription";
@@ -1773,6 +1774,18 @@ class CheckoutService {
     const selectedCapsuleCount = options.capsuleCount || 60; // Default to 60 for standup pouch
     const isOneTimePurchase = options.isOneTime || false; // Default to subscription
 
+    // Get user language for feature translation
+    let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
+    try {
+      const user = await User.findById(userId).select("language").lean();
+      if (user && user.language) {
+        userLang = getUserLanguageCode(user.language);
+      }
+    } catch (error) {
+      // Use default language if user fetch fails
+      logger.warn("Failed to fetch user language, using default", { userId, error });
+    }
+
     // Get user's cart
     const cart = await Carts.findOne({
       userId: new mongoose.Types.ObjectId(userId),
@@ -2047,14 +2060,20 @@ class CheckoutService {
                 existing.capsuleCount += capsuleCount;
                 existing.supplementsCount += capsuleCount;
                 if (planData.features && Array.isArray(planData.features)) {
-                  planData.features.forEach((f: string) =>
-                    existing.features.add(f)
-                  );
+                  planData.features.forEach((f: any) => {
+                    // Transform I18n feature to single language string
+                    const transformedFeature = getTranslatedString(f, userLang);
+                    existing.features.add(transformedFeature);
+                  });
                 }
               } else {
                 const featuresSet = new Set<string>();
                 if (planData.features && Array.isArray(planData.features)) {
-                  planData.features.forEach((f: string) => featuresSet.add(f));
+                  planData.features.forEach((f: any) => {
+                    // Transform I18n feature to single language string
+                    const transformedFeature = getTranslatedString(f, userLang);
+                    featuresSet.add(transformedFeature);
+                  });
                 }
 
                 subscriptionPlansMap.set(planInfo.key, {
