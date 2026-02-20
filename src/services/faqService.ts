@@ -27,6 +27,7 @@ export interface GroupedFaqResponse {
   categoryId: string | null;
   categoryTitle: string;
   categorySlug: string | null;
+  categoryImage: string | null;
   faqs: GroupedFaqItem[];
 }
 
@@ -116,12 +117,42 @@ class FaqService {
     const onlyActive = status !== "all";
     const categories = await this.fetchCategories({ onlyActive, title });
 
+    // Get FAQ counts for each category
+    const categoryIds = categories.map((cat) => cat._id);
+    const faqCounts = await FAQs.aggregate([
+      {
+        $match: {
+          categoryId: { $in: categoryIds },
+          isDeleted: false,
+          $or: [
+            { status: FAQStatus.ACTIVE },
+            { status: { $exists: false }, isActive: { $ne: false } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: "$categoryId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Create a map of categoryId -> count
+    const countMap = new Map<string, number>();
+    faqCounts.forEach((item) => {
+      if (item._id) {
+        countMap.set(item._id.toString(), item.count);
+      }
+    });
+
     return categories.map((category) => ({
       _id: category._id.toString(),
       title: this.resolveI18nField(category.title, lang),
       isActive: category.isActive,
       slug: category.slug || null,
       icon: category.icon || null,
+      faqCount: countMap.get(category._id.toString()) || 0,
     }));
   }
 
@@ -176,6 +207,7 @@ class FaqService {
           this.resolveI18nField(category.title, lang) ||
           this.fallbackCategoryTitle,
         categorySlug: category.slug || null,
+        categoryImage: category.icon || null,
         faqs: [],
       });
     });
@@ -205,6 +237,7 @@ class FaqService {
           categoryId: faq.categoryId ? faq.categoryId.toString() : null,
           categoryTitle: faq.category || this.fallbackCategoryTitle,
           categorySlug: this.slugify(faq.category),
+          categoryImage: null,
           faqs: [],
         });
         fallbackKeys.push(fallbackKey);

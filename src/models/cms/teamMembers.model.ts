@@ -28,8 +28,9 @@ const TeamMemberSchema = new Schema<ITeamMember>(
       default: null,
     },
     name: {
-      type: String,
-      trim: true,
+      type: I18nString,
+      default: () => ({}),
+      required: true,
     },
     designation: {
       type: I18nString,

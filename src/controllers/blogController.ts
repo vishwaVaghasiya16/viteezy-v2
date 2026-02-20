@@ -9,6 +9,8 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Blogs } from "@/models/cms/blogs.model";
 import { BlogCategories } from "@/models/cms/blogCategories.model";
+import { BlogBanner } from "@/models/cms/blogBanner.model";
+import { GeneralSettings } from "@/models/cms/generalSettings.model";
 import { User } from "@/models/index.model";
 import mongoose from "mongoose";
 import { markdownToHtml } from "@/utils/markdown";
@@ -43,25 +45,32 @@ const mapLanguageToCode = (
 
 class BlogController {
   /**
-   * Get paginated list of blogs with filters (authenticated users only)
+   * Get paginated list of blogs with filters (optional authentication)
    */
   getBlogs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const authenticatedReq = req as AuthenticatedRequest;
 
-      if (!authenticatedReq.user || !authenticatedReq.user._id) {
-        throw new AppError("User not authenticated", 401);
+      const { lang } = req.query as {
+        lang?: "en" | "nl" | "de" | "fr" | "es";
+      };
+
+      // Get language priority: query param > user token > default "en"
+      let userLang: "en" | "nl" | "de" | "fr" | "es" = "en";
+
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
+      } else if (authenticatedReq.user?._id) {
+        // Use language from user token if authenticated
+        const user = await User.findById(authenticatedReq.user._id)
+          .select("language")
+          .lean();
+
+        if (user) {
+          userLang = mapLanguageToCode(user.language);
+        }
       }
-
-      const user = await User.findById(authenticatedReq.user._id)
-        .select("language")
-        .lean();
-
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
-      const userLang = mapLanguageToCode(user.language);
 
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { category, search } = req.query;
@@ -100,15 +109,22 @@ class BlogController {
         Object.assign(sortOptions, sort);
       }
 
-      const total = await Blogs.countDocuments(filter);
-
-      const blogs = await Blogs.find(filter)
-        .populate("categoryId", "slug title")
-        .populate("authorId", "name email")
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      const [total, blogs, blogBanners, settings] = await Promise.all([
+        Blogs.countDocuments(filter),
+        Blogs.find(filter)
+          .populate("categoryId", "slug title")
+          .populate("authorId", "name email")
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        BlogBanner.find({ isDeleted: { $ne: true } })
+          .sort({ createdAt: -1 })
+          .lean(),
+        GeneralSettings.findOne({
+          isDeleted: { $ne: true },
+        }).lean(),
+      ]);
 
       const transformedBlogs = blogs.map((blog: any) => {
         const category =
@@ -138,34 +154,57 @@ class BlogController {
         };
       });
 
+      // Transform blog banners with localized content
+      const transformedBlogBanners = blogBanners.map((banner: any) => ({
+        _id: banner._id,
+        banner_image: banner.banner_image || null,
+        heading: banner.heading?.[userLang] || banner.heading?.en || "",
+        description:
+          banner.description?.[userLang] || banner.description?.en || "",
+        createdAt: banner.createdAt,
+        updatedAt: banner.updatedAt,
+      }));
+
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(transformedBlogs, pagination, "Blogs retrieved");
+      // Send response with blogs, blog banners, and CMS settings
+      res.status(200).json({
+        success: true,
+        message: "Blogs retrieved",
+        data: { blogs: transformedBlogs, blogBanners: transformedBlogBanners },
+        pagination,
+      });
     }
   );
 
   /**
-   * Get blog details by slug or ID (authenticated users only)
+   * Get blog details by slug or ID (optional authentication)
    */
   getBlogDetails = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const authenticatedReq = req as AuthenticatedRequest;
 
-      if (!authenticatedReq.user || !authenticatedReq.user._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
       const { slugOrId } = req.params;
+      const { lang } = req.query as {
+        lang?: "en" | "nl" | "de" | "fr" | "es";
+      };
 
-      const user = await User.findById(authenticatedReq.user._id)
-        .select("language")
-        .lean();
+      // Get language priority: query param > user token > default "en"
+      let userLang: "en" | "nl" | "de" | "fr" | "es" = "en";
 
-      if (!user) {
-        throw new AppError("User not found", 404);
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
+      } else if (authenticatedReq.user?._id) {
+        // Use language from user token if authenticated
+        const user = await User.findById(authenticatedReq.user._id)
+          .select("language")
+          .lean();
+
+        if (user) {
+          userLang = mapLanguageToCode(user.language);
+        }
       }
-
-      const userLang = mapLanguageToCode(user.language);
 
       const query: any = {
         isActive: true,
@@ -228,29 +267,33 @@ class BlogController {
   );
 
   /**
-   * Get list of blog categories (authenticated users only)
+   * Get list of blog categories (optional authentication)
    */
   getBlogCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const authenticatedReq = req as any;
+      const authenticatedReq = req as AuthenticatedRequest;
 
-      if (!authenticatedReq.user || !authenticatedReq.user._id) {
-        throw new AppError("User not authenticated", 401);
-      }
-
-      const user = await User.findById(authenticatedReq.user._id)
-        .select("language")
-        .lean();
-
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
-      const userLang = mapLanguageToCode(user.language);
-
-      const { status = "active" } = req.query as {
+      const { status = "active", lang } = req.query as {
         status?: "active" | "all";
+        lang?: "en" | "nl" | "de" | "fr" | "es";
       };
+
+      // Get language priority: query param > user token > default "en"
+      let userLang: "en" | "nl" | "de" | "fr" | "es" = "en";
+
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
+      } else if (authenticatedReq.user?._id) {
+        // Use language from user token if authenticated
+        const user = await User.findById(authenticatedReq.user._id)
+          .select("language")
+          .lean();
+
+        if (user) {
+          userLang = mapLanguageToCode(user.language);
+        }
+      }
 
       const filter: any = {
         isDeleted: false,
@@ -265,11 +308,38 @@ class BlogController {
         .select("slug title isActive")
         .lean();
 
+      // Get blog counts for each category
+      const categoryIds = categories.map((cat: any) => cat._id);
+      const blogCounts = await Blogs.aggregate([
+        {
+          $match: {
+            categoryId: { $in: categoryIds },
+            isActive: true,
+            isDeleted: false,
+          },
+        },
+        {
+          $group: {
+            _id: "$categoryId",
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      // Create a map of categoryId -> count
+      const countMap = new Map<string, number>();
+      blogCounts.forEach((item) => {
+        if (item._id) {
+          countMap.set(item._id.toString(), item.count);
+        }
+      });
+
       const transformedCategories = categories.map((category: any) => ({
         _id: category._id,
         slug: category.slug,
         title: category.title?.[userLang] || category.title?.en || "",
         isActive: category.isActive !== false,
+        blogCount: countMap.get(category._id.toString()) || 0,
       }));
 
       res.apiSuccess(
@@ -280,25 +350,32 @@ class BlogController {
   );
 
   /**
-   * Get popular or latest blogs (authenticated users only)
+   * Get popular or latest blogs (optional authentication)
    */
   getPopularBlogs = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const authenticatedReq = req as AuthenticatedRequest;
 
-      if (!authenticatedReq.user || !authenticatedReq.user._id) {
-        throw new AppError("User not authenticated", 401);
+      const { lang } = req.query as {
+        lang?: "en" | "nl" | "de" | "fr" | "es";
+      };
+
+      // Get language priority: query param > user token > default "en"
+      let userLang: "en" | "nl" | "de" | "fr" | "es" = "en";
+
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
+      } else if (authenticatedReq.user?._id) {
+        // Use language from user token if authenticated
+        const user = await User.findById(authenticatedReq.user._id)
+          .select("language")
+          .lean();
+
+        if (user) {
+          userLang = mapLanguageToCode(user.language);
+        }
       }
-
-      const user = await User.findById(authenticatedReq.user._id)
-        .select("language")
-        .lean();
-
-      if (!user) {
-        throw new AppError("User not found", 404);
-      }
-
-      const userLang = mapLanguageToCode(user.language);
 
       const { limit = 5, type = "popular" } = req.query;
       const blogLimit = Math.min(

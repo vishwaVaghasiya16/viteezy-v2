@@ -13,7 +13,8 @@ import {
 } from "../enums";
 
 export interface IPayment extends Document {
-  orderId: mongoose.Types.ObjectId;
+  orderId?: mongoose.Types.ObjectId;
+  subscriptionId?: mongoose.Types.ObjectId; // For subscription renewal payments
   userId: mongoose.Types.ObjectId;
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
@@ -29,6 +30,9 @@ export interface IPayment extends Document {
   refundedAt?: Date;
   processedAt?: Date;
   membershipId?: mongoose.Types.ObjectId;
+  isRenewalPayment?: boolean; // Flag to identify renewal payments
+  renewalCycleNumber?: number; // Which renewal cycle this payment is for
+  metadata?: Record<string, any>; // Additional metadata for payments
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +42,11 @@ const PaymentSchema = new Schema<IPayment>(
     orderId: {
       type: Schema.Types.ObjectId,
       ref: "orders",
+      default: null,
+    },
+    subscriptionId: {
+      type: Schema.Types.ObjectId,
+      ref: "subscriptions",
       default: null,
     },
     membershipId: {
@@ -111,6 +120,19 @@ const PaymentSchema = new Schema<IPayment>(
       type: Date,
       default: null,
     },
+    isRenewalPayment: {
+      type: Boolean,
+      default: false,
+    },
+    renewalCycleNumber: {
+      type: Number,
+      default: null,
+      min: 1,
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: () => ({}),
+    },
     ...SoftDelete,
     ...AuditSchema.obj,
   },
@@ -123,11 +145,13 @@ const PaymentSchema = new Schema<IPayment>(
 
 // Indexes
 PaymentSchema.index({ orderId: 1, status: 1 });
+PaymentSchema.index({ subscriptionId: 1, status: 1 });
 PaymentSchema.index({ userId: 1, status: 1 });
 PaymentSchema.index({ paymentMethod: 1, status: 1 });
 PaymentSchema.index({ gatewayTransactionId: 1 });
 PaymentSchema.index({ gatewaySessionId: 1 });
 PaymentSchema.index({ membershipId: 1, status: 1 });
+PaymentSchema.index({ isRenewalPayment: 1, createdAt: -1 });
 PaymentSchema.index({ createdAt: -1 });
 
 export const Payments = mongoose.model<IPayment>("payments", PaymentSchema);

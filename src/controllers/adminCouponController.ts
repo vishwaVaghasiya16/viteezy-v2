@@ -20,6 +20,35 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+/**
+ * Parse date string to Date object in UTC to avoid timezone conversion issues
+ * Extracts date components directly from ISO string and creates UTC date
+ * This ensures the date stored in DB matches the date sent in the request
+ */
+const parseDateWithoutTimezone = (dateValue: any): Date | undefined => {
+  if (!dateValue) return undefined;
+  
+  if (typeof dateValue === 'string') {
+    // Extract date components from ISO format: "2026-02-20T00:00:00.000Z" or "2026-02-20"
+    const dateMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      const [, year, month, day] = dateMatch;
+      // Create date in UTC to avoid timezone conversion when storing in DB
+      // Date.UTC creates timestamp, then new Date converts to Date object
+      return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+    }
+  }
+  
+  // Fallback for Date objects - extract UTC components
+  if (dateValue instanceof Date) {
+    return new Date(Date.UTC(dateValue.getUTCFullYear(), dateValue.getUTCMonth(), dateValue.getUTCDate()));
+  }
+  
+  // Fallback: parse and use UTC components
+  const date = new Date(dateValue);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+};
+
 const sanitizeObjectIdArray = (
   arr?: string[]
 ): mongoose.Types.ObjectId[] | undefined => {
@@ -49,9 +78,10 @@ class AdminCouponController {
         userUsageLimit,
         validFrom,
         validUntil,
-        isActive = true,
+        isActive,
         isRecurring = false,
         oneTimeUse = false,
+        recurringMonths,
         applicableProducts,
         applicableCategories,
         excludedProducts,
@@ -75,10 +105,46 @@ class AdminCouponController {
         );
       }
 
-      // Validate date range
-      if (validFrom && validUntil && validUntil <= validFrom) {
+      const now = new Date();
+      // Normalize now to start of day for comparison (to allow today's date)
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Parse dates without timezone conversion
+      const parsedValidFrom = parseDateWithoutTimezone(validFrom);
+      const parsedValidUntil = parseDateWithoutTimezone(validUntil);
+
+      // Ensure validFrom and validUntil are not in the past (must be today or future date)
+      // Use <= to allow today's date
+      if (parsedValidFrom && parsedValidFrom < todayStart) {
+        throw new AppError(
+          "Valid from date must be today or a future date",
+          400
+        );
+      }
+
+      if (parsedValidUntil && parsedValidUntil < todayStart) {
+        throw new AppError(
+          "Expiry date must be today or a future date",
+          400
+        );
+      }
+
+      // Validate date range (validUntil after validFrom)
+      if (parsedValidFrom && parsedValidUntil && parsedValidUntil <= parsedValidFrom) {
         throw new AppError("Expiry date must be after valid from date", 400);
       }
+
+      // Set defaults - use todayStart for consistency
+      const finalValidFrom = parsedValidFrom || todayStart;
+      const finalMinOrderAmount =
+        minOrderAmount !== undefined && minOrderAmount !== null
+          ? minOrderAmount
+          : 0;
+      
+      // Auto-activate if validFrom is in the future and isActive is not explicitly set
+      // If isActive is not provided, default to true (coupon will be auto-active)
+      // The pre-save hook will handle the logic for future dates
+      const finalIsActive = isActive !== undefined && isActive !== null ? isActive : true;
 
       const coupon = await Coupons.create({
         code: code.toUpperCase().trim(),
@@ -86,16 +152,17 @@ class AdminCouponController {
         description,
         type,
         value,
-        minOrderAmount,
+        minOrderAmount: finalMinOrderAmount,
         maxDiscountAmount,
         usageLimit,
         userUsageLimit,
         usageCount: 0,
-        validFrom: validFrom ? new Date(validFrom) : undefined,
-        validUntil: validUntil ? new Date(validUntil) : undefined,
-        isActive,
+        validFrom: finalValidFrom,
+        validUntil: parsedValidUntil,
+        isActive: finalIsActive,
         isRecurring,
         oneTimeUse,
+        recurringMonths: recurringMonths && Array.isArray(recurringMonths) ? recurringMonths : undefined,
         applicableProducts: sanitizeObjectIdArray(applicableProducts) || [],
         applicableCategories: sanitizeObjectIdArray(applicableCategories) || [],
         excludedProducts: sanitizeObjectIdArray(excludedProducts) || [],
@@ -107,31 +174,35 @@ class AdminCouponController {
   );
 
   /**
-   * Get coupon statistics (for current month only)
+   * Get coupon statistics with percentage changes (vs last month)
    */
   getCouponStats = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      // Get current month date range
       const now = new Date();
+      
+      // Current month date range
       const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      // Last month date range
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      
       
       // Calculate 7 days from now for expiring soon
       const sevenDaysFromNow = new Date(now);
       sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
 
-      // Active coupons count (not deleted, isActive = true, and valid if validUntil is set)
+      // Active coupons filter
       const activeCouponsFilter: Record<string, any> = {
         isDeleted: false,
         isActive: true,
-      };
-      
-      // Coupons are active if they don't have validUntil or validUntil is in the future
-      activeCouponsFilter.$or = [
+        $or: [
         { validUntil: { $exists: false } },
         { validUntil: null },
         { validUntil: { $gt: now } },
-      ];
+        ],
+      };
 
       // Coupons expiring soon (within 7 days, active, not deleted)
       const expiringSoonFilter: Record<string, any> = {
@@ -143,20 +214,57 @@ class AdminCouponController {
         },
       };
 
-      // Get stats in parallel
+      // Percentage change calculation function (capped at 100)
+      const percentChange = (current: number, previous: number) => {
+        if (previous === 0 && current > 0) {
+          return { percentage: 100, isPositive: true };
+        }
+        if (previous === 0 && current === 0) {
+          return { percentage: 0, isPositive: false };
+        }
+
+        const diff = ((current - previous) / previous) * 100;
+        const isPositive = diff >= 0;
+        const percentage = Math.abs(Number(diff.toFixed(2)));
+        const cappedPercentage = Math.min(percentage, 100);
+
+        return {
+          percentage: cappedPercentage,
+          isPositive: isPositive,
+        };
+      };
+
+      // Get all stats in parallel
       const [
-        activeCouponsCount,
-        expiringSoonCount,
-        totalRedemptionsResult,
-        totalDiscountAmountResult,
-      ] = await Promise.all([
         // Active coupons
+        activeCouponsCurrent,
+        activeCouponsLastMonth,
+        
+        // Redemptions - Current month
+        totalRedemptionsCurrentMonth,
+        totalRedemptionsLastMonth,
+        
+        // Discounted amount - Current month
+        totalDiscountAmountCurrentMonth,
+        totalDiscountAmountLastMonth,
+        
+        // Expiring soon coupons with details
+        expiringSoonCoupons,
+      ] = await Promise.all([
+        // Active coupons - current
         Coupons.countDocuments(activeCouponsFilter),
+        // Active coupons - last month (at end of last month)
+        Coupons.countDocuments({
+          isDeleted: false,
+          isActive: true,
+          $or: [
+            { validUntil: { $exists: false } },
+            { validUntil: null },
+            { validUntil: { $gt: endOfLastMonth } },
+          ],
+        }),
         
-        // Coupons expiring soon
-        Coupons.countDocuments(expiringSoonFilter),
-        
-        // Total redemptions for current month (from coupon usage history)
+        // Total redemptions - Current month
         CouponUsageHistory.aggregate([
           {
             $match: {
@@ -166,15 +274,22 @@ class AdminCouponController {
               },
             },
           },
+          { $group: { _id: null, total: { $sum: 1 } } },
+        ]),
+        // Total redemptions - Last month
+        CouponUsageHistory.aggregate([
           {
-            $group: {
-              _id: null,
-              total: { $sum: 1 },
+            $match: {
+              createdAt: {
+                $gte: startOfLastMonth,
+                $lte: endOfLastMonth,
             },
           },
+          },
+          { $group: { _id: null, total: { $sum: 1 } } },
         ]),
         
-        // Total discounted amount for current month
+        // Total discounted amount - Current month
         CouponUsageHistory.aggregate([
           {
             $match: {
@@ -192,22 +307,65 @@ class AdminCouponController {
             },
           },
         ]),
+        // Total discounted amount - Last month
+        CouponUsageHistory.aggregate([
+          {
+            $match: {
+              createdAt: {
+                $gte: startOfLastMonth,
+                $lte: endOfLastMonth,
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: "$discountAmount.amount" },
+              currency: { $first: "$discountAmount.currency" },
+            },
+          },
+        ]),
+        
+        // Expiring soon coupons with details
+        Coupons.find(expiringSoonFilter)
+          .select("code name validUntil")
+          .sort({ validUntil: 1 })
+          .lean(),
       ]);
 
-      const totalRedemptions = totalRedemptionsResult[0]?.total || 0;
-      const totalDiscountAmount = totalDiscountAmountResult[0]?.total || 0;
-      const currency = totalDiscountAmountResult[0]?.currency || "EUR";
+      // Extract values
+      const totalRedemptionsCurrent = totalRedemptionsCurrentMonth[0]?.total || 0;
+      const totalRedemptionsLast = totalRedemptionsLastMonth[0]?.total || 0;
+
+      const totalDiscountCurrent = totalDiscountAmountCurrentMonth[0]?.total || 0;
+      const totalDiscountLast = totalDiscountAmountLastMonth[0]?.total || 0;
+      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "EUR";
 
       res.apiSuccess(
         {
           stats: {
-            activeCoupons: activeCouponsCount,
-            totalRedemptions,
-            totalDiscountedAmount: {
-              amount: totalDiscountAmount,
-              currency,
+            activeCoupons: {
+              value: activeCouponsCurrent,
+              change: {
+                vsLastMonth: percentChange(activeCouponsCurrent, activeCouponsLastMonth),
+              },
             },
-            expiringSoon: expiringSoonCount,
+            totalRedemptions: {
+              value: totalRedemptionsCurrent,
+              change: {
+                vsLastMonth: percentChange(totalRedemptionsCurrent, totalRedemptionsLast),
+              },
+            },
+            totalDiscountedAmount: {
+              amount: totalDiscountCurrent,
+              currency,
+              change: {
+                vsLastMonth: percentChange(totalDiscountCurrent, totalDiscountLast),
+              },
+            },
+            expiringSoon: {
+              count: expiringSoonCoupons.length,
+            },
           },
         },
         "Coupon statistics retrieved successfully"
@@ -334,6 +492,7 @@ class AdminCouponController {
         isActive,
         isRecurring,
         oneTimeUse,
+        recurringMonths,
         applicableProducts,
         applicableCategories,
         excludedProducts,
@@ -388,15 +547,40 @@ class AdminCouponController {
         coupon.maxDiscountAmount = maxDiscountAmount;
       if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
       if (userUsageLimit !== undefined) coupon.userUsageLimit = userUsageLimit;
+      // Handle and validate dates
+      const nowUpdate = new Date();
+      // Normalize now to start of day for comparison (to allow today's date)
+      const todayStartUpdate = new Date(nowUpdate.getFullYear(), nowUpdate.getMonth(), nowUpdate.getDate());
+
       if (validFrom !== undefined) {
-        coupon.validFrom = validFrom ? new Date(validFrom) : undefined;
+        const parsedValidFromUpdate = parseDateWithoutTimezone(validFrom);
+        // Use <= to allow today's date
+        if (parsedValidFromUpdate && parsedValidFromUpdate < todayStartUpdate) {
+          throw new AppError(
+            "Valid from date must be today or a future date",
+            400
+          );
+        }
+        coupon.validFrom = parsedValidFromUpdate;
       }
+
       if (validUntil !== undefined) {
-        coupon.validUntil = validUntil ? new Date(validUntil) : undefined;
+        const parsedValidUntilUpdate = parseDateWithoutTimezone(validUntil);
+        // Use <= to allow today's date
+        if (parsedValidUntilUpdate && parsedValidUntilUpdate < todayStartUpdate) {
+          throw new AppError(
+            "Expiry date must be today or a future date",
+            400
+          );
+        }
+        coupon.validUntil = parsedValidUntilUpdate;
       }
       if (isActive !== undefined) coupon.isActive = isActive;
       if (isRecurring !== undefined) coupon.isRecurring = isRecurring;
       if (oneTimeUse !== undefined) coupon.oneTimeUse = oneTimeUse;
+      if (recurringMonths !== undefined) {
+        coupon.recurringMonths = Array.isArray(recurringMonths) ? recurringMonths : undefined;
+      }
       if (applicableProducts !== undefined)
         coupon.applicableProducts =
           sanitizeObjectIdArray(applicableProducts) || [];
@@ -405,15 +589,18 @@ class AdminCouponController {
           sanitizeObjectIdArray(applicableCategories) || [];
       if (excludedProducts !== undefined)
         coupon.excludedProducts = sanitizeObjectIdArray(excludedProducts) || [];
+      
+      // Ensure minOrderAmount defaults to 0 if set to null/undefined
+      if (minOrderAmount !== undefined) {
+        coupon.minOrderAmount = minOrderAmount !== null ? minOrderAmount : 0;
+      } else if (coupon.minOrderAmount === null || coupon.minOrderAmount === undefined) {
+        coupon.minOrderAmount = 0;
+      }
 
-      // Validate date range
-      const finalValidFrom = coupon.validFrom || validFrom;
-      const finalValidUntil = coupon.validUntil || validUntil;
-      if (
-        finalValidFrom &&
-        finalValidUntil &&
-        finalValidUntil <= finalValidFrom
-      ) {
+      // Validate date range after updates
+      const finalValidFrom = coupon.validFrom;
+      const finalValidUntil = coupon.validUntil;
+      if (finalValidFrom && finalValidUntil && finalValidUntil <= finalValidFrom) {
         throw new AppError("Expiry date must be after valid from date", 400);
       }
 
@@ -621,10 +808,28 @@ class AdminCouponController {
         },
         {
           $project: {
-            _id: 1,
-            couponId: 1,
-            userId: 1,
-            orderId: 1,
+            _id: { $toString: "$_id" },
+            couponId: {
+              $cond: {
+                if: { $ne: ["$couponId", null] },
+                then: { $toString: "$couponId" },
+                else: null,
+              },
+            },
+            userId: {
+              $cond: {
+                if: { $ne: ["$userId", null] },
+                then: { $toString: "$userId" },
+                else: null,
+              },
+            },
+            orderId: {
+              $cond: {
+                if: { $ne: ["$orderId", null] },
+                then: { $toString: "$orderId" },
+                else: null,
+              },
+            },
             couponCode: 1,
             orderNumber: 1,
             discountAmount: 1,
@@ -632,7 +837,13 @@ class AdminCouponController {
             createdAt: 1,
             updatedAt: 1,
             coupon: {
-              _id: "$coupon._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$coupon._id", null] },
+                  then: { $toString: "$coupon._id" },
+                  else: null,
+                },
+              },
               code: "$coupon.code",
               name: "$coupon.name",
               type: "$coupon.type",
@@ -641,13 +852,25 @@ class AdminCouponController {
               validUntil: "$coupon.validUntil",
             },
             user: {
-              _id: "$user._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$user._id", null] },
+                  then: { $toString: "$user._id" },
+                  else: null,
+                },
+              },
               firstName: "$user.firstName",
               lastName: "$user.lastName",
               email: "$user.email",
             },
             order: {
-              _id: "$order._id",
+              _id: {
+                $cond: {
+                  if: { $ne: ["$order._id", null] },
+                  then: { $toString: "$order._id" },
+                  else: null,
+                },
+              },
               orderNumber: "$order.orderNumber",
               total: "$order.total",
               status: "$order.status",

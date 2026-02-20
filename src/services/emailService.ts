@@ -170,6 +170,61 @@ class EmailService {
   }
 
   /**
+   * Send contact form confirmation to user (after "Ask us a question" submit)
+   */
+  async sendContactConfirmationEmail(
+    email: string,
+    name?: string,
+    subject?: string
+  ): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Contact confirmation for ${email}`);
+        return true;
+      }
+      const displayName = name || "there";
+      const emailSubject = "We received your message - Viteezy";
+      const html = this.getContactConfirmationTemplate(displayName, subject);
+      const text = `Hello ${displayName},\n\nThank you for contacting us. We have received your message${subject ? ` regarding "${subject}"` : ""} and will get back to you soon.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({ to: email, subject: emailSubject, html, text });
+      logger.info(`Contact confirmation sent to ${email} via SendGrid`);
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send contact confirmation via SendGrid:", {
+        email,
+        error: error?.message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send welcome / promotional email when user enters email in footer
+   */
+  async sendFooterWelcomeEmail(email: string): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Footer welcome email for ${email}`);
+        return true;
+      }
+      const subject = "Welcome to Viteezy – Tips, offers & more";
+      const html = this.getFooterWelcomeEmailTemplate();
+      const text = `Welcome to Viteezy!\n\nThank you for signing up. You'll receive our latest news, wellness tips, and exclusive offers.\n\nBest regards,\nThe Viteezy Team`;
+
+      await this.sendEmail({ to: email, subject, html, text });
+      logger.info(`Footer welcome email sent to ${email} via SendGrid`);
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send footer welcome email via SendGrid:", {
+        email,
+        error: error?.message,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Send password reset email (OTP-based - kept for backward compatibility)
    */
   async sendPasswordResetEmail(email: string, otp: string): Promise<boolean> {
@@ -820,6 +875,89 @@ The Viteezy Team
   }
 
   /**
+   * Contact form confirmation template (Ask us a question)
+   */
+  private getContactConfirmationTemplate(name: string, subject?: string): string {
+    const subjectLine = subject ? `<p><strong>Subject:</strong> ${subject}</p>` : "";
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>We received your message</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f4f4f4; margin: 0; padding: 0; }
+          .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
+          .header { background: #0d9488; color: #fff; padding: 24px 20px; text-align: center; }
+          .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+          .content { padding: 32px 24px; }
+          .content p { margin: 0 0 12px 0; font-size: 15px; }
+          .footer { text-align: center; padding: 20px; background: #f9fafb; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+        </style>
+      </head>
+      <body>
+        <div class="wrapper">
+          <div class="header"><h1>We received your message</h1></div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>Thank you for getting in touch. We have received your message and will respond as soon as possible.</p>
+            ${subjectLine}
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Footer welcome / promotional email template (newsletter signup)
+   */
+  private getFooterWelcomeEmailTemplate(): string {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to Viteezy</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f4f4f4; margin: 0; padding: 0; }
+          .wrapper { max-width: 600px; margin: 0 auto; background: #fff; }
+          .header { background: #0d9488; color: #fff; padding: 28px 20px; text-align: center; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 32px 24px; }
+          .content p { margin: 0 0 14px 0; font-size: 15px; }
+          .cta { margin: 24px 0; text-align: center; }
+          .cta a { display: inline-block; background: #0d9488; color: #fff !important; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; }
+          .footer { text-align: center; padding: 20px; background: #f9fafb; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; }
+        </style>
+      </head>
+      <body>
+        <div class="wrapper">
+          <div class="header"><h1>Welcome to Viteezy</h1></div>
+          <div class="content">
+            <p>Thank you for signing up! You're now part of the Viteezy community.</p>
+            <p>We'll send you wellness tips, product updates, and exclusive offers. Stay tuned for our best content.</p>
+            <p>If you have any questions, just reply to this email or visit our contact page.</p>
+            <div class="cta"><a href="#">Explore our products</a></div>
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>You received this email because you signed up at viteezy.com.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
    * Get password reset email HTML template (OTP-based - kept for backward compatibility)
    */
   private getPasswordResetEmailTemplate(otp: string): string {
@@ -1353,6 +1491,582 @@ ${message}
 Account Status: ${isActive ? "Active" : "Deactivated"}
 
 ${actionMessage}
+
+Best regards,
+The Viteezy Team
+
+---
+© ${new Date().getFullYear()} Viteezy. All rights reserved.
+This is an automated message, please do not reply to this email.
+    `;
+  }
+
+  /**
+   * Send subscription cancellation email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param data - Subscription cancellation data
+   */
+  async sendSubscriptionCancellationEmail(
+    email: string,
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      cancellationReason: string;
+      cancelledAt: Date;
+      cancelledImmediately: boolean;
+    }
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] Subscription cancellation email for ${email}: Subscription ${data.subscriptionNumber}`
+        );
+        return true;
+      }
+
+      const subject = "Your Subscription Has Been Cancelled - Viteezy";
+      const html = this.getSubscriptionCancellationEmailTemplate(name, data);
+      const text = this.getSubscriptionCancellationEmailText(name, data);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Subscription cancellation email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send subscription cancellation email via SendGrid:", {
+        email,
+        subscriptionNumber: data.subscriptionNumber,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send subscription pause email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param data - Subscription pause data
+   */
+  async sendSubscriptionPauseEmail(
+    email: string,
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      pausedAt: Date;
+    }
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] Subscription pause email for ${email}: Subscription ${data.subscriptionNumber}`
+        );
+        return true;
+      }
+
+      const subject = "Your Subscription Has Been Paused - Viteezy";
+      const html = this.getSubscriptionPauseEmailTemplate(name, data);
+      const text = this.getSubscriptionPauseEmailText(name, data);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Subscription pause email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send subscription pause email via SendGrid:", {
+        email,
+        subscriptionNumber: data.subscriptionNumber,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Send subscription payment failed email
+   * @param email - User's email address
+   * @param name - User's name
+   * @param data - Payment failed data
+   */
+  async sendSubscriptionPaymentFailedEmail(
+    email: string,
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): Promise<boolean> {
+    try {
+      // If not configured (development mode), just log
+      if (!this.isConfigured) {
+        logger.info(
+          `[DEV MODE] Subscription payment failed email for ${email}: Subscription ${data.subscriptionNumber}`
+        );
+        return true;
+      }
+
+      const subject = "Payment Failed - Action Required - Viteezy";
+      const html = this.getSubscriptionPaymentFailedEmailTemplate(name, data);
+      const text = this.getSubscriptionPaymentFailedEmailText(name, data);
+
+      await this.sendEmail({
+        to: email,
+        subject,
+        html,
+        text,
+      });
+
+      logger.info(
+        `Subscription payment failed email sent successfully to ${email} via SendGrid`
+      );
+      return true;
+    } catch (error: any) {
+      logger.error("Failed to send subscription payment failed email via SendGrid:", {
+        email,
+        subscriptionNumber: data.subscriptionNumber,
+        error: error?.message,
+        code: error?.code,
+        response: error?.response?.body,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get subscription payment failed email HTML template
+   */
+  private getSubscriptionPaymentFailedEmailTemplate(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): string {
+    const formattedAmount = `${data.currency} ${data.amount.toFixed(2)}`;
+    const nextRetryDate = new Date(data.nextRetryDate).toLocaleDateString();
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Failed - Viteezy</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h1 style="color: #dc3545; margin-top: 0;">Payment Failed</h1>
+          <p>Dear ${name},</p>
+          <p>We were unable to process your subscription payment for <strong>${data.subscriptionNumber}</strong>.</p>
+          
+          <div style="background-color: #fff; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #dc3545;">
+            <p style="margin: 0;"><strong>Amount:</strong> ${formattedAmount}</p>
+            <p style="margin: 5px 0;"><strong>Retry Attempt:</strong> ${data.retryCount}</p>
+            <p style="margin: 5px 0;"><strong>Next Retry:</strong> ${nextRetryDate}</p>
+            ${data.failureReason ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${data.failureReason}</p>` : ''}
+          </div>
+
+          <p><strong>What happens next?</strong></p>
+          <ul>
+            <li>We will automatically retry the payment on ${nextRetryDate}</li>
+            <li>Please ensure your payment method has sufficient funds</li>
+            <li>Update your payment method if needed</li>
+          </ul>
+
+          <p>If the payment continues to fail, your subscription may be cancelled.</p>
+
+          <p style="margin-top: 30px;">
+            <a href="${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions" 
+               style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+              Update Payment Method
+            </a>
+          </p>
+
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">
+            If you have any questions, please contact our support team.
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get subscription payment failed email text version
+   */
+  private getSubscriptionPaymentFailedEmailText(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      amount: number;
+      currency: string;
+      retryCount: number;
+      nextRetryDate: Date;
+      failureReason?: string;
+    }
+  ): string {
+    const formattedAmount = `${data.currency} ${data.amount.toFixed(2)}`;
+    const nextRetryDate = new Date(data.nextRetryDate).toLocaleDateString();
+
+    return `
+Payment Failed - Action Required
+
+Dear ${name},
+
+We were unable to process your subscription payment for ${data.subscriptionNumber}.
+
+Amount: ${formattedAmount}
+Retry Attempt: ${data.retryCount}
+Next Retry: ${nextRetryDate}
+${data.failureReason ? `Reason: ${data.failureReason}` : ''}
+
+What happens next?
+- We will automatically retry the payment on ${nextRetryDate}
+- Please ensure your payment method has sufficient funds
+- Update your payment method if needed
+
+If the payment continues to fail, your subscription may be cancelled.
+
+Update your payment method: ${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions
+
+If you have any questions, please contact our support team.
+
+Best regards,
+Viteezy Team
+    `;
+  }
+
+  /**
+   * Get subscription cancellation email HTML template
+   */
+  private getSubscriptionCancellationEmailTemplate(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      cancellationReason: string;
+      cancelledAt: Date;
+      cancelledImmediately: boolean;
+    }
+  ): string {
+    const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>Subscription Cancelled - Viteezy</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333333; 
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+          }
+          .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+          }
+          .header { 
+            background: #dc2626; 
+            color: #ffffff; 
+            padding: 30px 20px; 
+            text-align: center; 
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .content { 
+            background: #ffffff; 
+            padding: 40px 30px; 
+          }
+          .content p {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333333;
+          }
+          .info-box {
+            background: #f9fafb;
+            border-left: 4px solid #dc2626;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+          }
+          .info-box p {
+            margin: 5px 0;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #1f2937;
+          }
+          .footer { 
+            text-align: center; 
+            padding: 20px 30px;
+            background-color: #f9fafb;
+            color: #6b7280; 
+            font-size: 12px; 
+            border-top: 1px solid #e5e7eb;
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="header">
+            <h1>Subscription Cancelled</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>We wanted to inform you that your subscription has been cancelled.</p>
+            
+            <div class="info-box">
+              <p><span class="info-label">Subscription Number:</span> ${data.subscriptionNumber}</p>
+              <p><span class="info-label">Cancellation Date:</span> ${cancelledDate}</p>
+              <p><span class="info-label">Cancellation Type:</span> ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}</p>
+              <p><span class="info-label">Reason:</span> ${data.cancellationReason}</p>
+            </div>
+
+            <p>If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.</p>
+            <p>We're sorry to see you go and hope to serve you again in the future.</p>
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get subscription cancellation email text template
+   */
+  private getSubscriptionCancellationEmailText(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      cancellationReason: string;
+      cancelledAt: Date;
+      cancelledImmediately: boolean;
+    }
+  ): string {
+    const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return `
+Viteezy - Subscription Cancelled
+
+Hello ${name},
+
+We wanted to inform you that your subscription has been cancelled.
+
+Subscription Number: ${data.subscriptionNumber}
+Cancellation Date: ${cancelledDate}
+Cancellation Type: ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}
+Reason: ${data.cancellationReason}
+
+If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.
+
+We're sorry to see you go and hope to serve you again in the future.
+
+Best regards,
+The Viteezy Team
+
+---
+© ${new Date().getFullYear()} Viteezy. All rights reserved.
+This is an automated message, please do not reply to this email.
+    `;
+  }
+
+  /**
+   * Get subscription pause email HTML template
+   */
+  private getSubscriptionPauseEmailTemplate(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      pausedAt: Date;
+    }
+  ): string {
+    const pausedDate = data.pausedAt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>Subscription Paused - Viteezy</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333333; 
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+          }
+          .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+          }
+          .header { 
+            background: #f59e0b; 
+            color: #ffffff; 
+            padding: 30px 20px; 
+            text-align: center; 
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+          }
+          .content { 
+            background: #ffffff; 
+            padding: 40px 30px; 
+          }
+          .content p {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #333333;
+          }
+          .info-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+          }
+          .info-box p {
+            margin: 5px 0;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #1f2937;
+          }
+          .footer { 
+            text-align: center; 
+            padding: 20px 30px;
+            background-color: #f9fafb;
+            color: #6b7280; 
+            font-size: 12px; 
+            border-top: 1px solid #e5e7eb;
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-wrapper">
+          <div class="header">
+            <h1>Subscription Paused</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>We wanted to inform you that your subscription has been paused.</p>
+            
+            <div class="info-box">
+              <p><span class="info-label">Subscription Number:</span> ${data.subscriptionNumber}</p>
+              <p><span class="info-label">Paused Date:</span> ${pausedDate}</p>
+            </div>
+
+            <p>Your subscription is currently on hold. No charges or deliveries will occur while your subscription is paused.</p>
+            <p>If you have any questions or would like to resume your subscription, please contact our support team.</p>
+            <p>Best regards,<br><strong>The Viteezy Team</strong></p>
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get subscription pause email text template
+   */
+  private getSubscriptionPauseEmailText(
+    name: string,
+    data: {
+      subscriptionNumber: string;
+      pausedAt: Date;
+    }
+  ): string {
+    const pausedDate = data.pausedAt.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return `
+Viteezy - Subscription Paused
+
+Hello ${name},
+
+We wanted to inform you that your subscription has been paused.
+
+Subscription Number: ${data.subscriptionNumber}
+Paused Date: ${pausedDate}
+
+Your subscription is currently on hold. No charges or deliveries will occur while your subscription is paused.
+
+If you have any questions or would like to resume your subscription, please contact our support team.
 
 Best regards,
 The Viteezy Team

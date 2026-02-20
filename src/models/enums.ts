@@ -59,6 +59,17 @@ export enum StaticPageStatus {
   UNPUBLISHED = "Unpublished",
 }
 
+// System Page Types (pre-defined pages that cannot be deleted or have status toggled)
+export enum SystemPageType {
+  ABOUT_US = "about-us",
+  OUR_TEAM = "our-team",
+  LANDING_PAGE = "landing-page",
+  MEMBERSHIP = "membership",
+  BLOG = "blog",
+}
+
+export const SYSTEM_PAGE_TYPE_VALUES = Object.values(SystemPageType);
+
 // Order Status
 export enum OrderStatus {
   PENDING = "Pending",
@@ -298,6 +309,7 @@ export enum SubscriptionStatus {
   CANCELLED = "Cancelled",
   EXPIRED = "Expired",
   SUSPENDED = "Suspended",
+  PAST_DUE = "Past Due", // Payment failed but subscription still active
 }
 
 // Subscription Cycle Intervals (in days)
@@ -319,6 +331,33 @@ export enum ReferralStatus {
   PENDING = "Pending",
   PAID = "Paid",
   COMPLETED = "Completed",
+}
+
+// Device Types for Header Banner
+export enum DeviceType {
+  WEB = "WEB",
+  MOBILE = "MOBILE",
+}
+
+// Notification Categories
+export enum NotificationCategory {
+  ORDER = "Order",
+  DELIVERY = "Delivery",
+  PROMOTIONAL = "Promotional",
+  SYSTEM = "System",
+  PAYMENT = "Payment",
+  SUBSCRIPTION = "Subscription",
+  MEMBERSHIP = "Membership",
+  REVIEW = "Review",
+  FAMILY = "Family",
+  SUPPORT = "Support",
+  GENERAL = "General",
+}
+
+// Notification Types
+export enum NotificationType {
+  NORMAL = "Normal",
+  REDIRECTION = "Redirection",
 }
 
 // Export all enum values as arrays for Mongoose schemas
@@ -370,3 +409,6 @@ export const SUBSCRIPTION_CYCLE_VALUES = [
 ];
 export const SESSION_STATUS_VALUES = Object.values(SessionStatus);
 export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
+export const DEVICE_TYPE_VALUES = Object.values(DeviceType);
+export const NOTIFICATION_CATEGORY_VALUES = Object.values(NotificationCategory);
+export const NOTIFICATION_TYPE_VALUES = Object.values(NotificationType);

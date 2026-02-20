@@ -38,6 +38,7 @@ class AdminUserController {
    * @query {String} [search] - Search by name or email
    * @query {Boolean} [isActive] - Filter by active status (true/false)
    * @query {String} [userType] - Filter by user type: "new" or "recurring"
+   * @query {String} [registrationDate] - Filter by registration date (format: YYYY-MM-DD, e.g., 2025-02-21)
    */
   getAllUsers = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
@@ -47,12 +48,14 @@ class AdminUserController {
         search,
         isActive,
         userType,
+        registrationDate,
       } = req.query as {
         page?: string;
         limit?: string;
         search?: string;
         isActive?: string | boolean;
         userType?: string;
+        registrationDate?: string;
       };
 
       const pageNum = parseInt(page, 10) || 1;
@@ -71,18 +74,62 @@ class AdminUserController {
         query.isActive = value === "true" || value === true || value === "1";
       }
 
+      // Filter by registration date
+      if (registrationDate) {
+        // Parse the date string (YYYY-MM-DD format)
+        const date = new Date(registrationDate);
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        // Filter by registeredAt or createdAt (fallback)
+        query.$or = [
+          {
+            registeredAt: {
+              $gte: startOfDay,
+              $lte: endOfDay,
+            },
+          },
+          {
+            registeredAt: { $exists: false },
+            createdAt: {
+              $gte: startOfDay,
+              $lte: endOfDay,
+            },
+          },
+        ];
+      }
+
       // Search functionality - only by name or email
       if (search) {
-        query.$or = [
-          { name: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-        ];
+        // If registrationDate filter exists, we need to combine $or conditions
+        if (query.$or) {
+          const registrationDateOr = query.$or;
+          query.$and = [
+            { $or: registrationDateOr },
+            {
+              $or: [
+                { firstName: { $regex: search, $options: "i" } },
+                { lastName: { $regex: search, $options: "i" } },
+                { email: { $regex: search, $options: "i" } },
+              ],
+            },
+          ];
+          delete query.$or;
+        } else {
+          query.$or = [
+            { firstName: { $regex: search, $options: "i" } },
+            { lastName: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ];
+        }
       }
 
       // Get all users first (for userType filtering)
       let allUsers = await User.find(query)
         .select(
-          "_id name email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+          "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
         )
         .sort({ createdAt: -1 })
         .lean();
@@ -255,7 +302,7 @@ class AdminUserController {
         // Recent orders (last 10)
         Orders.find({ userId })
           .select(
-            "_id orderNumber paymentMethod createdAt total items paymentStatus paymentId"
+            "_id orderNumber paymentMethod createdAt grandTotal items paymentStatus paymentId"
           )
           .populate("items.productId", "title productImage slug")
           .sort({ createdAt: -1 })
@@ -340,6 +387,7 @@ class AdminUserController {
           const product = item.productId || {};
           return {
             productName: item.name || product.title || "Unknown Product",
+            planDays: item.planDays || item.capsuleCount || null,
             productImage: product.productImage || null,
             productPrice: {
               amount: item.amount || 0,

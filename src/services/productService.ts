@@ -17,6 +17,7 @@ import { logger } from "../utils/logger";
 import { generateSlug, generateUniqueSlug } from "../utils/slug";
 import { fileStorageService } from "./fileStorageService";
 import mongoose, { PipelineStage } from "mongoose";
+import { I18nStringType, I18nTextType } from "../models/common.model";
 
 export type ProductSortOption =
   | "relevance"
@@ -133,6 +134,11 @@ interface CreateProductData {
       values: boolean[];
     }>;
   };
+  /** Optional FAQs for this product (max 15). Each item: { question, answer }. */
+  faqs?: Array<{
+    question: string | I18nStringType;
+    answer: string | I18nTextType;
+  }>;
   createdBy?: mongoose.Types.ObjectId;
 }
 
@@ -239,6 +245,11 @@ interface UpdateProductData {
       values: boolean[];
     }>;
   };
+  /** Optional FAQs for this product (max 15). Each item: { question, answer }. If provided, replaces all existing FAQs. */
+  faqs?: Array<{
+    question: string | I18nStringType;
+    answer: string | I18nTextType;
+  }>;
   updatedBy?: mongoose.Types.ObjectId;
 }
 
@@ -353,12 +364,29 @@ class ProductService {
       price,
       sachetPrices,
       variant,
+      createdBy,
     } = data;
+
+    const creatorId = createdBy?.toString() || "Unknown";
+    logger.info(`[Create Product] Starting product creation - Title: "${title}", CreatedBy: ${creatorId}, Variant: ${variant}`);
 
     // Generate slug from title if not provided
     let finalSlug = slug;
     if (!finalSlug) {
-      const baseSlug = generateSlug(title);
+      // Extract English title from I18n object if needed
+      let titleForSlug: string;
+      if (typeof title === "string") {
+        titleForSlug = title;
+      } else if (title && typeof title === "object" && "en" in title) {
+        titleForSlug = (title as I18nStringType).en || "";
+      } else {
+        titleForSlug = String(title || "");
+      }
+      
+      logger.info(`[Create Product] Slug not provided, generating from title: "${titleForSlug}"`);
+      const baseSlug = generateSlug(titleForSlug);
+      logger.debug(`[Create Product] Base slug generated: "${baseSlug}"`);
+      
       finalSlug = await generateUniqueSlug(
         baseSlug,
         async (slugToCheck: string) => {
@@ -369,29 +397,43 @@ class ProductService {
           return !!existing;
         }
       );
+      logger.info(`[Create Product] Unique slug generated: "${finalSlug}"`);
     } else {
+      logger.info(`[Create Product] Slug provided: "${finalSlug}", validating uniqueness`);
       // Check if provided slug already exists
       const existingProduct = await Products.findOne({
         slug: finalSlug,
         isDeleted: false,
       });
       if (existingProduct) {
+        logger.warn(`[Create Product] Product with slug "${finalSlug}" already exists`);
         throw new AppError("Product with this slug already exists", 409);
       }
+      logger.info(`[Create Product] Slug "${finalSlug}" is unique`);
     }
 
     // Validate standupPouchPrice if hasStandupPouch is true
     if (hasStandupPouch && !standupPouchPrice) {
+      logger.error(`[Create Product] Validation failed - hasStandupPouch is true but standupPouchPrice is missing`);
       throw new AppError(
         "standupPouchPrice is required when hasStandupPouch is true",
         400
       );
     }
 
+    if (hasStandupPouch) {
+      logger.info(`[Create Product] Standup pouch enabled, processing standupPouchPrice`);
+    }
+
     // Process sachetPrices: calculate savingsPercentage and totalAmount
-    const processedSachetPrices = sachetPrices
-      ? this.processSachetPrices(sachetPrices)
-      : sachetPrices;
+    let processedSachetPrices = sachetPrices;
+    if (sachetPrices) {
+      logger.info(`[Create Product] Processing sachetPrices`);
+      processedSachetPrices = this.processSachetPrices(sachetPrices);
+      logger.debug(`[Create Product] Sachet prices processed successfully`);
+    } else {
+      logger.info(`[Create Product] No sachetPrices provided`);
+    }
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
@@ -400,7 +442,8 @@ class ProductService {
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
-      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      logger.info(`[Create Product] Price not provided, deriving from sachetPrices.thirtyDays`);
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays as any; // Type assertion for discountedPrice property
       const baseAmount =
         thirtyDaysPrice.discountedPrice !== undefined
           ? thirtyDaysPrice.discountedPrice
@@ -410,6 +453,11 @@ class ProductService {
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
+      logger.info(`[Create Product] Derived price: ${finalPrice.amount} ${finalPrice.currency}`);
+    } else if (finalPrice) {
+      logger.info(`[Create Product] Using provided price: ${finalPrice.amount} ${finalPrice.currency}`);
+    } else {
+      logger.warn(`[Create Product] No price provided and cannot derive from sachetPrices`);
     }
 
     // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
@@ -419,27 +467,74 @@ class ProductService {
       typeof standupPouchPrice === "object" &&
       "oneTime" in standupPouchPrice
     ) {
+      logger.info(`[Create Product] Normalizing standupPouchPrice (unwrapping oneTime wrapper)`);
       // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
       normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
     }
 
     // Process standupPouchPrice: calculate savingsPercentage and totalAmount
-    const processedStandupPouchPrice = normalizedStandupPouchPrice
-      ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
-      : normalizedStandupPouchPrice;
+    let processedStandupPouchPrice = normalizedStandupPouchPrice;
+    if (normalizedStandupPouchPrice) {
+      logger.info(`[Create Product] Processing standupPouchPrice`);
+      processedStandupPouchPrice = this.processStandupPouchPrice(normalizedStandupPouchPrice);
+      logger.debug(`[Create Product] Standup pouch price processed successfully`);
+    }
+
+    // Log product data summary before creation
+    logger.info(`[Create Product] Creating product with - Slug: "${finalSlug}", Variant: ${variant}, HasStandupPouch: ${hasStandupPouch}, Categories: ${data.categories?.length || 0}, Ingredients: ${data.ingredients?.length || 0}, FAQs: ${data.faqs?.length || 0}`);
+
+    // Strip faqs from product data (FAQs are stored in product_faqs collection)
+    const { faqs: faqsInput, ...productData } = data;
 
     // Create product with generated slug and derived price
     const product = await Products.create({
-      ...data,
+      ...productData,
       price: finalPrice,
       sachetPrices: processedSachetPrices,
       standupPouchPrice: processedStandupPouchPrice,
       slug: finalSlug,
     });
 
-    logger.info(`Product created successfully: ${product.slug}`);
+    logger.info(`[Create Product] Product created successfully - ID: ${product._id}, Slug: "${product.slug}", Title: "${product.title}"`);
+
+    // Create optional product FAQs (max 15)
+    if (faqsInput && faqsInput.length > 0) {
+      const faqDocs = faqsInput.slice(0, 15).map((faq, index) => {
+        const question =
+          typeof faq.question === "string" ? { en: faq.question } : faq.question;
+        const answer =
+          typeof faq.answer === "string" ? { en: faq.answer } : faq.answer;
+        return {
+          productId: product._id,
+          question,
+          answer,
+          sortOrder: index,
+          status: FAQStatus.ACTIVE,
+          isActive: true,
+        };
+      });
+      await ProductFAQs.insertMany(faqDocs);
+      logger.info(`[Create Product] Created ${faqDocs.length} FAQs for product ${product._id}`);
+    }
+
+    // Update ingredient documents to add this product ID to their products array
+    const ingredientIds = product.ingredients || [];
+    if (ingredientIds.length > 0) {
+      logger.info(`[Create Product] Updating ${ingredientIds.length} ingredient documents to add product ID`);
+      try {
+        await ProductIngredients.updateMany(
+          { _id: { $in: ingredientIds } },
+          { $addToSet: { products: product._id } } // $addToSet prevents duplicates
+        );
+        logger.info(`[Create Product] Successfully updated ingredient documents with product ID`);
+      } catch (error: any) {
+        logger.error(`[Create Product] Failed to update ingredient documents: ${error.message}`, error);
+        // Don't throw error, just log it - product is already created
+      }
+    }
 
     // Populate categories for response
+    logger.debug(`[Create Product] Populating categories for product ${product._id}`);
     const populatedProduct = await Products.findById(product._id)
       .populate(
         "categories",
@@ -447,23 +542,50 @@ class ProductService {
       )
       .lean();
 
+    if (populatedProduct?.categories) {
+      logger.debug(`[Create Product] Populated ${populatedProduct.categories.length} categories`);
+    }
+
     // Get ingredient details and replace ingredients array with populated data
-    const ingredientDetails = await ProductIngredients.find({
-      _id: { $in: product.ingredients || [] },
-    })
-      .select("sId slug name description sortOrder icon image")
-      .lean();
+    // Reuse ingredientIds from above (already declared at line 477)
+    if (ingredientIds.length > 0) {
+      logger.debug(`[Create Product] Fetching ${ingredientIds.length} ingredient details`);
+      const ingredientDetails = await ProductIngredients.find({
+        _id: { $in: ingredientIds },
+      })
+        .select("sId slug name description sortOrder icon image")
+        .lean();
 
-    // Calculate monthly amounts for subscription prices in response
-    const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
-      ...populatedProduct,
-      ingredients: ingredientDetails, // Replace IDs with populated data
-    });
+      logger.debug(`[Create Product] Fetched ${ingredientDetails.length} ingredient details`);
 
-    return {
-      product: productWithMonthlyAmounts,
-      message: "Product created successfully",
-    };
+      // Calculate monthly amounts for subscription prices in response
+      const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+        ...populatedProduct,
+        ingredients: ingredientDetails, // Replace IDs with populated data
+      });
+
+      logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
+
+      return {
+        product: productWithMonthlyAmounts,
+        message: "Product created successfully",
+      };
+    } else {
+      logger.info(`[Create Product] No ingredients to fetch`);
+      
+      // Calculate monthly amounts for subscription prices in response
+      const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
+        ...populatedProduct,
+        ingredients: [], // No ingredients
+      });
+
+      logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
+
+      return {
+        product: productWithMonthlyAmounts,
+        message: "Product created successfully",
+      };
+    }
   }
 
   /**
@@ -574,6 +696,8 @@ class ProductService {
       healthGoals?: string[];
       ingredients?: string[];
       sortBy?: ProductSortOption;
+      /** When true (admin), do not filter by status — return all active and inactive products */
+      includeInactive?: boolean;
     }
   ): Promise<{ products: any[]; total: number }> {
     const {
@@ -585,6 +709,7 @@ class ProductService {
       healthGoals,
       ingredients,
       sortBy,
+      includeInactive,
     } = filters;
 
     // Base match: not deleted
@@ -592,13 +717,13 @@ class ProductService {
       isDeleted: false,
     };
 
-    // If status filter is provided, use it (admin can filter by status)
-    // Otherwise, show only active products (status = true)
-    if (status !== undefined) {
-      matchStage.status = status;
-    } else {
-      // Show only active products for regular users
-      matchStage.status = true;
+    // If includeInactive (admin), skip status filter; else if status provided use it, else only active
+    if (!includeInactive) {
+      if (status !== undefined) {
+        matchStage.status = status;
+      } else {
+        matchStage.status = true;
+      }
     }
 
     if (variant) {
@@ -664,134 +789,185 @@ class ProductService {
     if (search && search.trim().length > 0) {
       hasSearch = true;
       const searchTerm = search.trim();
-
-      // Try text search first, but also support regex fallback for better compatibility
-      // Build text search match with isDeleted filter
-      const textSearchMatch: Record<string, any> = {
-        $text: { $search: searchTerm },
-        isDeleted: false,
-      };
-
-      // Add other filters that can be combined with $text in same stage
-      if (status !== undefined) {
-        textSearchMatch.status = status;
-      } else {
-        // Show only active products for regular users
-        textSearchMatch.status = true;
-      }
-      if (variant) textSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined)
-        textSearchMatch.hasStandupPouch = hasStandupPouch;
-
-      // Text search must be first stage
-      // Use $or to support both text search and regex fallback
-      const searchConditions: any[] = [textSearchMatch];
-
-      // Add regex fallback for better search compatibility
       const escapedSearchTerm = searchTerm.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
-      const regexSearchMatch: Record<string, any> = {
-        $or: [
-          { title: { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
-          { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
-          { description: { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
-          { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
-          { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
-          { slug: { $regex: escapedSearchTerm, $options: "i" } },
-        ],
-        isDeleted: false,
-      };
 
-      if (status !== undefined) {
-        regexSearchMatch.status = status;
-      } else {
-        regexSearchMatch.status = true;
-      }
-      if (variant) regexSearchMatch.variant = variant;
-      if (hasStandupPouch !== undefined)
-        regexSearchMatch.hasStandupPouch = hasStandupPouch;
+      // When categories are provided, use regex search only (can't combine $text with $in easily)
+      // Otherwise, try text search first with regex fallback
+      const hasArrayFilters = categoryObjectIds.length > 0 || healthGoals?.length || ingredientIds.length > 0;
 
-      searchConditions.push(regexSearchMatch);
-
-      pipeline.push({
-        $match: {
-          $or: searchConditions,
-        },
-      });
-
-      // Add relevance score - use textScore if available, otherwise use regex match priority
-      pipeline.push({
-        $addFields: {
-          relevanceScore: {
-            $ifNull: [
-              { $meta: "textScore" },
-              {
-                $cond: [
-                  {
-                    $or: [
-                      {
-                        $regexMatch: {
-                          input: { $ifNull: ["$title", ""] },
-                          regex: escapedSearchTerm,
-                          options: "i",
-                        },
-                      },
-                      {
-                        $regexMatch: {
-                          input: { $ifNull: ["$title.en", ""] },
-                          regex: escapedSearchTerm,
-                          options: "i",
-                        },
-                      },
-                    ],
-                  },
-                  10,
-                  5,
-                ],
-              },
-            ],
-          },
-        },
-      });
-
-      // Apply array filters in separate stage (can't combine $in/$all with $text in same stage)
-      const arrayFilters: Record<string, any> = {};
-      if (categoryObjectIds.length > 0) {
-        arrayFilters.categories = {
-          $in: categoryObjectIds,
+      if (hasArrayFilters) {
+        // Use regex search only when array filters are present (categories, healthGoals, ingredients)
+        // This avoids MongoDB restrictions with $text and $in/$all in same pipeline
+        const regexSearchMatch: Record<string, any> = {
+          $or: [
+            { title: { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { description: { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+            { slug: { $regex: escapedSearchTerm, $options: "i" } },
+          ],
+          ...matchStage, // Include all base filters (status, variant, hasStandupPouch, etc.)
         };
-      }
-      if (healthGoals?.length) {
-        // Use $elemMatch with regex for array filters too
-        const escapedGoals = healthGoals.map((goal) => {
-          return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        pipeline.push({
+          $match: regexSearchMatch,
         });
 
-        const combinedRegex = escapedGoals.join("|");
-
-        arrayFilters.healthGoals = {
-          $elemMatch: {
-            $regex: combinedRegex,
-            $options: "i",
-          },
+        // Add relevance score for regex search (title can be string or I18n object - $regexMatch needs string input)
+        const titleAsString = {
+          $cond: [
+            { $eq: [{ $type: "$title" }, "string"] },
+            { $ifNull: ["$title", ""] },
+            { $ifNull: ["$title.en", ""] },
+          ],
         };
-      }
-      if (ingredientIds.length > 0) {
-        arrayFilters.ingredients = { $all: ingredientIds };
-      }
+        pipeline.push({
+          $addFields: {
+            relevanceScore: {
+              $cond: [
+                {
+                  $regexMatch: {
+                    input: titleAsString,
+                    regex: escapedSearchTerm,
+                    options: "i",
+                  },
+                },
+                10,
+                5,
+              ],
+            },
+          },
+        });
 
-      if (Object.keys(arrayFilters).length > 0) {
-        pipeline.push({ $match: arrayFilters });
+        // Apply array filters in separate stage
+        const arrayFilters: Record<string, any> = {};
+        if (categoryObjectIds.length > 0) {
+          arrayFilters.categories = {
+            $in: categoryObjectIds,
+          };
+        }
+        if (healthGoals?.length) {
+          // Use $elemMatch with regex for array filters too
+          const escapedGoals = healthGoals.map((goal) => {
+            return goal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          });
+
+          const combinedRegex = escapedGoals.join("|");
+
+          arrayFilters.healthGoals = {
+            $elemMatch: {
+              $regex: combinedRegex,
+              $options: "i",
+            },
+          };
+        }
+        if (ingredientIds.length > 0) {
+          arrayFilters.ingredients = { $all: ingredientIds };
+        }
+
+        if (Object.keys(arrayFilters).length > 0) {
+          pipeline.push({ $match: arrayFilters });
+        }
+      } else {
+        // No array filters - can use text search with regex fallback
+        // Build text search match with isDeleted filter
+        const textSearchMatch: Record<string, any> = {
+          $text: { $search: searchTerm },
+          isDeleted: false,
+        };
+
+        // Add other filters that can be combined with $text in same stage
+        if (!includeInactive) {
+          if (status !== undefined) {
+            textSearchMatch.status = status;
+          } else {
+            textSearchMatch.status = true;
+          }
+        }
+        if (variant) textSearchMatch.variant = variant;
+        if (hasStandupPouch !== undefined)
+          textSearchMatch.hasStandupPouch = hasStandupPouch;
+
+        // Add regex fallback for better search compatibility
+        const regexSearchMatch: Record<string, any> = {
+          $or: [
+            { title: { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "title.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { description: { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.en": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.nl": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.de": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.fr": { $regex: escapedSearchTerm, $options: "i" } },
+            { "description.es": { $regex: escapedSearchTerm, $options: "i" } },
+            { shortDescription: { $regex: escapedSearchTerm, $options: "i" } },
+            { slug: { $regex: escapedSearchTerm, $options: "i" } },
+          ],
+          isDeleted: false,
+        };
+
+        if (!includeInactive) {
+          if (status !== undefined) {
+            regexSearchMatch.status = status;
+          } else {
+            regexSearchMatch.status = true;
+          }
+        }
+        if (variant) regexSearchMatch.variant = variant;
+        if (hasStandupPouch !== undefined)
+          regexSearchMatch.hasStandupPouch = hasStandupPouch;
+
+        pipeline.push({
+          $match: {
+            $or: [textSearchMatch, regexSearchMatch],
+          },
+        });
+
+        // Add relevance score - use textScore if available, otherwise use regex match (title can be I18n object - $regexMatch needs string)
+        const titleAsString = {
+          $cond: [
+            { $eq: [{ $type: "$title" }, "string"] },
+            { $ifNull: ["$title", ""] },
+            { $ifNull: ["$title.en", ""] },
+          ],
+        };
+        pipeline.push({
+          $addFields: {
+            relevanceScore: {
+              $ifNull: [
+                { $meta: "textScore" },
+                {
+                  $cond: [
+                    {
+                      $regexMatch: {
+                        input: titleAsString,
+                        regex: escapedSearchTerm,
+                        options: "i",
+                      },
+                    },
+                    10,
+                    5,
+                  ],
+                },
+              ],
+            },
+          },
+        });
       }
     } else {
       // No search - apply all filters in first stage
@@ -822,14 +998,27 @@ class ProductService {
           as: "categories",
         },
       },
-      // Convert string ingredient IDs to ObjectIds and lookup
+      // Convert string ingredient IDs to ObjectIds and lookup (with error handling)
       {
         $addFields: {
           ingredientObjectIds: {
-            $map: {
-              input: { $ifNull: ["$ingredients", []] },
-              as: "id",
-              in: { $toObjectId: "$$id" },
+            $filter: {
+              input: {
+                $map: {
+                  input: { $ifNull: ["$ingredients", []] },
+                  as: "id",
+                  in: {
+                    $convert: {
+                      input: "$$id",
+                      to: "objectId",
+                      onError: null,
+                      onNull: null,
+                    },
+                  },
+                },
+              },
+              as: "objId",
+              cond: { $ne: ["$$objId", null] },
             },
           },
         },
@@ -841,13 +1030,15 @@ class ProductService {
           foreignField: "_id",
           pipeline: [
             {
+              $match: {
+                isDeleted: { $ne: true },
+              },
+            },
+            {
               $project: {
-                sId: 1,
-                slug: 1,
+                _id: 1,
                 name: 1,
                 description: 1,
-                sortOrder: 1,
-                icon: 1,
                 image: 1,
               },
             },
@@ -1145,11 +1336,26 @@ class ProductService {
     // Get ingredient details and replace ingredients array with populated data
     // Include image field (not icon, as ProductIngredients model has image field)
     // Always include image field even if null/empty for FE consistency
-    const ingredientDetails = await ProductIngredients.find({
-      _id: { $in: product.ingredients || [] },
-    })
-      .select("_id name description image")
-      .lean();
+    const ingredientIds = product.ingredients || [];
+    // Convert ingredient IDs to ObjectIds if they're strings
+    const ingredientObjectIds = ingredientIds
+      .filter((id: any) => id != null) // Filter out null/undefined
+      .map((id: any) => {
+        if (typeof id === 'string') {
+          return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+        }
+        return id instanceof mongoose.Types.ObjectId ? id : (mongoose.Types.ObjectId.isValid(id?.toString()) ? new mongoose.Types.ObjectId(id.toString()) : null);
+      })
+      .filter((id: any) => id != null); // Filter out invalid ObjectIds
+    
+    const ingredientDetails = ingredientObjectIds.length > 0
+      ? await ProductIngredients.find({
+          _id: { $in: ingredientObjectIds },
+          isDeleted: { $ne: true },
+        })
+          .select("_id name description image")
+          .lean()
+      : [];
 
     // Fetch product ingredients linked to this product (relationship is reversed)
     let linkedProductIngredients: any[] = [];
@@ -1164,7 +1370,7 @@ class ProductService {
 
     // Fetch product FAQs
     // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
-    const productFAQs = await ProductFAQs.find({
+    const rawFAQs = await ProductFAQs.find({
       productId: new mongoose.Types.ObjectId(productId),
       isDeleted: { $ne: true },
       isActive: true,
@@ -1174,10 +1380,24 @@ class ProductService {
       .sort({ sortOrder: 1 })
       .lean();
 
+    // Flatten question/answer from { en: "x" } to plain "x" for API response
+    const productFAQs = (rawFAQs || []).map((faq: any) => ({
+      _id: faq._id,
+      question: typeof faq.question === "string" ? faq.question : (faq.question?.en ?? ""),
+      answer: typeof faq.answer === "string" ? faq.answer : (faq.answer?.en ?? ""),
+      sortOrder: faq.sortOrder ?? 0,
+    }));
+
+    // Use productIngredientDetails as ingredients if ingredients array is empty
+    // This handles the case where ingredients are linked via reverse relationship
+    const finalIngredients = ingredientDetails.length > 0 
+      ? ingredientDetails 
+      : (linkedProductIngredients.length > 0 ? linkedProductIngredients : []);
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
-      ingredients: ingredientDetails, // Replace IDs with populated data
+      ingredients: finalIngredients, // Use populated ingredients or fallback to linked ingredients
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
@@ -1238,16 +1458,23 @@ class ProductService {
       .lean();
 
     // Fetch product FAQs
-    // Use FAQStatus.ACTIVE (which is "Active") instead of lowercase "active"
-    const productFAQs = await ProductFAQs.find({
+    const rawFAQsBySlug = await ProductFAQs.find({
       productId: product._id,
       isDeleted: { $ne: true },
       isActive: true,
-      status: FAQStatus.ACTIVE, // "Active" with capital A
+      status: FAQStatus.ACTIVE,
     })
       .select("_id question answer sortOrder")
       .sort({ sortOrder: 1 })
       .lean();
+
+    // Flatten question/answer from { en: "x" } to plain "x" for API response
+    const productFAQs = (rawFAQsBySlug || []).map((faq: any) => ({
+      _id: faq._id,
+      question: typeof faq.question === "string" ? faq.question : (faq.question?.en ?? ""),
+      answer: typeof faq.answer === "string" ? faq.answer : (faq.answer?.en ?? ""),
+      sortOrder: faq.sortOrder ?? 0,
+    }));
 
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
@@ -1340,7 +1567,7 @@ class ProductService {
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
-      const thirtyDaysPrice = processedSachetPrices.thirtyDays;
+      const thirtyDaysPrice = processedSachetPrices.thirtyDays as any; // Type assertion for discountedPrice property
       const baseAmount =
         thirtyDaysPrice.discountedPrice !== undefined
           ? thirtyDaysPrice.discountedPrice
@@ -1400,14 +1627,17 @@ class ProductService {
       });
     }
 
+    // Extract faqs from data (FAQs are stored in product_faqs collection, not in product doc)
+    const faqsInput = data.faqs;
+
     // Prepare update object - only include fields that are being updated (not undefined)
     const updateData: any = {
       updatedAt: new Date(),
     };
 
-    // Only include fields that are explicitly provided (not undefined)
+    // Only include fields that are explicitly provided (not undefined), excluding faqs
     Object.keys(data).forEach((key) => {
-      if (data[key as keyof UpdateProductData] !== undefined) {
+      if (key !== "faqs" && data[key as keyof UpdateProductData] !== undefined) {
         updateData[key] = data[key as keyof UpdateProductData];
       }
     });
@@ -1427,11 +1657,90 @@ class ProductService {
       updateData.price = finalPrice;
     }
 
+    // Handle ingredient updates: update ingredient documents if ingredients are being changed
+    if (data.ingredients !== undefined) {
+      const oldIngredientIds = (existingProduct.ingredients || []).map((id: any) => 
+        id.toString()
+      );
+      const newIngredientIds = (data.ingredients || []).map((id: string) => 
+        id.toString()
+      );
+
+      // Find ingredients to remove (in old but not in new)
+      const ingredientsToRemove = oldIngredientIds.filter(
+        (id: string) => !newIngredientIds.includes(id)
+      );
+      
+      // Find ingredients to add (in new but not in old)
+      const ingredientsToAdd = newIngredientIds.filter(
+        (id: string) => !oldIngredientIds.includes(id)
+      );
+
+      logger.info(`[Update Product] Ingredients changed - Removing from ${ingredientsToRemove.length} ingredients, Adding to ${ingredientsToAdd.length} ingredients`);
+
+      // Remove product ID from old ingredients
+      if (ingredientsToRemove.length > 0) {
+        try {
+          await ProductIngredients.updateMany(
+            { _id: { $in: ingredientsToRemove.map((id: string) => new mongoose.Types.ObjectId(id)) } },
+            { $pull: { products: new mongoose.Types.ObjectId(productId) } }
+          );
+          logger.info(`[Update Product] Removed product ID from ${ingredientsToRemove.length} ingredient documents`);
+        } catch (error: any) {
+          logger.error(`[Update Product] Failed to remove product ID from ingredients: ${error.message}`, error);
+        }
+      }
+
+      // Add product ID to new ingredients
+      if (ingredientsToAdd.length > 0) {
+        try {
+          await ProductIngredients.updateMany(
+            { _id: { $in: ingredientsToAdd.map((id: string) => new mongoose.Types.ObjectId(id)) } },
+            { $addToSet: { products: new mongoose.Types.ObjectId(productId) } } // $addToSet prevents duplicates
+          );
+          logger.info(`[Update Product] Added product ID to ${ingredientsToAdd.length} ingredient documents`);
+        } catch (error: any) {
+          logger.error(`[Update Product] Failed to add product ID to ingredients: ${error.message}`, error);
+        }
+      }
+    }
+
     // Update product with only provided fields
     await Products.findByIdAndUpdate(productId, updateData, {
       new: true,
       runValidators: true,
     });
+
+    // Handle FAQ updates: if faqs are provided, replace all existing FAQs
+    if (faqsInput !== undefined) {
+      if (faqsInput && faqsInput.length > 0) {
+        // Delete all existing FAQs for this product
+        await ProductFAQs.deleteMany({ productId: new mongoose.Types.ObjectId(productId) });
+        logger.info(`[Update Product] Deleted existing FAQs for product ${productId}`);
+
+        // Create new FAQs (max 15)
+        const faqDocs = faqsInput.slice(0, 15).map((faq, index) => {
+          const question =
+            typeof faq.question === "string" ? { en: faq.question } : faq.question;
+          const answer =
+            typeof faq.answer === "string" ? { en: faq.answer } : faq.answer;
+          return {
+            productId: new mongoose.Types.ObjectId(productId),
+            question,
+            answer,
+            sortOrder: index,
+            status: FAQStatus.ACTIVE,
+            isActive: true,
+          };
+        });
+        await ProductFAQs.insertMany(faqDocs);
+        logger.info(`[Update Product] Created ${faqDocs.length} new FAQs for product ${productId}`);
+      } else {
+        // If faqs is empty array, delete all FAQs
+        await ProductFAQs.deleteMany({ productId: new mongoose.Types.ObjectId(productId) });
+        logger.info(`[Update Product] Deleted all FAQs for product ${productId} (empty faqs array provided)`);
+      }
+    }
 
     // Delete old images asynchronously (don't wait for it)
     if (imagesToDelete.length > 0) {
@@ -1539,6 +1848,22 @@ class ProductService {
 
     // Delete associated assets
     await fileStorageService.deleteFileByUrl(product.productImage);
+
+    // Remove product ID from all ingredient documents
+    const ingredientIds = product.ingredients || [];
+    if (ingredientIds.length > 0) {
+      logger.info(`[Delete Product] Removing product ID from ${ingredientIds.length} ingredient documents`);
+      try {
+        await ProductIngredients.updateMany(
+          { _id: { $in: ingredientIds } },
+          { $pull: { products: new mongoose.Types.ObjectId(productId) } }
+        );
+        logger.info(`[Delete Product] Successfully removed product ID from ingredient documents`);
+      } catch (error: any) {
+        logger.error(`[Delete Product] Failed to remove product ID from ingredients: ${error.message}`, error);
+        // Don't throw error, continue with product deletion
+      }
+    }
 
     // Soft delete
     await Products.findByIdAndUpdate(productId, {
@@ -1651,13 +1976,21 @@ class ProductService {
       },
     ]);
 
-    const mapHealthGoals = (items?: Array<{ value: string }>) => {
+    const mapHealthGoals = (items?: Array<{ value: string | Record<string, string> }>) => {
       const goals = (items ?? []).map((item) => item.value);
+      // Normalize to string (healthGoals can be I18n object { en, nl, ... } or plain string)
+      const toStr = (v: string | Record<string, string> | undefined): string => {
+        if (v == null) return "";
+        if (typeof v === "string") return v;
+        if (typeof v === "object" && v !== null) return (v.en ?? v.nl ?? Object.values(v)[0] ?? "") as string;
+        return "";
+      };
       // Clean HTML tags from healthGoals for easier use
       const cleanedGoals = goals
         .map((goal) => {
+          const str = toStr(goal);
           // Remove HTML tags like <p> and </p>
-          let cleaned = goal.replace(/<[^>]*>/g, "");
+          let cleaned = str.replace(/<[^>]*>/g, "");
           // Remove escaped quotes like \"Bone Health\"
           cleaned = cleaned.replace(/\\"/g, '"').replace(/^"|"$/g, "");
           return cleaned.trim();

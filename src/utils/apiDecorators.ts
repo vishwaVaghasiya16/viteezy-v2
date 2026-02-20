@@ -96,36 +96,36 @@ export const validationWrapper = (validationRules: any[]) => {
 /**
  * Rate limiting wrapper
  */
-export const rateLimitWrapper = (maxRequests: number, windowMs: number) => {
-  const requests = new Map<string, { count: number; resetTime: number }>();
+// export const rateLimitWrapper = (maxRequests: number, windowMs: number) => {
+//   const requests = new Map<string, { count: number; resetTime: number }>();
 
-  return (req: Request, res: Response, next: NextFunction) => {
-    const key = req.ip || 'unknown';
-    const now = Date.now();
-    const windowStart = now - windowMs;
+//   return (req: Request, res: Response, next: NextFunction) => {
+//     const key = req.ip || 'unknown';
+//     const now = Date.now();
+//     const windowStart = now - windowMs;
 
-    // Clean old entries
-    for (const [ip, data] of requests.entries()) {
-      if (data.resetTime < windowStart) {
-        requests.delete(ip);
-      }
-    }
+//     // Clean old entries
+//     for (const [ip, data] of requests.entries()) {
+//       if (data.resetTime < windowStart) {
+//         requests.delete(ip);
+//       }
+//     }
 
-    const userRequests = requests.get(key);
+//     const userRequests = requests.get(key);
 
-    if (!userRequests) {
-      requests.set(key, { count: 1, resetTime: now });
-      return next();
-    }
+//     if (!userRequests) {
+//       requests.set(key, { count: 1, resetTime: now });
+//       return next();
+//     }
 
-    if (userRequests.count >= maxRequests) {
-      return res.apiError('Too many requests', 429);
-    }
+//     if (userRequests.count >= maxRequests) {
+//       return res.apiError('Too many requests', 429);
+//     }
 
-    userRequests.count++;
-    next();
-  };
-};
+//     userRequests.count++;
+//     next();
+//   };
+// };
 
 /**
  * Cache wrapper for response caching

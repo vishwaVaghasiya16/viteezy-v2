@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
+import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { FaqCategories, FAQs } from "@/models/cms";
 import { generateSlug } from "@/utils/slug";
@@ -89,11 +89,10 @@ class AdminFaqCategoryController {
   );
 
   /**
-   * Get paginated FAQ categories (Admin view)
+   * Get all FAQ categories (Admin view)
    */
   getCategories = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { page, limit, skip, sort } = getPaginationOptions(req);
       const { search, status } = req.query as {
         search?: string;
         status?: "active" | "inactive" | "all";
@@ -113,27 +112,22 @@ class AdminFaqCategoryController {
         filter.$or = [
           { "title.en": { $regex: search, $options: "i" } },
           { "title.nl": { $regex: search, $options: "i" } },
+          { "title.de": { $regex: search, $options: "i" } },
+          { "title.fr": { $regex: search, $options: "i" } },
+          { "title.es": { $regex: search, $options: "i" } },
           { slug: { $regex: search, $options: "i" } },
         ];
       }
 
       const sortOptions = {
         createdAt: -1 as 1 | -1,
-        ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      const [categories, total] = await Promise.all([
-        FaqCategories.find(filter)
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        FaqCategories.countDocuments(filter),
-      ]);
+      const categories = await FaqCategories.find(filter)
+        .sort(sortOptions)
+        .lean();
 
-      const pagination = getPaginationMeta(page, limit, total);
-
-      res.apiPaginated(categories, pagination, "FAQ categories retrieved");
+      res.apiSuccess(categories, "FAQ categories retrieved");
     }
   );
 

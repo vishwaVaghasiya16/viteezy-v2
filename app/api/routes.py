@@ -225,6 +225,7 @@ async def create_session(
     
     Returns a standardized success response with session information.
     """
+    logger.info(f"[Create Session] Request received - payload: {payload}")
     try:
         user_id = payload.user_id if payload else None
         metadata = (payload.metadata if payload else None) or {}
@@ -236,16 +237,20 @@ async def create_session(
         else:
             metadata["is_registered"] = False
         
+        logger.info(f"[Create Session] Creating session with metadata: {metadata}, user_id: {user_id}")
         session = await chat_service.create_session(metadata=metadata, user_id=user_id)
+        logger.info(f"[Create Session] Session created successfully: {session.id}")
         
         session_response = SessionResponse(session_id=session.id, created_at=session.created_at)
         # Serialize datetime to ISO format string
         session_data = session_response.model_dump(mode='json')
-        return SessionCreateResponse(
+        response = SessionCreateResponse(
             success=True,
             message="Session created successfully",
             data=session_data
         )
+        logger.info(f"[Create Session] Returning response: {response.model_dump()}")
+        return response
     except PydanticValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -265,6 +270,7 @@ async def create_session(
             ).model_dump()
         ) from exc
     except Exception as e:
+        logger.error(f"[Create Session] Exception occurred: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=SessionCreateResponse(
@@ -272,7 +278,7 @@ async def create_session(
                 message="Failed to create session",
                 data=None
             ).model_dump()
-        )
+        ) from e
 
 
 @router.get(
@@ -564,21 +570,27 @@ async def chat(
     """
     from datetime import datetime, timezone
     
+    logger.info(f"[Chat Endpoint] Request received for session: {payload.session_id}")
     try:
         # Validate and sanitize input
         payload.message = sanitize_message(payload.message)
         payload.session_id = validate_session_id(payload.session_id)
         
+        logger.info(f"[Chat Endpoint] Calling chat_service.handle_message for session: {payload.session_id}")
         chat_response = await chat_service.handle_message(payload)
+        logger.info(f"[Chat Endpoint] chat_service.handle_message returned for session: {payload.session_id}")
+        
         # Serialize the response and add timestamp inside data
         chat_data = chat_response.model_dump(mode='json')
         chat_data["timestamp"] = datetime.now(timezone.utc).isoformat()
         
-        return ChatResponseCustom(
+        response = ChatResponseCustom(
             success=True,
             message="Message processed successfully",
             data=chat_data
         )
+        logger.info(f"[Chat Endpoint] Returning response for session: {payload.session_id}")
+        return response
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -677,10 +689,26 @@ async def get_current_question(
         ) from e
 
 
+def _i18n_to_string(value: dict | str | None, lang: str) -> str:
+    """Return a single-language string from I18n field (dict with en/nl/de/fr/es) or plain string."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        v = value.get(lang) or value.get("en") or next((x for x in value.values() if x), None)
+        return str(v) if v is not None else ""
+    return ""
+
+
+_SUPPORTED_LANGS = frozenset({"en", "nl", "de", "fr", "es"})
+
+
 class UserLoginRequest(BaseModel):
     """Request model for user login verification."""
     user_id: str | None = Field(None, description="User ID to check (can be null or empty)")
     session_id: str = Field(..., description="Session ID to retrieve product recommendations from")
+    lang: str | None = Field(None, description="Language code for product fields (en, nl, de, fr, es). Default: en.")
 
 
 @router.post(
@@ -705,7 +733,8 @@ async def check_user_login(
     """
     from datetime import datetime, timezone
     from bson import ObjectId
-        
+    
+    logger.info(f"[UserLogin] Request received - user_id: {request.user_id}, session_id: {request.session_id}")
     try:
         # Check if user_id is null or empty
         if not request.user_id or request.user_id.strip() == "":
@@ -916,30 +945,22 @@ async def check_user_login(
                                 
                                 logging.info(f"Found {len(product_docs)} products from database")
                                 
-                                # Format product data
+                                # Language for product fields: request lang or default en
+                                user_lang = (request.lang or "en").strip().lower()
+                                if user_lang not in _SUPPORTED_LANGS:
+                                    user_lang = "en"
+                                
+                                # Format product data (single-language title and shortDescription)
                                 for product_doc in product_docs:
-                                    # Extract product _id
                                     product_id = str(product_doc.get("_id", ""))
-                                    
-                                    # Extract title.en
-                                    title_obj = product_doc.get("title", {})
-                                    if isinstance(title_obj, dict):
-                                        title_en = title_obj.get("en", "")
-                                    elif isinstance(title_obj, str):
-                                        title_en = title_obj
-                                    else:
-                                        title_en = ""
-                                    
-                                    # Extract shortDescription
-                                    short_description = product_doc.get("shortDescription", "")
-                                    
-                                    # Extract productImage
-                                    product_image = product_doc.get("productImage", "")
+                                    title_str = _i18n_to_string(product_doc.get("title"), user_lang)
+                                    short_desc_str = _i18n_to_string(product_doc.get("shortDescription"), user_lang)
+                                    product_image = product_doc.get("productImage", "") or ""
                                     
                                     products_data.append({
                                         "id": product_id,
-                                        "title": title_en,  # Return as string (en value), not object
-                                        "shortDescription": short_description,
+                                        "title": title_str,
+                                        "shortDescription": short_desc_str,
                                         "productImage": product_image
                                     })
                                     
@@ -1076,6 +1097,7 @@ async def link_session_to_user(
     from datetime import datetime, timezone
     from bson import ObjectId
     
+    logger.info(f"[Link Session] Request received - user_id: {request.user_id}, session_id: {request.session_id}")
     try:
         # Validate session_id
         try:
@@ -1152,11 +1174,13 @@ async def link_session_to_user(
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
-            return LinkSessionResponseCustom(
+            response = LinkSessionResponseCustom(
                 success=True,
                 message="Session Linked Successfully",
                 data=link_data
             )
+            logger.info(f"[Link Session] Returning success response for session: {request.session_id}")
+            return response
         else:
             # Normalize user_id for consistent response format
             from app.utils.validation import normalize_user_id

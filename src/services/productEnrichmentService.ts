@@ -49,8 +49,9 @@ const getTranslatedText = (
 
 /**
  * Transform product to use user's language
+ * Exported for use in common translation service
  */
-const transformProductForLanguage = (
+export const transformProductForLanguage = (
   product: any,
   lang: SupportedLanguage
 ): any => {
@@ -79,27 +80,199 @@ const transformProductForLanguage = (
     variantsValue = product.variants;
   }
 
+  // Transform shortDescription
+  const transformedShortDescription = product.shortDescription
+    ? getTranslatedString(product.shortDescription, lang)
+    : product.shortDescription;
+
+  // Transform benefits array
+  const transformedBenefits = product.benefits
+    ? product.benefits.map((benefit: any) => getTranslatedString(benefit, lang))
+    : product.benefits;
+
+  // Transform healthGoals array
+  const transformedHealthGoals = product.healthGoals
+    ? product.healthGoals.map((goal: any) => getTranslatedString(goal, lang))
+    : product.healthGoals;
+
+  // Transform comparisonSection
+  let transformedComparisonSection = product.comparisonSection;
+  if (product.comparisonSection) {
+    transformedComparisonSection = {
+      ...product.comparisonSection,
+      title: getTranslatedString(product.comparisonSection.title, lang),
+      columns: product.comparisonSection.columns
+        ? product.comparisonSection.columns.map((col: any) =>
+            getTranslatedString(col, lang)
+          )
+        : product.comparisonSection.columns,
+      rows: product.comparisonSection.rows
+        ? product.comparisonSection.rows.map((row: any) => ({
+            ...row,
+            label: getTranslatedString(row.label, lang),
+          }))
+        : product.comparisonSection.rows,
+    };
+  }
+
+  // Transform specification
+  let transformedSpecification = product.specification;
+  if (product.specification) {
+    transformedSpecification = {
+      ...product.specification,
+      main_title: getTranslatedString(product.specification.main_title, lang),
+      items: product.specification.items
+        ? product.specification.items.map((item: any) => ({
+            ...item,
+            title: getTranslatedString(item.title, lang),
+            descr: getTranslatedText(item.descr, lang),
+          }))
+        : product.specification.items,
+    };
+  }
+
+  // Transform sachetPrices features
+  let transformedSachetPrices = product.sachetPrices;
+  if (product.sachetPrices) {
+    transformedSachetPrices = { ...product.sachetPrices };
+
+    // Transform features in subscription periods
+    const periods = ["thirtyDays", "sixtyDays", "ninetyDays", "oneEightyDays"];
+    periods.forEach((period) => {
+      if (transformedSachetPrices[period]?.features) {
+        transformedSachetPrices[period] = {
+          ...transformedSachetPrices[period],
+          features: transformedSachetPrices[period].features.map((feature: any) =>
+            getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    });
+
+    // Transform features in oneTime options
+    if (transformedSachetPrices.oneTime) {
+      transformedSachetPrices.oneTime = { ...transformedSachetPrices.oneTime };
+
+      if (transformedSachetPrices.oneTime.count30?.features) {
+        transformedSachetPrices.oneTime.count30 = {
+          ...transformedSachetPrices.oneTime.count30,
+          features: transformedSachetPrices.oneTime.count30.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+
+      if (transformedSachetPrices.oneTime.count60?.features) {
+        transformedSachetPrices.oneTime.count60 = {
+          ...transformedSachetPrices.oneTime.count60,
+          features: transformedSachetPrices.oneTime.count60.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    }
+  }
+
+  // Transform standupPouchPrice features
+  let transformedStandupPouchPrice = product.standupPouchPrice;
+  if (product.standupPouchPrice) {
+    // Check if it's the count30/count60 structure
+    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+      transformedStandupPouchPrice = { ...product.standupPouchPrice };
+
+      if (transformedStandupPouchPrice.count30?.features) {
+        transformedStandupPouchPrice.count30 = {
+          ...transformedStandupPouchPrice.count30,
+          features: transformedStandupPouchPrice.count30.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+
+      if (transformedStandupPouchPrice.count60?.features) {
+        transformedStandupPouchPrice.count60 = {
+          ...transformedStandupPouchPrice.count60,
+          features: transformedStandupPouchPrice.count60.features.map(
+            (feature: any) => getTranslatedString(feature, lang)
+          ),
+        };
+      }
+    }
+  }
+
   return {
     ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
     description: getTranslatedText(product.description, lang),
+    shortDescription: transformedShortDescription,
+    benefits: transformedBenefits,
+    healthGoals: transformedHealthGoals,
     nutritionInfo: getTranslatedText(product.nutritionInfo, lang),
     howToUse: getTranslatedText(product.howToUse, lang),
+    comparisonSection: transformedComparisonSection,
+    specification: transformedSpecification,
+    sachetPrices: transformedSachetPrices,
+    standupPouchPrice: transformedStandupPouchPrice,
     variants: variantsValue,
     ingredients:
-      product.ingredients?.map((ingredient: any) => ({
-        ...ingredient,
-        name: getTranslatedString(ingredient.name, lang),
-        description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || undefined,
-      })) || [],
+      product.ingredients && Array.isArray(product.ingredients) && product.ingredients.length > 0
+        ? product.ingredients
+            .filter((ingredient: any) => {
+              // Filter out IDs (strings or ObjectIds) - only keep populated objects
+              return ingredient && typeof ingredient === 'object' && ingredient._id;
+            })
+            .map((ingredient: any) => ({
+              _id: ingredient._id,
+              name: getTranslatedString(ingredient.name, lang),
+              description: getTranslatedText(ingredient.description, lang),
+              image: ingredient.image || null, // Always include image field, null if not present
+            }))
+        : [],
     categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
+      product.categories?.map((category: any) => {
+        // Normalize image field - return as object { type, url, sortOrder }
+        let normalizedImage: { type: string; url: string; sortOrder: number } | null = null;
+        if (category.image) {
+          if (typeof category.image === 'string') {
+            normalizedImage = { type: 'image', url: category.image, sortOrder: 0 };
+          } else if (typeof category.image === 'object' && category.image.url) {
+            normalizedImage = {
+              type: category.image.type || 'image',
+              url: category.image.url,
+              sortOrder: category.image.sortOrder ?? 0,
+            };
+          }
+        }
+
+        // Normalize icon field - ensure it's a string or null
+        let normalizedIcon: string | null = null;
+        if (category.icon) {
+          if (typeof category.icon === 'string') {
+            normalizedIcon = category.icon;
+          } else if (typeof category.icon === 'object' && category.icon.url) {
+            normalizedIcon = category.icon.url;
+          }
+        }
+
+        return {
+          _id: category._id,
+          slug: category.slug,
+          name: getTranslatedString(category.name, lang),
+          description: getTranslatedText(category.description, lang),
+          sortOrder: category.sortOrder || 0,
+          icon: normalizedIcon,
+          image: normalizedImage,
+          productCount: category.productCount || 0,
+        };
+      }) || [],
+    // Transform FAQs: flatten question/answer from { en: "12" } to plain "12"
+    faqs:
+      product.faqs?.map((faq: any) => ({
+        _id: faq._id,
+        question: getTranslatedString(faq.question, lang),
+        answer: getTranslatedText(faq.answer, lang),
+        sortOrder: faq.sortOrder ?? 0,
+      })) ?? [],
   };
 };
 

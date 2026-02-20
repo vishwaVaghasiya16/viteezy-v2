@@ -32,19 +32,58 @@ router.post(
       { name: "heroSection_video_url", maxCount: 1 },
       { name: "heroBackgroundImage", maxCount: 1 },
       { name: "heroPrimaryCTAImages", maxCount: 3 },
+      { name: "heroPrimaryCTAImages_0", maxCount: 1 },
+      { name: "heroPrimaryCTAImages_1", maxCount: 1 },
+      { name: "heroPrimaryCTAImages_2", maxCount: 1 },
       { name: "membershipBackgroundImage", maxCount: 1 },
       { name: "missionBackgroundImage", maxCount: 1 },
       { name: "communityBackgroundImage", maxCount: 1 },
-      { name: "howItWorksStepImages", maxCount: 10 },
+      { name: "howItWorksStepImages_0", maxCount: 1 },
+      { name: "howItWorksStepImages_1", maxCount: 1 },
+      { name: "howItWorksStepImages_2", maxCount: 1 },
+      { name: "howItWorksStepImages_3", maxCount: 1 },
+      { name: "howItWorksStepImages_4", maxCount: 1 },
+      { name: "howItWorksStepImages_5", maxCount: 1 },
+      { name: "howItWorksStepImages_6", maxCount: 1 },
+      { name: "howItWorksStepImages_7", maxCount: 1 },
+      { name: "howItWorksStepImages_8", maxCount: 1 },
+      { name: "howItWorksStepImages_9", maxCount: 1 },
+      { name: "designedByScienceStepImages_0", maxCount: 1 },
+      { name: "designedByScienceStepImages_1", maxCount: 1 },
+      { name: "designedByScienceStepImages_2", maxCount: 1 },
+      { name: "designedByScienceStepImages_3", maxCount: 1 },
+      { name: "designedByScienceStepImages_4", maxCount: 1 },
+      { name: "designedByScienceStepImages_5", maxCount: 1 },
+      { name: "designedByScienceStepImages_6", maxCount: 1 },
+      { name: "designedByScienceStepImages_7", maxCount: 1 },
+      { name: "designedByScienceStepImages_8", maxCount: 1 },
+      { name: "designedByScienceStepImages_9", maxCount: 1 },
       { name: "designedByScienceStepImages", maxCount: 10 },
+      { name: "featureIcons_0", maxCount: 1 },
+      { name: "featureIcons_1", maxCount: 1 },
+      { name: "featureIcons_2", maxCount: 1 },
+      { name: "featureIcons_3", maxCount: 1 },
+      { name: "featureIcons_4", maxCount: 1 },
+      { name: "featureIcons_5", maxCount: 1 },
+      { name: "featureIcons_6", maxCount: 1 },
+      { name: "featureIcons_7", maxCount: 1 },
+      { name: "featureIcons_8", maxCount: 1 },
+      { name: "featureIcons_9", maxCount: 1 },
+      // Keep backward compatibility with featureIcons (non-indexed)
       { name: "featureIcons", maxCount: 10 },
+      // Support indexed membershipSection benefits icons: membershipSection_benefits_0_icon, etc.
+      { name: "membershipSection_benefits_0_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_1_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_2_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_3_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_4_icon", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons`,
+                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages (or heroPrimaryCTAImages_0/1/2), membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages (or designedByScienceStepImages_0..9), featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
                 400
               )
             );
@@ -89,19 +128,58 @@ router.put(
       { name: "heroSection_video_url", maxCount: 1 },
       { name: "heroBackgroundImage", maxCount: 1 },
       { name: "heroPrimaryCTAImages", maxCount: 3 },
+      { name: "heroPrimaryCTAImages_0", maxCount: 1 },
+      { name: "heroPrimaryCTAImages_1", maxCount: 1 },
+      { name: "heroPrimaryCTAImages_2", maxCount: 1 },
       { name: "membershipBackgroundImage", maxCount: 1 },
       { name: "missionBackgroundImage", maxCount: 1 },
       { name: "communityBackgroundImage", maxCount: 1 },
-      { name: "howItWorksStepImages", maxCount: 10 },
+      { name: "howItWorksStepImages_0", maxCount: 1 },
+      { name: "howItWorksStepImages_1", maxCount: 1 },
+      { name: "howItWorksStepImages_2", maxCount: 1 },
+      { name: "howItWorksStepImages_3", maxCount: 1 },
+      { name: "howItWorksStepImages_4", maxCount: 1 },
+      { name: "howItWorksStepImages_5", maxCount: 1 },
+      { name: "howItWorksStepImages_6", maxCount: 1 },
+      { name: "howItWorksStepImages_7", maxCount: 1 },
+      { name: "howItWorksStepImages_8", maxCount: 1 },
+      { name: "howItWorksStepImages_9", maxCount: 1 },
+      { name: "designedByScienceStepImages_0", maxCount: 1 },
+      { name: "designedByScienceStepImages_1", maxCount: 1 },
+      { name: "designedByScienceStepImages_2", maxCount: 1 },
+      { name: "designedByScienceStepImages_3", maxCount: 1 },
+      { name: "designedByScienceStepImages_4", maxCount: 1 },
+      { name: "designedByScienceStepImages_5", maxCount: 1 },
+      { name: "designedByScienceStepImages_6", maxCount: 1 },
+      { name: "designedByScienceStepImages_7", maxCount: 1 },
+      { name: "designedByScienceStepImages_8", maxCount: 1 },
+      { name: "designedByScienceStepImages_9", maxCount: 1 },
       { name: "designedByScienceStepImages", maxCount: 10 },
+      { name: "featureIcons_0", maxCount: 1 },
+      { name: "featureIcons_1", maxCount: 1 },
+      { name: "featureIcons_2", maxCount: 1 },
+      { name: "featureIcons_3", maxCount: 1 },
+      { name: "featureIcons_4", maxCount: 1 },
+      { name: "featureIcons_5", maxCount: 1 },
+      { name: "featureIcons_6", maxCount: 1 },
+      { name: "featureIcons_7", maxCount: 1 },
+      { name: "featureIcons_8", maxCount: 1 },
+      { name: "featureIcons_9", maxCount: 1 },
+      // Keep backward compatibility with featureIcons (non-indexed)
       { name: "featureIcons", maxCount: 10 },
+      // Support indexed membershipSection benefits icons: membershipSection_benefits_0_icon, etc.
+      { name: "membershipSection_benefits_0_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_1_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_2_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_3_icon", maxCount: 1 },
+      { name: "membershipSection_benefits_4_icon", maxCount: 1 },
     ])(req, res, (err: any) => {
       if (err) {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
             return next(
               new AppError(
-                `Unexpected file field: ${err.field}. Allowed fields are: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages, membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages, designedByScienceStepImages, featureIcons`,
+                `Unexpected file field: ${err.field}. Allowed fields include: heroSection_image_url, heroSection_video_url, heroBackgroundImage, heroPrimaryCTAImages (or heroPrimaryCTAImages_0/1/2), membershipBackgroundImage, missionBackgroundImage, communityBackgroundImage, howItWorksStepImages_0..9, designedByScienceStepImages (or designedByScienceStepImages_0..9), featureIcons, featureIcons_0..9, membershipSection_benefits_0_icon..4_icon`,
                 400
               )
             );

@@ -28,7 +28,10 @@ export const createCouponSchema = Joi.object(
       .required()
       .label("Coupon code"),
     name: i18nStringSchema.label("Coupon name"),
-    description: i18nStringSchema.label("Coupon description"),
+    description: Joi.alternatives()
+      .try(i18nStringSchema, Joi.string().allow("", null))
+      .optional()
+      .label("Coupon description"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .required()
@@ -53,17 +56,49 @@ export const createCouponSchema = Joi.object(
       .label("Max discount amount"),
     usageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .label("Max global usage"),
     userUsageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .label("Max usage per user"),
-    validFrom: Joi.date().optional().label("Valid from date"),
+    validFrom: Joi.date()
+      .optional()
+      .custom((value, helpers) => {
+        // If validFrom is provided, it must be today or a future date
+        if (value) {
+          const now = new Date();
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const valueDate = new Date(value);
+          const valueStart = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
+          if (valueStart < todayStart) {
+            return helpers.error("date.min", {
+              message: "Valid from date must be today or a future date",
+            });
+          }
+        }
+        return value;
+      })
+      .label("Valid from date"),
     validUntil: Joi.date()
       .optional()
+      .custom((value, helpers) => {
+        // If validUntil is provided, it must be today or a future date
+        if (value) {
+          const now = new Date();
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const valueDate = new Date(value);
+          const valueStart = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
+          if (valueStart < todayStart) {
+            return helpers.error("date.min", {
+              message: "Expiry date must be today or a future date",
+            });
+          }
+        }
+        return value;
+      })
       .label("Expiry date")
       .when("validFrom", {
         is: Joi.exist(),
@@ -73,6 +108,11 @@ export const createCouponSchema = Joi.object(
     isActive: Joi.boolean().optional().label("Is active"),
     isRecurring: Joi.boolean().optional().label("Is recurring"),
     oneTimeUse: Joi.boolean().optional().label("One time use"),
+    recurringMonths: Joi.array()
+      .items(Joi.number().integer().min(1).max(12))
+      .optional()
+      .allow(null)
+      .label("Recurring months"),
     applicableProducts: Joi.array()
       .items(objectIdSchema)
       .optional()
@@ -111,7 +151,10 @@ export const updateCouponSchema = Joi.object(
       .optional()
       .label("Coupon code"),
     name: i18nStringSchema.label("Coupon name"),
-    description: i18nStringSchema.label("Coupon description"),
+    description: Joi.alternatives()
+      .try(i18nStringSchema, Joi.string().allow("", null))
+      .optional()
+      .label("Coupon description"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .optional()
@@ -141,20 +184,54 @@ export const updateCouponSchema = Joi.object(
       .label("Max discount amount"),
     usageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .allow(null)
       .label("Max global usage"),
     userUsageLimit: Joi.number()
       .integer()
-      .min(1)
+      .min(0)
       .optional()
       .allow(null)
       .label("Max usage per user"),
-    validFrom: Joi.date().optional().allow(null).label("Valid from date"),
+    // When editing, if validFrom or validUntil are provided, they must be future dates
+    validFrom: Joi.date()
+      .optional()
+      .allow(null)
+      .custom((value, helpers) => {
+        // If validFrom is provided during update, it must be today or a future date
+        if (value) {
+          const now = new Date();
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const valueDate = new Date(value);
+          const valueStart = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
+          if (valueStart < todayStart) {
+            return helpers.error("date.min", {
+              message: "Valid from date must be today or a future date",
+            });
+          }
+        }
+        return value;
+      })
+      .label("Valid from date"),
     validUntil: Joi.date()
       .optional()
       .allow(null)
+      .custom((value, helpers) => {
+        // If validUntil is provided during update, it must be today or a future date
+        if (value) {
+          const now = new Date();
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const valueDate = new Date(value);
+          const valueStart = new Date(valueDate.getFullYear(), valueDate.getMonth(), valueDate.getDate());
+          if (valueStart < todayStart) {
+            return helpers.error("date.min", {
+              message: "Expiry date must be today or a future date",
+            });
+          }
+        }
+        return value;
+      })
       .label("Expiry date")
       .when("validFrom", {
         is: Joi.exist(),
@@ -164,6 +241,11 @@ export const updateCouponSchema = Joi.object(
     isActive: Joi.boolean().optional().label("Is active"),
     isRecurring: Joi.boolean().optional().label("Is recurring"),
     oneTimeUse: Joi.boolean().optional().label("One time use"),
+    recurringMonths: Joi.array()
+      .items(Joi.number().integer().min(1).max(12))
+      .optional()
+      .allow(null)
+      .label("Recurring months"),
     applicableProducts: Joi.array()
       .items(objectIdSchema)
       .optional()

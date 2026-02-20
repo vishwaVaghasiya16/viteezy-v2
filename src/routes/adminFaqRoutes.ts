@@ -5,13 +5,14 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminFaqController } from "@/controllers/adminFaqController";
 import {
   createFaqSchema,
   updateFaqSchema,
   faqIdParamsSchema,
 } from "@/validation/adminFaqValidation";
-import { paginationQuerySchema } from "../validation/commonValidation";
 
 const router = Router();
 
@@ -23,16 +24,25 @@ router.use(authorize("Admin"));
  * @desc Create a new FAQ
  * @access Admin
  */
-router.post("/", validateJoi(createFaqSchema), adminFaqController.createFaq);
+router.post(
+  "/",
+  autoTranslateMiddleware("faqs"), // Auto-translate English to all languages
+  validateJoi(createFaqSchema),
+  adminFaqController.createFaq
+);
 
 /**
  * @route GET /api/v1/admin/faqs
- * @desc Get paginated list of FAQs
+ * @desc Get FAQs grouped by category
  * @access Admin
+ * @query {String} [status] - Filter by status: "Active", "Inactive", "Draft"
+ * @query {String} [search] - Search by question or tags
+ * @query {String} [categoryId] - Filter by specific category ID
+ * @returns {Object} { categories: Array<{ category: Object, faqs: Array }>, total: Number }
  */
 router.get(
   "/",
-  validateQuery(paginationQuerySchema),
+  transformResponseMiddleware("faqs"), // Detects language from admin token and transforms I18n fields to single language strings
   adminFaqController.getFaqs
 );
 
@@ -43,6 +53,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("faqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(faqIdParamsSchema),
   adminFaqController.getFaqById
 );
@@ -54,6 +65,7 @@ router.get(
  */
 router.put(
   "/:id",
+  autoTranslateMiddleware("faqs"), // Auto-translate English to all languages
   validateParams(faqIdParamsSchema),
   validateJoi(updateFaqSchema),
   adminFaqController.updateFaq

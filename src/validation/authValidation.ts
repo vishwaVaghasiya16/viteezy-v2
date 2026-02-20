@@ -243,6 +243,13 @@ export const forgotPasswordSchema = Joi.object(
   withFieldLabels({
     email: emailSchema,
     deviceInfo: deviceInfoSchema,
+    client: Joi.string()
+      .valid("user", "admin")
+      .optional()
+      .label("Client")
+      .messages({
+        "any.only": 'Client must be either "user" or "admin"',
+      }),
   })
 ).label("ForgotPasswordPayload");
 
@@ -336,14 +343,12 @@ export const updateProfileSchema = Joi.object(
         "German",
         "French",
         "Spanish",
-        "Italian",
-        "Portuguese"
       )
       .optional()
       .label("Language")
       .messages({
         "any.only":
-          "Language must be one of: English, Dutch, German, French, Spanish, Italian, Portuguese",
+          "Language must be one of: English, Dutch, German, French, Spanish",
       }),
   })
 ).label("UpdateProfilePayload");

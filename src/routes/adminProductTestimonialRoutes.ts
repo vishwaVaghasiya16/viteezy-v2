@@ -17,6 +17,8 @@ import {
   handleVideoAndThumbnailUploadError,
 } from "@/middleware/videoUpload";
 import { parseFormDataJson } from "@/middleware/parseFormData";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 
 const router = Router();
 
@@ -28,6 +30,7 @@ router.use(authorize("Admin"));
  * @desc Create a new product testimonial
  * @access Admin
  * @body {Array} products - Array of product IDs
+ * @body {Array} [productsForDetailsPage] - Array of product IDs to show on product details page
  * @body {Boolean} [isVisibleOnHomepage] - Show on homepage (default: false)
  * @body {Number} [displayOrder] - Display order (default: 0)
  * @body {String} [metadata] - JSON string for metadata
@@ -42,7 +45,8 @@ router.post(
       { name: "thumbnail", maxCount: 1 },
     ])
   ),
-  parseFormDataJson(["products", "metadata"]),
+  parseFormDataJson(["products", "productsForDetailsPage", "metadata"]),
+  autoTranslateMiddleware("productTestimonials"), // Auto-translate English to all languages (if I18n fields exist)
   validateJoi(createProductTestimonialSchema),
   adminProductTestimonialController.createTestimonial
 );
@@ -59,6 +63,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("productTestimonials"), // Detects language from admin token and transforms I18n fields to single language strings (if I18n fields exist)
   validateQuery(listProductTestimonialsQuerySchema),
   adminProductTestimonialController.getAllTestimonials
 );
@@ -70,6 +75,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("productTestimonials"), // Detects language from admin token and transforms I18n fields to single language strings (if I18n fields exist)
   validateParams(productTestimonialIdParamsSchema),
   adminProductTestimonialController.getTestimonialById
 );
@@ -79,6 +85,7 @@ router.get(
  * @desc Update product testimonial
  * @access Admin
  * @body {Array} [products] - Array of product IDs
+ * @body {Array} [productsForDetailsPage] - Array of product IDs to show on product details page
  * @body {Boolean} [isVisibleOnHomepage] - Show on homepage
  * @body {Number} [displayOrder] - Display order
  * @body {String} [metadata] - JSON string for metadata
@@ -93,7 +100,8 @@ router.put(
       { name: "thumbnail", maxCount: 1 },
     ])
   ),
-  parseFormDataJson(["products", "metadata"]),
+  parseFormDataJson(["products", "productsForDetailsPage", "metadata"]),
+  autoTranslateMiddleware("productTestimonials"), // Auto-translate English to all languages (if I18n fields exist)
   validateParams(productTestimonialIdParamsSchema),
   validateJoi(updateProductTestimonialSchema),
   adminProductTestimonialController.updateTestimonial

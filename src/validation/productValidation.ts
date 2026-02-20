@@ -9,12 +9,26 @@ import {
 } from "../models/enums";
 import { AppError } from "../utils/AppError";
 
+// I18n object schema - accepts both string and I18n object
+const i18nStringSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().min(2).max(200),
+    Joi.object({
+      en: Joi.string().trim().min(2).max(200).required(),
+      nl: Joi.string().trim().optional(),
+      de: Joi.string().trim().optional(),
+      fr: Joi.string().trim().optional(),
+      es: Joi.string().trim().optional(),
+    })
+  )
+  .required()
+  .messages({
+    "alternatives.match": "Title must be a string or I18n object with 'en' field",
+    "any.required": "Title is required",
+  });
+
 // Common validation patterns
-const titleSchema = Joi.string().trim().min(2).max(200).required().messages({
-  "string.min": "Title must be at least 2 characters long",
-  "string.max": "Title cannot exceed 200 characters",
-  "any.required": "Title is required",
-});
+const titleSchema = i18nStringSchema;
 
 const slugSchema = Joi.string()
   .trim()
@@ -26,16 +40,39 @@ const slugSchema = Joi.string()
       "Slug must be a valid URL-friendly string (lowercase letters, numbers, and hyphens only)",
   });
 
-const descriptionSchema = Joi.string().trim().required().messages({
-  "any.required": "Description is required",
-});
-
-const shortDescriptionSchema = Joi.string()
-  .trim()
-  .optional()
-  .allow("")
+const i18nTextSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim(),
+    Joi.object({
+      en: Joi.string().trim().required(),
+      nl: Joi.string().trim().optional(),
+      de: Joi.string().trim().optional(),
+      fr: Joi.string().trim().optional(),
+      es: Joi.string().trim().optional(),
+    })
+  )
+  .required()
   .messages({
-    "string.base": "Short description must be a string",
+    "alternatives.match": "Description must be a string or I18n object with 'en' field",
+    "any.required": "Description is required",
+  });
+
+const descriptionSchema = i18nTextSchema;
+
+const shortDescriptionSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow(""),
+    Joi.object({
+      en: Joi.string().trim().required(),
+      nl: Joi.string().trim().optional(),
+      de: Joi.string().trim().optional(),
+      fr: Joi.string().trim().optional(),
+      es: Joi.string().trim().optional(),
+    })
+  )
+  .optional()
+  .messages({
+    "alternatives.match": "Short description must be a string or I18n object with 'en' field",
   });
 
 const productImageSchema = Joi.string().trim().uri().required().messages({
@@ -51,10 +88,21 @@ const galleryImagesSchema = Joi.array()
   });
 
 const benefitsSchema = Joi.array()
-  .items(Joi.string().trim())
+  .items(
+    Joi.alternatives().try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+  )
   .optional()
   .messages({
-    "array.base": "Benefits must be an array of strings",
+    "array.base": "Benefits must be an array of strings or I18n objects",
   });
 
 // ObjectId validation helper
@@ -86,15 +134,38 @@ const categoriesSchema = Joi.array()
   });
 
 const healthGoalsSchema = Joi.array()
-  .items(Joi.string().trim())
+  .items(
+    Joi.alternatives().try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+  )
   .optional()
   .messages({
-    "array.base": "Health goals must be an array of strings",
+    "array.base": "Health goals must be an array of strings or I18n objects",
   });
 
-const nutritionInfoSchema = Joi.string().trim().optional().allow("").messages({
-  "string.base": "Nutrition info must be a string",
-});
+const nutritionInfoSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow(""),
+    Joi.object({
+      en: Joi.string().trim().required(),
+      nl: Joi.string().trim().optional(),
+      de: Joi.string().trim().optional(),
+      fr: Joi.string().trim().optional(),
+      es: Joi.string().trim().optional(),
+    })
+  )
+  .optional()
+  .messages({
+    "alternatives.match": "Nutrition info must be a string or I18n object with 'en' field",
+  });
 
 const metaSchema = Joi.object({
   title: Joi.string().trim().optional(),
@@ -111,9 +182,21 @@ const metaSchema = Joi.object({
     .optional(),
 }).optional();
 
-const howToUseSchema = Joi.string().trim().optional().allow("").messages({
-  "string.base": "How to use must be a string",
-});
+const howToUseSchema = Joi.alternatives()
+  .try(
+    Joi.string().trim().allow(""),
+    Joi.object({
+      en: Joi.string().trim().required(),
+      nl: Joi.string().trim().optional(),
+      de: Joi.string().trim().optional(),
+      fr: Joi.string().trim().optional(),
+      es: Joi.string().trim().optional(),
+    })
+  )
+  .optional()
+  .messages({
+    "alternatives.match": "How to use must be a string or I18n object with 'en' field",
+  });
 
 const statusSchema = Joi.boolean().optional().messages({
   "boolean.base": "Status must be true or false",
@@ -162,9 +245,23 @@ const subscriptionPriceSchema = priceSchema.keys({
     "number.min": "Savings percentage must be greater than or equal to 0",
     "number.max": "Savings percentage must be less than or equal to 100",
   }),
-  features: Joi.array().items(Joi.string().trim()).optional().messages({
-    "array.base": "Features must be an array of strings",
-  }),
+  features: Joi.array()
+    .items(
+      Joi.alternatives().try(
+        Joi.string().trim(),
+        Joi.object({
+          en: Joi.string().trim().required(),
+          nl: Joi.string().trim().optional(),
+          de: Joi.string().trim().optional(),
+          fr: Joi.string().trim().optional(),
+          es: Joi.string().trim().optional(),
+        })
+      )
+    )
+    .optional()
+    .messages({
+      "array.base": "Features must be an array of strings or I18n objects",
+    }),
   icon: Joi.string().trim().uri().optional().messages({
     "string.uri": "Icon must be a valid URL",
   }),
@@ -190,7 +287,23 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
-      features: Joi.array().items(Joi.string().trim()).optional(),
+      features: Joi.array()
+        .items(
+          Joi.alternatives().try(
+            Joi.string().trim(),
+            Joi.object({
+              en: Joi.string().trim().required(),
+              nl: Joi.string().trim().optional(),
+              de: Joi.string().trim().optional(),
+              fr: Joi.string().trim().optional(),
+              es: Joi.string().trim().optional(),
+            })
+          )
+        )
+        .optional()
+        .messages({
+          "array.base": "Features must be an array of strings or I18n objects",
+        }),
     })
     .required(),
   count60: priceSchema
@@ -201,7 +314,23 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
       capsuleCount: Joi.number().min(0).optional().messages({
         "number.min": "Capsule count must be greater than or equal to 0",
       }),
-      features: Joi.array().items(Joi.string().trim()).optional(),
+      features: Joi.array()
+        .items(
+          Joi.alternatives().try(
+            Joi.string().trim(),
+            Joi.object({
+              en: Joi.string().trim().required(),
+              nl: Joi.string().trim().optional(),
+              de: Joi.string().trim().optional(),
+              fr: Joi.string().trim().optional(),
+              es: Joi.string().trim().optional(),
+            })
+          )
+        )
+        .optional()
+        .messages({
+          "array.base": "Features must be an array of strings or I18n objects",
+        }),
     })
     .required(),
 });
@@ -265,13 +394,49 @@ const standupPouchPricesSchema = legacySubscriptionPriceSchema.when(
 const isFeaturedSchema = Joi.boolean().optional().default(false);
 
 const comparisonRowSchema = Joi.object({
-  label: Joi.string().trim().required(),
+  label: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .required(),
   values: Joi.array().items(Joi.boolean()).min(1).required(),
 });
 
 const comparisonSectionSchema = Joi.object({
-  title: Joi.string().trim().required(),
-  columns: Joi.array().items(Joi.string().trim().required()).min(1).required(),
+  title: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .required(),
+  columns: Joi.array()
+    .items(
+      Joi.alternatives().try(
+        Joi.string().trim(),
+        Joi.object({
+          en: Joi.string().trim().required(),
+          nl: Joi.string().trim().optional(),
+          de: Joi.string().trim().optional(),
+          fr: Joi.string().trim().optional(),
+          es: Joi.string().trim().optional(),
+        })
+      )
+    )
+    .min(1)
+    .required(),
   rows: Joi.array().items(comparisonRowSchema).min(1).required(),
 })
   .optional()
@@ -280,14 +445,47 @@ const comparisonSectionSchema = Joi.object({
   });
 
 const specificationItemSchema = Joi.object({
-  title: Joi.string().trim().required(),
-  descr: Joi.string().trim().required(),
+  title: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .required(),
+  descr: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .required(),
   image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
   imageMobile: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
 });
 
 const specificationSchema = Joi.object({
-  main_title: Joi.string().trim().required(),
+  main_title: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().required(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .required(),
   bg_image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
   items: Joi.array().items(specificationItemSchema).min(1).max(4).optional(),
   // Individual item fields (title1, descr1, etc.) - will be converted to items array
@@ -329,6 +527,39 @@ export const createProductSchema = Joi.object({
   isFeatured: isFeaturedSchema,
   comparisonSection: comparisonSectionSchema,
   specification: specificationSchema,
+  // Optional FAQs: max 15, each { question, answer } (string or I18n)
+  faqs: Joi.array()
+    .items(
+      Joi.object({
+        question: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+        answer: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+      }).required()
+    )
+    .min(1)
+    .max(15)
+    .optional()
+    .messages({
+      "array.max": "Maximum 15 FAQs allowed",
+      "array.min": "Each FAQ must have question and answer",
+    }),
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is true, standupPouchPrice must be provided
   if (value.hasStandupPouch === true && !value.standupPouchPrice) {
@@ -382,6 +613,40 @@ export const updateProductSchema = Joi.object({
   isFeatured: isFeaturedSchema.optional(),
   comparisonSection: comparisonSectionSchema.optional(),
   specification: specificationSchema.optional(),
+  // Optional FAQs: empty array [] = delete all FAQs; or 1–15 items to replace. Each item must have question and answer.
+  // Do not use .required() on the item object so that empty array [] is valid (Joi treats items().required() as "at least one item").
+  faqs: Joi.array()
+    .items(
+      Joi.object({
+        question: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+        answer: Joi.alternatives().try(
+          Joi.string().trim().min(1),
+          Joi.object({
+            en: Joi.string().trim().required(),
+            nl: Joi.string().trim().optional(),
+            de: Joi.string().trim().optional(),
+            fr: Joi.string().trim().optional(),
+            es: Joi.string().trim().optional(),
+          })
+        ).required(),
+      })
+    )
+    .min(0)
+    .max(15)
+    .optional()
+    .messages({
+      "array.max": "Maximum 15 FAQs allowed",
+      "array.min": "Each FAQ must have question and answer",
+    }),
 }).custom((value, helpers) => {
   // Custom validation: if hasStandupPouch is being set to true, standupPouchPrice must be provided
   // Only validate if hasStandupPouch is explicitly being updated to true
@@ -420,8 +685,8 @@ export const updateProductStatusSchema = Joi.object({
 
 // Get product categories query schema
 export const getProductCategoriesSchema = Joi.object({
-  lang: Joi.string().valid("en", "nl").optional().default("en").messages({
-    "any.only": "Language must be either 'en' or 'nl'",
+  lang: Joi.string().valid("en", "nl", "de", "fr", "es").optional().default("en").messages({
+    "any.only": "Language must be one of: en, nl, de, fr, es",
   }),
 })
   .unknown(false)
@@ -429,7 +694,7 @@ export const getProductCategoriesSchema = Joi.object({
 
 // Get product categories list with products query schema (for navbar)
 export const listProductCategoriesSchema = Joi.object({
-  lan: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
+  lang: Joi.string().valid("en", "nl", "de", "fr", "es").optional().messages({
     "any.only": "Language must be one of: en, nl, de, fr, es",
   }),
 })
@@ -446,11 +711,19 @@ export const validateProduct = (schema: Joi.ObjectSchema) => {
     });
 
     if (error) {
-      const first = error.details[0];
-      const firstMessage = first?.message || "Validation error";
+      // Collect all validation errors
+      const allErrors = error.details.map((detail) => ({
+        field: detail.path.join("."),
+        message: detail.message,
+        value: detail.context?.value,
+      }));
+
+      const errorMessages = allErrors.map((e) => `${e.field}: ${e.message}`).join("; ");
+      
       const appErr: any = new AppError("Validation error", 400);
       appErr.errorType = "Validation error";
-      appErr.error = firstMessage;
+      appErr.error = errorMessages; // Show all errors
+      appErr.errors = allErrors; // Include detailed errors array
       throw appErr;
     }
 

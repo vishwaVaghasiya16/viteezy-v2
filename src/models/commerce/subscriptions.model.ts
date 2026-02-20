@@ -45,6 +45,17 @@ export interface ISubscription extends Document {
   // Pause/Resume
   pausedAt?: Date;
   pausedUntil?: Date; // Resume date if paused temporarily
+  // Auto-Renewal
+  isAutoRenew: boolean; // Auto-renew subscription until cancelled or paused
+  renewalCount: number; // Number of times subscription has been renewed
+  // Gateway Integration
+  gatewaySubscriptionId?: string; // Stripe/Mollie subscription ID
+  gatewayCustomerId?: string; // Stripe/Mollie customer ID
+  gatewayPaymentMethodId?: string; // Saved payment method ID
+  cancelAtPeriodEnd?: boolean; // Cancel at end of current period
+  retryCount?: number; // Number of payment retry attempts
+  lastRetryDate?: Date; // Last payment retry date
+  nextRetryDate?: Date; // Next payment retry date
   // Metadata
   metadata?: Record<string, any>;
   createdAt: Date;
@@ -199,6 +210,52 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: Date,
       default: null,
     },
+    // Auto-Renewal
+    isAutoRenew: {
+      type: Boolean,
+      default: true, // Default to auto-renew
+    },
+    renewalCount: {
+      type: Number,
+      default: 0, // Initial subscription is not a renewal
+      min: 0,
+    },
+    // Gateway Integration
+    gatewaySubscriptionId: {
+      type: String,
+      trim: true,
+      default: undefined, // Use undefined instead of null to avoid sparse index conflicts
+      sparse: true,
+    },
+    gatewayCustomerId: {
+      type: String,
+      trim: true,
+      default: null,
+      sparse: true,
+    },
+    gatewayPaymentMethodId: {
+      type: String,
+      trim: true,
+      default: null,
+      sparse: true,
+    },
+    cancelAtPeriodEnd: {
+      type: Boolean,
+      default: false,
+    },
+    retryCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastRetryDate: {
+      type: Date,
+      default: null,
+    },
+    nextRetryDate: {
+      type: Date,
+      default: null,
+    },
     metadata: {
       type: Schema.Types.Mixed,
       default: () => ({}),
@@ -243,6 +300,12 @@ SubscriptionSchema.index({ userId: 1, status: 1 });
 SubscriptionSchema.index({ orderId: 1 });
 SubscriptionSchema.index({ status: 1, nextBillingDate: 1 });
 SubscriptionSchema.index({ status: 1, nextDeliveryDate: 1 });
+// Sparse unique index: allows multiple null values, but ensures unique non-null values
+SubscriptionSchema.index(
+  { gatewaySubscriptionId: 1 },
+  { sparse: true, unique: true }
+);
+SubscriptionSchema.index({ gatewayCustomerId: 1 }, { sparse: true });
 SubscriptionSchema.index({ createdAt: -1 });
 
 export const Subscriptions = mongoose.model<ISubscription>(

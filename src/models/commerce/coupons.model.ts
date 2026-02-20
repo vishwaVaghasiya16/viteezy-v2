@@ -28,6 +28,7 @@ export interface ICoupon extends Document, AuditType {
   isActive: boolean;
   isRecurring?: boolean;
   oneTimeUse?: boolean;
+  recurringMonths?: number[]; // Array of months (e.g., [1, 3, 6] for 1 month, 3 months, 6 months subscription plans)
   isDeleted?: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -76,7 +77,7 @@ const CouponSchema = new Schema<ICoupon>(
     minOrderAmount: {
       type: Number,
       min: 0,
-      default: null,
+      default: 0,
     },
     maxDiscountAmount: {
       type: Number,
@@ -85,7 +86,7 @@ const CouponSchema = new Schema<ICoupon>(
     },
     usageLimit: {
       type: Number,
-      min: 1,
+      min: 0, // 0 means infinite usage
       default: null,
     },
     usageCount: {
@@ -95,7 +96,7 @@ const CouponSchema = new Schema<ICoupon>(
     },
     userUsageLimit: {
       type: Number,
-      min: 1,
+      min: 0, // 0 means infinite usage
       default: null,
     },
     applicableProducts: [
@@ -118,7 +119,7 @@ const CouponSchema = new Schema<ICoupon>(
     ],
     validFrom: {
       type: Date,
-      default: null,
+      default: () => new Date(),
     },
     validUntil: {
       type: Date,
@@ -148,6 +149,12 @@ const CouponSchema = new Schema<ICoupon>(
       default: false,
       description:
         "If true, customer can use this coupon only once in their lifetime",
+    },
+    recurringMonths: {
+      type: [Number],
+      default: undefined,
+      description:
+        "Array of months for which subscription plans this coupon applies (e.g., [1, 3, 6] for 1 month, 3 months, 6 months plans)",
     },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),
@@ -181,6 +188,20 @@ CouponSchema.pre("save", function (next) {
     this.maxDiscountAmount < 0
   ) {
     return next(new Error("Max discount amount cannot be negative"));
+  }
+
+  // Auto-activate coupon if validFrom is in the future and isActive is not explicitly set to false
+  // If validFrom is set to a future date, the coupon should be active (unless explicitly set to false)
+  if (this.validFrom && this.validFrom > new Date()) {
+    // Only auto-activate if isActive is undefined (not explicitly set)
+    if (this.isActive === undefined || this.isActive === null) {
+      this.isActive = true;
+    }
+  }
+
+  // Ensure minOrderAmount defaults to 0 if not provided
+  if (this.minOrderAmount === null || this.minOrderAmount === undefined) {
+    this.minOrderAmount = 0;
   }
 
   next();

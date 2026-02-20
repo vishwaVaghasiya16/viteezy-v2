@@ -8,6 +8,7 @@ import Joi from "joi";
 import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from "@/models/common.model";
+import { PRODUCT_VARIANT_VALUES } from "@/models/enums";
 
 // Common validation patterns
 const objectIdSchema = Joi.string()
@@ -53,5 +54,17 @@ export const validateCouponSchema = Joi.object(
           ", "
         )}`,
       }),
+    planDurationDays: Joi.number()
+      .integer()
+      .valid(30, 60, 90, 180)
+      .optional()
+      .label("Plan duration days"),
+    isSubscription: Joi.boolean()
+      .optional()
+      .label("Is subscription"),
+    variantType: Joi.string()
+      .valid(...PRODUCT_VARIANT_VALUES)
+      .optional()
+      .label("Variant type"),
   })
 ).label("ValidateCouponPayload");

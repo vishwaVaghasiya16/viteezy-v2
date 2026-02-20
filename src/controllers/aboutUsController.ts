@@ -54,16 +54,20 @@ class AboutUsController {
           banner: {
             banner_image: null,
             banner_title: "",
-            banner_subtitle: "",
+            banner_description: "",
             banner_button_text: "",
             banner_button_link: "",
           },
-          founderQuote: {
-            founder_image: null,
-            founder_quote_text: "",
-            founder_name: "",
-            founder_designation: "",
-            note: "",
+          founderNote: {
+            headline: "",
+            description: "",
+          },
+          founderStory: {
+            headline: "",
+            description: "",
+            image: null,
+            name: "",
+            position: "",
           },
           meetBrains: {
             meet_brains_title: "",
@@ -80,6 +84,10 @@ class AboutUsController {
             subtitle: "",
             images: [],
           },
+          theStory: {
+            heading: "",
+            description: ""
+          }
         };
         res.apiSuccess(
           { aboutUs: emptyAboutUs },
@@ -93,25 +101,23 @@ class AboutUsController {
         banner: {
           banner_image: aboutUs.banner?.banner_image || null,
           banner_title: getI18nValue(aboutUs.banner?.banner_title, lang),
-          banner_subtitle: getI18nValue(aboutUs.banner?.banner_subtitle, lang),
+          banner_description: getI18nValue(aboutUs.banner?.banner_description, lang),
           banner_button_text: getI18nValue(
             aboutUs.banner?.banner_button_text,
             lang
           ),
           banner_button_link: aboutUs.banner?.banner_button_link || "",
         },
-        founderQuote: {
-          founder_image: aboutUs.founderQuote?.founder_image || null,
-          founder_quote_text: getI18nValue(
-            aboutUs.founderQuote?.founder_quote_text,
-            lang
-          ),
-          founder_name: getI18nValue(aboutUs.founderQuote?.founder_name, lang),
-          founder_designation: getI18nValue(
-            aboutUs.founderQuote?.founder_designation,
-            lang
-          ),
-          note: getI18nValue(aboutUs.founderQuote?.note, lang),
+        founderNote: {
+          headline: getI18nValue(aboutUs.founderNote?.headline, lang),
+          description: getI18nValue(aboutUs.founderNote?.description, lang),
+        },
+        founderStory: {
+          headline: getI18nValue(aboutUs.founderStory?.headline, lang),
+          description: getI18nValue(aboutUs.founderStory?.description, lang),
+          image: aboutUs.founderStory?.image || null,
+          name: aboutUs.founderStory?.name || "",
+          position: aboutUs.founderStory?.position || "",
         },
         meetBrains: {
           meet_brains_title: getI18nValue(
@@ -148,6 +154,10 @@ class AboutUsController {
           subtitle: getI18nValue(aboutUs.people?.subtitle, lang),
           images: aboutUs.people?.images || [],
         },
+        theStory: {
+          heading: getI18nValue(aboutUs.theStory?.heading, lang),
+          description: getI18nValue(aboutUs.theStory.description, lang)
+        }
       };
 
       res.apiSuccess(

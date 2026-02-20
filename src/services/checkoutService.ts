@@ -11,6 +11,8 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
+import { I18nStringType } from "../models/common.model";
+import { getTranslatedString } from "../utils/translationUtils";
 
 interface PurchasePlan {
   planType: "oneTime" | "subscription";
@@ -174,6 +176,26 @@ class CheckoutService {
   private readonly NINETY_DAY_DISCOUNT_PERCENTAGE = 15; // 15% discount for 90-day plans
 
   /**
+   * Convert I18n features array to string array
+   * Extracts English value from I18n objects or returns string as-is
+   */
+  private convertFeaturesToStringArray(
+    features?: (I18nStringType | string)[]
+  ): string[] | undefined {
+    if (!features || !Array.isArray(features) || features.length === 0) {
+      return undefined;
+    }
+
+    return features.map((feature) => {
+      if (typeof feature === "string") {
+        return feature;
+      }
+      // Extract English value from I18n object
+      return getTranslatedString(feature, "en");
+    });
+  }
+
+  /**
    * Get purchase plans for products in cart
    * For sachets: all purchase plans (one-time + subscriptions)
    * For stand-up pouches: only one-time purchase plans
@@ -297,7 +319,9 @@ class CheckoutService {
               },
               savingsPercentage:
                 product.sachetPrices.thirtyDays.savingsPercentage,
-              features: product.sachetPrices.thirtyDays.features,
+              features: this.convertFeaturesToStringArray(
+                product.sachetPrices.thirtyDays.features as any
+              ),
               icon: product.sachetPrices.thirtyDays.icon,
               label: "30 Days",
             });
@@ -321,7 +345,9 @@ class CheckoutService {
               },
               savingsPercentage:
                 product.sachetPrices.sixtyDays.savingsPercentage,
-              features: product.sachetPrices.sixtyDays.features,
+              features: this.convertFeaturesToStringArray(
+                product.sachetPrices.sixtyDays.features as any
+              ),
               icon: product.sachetPrices.sixtyDays.icon,
               label: "60 Days",
             });
@@ -350,7 +376,9 @@ class CheckoutService {
                 totalAmount: discountedPrice,
               },
               savingsPercentage: this.NINETY_DAY_DISCOUNT_PERCENTAGE,
-              features: ninetyDaysPrice.features,
+              features: this.convertFeaturesToStringArray(
+                ninetyDaysPrice.features as any
+              ),
               icon: ninetyDaysPrice.icon,
               label: "90 Days",
             });
@@ -377,7 +405,9 @@ class CheckoutService {
               },
               savingsPercentage:
                 product.sachetPrices.oneEightyDays.savingsPercentage,
-              features: product.sachetPrices.oneEightyDays.features,
+              features: this.convertFeaturesToStringArray(
+                product.sachetPrices.oneEightyDays.features as any
+              ),
               icon: product.sachetPrices.oneEightyDays.icon,
               label: "180 Days",
             });
@@ -952,12 +982,18 @@ class CheckoutService {
     orderAmount,
     productIds,
     categoryIds,
+    planDurationDays,
+    isSubscription,
+    variantType,
   }: {
     couponCode: string;
     userId: string;
     orderAmount: number;
     productIds: string[];
     categoryIds: string[];
+    planDurationDays?: number;
+    isSubscription?: boolean;
+    variantType?: ProductVariant;
   }): Promise<{ discountAmount: number; metadata?: Record<string, any> }> {
     const coupon = await Coupons.findOne({
       code: couponCode.toUpperCase(),
@@ -980,11 +1016,13 @@ class CheckoutService {
       throw new AppError("This coupon has expired", 400);
     }
 
-    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+    // Check usage limit (0 means infinite, so skip check if 0 or undefined)
+    if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
       throw new AppError("This coupon has reached its usage limit", 400);
     }
 
-    if (coupon.userUsageLimit) {
+    // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
+    if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
       const userUsageCount = await Orders.countDocuments({
         userId: new mongoose.Types.ObjectId(userId),
         couponCode: coupon.code,
@@ -1034,6 +1072,48 @@ class CheckoutService {
         "This coupon is not applicable to the selected categories",
         400
       );
+    }
+
+    // Additional validation: recurringMonths for subscription sachet plans
+    // If coupon has recurringMonths configured, it should only apply to matching subscription plan durations
+    if (
+      isSubscription &&
+      variantType === ProductVariant.SACHETS &&
+      Array.isArray((coupon as any).recurringMonths) &&
+      (coupon as any).recurringMonths.length > 0
+    ) {
+      if (!planDurationDays) {
+        throw new AppError(
+          "This coupon is only valid for specific subscription plans",
+          400
+        );
+      }
+
+      const recurringMonths: number[] = (coupon as any).recurringMonths;
+
+      // Map recurring month values to allowed duration days
+      // 1 -> 30 days, 2 -> 60 days, 3 -> 90 days, 6 -> 180 days
+      const monthToDuration: Record<number, number> = {
+        1: 30,
+        2: 60,
+        3: 90,
+        6: 180,
+      };
+
+      const allowedDurations = new Set<number>();
+      for (const month of recurringMonths) {
+        const mappedDuration = monthToDuration[month];
+        if (mappedDuration) {
+          allowedDurations.add(mappedDuration);
+        }
+      }
+
+      if (!allowedDurations.has(planDurationDays)) {
+        throw new AppError(
+          "This coupon is not applicable to the selected subscription plan",
+          400
+        );
+      }
     }
 
     if (
@@ -1232,6 +1312,9 @@ class CheckoutService {
           orderAmount: subtotalAfterMembership,
           productIds,
           categoryIds,
+          planDurationDays: options.planDurationDays,
+          isSubscription: options.isSubscription,
+          variantType: options.variantType,
         });
         couponDiscountAmount = couponResult.discountAmount;
       }
@@ -1518,6 +1601,12 @@ class CheckoutService {
           orderAmount: subtotal,
           productIds: productIds.map((id) => id.toString()),
           categoryIds,
+          planDurationDays,
+          isSubscription,
+          variantType:
+            planType === "SACHET"
+              ? ProductVariant.SACHETS
+              : ProductVariant.STAND_UP_POUCH,
         });
         couponDiscountTotal = couponResult.discountAmount;
       } catch (error) {
@@ -2195,6 +2284,12 @@ class CheckoutService {
           orderAmount: orderAmountForCoupon, // Use amount with tax for validation
           productIds: productIdsArray,
           categoryIds: categoryIdsArray,
+          planDurationDays: selectedPlanDays,
+          isSubscription: !isOneTimePurchase,
+          variantType:
+            selectedVariant === "SACHETS"
+              ? ProductVariant.SACHETS
+              : ProductVariant.STAND_UP_POUCH,
         });
 
         couponDiscountAmount = couponResult.discountAmount;

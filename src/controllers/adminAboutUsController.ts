@@ -32,15 +32,20 @@ class AdminAboutUsController {
           banner: {
             banner_image: null,
             banner_title: {},
-            banner_subtitle: {},
+            banner_description: {},
             banner_button_text: {},
             banner_button_link: "",
           },
-          founderQuote: {
-            founder_quote_text: {},
-            founder_name: {},
-            founder_designation: {},
-            note: {},
+          founderNote: {
+            headline: {},
+            description: {},
+          },
+          founderStory: {
+            headline: {},
+            description: {},
+            image: null,
+            name: "",
+            position: "",
           },
           meetBrains: {
             meet_brains_title: {},
@@ -56,6 +61,10 @@ class AdminAboutUsController {
             title: {},
             subtitle: {},
           },
+          theStory: {
+            heading: {},
+            description: {}
+          }
         };
         res.apiSuccess(
           { aboutUs: emptyAboutUs },
@@ -78,7 +87,7 @@ class AdminAboutUsController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
-      const { banner, founderQuote, meetBrains, timeline, people } = req.body;
+      const { banner, founderNote, meetBrains, timeline, people, founderStory, theStory } = req.body;
 
       // Find existing About Us page
       let aboutUs = await AboutUs.findOne({
@@ -90,8 +99,11 @@ class AdminAboutUsController {
         if (banner) {
           aboutUs.banner = { ...aboutUs.banner, ...banner };
         }
-        if (founderQuote) {
-          aboutUs.founderQuote = { ...aboutUs.founderQuote, ...founderQuote };
+        if (founderNote) {
+          aboutUs.founderNote = { ...aboutUs.founderNote, ...founderNote };
+        }
+        if (founderStory) {
+          aboutUs.founderStory = { ...aboutUs.founderStory, ...founderStory };
         }
         if (meetBrains) {
           aboutUs.meetBrains = { ...aboutUs.meetBrains, ...meetBrains };
@@ -101,6 +113,9 @@ class AdminAboutUsController {
         }
         if (people) {
           aboutUs.people = { ...aboutUs.people, ...people };
+        }
+        if (theStory) {
+          aboutUs.theStory = { ...aboutUs.theStory, ...theStory };
         }
 
         if (requesterId) {
@@ -113,10 +128,12 @@ class AdminAboutUsController {
         // Create new
         aboutUs = await AboutUs.create({
           banner: banner || {},
-          founderQuote: founderQuote || {},
+          founderNote: founderNote || {},
+          founderStory: founderStory || {},
           meetBrains: meetBrains || {},
           timeline: timeline || {},
           people: people || {},
+          theStory: theStory || {},
           createdBy: requesterId,
         });
 
@@ -138,10 +155,12 @@ class AdminAboutUsController {
 
       const validSections = [
         "banner",
-        "founderQuote",
+        "founderNote",
+        "founderStory",
         "meetBrains",
         "timeline",
         "people",
+        "theStory",
       ];
 
       if (!validSections.includes(section)) {
@@ -170,14 +189,18 @@ class AdminAboutUsController {
       // Update the specific section
       if (section === "banner") {
         aboutUs.banner = { ...aboutUs.banner, ...sectionData };
-      } else if (section === "founderQuote") {
-        aboutUs.founderQuote = { ...aboutUs.founderQuote, ...sectionData };
+      } else if (section === "founderNote") {
+        aboutUs.founderNote = { ...aboutUs.founderNote, ...sectionData };
+      } else if (section === "founderStory") {
+        aboutUs.founderStory = { ...aboutUs.founderStory, ...sectionData };
       } else if (section === "meetBrains") {
         aboutUs.meetBrains = { ...aboutUs.meetBrains, ...sectionData };
       } else if (section === "timeline") {
         aboutUs.timeline = { ...aboutUs.timeline, ...sectionData };
       } else if (section === "people") {
         aboutUs.people = { ...aboutUs.people, ...sectionData };
+      } else if (section === "theStory") {
+        aboutUs.theStory = { ...aboutUs.theStory, ...sectionData };
       }
 
       if (requesterId) {

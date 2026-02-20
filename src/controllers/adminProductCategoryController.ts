@@ -35,6 +35,21 @@ class AdminProductCategoryController {
         ? new mongoose.Types.ObjectId(req.user._id)
         : undefined;
 
+      // Check if name.en is unique
+      if (name?.en) {
+        const existingCategory = await ProductCategory.findOne({
+          "name.en": name.en.trim(),
+          isDeleted: { $ne: true },
+        });
+
+        if (existingCategory) {
+          throw new AppError(
+            "A category with this name already exists. Please use a different name.",
+            400
+          );
+        }
+      }
+
       // Generate slug if not provided
       const baseSlug = slug || generateSlug(name?.en || "");
       if (!baseSlug) {
@@ -117,13 +132,13 @@ class AdminProductCategoryController {
   );
 
   /**
-   * Get all product categories with pagination and filters
+   * Get all product categories (no pagination) with filters. Response shape unchanged.
    * @route GET /api/v1/admin/product-categories
    * @access Admin
    */
   getProductCategory = asyncHandler(
     async (req: AuthenticatedRequest, res: Response) => {
-      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const { sort } = getPaginationOptions(req);
       const { search, isActive } = req.query as {
         search?: string;
         isActive?: string | boolean;
@@ -154,18 +169,43 @@ class AdminProductCategoryController {
         ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      const [categories, total] = await Promise.all([
-        ProductCategory.find(filter)
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
-        ProductCategory.countDocuments(filter),
+      // Fetch all categories with actual productCount via aggregation (no pagination)
+      const sortStage: Record<string, 1 | -1> = {};
+      if (sortOptions.sortOrder) sortStage.sortOrder = sortOptions.sortOrder;
+      if (sortOptions.createdAt) sortStage.createdAt = sortOptions.createdAt;
+      Object.assign(sortStage, sort as Record<string, 1 | -1> || {});
+
+      const categoriesWithCount = await ProductCategory.aggregate([
+        { $match: filter },
+        { $sort: Object.keys(sortStage).length ? sortStage : { sortOrder: 1, createdAt: -1 } },
+        {
+          $lookup: {
+            from: "products",
+            let: { catId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $in: ["$$catId", "$categories"] },
+                  isDeleted: false,
+                },
+              },
+              { $count: "count" },
+            ],
+            as: "productCountArr",
+          },
+        },
+        {
+          $addFields: {
+            productCount: {
+              $ifNull: [{ $arrayElemAt: ["$productCountArr.count", 0] }, 0],
+            },
+          },
+        },
+        { $project: { productCountArr: 0 } },
       ]);
 
-      const pagination = getPaginationMeta(page, limit, total);
-
-      res.apiPaginated(categories, pagination, "Categories retrieved");
+      // No pagination: return all categories in data only
+      res.apiSuccess(categoriesWithCount, "Categories retrieved");
     }
   );
 
@@ -231,6 +271,22 @@ class AdminProductCategoryController {
 
       // Update name
       if (name !== undefined) {
+        // Check if name.en is unique (only if name is being changed)
+        if (name?.en && name.en.trim() !== category.name?.en?.trim()) {
+          const existingCategory = await ProductCategory.findOne({
+            "name.en": name.en.trim(),
+            _id: { $ne: id },
+            isDeleted: { $ne: true },
+          });
+
+          if (existingCategory) {
+            throw new AppError(
+              "A category with this name already exists. Please use a different name.",
+              400
+            );
+          }
+        }
+
         updateData.name = name;
         // Regenerate slug if name changed
         if (name.en && name.en !== category.name?.en) {

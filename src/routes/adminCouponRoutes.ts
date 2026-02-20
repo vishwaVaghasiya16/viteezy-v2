@@ -5,6 +5,8 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminCouponController } from "@/controllers/adminCouponController";
 import {
   createCouponSchema,
@@ -39,14 +41,20 @@ router.use(authorize("Admin"));
  */
 router.post(
   "/",
+  autoTranslateMiddleware("coupons"), // Auto-translate English to all languages
   validateJoi(createCouponSchema),
   adminCouponController.createCoupon
 );
 
 /**
  * @route GET /api/v1/admin/coupons/stats
- * @desc Get coupon statistics (for current month)
+ * @desc Get coupon statistics with percentage changes (vs last month and last 7 days)
  * @access Admin
+ * @returns {Object} stats - Object containing:
+ *   - activeCoupons: Count with vsLastMonth percentage change
+ *   - totalRedemptions: Count with vsLastMonth percentage change
+ *   - totalDiscountedAmount: Amount with vsLastMonth percentage change
+ *   - expiringSoon: Count and details of coupons expiring within 7 days (with days/months until expiration)
  */
 router.get("/stats", adminCouponController.getCouponStats);
 
@@ -61,9 +69,12 @@ router.get("/stats", adminCouponController.getCouponStats);
  * @query {String} [expiryDateFrom] - Filter by coupon expiry date from (ISO date string)
  * @query {String} [expiryDateTo] - Filter by coupon expiry date to (ISO date string)
  * @query {String} [couponId] - Filter by specific coupon ID
+ * @note Response is automatically transformed based on admin's language preference from token.
+ *       I18n objects in coupon data are converted to single language strings.
  */
 router.get(
   "/usage-logs",
+  transformResponseMiddleware("coupons"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getCouponUsageLogsQuerySchema),
   adminCouponController.getCouponUsageLogs
 );
@@ -82,6 +93,7 @@ router.get(
  */
 router.get(
   "/",
+  transformResponseMiddleware("coupons"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getCouponsQuerySchema),
   adminCouponController.getCoupons
 );
@@ -94,6 +106,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("coupons"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(couponIdParamsSchema),
   adminCouponController.getCouponById
 );
@@ -107,6 +120,7 @@ router.get(
  */
 router.put(
   "/:id",
+  autoTranslateMiddleware("coupons"), // Auto-translate English to all languages
   validateParams(couponIdParamsSchema),
   validateJoi(updateCouponSchema),
   adminCouponController.updateCoupon

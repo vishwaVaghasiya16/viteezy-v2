@@ -30,6 +30,25 @@ export const handleAboutUsImageUpload = async (
       }
     }
 
+    // Handle founderStory_image (single file for founder story section)
+    if (files?.founderStory_image && files.founderStory_image.length > 0) {
+      const founderStoryImageUrl = await fileStorageService.uploadFile(
+        "about-us",
+        files.founderStory_image[0]
+      );
+      if (!req.body.founderStory) {
+        req.body.founderStory = {};
+      }
+      if (!req.body.founderStory.image) {
+        req.body.founderStory.image = {};
+      }
+      req.body.founderStory.image.url = founderStoryImageUrl;
+      // Default to image type if not provided
+      if (!req.body.founderStory.image.type) {
+        req.body.founderStory.image.type = "Image";
+      }
+    }
+    
     // Handle meet_brains_main_image (single file for meet brains section)
     if (
       files?.meet_brains_main_image &&
@@ -49,24 +68,6 @@ export const handleAboutUsImageUpload = async (
       // Default to image type if not provided
       if (!req.body.meetBrains.meet_brains_main_image.type) {
         req.body.meetBrains.meet_brains_main_image.type = "Image";
-      }
-    }
-
-    // Handle founder_image (single file for founder quote section)
-    if (files?.founder_image && files.founder_image.length > 0) {
-      const imageUrl = await fileStorageService.uploadFile(
-        "about-us",
-        files.founder_image[0]
-      );
-      if (!req.body.founderQuote) {
-        req.body.founderQuote = {};
-      }
-      if (!req.body.founderQuote.founder_image) {
-        req.body.founderQuote.founder_image = {};
-      }
-      req.body.founderQuote.founder_image.url = imageUrl;
-      if (!req.body.founderQuote.founder_image.type) {
-        req.body.founderQuote.founder_image.type = "Image";
       }
     }
 

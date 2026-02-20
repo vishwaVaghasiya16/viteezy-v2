@@ -1,5 +1,10 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { AuditSchema, SoftDelete } from "../common.model";
+import {
+  AuditSchema,
+  SoftDelete,
+  I18nString,
+  I18nStringType,
+} from "../common.model";
 
 export interface ISocialMediaLinks {
   facebook?: string;
@@ -19,18 +24,12 @@ export interface IGeneralSettings extends Document {
   // Branding
   logoLight?: string; // URL for light theme logo
   logoDark?: string; // URL for dark theme logo
-  tagline?: string; // Short description or tagline
+  tagline?: I18nStringType; // Short description or tagline (multi-language)
 
   // Contact Information
   supportEmail?: string;
   supportPhone?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-    country?: string;
-  };
+  address?: string;
 
   // Social Media Links
   socialMedia?: ISocialMediaLinks;
@@ -108,10 +107,8 @@ const GeneralSettingsSchema = new Schema<IGeneralSettings>(
       default: null,
     },
     tagline: {
-      type: String,
-      trim: true,
-      maxlength: [200, "Tagline cannot exceed 200 characters"],
-      default: null,
+      type: I18nString,
+      default: () => ({}),
     },
 
     // Contact Information
@@ -131,7 +128,8 @@ const GeneralSettingsSchema = new Schema<IGeneralSettings>(
       default: null,
     },
     address: {
-      type: AddressSchema,
+      type: String,
+      trim: true,
       default: null,
     },
 

@@ -3,9 +3,14 @@ import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
 import { ProductCategory } from "../models/commerce/categories.model";
+import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductTestimonials } from "../models/cms/productTestimonials.model";
 import { Blogs } from "../models/cms/blogs.model";
 import { FAQs } from "../models/cms/faqs.model";
+import { FAQStatus } from "../models/enums";
+import { Wishlists } from "../models/commerce/wishlists.model";
+import { cartService } from "./cartService";
+import { transformProductForLanguage } from "./productEnrichmentService";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
@@ -159,7 +164,7 @@ interface CreateLandingPageData {
     title: string; // Simple string for now
     description?: string; // Simple string for now
     subTitle?: string;
-    productCategoryIds?: mongoose.Types.ObjectId[] | string[];
+    // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
@@ -267,6 +272,7 @@ interface UpdateLandingPageData {
   howItWorksSection?: {
     title?: string;
     subTitle?: string;
+    description?: string;
     stepsCount?: number;
     steps?: Array<{
       image?: string;
@@ -281,7 +287,7 @@ interface UpdateLandingPageData {
     title?: string;
     description?: string;
     subTitle?: string;
-    productCategoryIds?: (mongoose.Types.ObjectId | string)[];
+    // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
@@ -394,11 +400,7 @@ class LandingPageService {
             ? { en: data.heroSection.description }
             : data.heroSection.description
           : undefined,
-        subTitle: data.heroSection.subTitle
-          ? typeof data.heroSection.subTitle === "string"
-            ? { en: data.heroSection.subTitle }
-            : data.heroSection.subTitle
-          : undefined,
+        // subTitle removed from create API
         highlightedText: Array.isArray(data.heroSection.highlightedText)
           ? data.heroSection.highlightedText.map((text) =>
               typeof text === "string" ? { en: text } : text
@@ -508,6 +510,13 @@ class LandingPageService {
 
     // Convert product category section strings to I18n format
     if (data.productCategorySection) {
+      const productCategoryIds =
+        Array.isArray((data.productCategorySection as any).productCategoryIds) &&
+        (data.productCategorySection as any).productCategoryIds.length > 0
+          ? (data.productCategorySection as any).productCategoryIds.map(
+              (id: string) => new mongoose.Types.ObjectId(id)
+            )
+          : undefined;
       landingPageData.productCategorySection = {
         title:
           typeof data.productCategorySection.title === "string"
@@ -523,7 +532,7 @@ class LandingPageService {
             ? { en: data.productCategorySection.subTitle }
             : (data.productCategorySection as any).subTitle
           : undefined,
-        productCategoryIds: data.productCategorySection.productCategoryIds,
+        ...(productCategoryIds && { productCategoryIds }),
         isEnabled:
           data.productCategorySection.isEnabled !== undefined
             ? data.productCategorySection.isEnabled
@@ -667,7 +676,7 @@ class LandingPageService {
             ? { en: data.testimonialsSection.subTitle }
             : (data.testimonialsSection as any).subTitle
           : undefined,
-        testimonialIds: data.testimonialsSection.testimonialIds,
+        // Testimonials are not stored here, they will be fetched dynamically from ProductTestimonials model
         isEnabled:
           data.testimonialsSection.isEnabled !== undefined
             ? data.testimonialsSection.isEnabled
@@ -717,7 +726,8 @@ class LandingPageService {
     }
 
     // Convert FAQ section strings to I18n format
-    if (data.faqSection && data.faqSection.faqs) {
+    // FAQs will be fetched dynamically from FAQs model (latest 8)
+    if (data.faqSection) {
       landingPageData.faqSection = {
         title:
           typeof data.faqSection.title === "string"
@@ -728,18 +738,7 @@ class LandingPageService {
             ? { en: data.faqSection.description }
             : data.faqSection.description
           : undefined,
-        faqs: data.faqSection.faqs.map((faq) => ({
-          question:
-            typeof faq.question === "string"
-              ? { en: faq.question }
-              : faq.question,
-          answer: faq.answer
-            ? typeof faq.answer === "string"
-              ? { en: faq.answer }
-              : faq.answer
-            : undefined,
-          order: faq.order || 0,
-        })),
+        // FAQs are not stored here, they will be fetched dynamically from FAQs model
         isEnabled:
           data.faqSection.isEnabled !== undefined
             ? data.faqSection.isEnabled
@@ -760,6 +759,7 @@ class LandingPageService {
 
   /**
    * Get all landing pages with optional filters
+   * Returns landing pages with single language (default: English)
    */
   async getAllLandingPages(filters: {
     isActive?: boolean;
@@ -776,7 +776,12 @@ class LandingPageService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return { landingPages };
+    // Transform each landing page to single language (default: English)
+    const transformedLandingPages = landingPages.map((landingPage) =>
+      this.transformToLanguage(landingPage, "en")
+    );
+
+    return { landingPages: transformedLandingPages };
   }
 
   /**
@@ -794,6 +799,113 @@ class LandingPageService {
       throw new AppError("Landing page not found", 404);
     }
 
+    // Fetch FAQs from FAQs model if FAQ section is enabled
+    if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
+      const recentFaqs = await FAQs.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { status: FAQStatus.ACTIVE },
+          { status: { $exists: false }, isActive: { $ne: false } },
+        ],
+      })
+        .select("_id question answer sortOrder")
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .limit(8) // Max 8 FAQs
+        .lean();
+
+      // Map sortOrder to order to maintain same response structure
+      // Keep only the fields that match the original structure: _id, question, answer, order
+      const mappedFaqs = recentFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: faq.question,
+        answer: faq.answer,
+        order: faq.sortOrder || 0,
+      }));
+
+      (landingPage as any).faqSection = {
+        ...landingPage.faqSection,
+        faqs: mappedFaqs,
+      };
+    }
+
+    // Fetch Blogs from Blogs model if Blog section is enabled
+    if (landingPage.blogSection && landingPage.blogSection.isEnabled !== false) {
+      const blogs = await Blogs.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id title description coverImage seo createdAt viewCount authorId")
+        .populate("authorId", "firstName lastName")
+        .sort({ createdAt: -1 })
+        .limit(4) // Max 4 blogs
+        .lean();
+
+      // Map authorId to author name (combine firstName and lastName)
+      const blogsWithAuthor = blogs.map((blog: any) => {
+        let authorName = null;
+        if (blog.authorId && typeof blog.authorId === "object") {
+          const firstName = blog.authorId.firstName || "";
+          const lastName = blog.authorId.lastName || "";
+          authorName = `${firstName} ${lastName}`.trim() || null;
+        }
+        return {
+          ...blog,
+          author: authorName,
+        };
+      });
+
+      (landingPage as any).blogSection = {
+        ...landingPage.blogSection,
+        blogs: blogsWithAuthor,
+      };
+    }
+
+    // Fetch Testimonials from ProductTestimonials model if Testimonials section is enabled
+    if (landingPage.testimonialsSection && landingPage.testimonialsSection.isEnabled !== false) {
+      const testimonials = await ProductTestimonials.find({
+        isVisibleInLP: true,
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .populate({
+          path: "products",
+          match: { isDeleted: { $ne: true } },
+          populate: [
+            {
+              path: "categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
+        })
+        .select("_id videoUrl videoThumbnail products isFeatured displayOrder")
+        .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+        .limit(6) // Max 6 testimonials
+        .lean();
+
+      (landingPage as any).testimonialsSection = {
+        ...landingPage.testimonialsSection,
+        testimonials: testimonials,
+      };
+    }
+
+    // Fetch Product Categories from ProductCategory model if ProductCategory section is enabled
+    if (landingPage.productCategorySection && landingPage.productCategorySection.isEnabled !== false) {
+      // Fetch latest max 10 categories dynamically from product_categories table
+      const categories = await ProductCategory.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id slug name description sortOrder icon image productCount")
+        .sort({ createdAt: -1 }) // Latest first
+        .limit(10) // Max 10 categories
+        .lean();
+
+      (landingPage as any).productCategorySection = {
+        ...landingPage.productCategorySection,
+        productCategories: categories,
+      };
+    }
+
     return { landingPage };
   }
 
@@ -803,9 +915,11 @@ class LandingPageService {
    * Filters sections by isEnabled and sorts by order
    * Transforms all I18n fields to requested language
    * @param lang - Language code (en, nl, de, fr, es). Defaults to "en"
+   * @param userId - Optional user ID for authenticated users (to add is_liked and isInCart fields)
    */
   async getActiveLandingPage(
-    lang: SupportedLanguage = "en"
+    lang: SupportedLanguage = "en",
+    userId?: string | null
   ): Promise<{ landingPage: any }> {
     // Debug: Log the language parameter
     console.log(`[Landing Page Service] Processing with language: ${lang}`);
@@ -888,24 +1002,20 @@ class LandingPageService {
       landingPage.productCategorySection &&
       landingPage.productCategorySection.isEnabled !== false
     ) {
-      if (
-        landingPage.productCategorySection.productCategoryIds &&
-        landingPage.productCategorySection.productCategoryIds.length > 0
-      ) {
-        const categories = await ProductCategory.find({
-          _id: { $in: landingPage.productCategorySection.productCategoryIds },
-          isActive: true,
-          isDeleted: { $ne: true },
-        })
-          .select("_id slug name description sortOrder icon image productCount")
-          .sort({ sortOrder: 1 })
-          .lean();
+      // Fetch latest max 10 categories dynamically from product_categories table
+      const categories = await ProductCategory.find({
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id slug name description sortOrder icon image productCount")
+        .sort({ createdAt: -1 }) // Latest first
+        .limit(10) // Max 10 categories
+        .lean();
 
-        processedLandingPage.productCategorySection = {
-          ...landingPage.productCategorySection,
-          productCategories: categories,
-        };
-      }
+      processedLandingPage.productCategorySection = {
+        ...landingPage.productCategorySection,
+        productCategories: categories,
+      };
     } else {
       delete processedLandingPage.productCategorySection;
     }
@@ -968,32 +1078,200 @@ class LandingPageService {
     }
 
     // Filter and populate Testimonials Section
+    // Always fetch testimonials from ProductTestimonials model (max 6)
+    // Priority: isFeatured = true first, then latest
     if (
       landingPage.testimonialsSection &&
       landingPage.testimonialsSection.isEnabled !== false
     ) {
-      if (
-        landingPage.testimonialsSection.testimonialIds &&
-        landingPage.testimonialsSection.testimonialIds.length > 0
-      ) {
-        const testimonials = await ProductTestimonials.find({
-          _id: { $in: landingPage.testimonialsSection.testimonialIds },
-          isActive: true,
-          isDeleted: false,
+      // First try to fetch testimonials where isVisibleInLP = true and isActive = true
+      // Sort: isFeatured = true first, then by createdAt descending (latest)
+      let testimonials = await ProductTestimonials.find({
+        isVisibleInLP: true,
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .populate({
+          path: "products",
+          match: { isDeleted: { $ne: true } },
+          populate: [
+            {
+              path: "categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
         })
-          .populate("products", "_id name title slug")
+        .select(
+          "_id videoUrl videoThumbnail products isFeatured displayOrder"
+        )
+        .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+        .limit(6) // Max 6 testimonials
+        .lean();
+
+      // If no testimonials found with isVisibleInLP = true, fetch latest active testimonials
+      if (!testimonials || testimonials.length === 0) {
+        testimonials = await ProductTestimonials.find({
+          isActive: true,
+          isDeleted: { $ne: true },
+        })
+          .populate({
+            path: "products",
+            match: { isDeleted: { $ne: true } },
+            populate: [
+              {
+                path: "categories",
+                select: "sId slug name description sortOrder icon image productCount",
+              },
+            ],
+          })
           .select(
             "_id videoUrl videoThumbnail products isFeatured displayOrder"
           )
-          .sort({ displayOrder: 1, createdAt: -1 })
-          .limit(10) // Max 10 testimonials
+          .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
+          .limit(6) // Max 6 testimonials
           .lean();
-
-        processedLandingPage.testimonialsSection = {
-          ...landingPage.testimonialsSection,
-          testimonials: testimonials,
-        };
       }
+
+        // Manually populate ingredients for all products (since ingredients is string array, not ref)
+        // Collect all unique ingredient IDs from all products
+        const allIngredientIds = new Set<string>();
+        for (const testimonial of testimonials) {
+          if (testimonial.products && Array.isArray(testimonial.products)) {
+            for (const product of testimonial.products) {
+              const productObj = product as any;
+              if (productObj.ingredients && Array.isArray(productObj.ingredients) && productObj.ingredients.length > 0) {
+                productObj.ingredients.forEach((id: any) => {
+                  if (mongoose.Types.ObjectId.isValid(id)) {
+                    allIngredientIds.add(id.toString());
+                  }
+                });
+              }
+            }
+          }
+        }
+
+        // Batch fetch all ingredients
+        let ingredientsMap = new Map<string, any>();
+        if (allIngredientIds.size > 0) {
+          const ingredientObjectIds = Array.from(allIngredientIds).map(
+            (id) => new mongoose.Types.ObjectId(id)
+          );
+          const ingredients = await ProductIngredients.find({
+            _id: { $in: ingredientObjectIds },
+            isDeleted: { $ne: true },
+          })
+            .select("sId slug name description sortOrder icon image _id")
+            .lean();
+
+          // Create a map for quick lookup
+          ingredients.forEach((ingredient: any) => {
+            ingredientsMap.set(ingredient._id.toString(), ingredient);
+          });
+        }
+
+        // Get user's wishlist and cart product IDs if authenticated
+        let userWishlistProductIds: Set<string> = new Set();
+        let cartProductIds: Set<string> = new Set();
+        
+        if (userId) {
+          try {
+            // Get wishlist product IDs
+            const wishlistItems = await Wishlists.find({
+              userId: new mongoose.Types.ObjectId(userId),
+            })
+              .select("productId")
+              .lean();
+            userWishlistProductIds = new Set(
+              wishlistItems.map((item: any) => item.productId.toString())
+            );
+
+            // Get cart product IDs
+            cartProductIds = await cartService.getCartProductIds(userId);
+          } catch (error) {
+            logger.warn("Failed to fetch wishlist or cart for landing page", error);
+          }
+        }
+
+        // Replace ingredient IDs with populated objects and transform products to single language
+        for (const testimonial of testimonials) {
+          if (testimonial.products && Array.isArray(testimonial.products)) {
+            testimonial.products = testimonial.products.map((product: any) => {
+              const productObj = product as any;
+
+              // 1) Populate ingredients using the pre-fetched ingredientsMap
+              if (
+                productObj.ingredients &&
+                Array.isArray(productObj.ingredients) &&
+                productObj.ingredients.length > 0
+              ) {
+                const populatedIngredients = productObj.ingredients
+                  .map((id: any) => {
+                    const idStr = id.toString();
+                    return ingredientsMap.get(idStr) || null;
+                  })
+                  .filter((ingredient: any) => ingredient !== null)
+                  .map((ingredient: any) => ({
+                    _id: ingredient._id,
+                    sId: ingredient.sId,
+                    slug: ingredient.slug,
+                    name: getTranslatedString(ingredient.name, lang),
+                    description: getTranslatedText(ingredient.description, lang),
+                    sortOrder: ingredient.sortOrder,
+                    icon: ingredient.icon || null,
+                    image: ingredient.image || null,
+                  }));
+
+                productObj.ingredients = populatedIngredients;
+              }
+
+              // 2) Transform the entire product to a single language
+              //    This handles:
+              //    - title, description, shortDescription
+              //    - benefits, healthGoals
+              //    - nutritionInfo, howToUse
+              //    - comparisonSection (title, columns, rows.label)
+              //    - specification (main_title, items.title, items.descr)
+              //    - any other I18n fields handled by transformProductForLanguage
+              const translatedProduct = transformProductForLanguage(
+                productObj,
+                lang
+              );
+
+              // 3) Ensure categories names/descriptions are also flattened
+              if (
+                translatedProduct.categories &&
+                Array.isArray(translatedProduct.categories) &&
+                translatedProduct.categories.length > 0
+              ) {
+                translatedProduct.categories = translatedProduct.categories.map(
+                  (category: any) => ({
+                    ...category,
+                    name: getTranslatedString(category.name, lang),
+                    description: getTranslatedText(category.description, lang),
+                  })
+                );
+              }
+
+              // 4) Add is_liked and isInCart flags based on user context
+              const isLiked =
+                !!userId &&
+                userWishlistProductIds.has(translatedProduct._id.toString());
+              const isInCart =
+                !!userId && cartProductIds.has(translatedProduct._id.toString());
+
+              return {
+                ...translatedProduct,
+                is_liked: isLiked,
+                isInCart,
+              };
+            });
+          }
+        }
+
+      processedLandingPage.testimonialsSection = {
+        ...landingPage.testimonialsSection,
+        testimonials: testimonials,
+      };
     } else {
       delete processedLandingPage.testimonialsSection;
     }
@@ -1011,57 +1289,68 @@ class LandingPageService {
       landingPage.blogSection &&
       landingPage.blogSection.isEnabled !== false
     ) {
-      // Fetch recent blogs (max 3-4)
+      // Fetch recent blogs (max 4)
       const blogs = await Blogs.find({
         isActive: true,
         isDeleted: { $ne: true },
       })
-        .select("_id title description coverImage seo createdAt viewCount")
+        .select("_id title description coverImage seo createdAt viewCount authorId")
+        .populate("authorId", "firstName lastName")
         .sort({ createdAt: -1 })
         .limit(4) // Max 4 blogs
         .lean();
 
+      // Map authorId to author name (combine firstName and lastName)
+      const blogsWithAuthor = blogs.map((blog: any) => {
+        let authorName = null;
+        if (blog.authorId && typeof blog.authorId === "object") {
+          const firstName = blog.authorId.firstName || "";
+          const lastName = blog.authorId.lastName || "";
+          authorName = `${firstName} ${lastName}`.trim() || null;
+        }
+        return {
+          ...blog,
+          author: authorName,
+        };
+      });
+
       processedLandingPage.blogSection = {
         ...landingPage.blogSection,
-        blogs: blogs,
+        blogs: blogsWithAuthor,
       };
     } else {
       delete processedLandingPage.blogSection;
     }
 
     // Filter and fetch FAQs Section
+    // Always fetch latest FAQs from FAQs model (max 8)
     if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
-      // If FAQs are stored in the section, use them
-      // Otherwise, fetch recent FAQs (max 6-8)
-      if (
-        landingPage.faqSection.faqs &&
-        landingPage.faqSection.faqs.length > 0
-      ) {
-        processedLandingPage.faqSection = {
-          ...landingPage.faqSection,
-          faqs: landingPage.faqSection.faqs
-            .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
-            .slice(0, 8), // Max 8 FAQs
-        };
-      } else {
-        // Fetch recent FAQs from FAQs collection
-        const recentFaqs = await FAQs.find({
-          isDeleted: { $ne: true },
-          $or: [
-            { status: "active" },
-            { status: { $exists: false }, isActive: { $ne: false } },
-          ],
-        })
-          .select("_id question answer sortOrder")
-          .sort({ sortOrder: 1, createdAt: -1 })
-          .limit(8) // Max 8 FAQs
-          .lean();
+      // Fetch recent FAQs from FAQs collection
+      const recentFaqs = await FAQs.find({
+        isDeleted: { $ne: true },
+        $or: [
+          { status: FAQStatus.ACTIVE },
+          { status: { $exists: false }, isActive: { $ne: false } },
+        ],
+      })
+        .select("_id question answer sortOrder")
+        .sort({ sortOrder: 1, createdAt: -1 })
+        .limit(8) // Max 8 FAQs
+        .lean();
 
-        processedLandingPage.faqSection = {
-          ...landingPage.faqSection,
-          faqs: recentFaqs,
-        };
-      }
+      // Map sortOrder to order to maintain same response structure
+      // Keep only the fields that match the original structure: _id, question, answer, order
+      const mappedFaqs = recentFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: faq.question,
+        answer: faq.answer,
+        order: faq.sortOrder || 0,
+      }));
+
+      processedLandingPage.faqSection = {
+        ...landingPage.faqSection,
+        faqs: mappedFaqs,
+      };
     } else {
       delete processedLandingPage.faqSection;
     }
@@ -1411,6 +1700,7 @@ class LandingPageService {
           seo: blog.seo,
           createdAt: blog.createdAt,
           viewCount: blog.viewCount,
+          author: blog.author || null, // Author name (already mapped from authorId)
         })),
         isEnabled: landingPage.blogSection.isEnabled,
         order: landingPage.blogSection.order,
@@ -1456,52 +1746,114 @@ class LandingPageService {
     }
 
     // Update fields
+    // Rule: Non-image fields that are NOT in request -> empty/remove
+    // Image fields that are NOT in request -> preserve existing
     if (data.heroSection) {
-      if (data.heroSection.media) {
-        const mediaUpdate: any = {
-          type: data.heroSection.media.type,
-          url: data.heroSection.media.url,
-          sortOrder: data.heroSection.media.sortOrder,
-        };
-
-        (landingPage.heroSection.media as any) = {
-          ...(landingPage.heroSection.media as any),
-          ...mediaUpdate,
-        };
+      // Image fields: only update if explicitly provided
+      if (data.heroSection.media !== undefined) {
+        if (data.heroSection.media) {
+          const mediaUpdate: any = {
+            type: data.heroSection.media.type,
+            url: data.heroSection.media.url,
+            sortOrder: data.heroSection.media.sortOrder,
+          };
+          (landingPage.heroSection.media as any) = {
+            ...(landingPage.heroSection.media as any),
+            ...mediaUpdate,
+          };
+        }
       }
-      if (data.heroSection.title) {
-        // Convert title string to I18n format
-        const existingTitle = landingPage.heroSection.title as any;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.heroSection.title as any) =
-          typeof data.heroSection.title === "string"
-            ? { ...titleObj, en: data.heroSection.title }
-            : {
-                ...titleObj,
-                ...(data.heroSection.title as Record<string, any>),
-              };
+      if (data.heroSection.imageUrl !== undefined) {
+        (landingPage.heroSection as any).imageUrl = data.heroSection.imageUrl ?? "";
+      }
+      if (data.heroSection.videoUrl !== undefined) {
+        (landingPage.heroSection as any).videoUrl = data.heroSection.videoUrl ?? "";
+      }
+      if (data.heroSection.backgroundImage !== undefined) {
+        (landingPage.heroSection as any).backgroundImage = data.heroSection.backgroundImage ?? "";
+      }
+      
+      // Non-image fields: update if provided, else empty
+      if (data.heroSection.title !== undefined) {
+        if (data.heroSection.title) {
+          const existingTitle = landingPage.heroSection.title as any;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.heroSection.title as any) =
+            typeof data.heroSection.title === "string"
+              ? { ...titleObj, en: data.heroSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.heroSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.heroSection.title as any) = {};
+        }
       }
       if (data.heroSection.description !== undefined) {
-        // Convert description string to I18n format
-        const existingDesc = landingPage.heroSection.description as any;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.heroSection.description as any) =
-          typeof data.heroSection.description === "string"
-            ? { ...descObj, en: data.heroSection.description }
-            : {
-                ...descObj,
-                ...(data.heroSection.description as Record<string, any>),
-              };
+        if (data.heroSection.description) {
+          const existingDesc = landingPage.heroSection.description as any;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.heroSection.description as any) =
+            typeof data.heroSection.description === "string"
+              ? { ...descObj, en: data.heroSection.description }
+              : {
+                  ...descObj,
+                  ...(data.heroSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.heroSection.description as any) = {};
+        }
+      }
+      if (data.heroSection.highlightedText !== undefined) {
+        (landingPage.heroSection.highlightedText as any) = Array.isArray(data.heroSection.highlightedText)
+          ? data.heroSection.highlightedText.map((text: any) =>
+              typeof text === "string" ? { en: text } : text
+            )
+          : [];
+      }
+      if (data.heroSection.isEnabled !== undefined) {
+        (landingPage.heroSection as any).isEnabled = data.heroSection.isEnabled;
+      }
+      if (data.heroSection.order !== undefined) {
+        (landingPage.heroSection as any).order = data.heroSection.order;
+      }
+      
+      // Primary CTA: update if provided, preserve images if not provided
+      if (Array.isArray(data.heroSection.primaryCTA)) {
+        const existingCTA = (landingPage.heroSection as any).primaryCTA || [];
+        const maxLen = Math.max(existingCTA.length, data.heroSection.primaryCTA.length, 3);
+        const updatedCTA: any[] = [];
+        for (let index = 0; index < maxLen; index++) {
+          const cta = data.heroSection.primaryCTA[index];
+          const existing = existingCTA[index] || {};
+          if (cta === undefined) {
+            updatedCTA.push(existing);
+            continue;
+          }
+          // Non-image fields: update if provided, else empty
+          const label =
+            cta.label !== undefined
+              ? typeof cta.label === "string"
+                ? { en: cta.label }
+                : (cta as any).label ?? {}
+              : {};
+          const link = cta.link !== undefined ? cta.link : "";
+          const order = cta.order !== undefined ? cta.order : index;
+          // Image field: update if provided, else preserve existing
+          const image = cta.image !== undefined ? (cta.image == null ? "" : cta.image) : (existing.image ?? "");
+          updatedCTA.push({ label, image, link, order });
+        }
+        (landingPage.heroSection as any).primaryCTA = updatedCTA.slice(0, 3);
       }
     }
 
@@ -1511,93 +1863,206 @@ class LandingPageService {
         (landingPage as any).membershipSection = {};
       }
 
+      // Image fields: only update if explicitly provided
       if (data.membershipSection.backgroundImage !== undefined) {
         (landingPage.membershipSection as any).backgroundImage =
-          data.membershipSection.backgroundImage;
+          data.membershipSection.backgroundImage ?? "";
       }
 
-      if (data.membershipSection.title) {
-        const existingTitle = (landingPage.membershipSection as any)?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.membershipSection as any).title =
-          typeof data.membershipSection.title === "string"
-            ? { ...titleObj, en: data.membershipSection.title }
-            : {
-                ...titleObj,
-                ...(data.membershipSection.title as Record<string, any>),
-              };
-      }
-
-      if (data.membershipSection.description !== undefined) {
-        const existingDesc = (landingPage.membershipSection as any)
-          ?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.membershipSection as any).description =
-          typeof data.membershipSection.description === "string"
-            ? { ...descObj, en: data.membershipSection.description }
-            : {
-                ...descObj,
-                ...(data.membershipSection.description as Record<string, any>),
-              };
-      }
-    }
-
-    // Update how it works section
-    if (data.howItWorksSection) {
-      if (data.howItWorksSection.steps) {
-        const existingSteps =
-          (landingPage.howItWorksSection as any)?.steps || [];
-        const updatedSteps = data.howItWorksSection.steps.map((step, index) => {
-          const existingStep: any = existingSteps[index] || {};
-          const existingTitle = existingStep.title;
-          const existingDesc = existingStep.description;
+      // Non-image fields: update if provided, else empty
+      if (data.membershipSection.title !== undefined) {
+        if (data.membershipSection.title) {
+          const existingTitle = (landingPage.membershipSection as any)?.title;
           const titleObj =
             existingTitle &&
             typeof existingTitle === "object" &&
             !Array.isArray(existingTitle)
               ? (existingTitle as Record<string, any>)
               : {};
+          (landingPage.membershipSection as any).title =
+            typeof data.membershipSection.title === "string"
+              ? { ...titleObj, en: data.membershipSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.membershipSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.membershipSection as any).title = {};
+        }
+      }
+
+      if (data.membershipSection.description !== undefined) {
+        if (data.membershipSection.description) {
+          const existingDesc = (landingPage.membershipSection as any)
+            ?.description;
           const descObj =
             existingDesc &&
             typeof existingDesc === "object" &&
             !Array.isArray(existingDesc)
               ? (existingDesc as Record<string, any>)
               : {};
+          (landingPage.membershipSection as any).description =
+            typeof data.membershipSection.description === "string"
+              ? { ...descObj, en: data.membershipSection.description }
+              : {
+                  ...descObj,
+                  ...(data.membershipSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.membershipSection as any).description = {};
+        }
+      }
 
-          return {
-            image:
-              step.image !== undefined ? step.image : existingStep.image || "",
-            title: step.title
-              ? typeof step.title === "string"
-                ? { ...titleObj, en: step.title }
-                : { ...titleObj, ...(step.title as Record<string, any>) }
-              : existingStep.title || {},
-            description:
-              step.description !== undefined
-                ? typeof step.description === "string"
-                  ? { ...descObj, en: step.description }
-                  : { ...descObj, ...(step.description as Record<string, any>) }
-                : existingStep.description || {},
-            order:
-              step.order !== undefined
-                ? step.order
-                : existingStep.order !== undefined
-                ? existingStep.order
-                : index,
-          };
+      if (data.membershipSection.isEnabled !== undefined) {
+        (landingPage.membershipSection as any).isEnabled = data.membershipSection.isEnabled;
+      }
+
+      if (data.membershipSection.order !== undefined) {
+        (landingPage.membershipSection as any).order = data.membershipSection.order;
+      }
+
+      // Benefits: update if provided, preserve images if not provided
+      if (Array.isArray(data.membershipSection.benefits)) {
+        const existingBenefits = (landingPage.membershipSection as any).benefits || [];
+        const maxLen = Math.max(existingBenefits.length, data.membershipSection.benefits.length);
+        const updatedBenefits: any[] = [];
+        for (let index = 0; index < maxLen; index++) {
+          const benefit = data.membershipSection.benefits[index];
+          const existing = existingBenefits[index] || {};
+          if (benefit === undefined) {
+            updatedBenefits.push(existing);
+            continue;
+          }
+          // Image field: update if provided, else preserve existing
+          const icon = benefit.icon !== undefined ? (benefit.icon == null ? "" : benefit.icon) : (existing.icon ?? "");
+          // Non-image fields: update if provided, else empty
+          const title = benefit.title !== undefined
+            ? (typeof benefit.title === "string" ? { en: benefit.title } : (benefit as any).title ?? {})
+            : {};
+          const description =
+            benefit.description !== undefined
+              ? typeof benefit.description === "string"
+                ? { en: benefit.description }
+                : ((benefit as any).description || {})
+              : {};
+          const order = benefit.order !== undefined ? benefit.order : index;
+          updatedBenefits.push({ icon, title, description, order });
+        }
+        (landingPage.membershipSection as any).benefits = updatedBenefits.slice(0, 5);
+      }
+    }
+
+    // Update how it works section
+    if (data.howItWorksSection) {
+      if (!landingPage.howItWorksSection) {
+        (landingPage as any).howItWorksSection = {};
+      }
+
+      // Non-image fields: update if provided, else empty
+      if (data.howItWorksSection.title !== undefined) {
+        if (data.howItWorksSection.title) {
+          const existingTitle = (landingPage.howItWorksSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.howItWorksSection as any).title =
+            typeof data.howItWorksSection.title === "string"
+              ? { ...titleObj, en: data.howItWorksSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.howItWorksSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.howItWorksSection as any).title = {};
+        }
+      }
+
+      if (data.howItWorksSection.subTitle !== undefined) {
+        if (data.howItWorksSection.subTitle) {
+          const existingSubTitle = (landingPage.howItWorksSection as any)?.subTitle;
+          const subTitleObj =
+            existingSubTitle &&
+            typeof existingSubTitle === "object" &&
+            !Array.isArray(existingSubTitle)
+              ? (existingSubTitle as Record<string, any>)
+              : {};
+          (landingPage.howItWorksSection as any).subTitle =
+            typeof data.howItWorksSection.subTitle === "string"
+              ? { ...subTitleObj, en: data.howItWorksSection.subTitle }
+              : {
+                  ...subTitleObj,
+                  ...(data.howItWorksSection.subTitle as Record<string, any>),
+                };
+        } else {
+          (landingPage.howItWorksSection as any).subTitle = {};
+        }
+      }
+
+      if (data.howItWorksSection.description !== undefined) {
+        if (data.howItWorksSection.description) {
+          const existingDesc = (landingPage.howItWorksSection as any)?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.howItWorksSection as any).description =
+            typeof data.howItWorksSection.description === "string"
+              ? { ...descObj, en: data.howItWorksSection.description }
+              : {
+                  ...descObj,
+                  ...(data.howItWorksSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.howItWorksSection as any).description = {};
+        }
+      }
+
+      if (data.howItWorksSection.isEnabled !== undefined) {
+        (landingPage.howItWorksSection as any).isEnabled = data.howItWorksSection.isEnabled;
+      }
+
+      if (data.howItWorksSection.order !== undefined) {
+        (landingPage.howItWorksSection as any).order = data.howItWorksSection.order;
+      }
+
+      // Steps: update if provided, preserve images if not provided
+      if (Array.isArray(data.howItWorksSection.steps)) {
+        const existingSteps =
+          (landingPage.howItWorksSection as any)?.steps || [];
+        const updatedSteps = data.howItWorksSection.steps.map((step, index) => {
+          const existingStep: any = existingSteps[index] || {};
+          
+          // Image field: update if provided, else preserve existing
+          const image =
+            step.image !== undefined ? (step.image == null ? "" : step.image) : (existingStep.image ?? "");
+          
+          // Non-image fields: update if provided, else empty
+          const title = step.title !== undefined
+            ? (typeof step.title === "string"
+                ? { en: step.title }
+                : (step.title as Record<string, any>))
+            : {};
+          const description =
+            step.description !== undefined
+              ? (typeof step.description === "string"
+                  ? { en: step.description }
+                  : (step.description as Record<string, any>))
+              : {};
+          const order =
+            step.order !== undefined
+              ? step.order
+              : index;
+
+          return { image, title, description, order };
         });
 
         (landingPage as any).howItWorksSection = {
+          ...(landingPage.howItWorksSection as any),
           steps: updatedSteps,
         };
       }
@@ -1609,43 +2074,70 @@ class LandingPageService {
         (landingPage as any).productCategorySection = {};
       }
 
-      if (data.productCategorySection.title) {
-        const existingTitle = (landingPage.productCategorySection as any)
-          ?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.productCategorySection as any).title =
-          typeof data.productCategorySection.title === "string"
-            ? { ...titleObj, en: data.productCategorySection.title }
-            : {
-                ...titleObj,
-                ...(data.productCategorySection.title as Record<string, any>),
-              };
+      // Non-image fields: update if provided, else empty
+      if (data.productCategorySection.title !== undefined) {
+        if (data.productCategorySection.title) {
+          const existingTitle = (landingPage.productCategorySection as any)
+            ?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.productCategorySection as any).title =
+            typeof data.productCategorySection.title === "string"
+              ? { ...titleObj, en: data.productCategorySection.title }
+              : {
+                  ...titleObj,
+                  ...(data.productCategorySection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.productCategorySection as any).title = {};
+        }
       }
 
       if (data.productCategorySection.description !== undefined) {
-        const existingDesc = (landingPage.productCategorySection as any)
-          ?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.productCategorySection as any).description =
-          typeof data.productCategorySection.description === "string"
-            ? { ...descObj, en: data.productCategorySection.description }
-            : {
-                ...descObj,
-                ...(data.productCategorySection.description as Record<
-                  string,
-                  any
-                >),
-              };
+        if (data.productCategorySection.description) {
+          const existingDesc = (landingPage.productCategorySection as any)
+            ?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.productCategorySection as any).description =
+            typeof data.productCategorySection.description === "string"
+              ? { ...descObj, en: data.productCategorySection.description }
+              : {
+                  ...descObj,
+                  ...(data.productCategorySection.description as Record<
+                    string,
+                    any
+                  >),
+                };
+        } else {
+          (landingPage.productCategorySection as any).description = {};
+        }
+      }
+
+      if (
+        (data.productCategorySection as any).productCategoryIds !== undefined
+      ) {
+        const ids = (data.productCategorySection as any).productCategoryIds;
+        (landingPage.productCategorySection as any).productCategoryIds =
+          Array.isArray(ids) && ids.length > 0
+            ? ids.map((id: string) => new mongoose.Types.ObjectId(id))
+            : [];
+      }
+
+      if (data.productCategorySection.isEnabled !== undefined) {
+        (landingPage.productCategorySection as any).isEnabled = data.productCategorySection.isEnabled;
+      }
+
+      if (data.productCategorySection.order !== undefined) {
+        (landingPage.productCategorySection as any).order = data.productCategorySection.order;
       }
     }
 
@@ -1655,239 +2147,333 @@ class LandingPageService {
         (landingPage as any).missionSection = {};
       }
 
+      // Image fields: only update if explicitly provided
       if (data.missionSection.backgroundImage !== undefined) {
         (landingPage.missionSection as any).backgroundImage =
-          data.missionSection.backgroundImage;
+          data.missionSection.backgroundImage ?? "";
       }
 
-      if (data.missionSection.title) {
-        const existingTitle = (landingPage.missionSection as any)?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.missionSection as any).title =
-          typeof data.missionSection.title === "string"
-            ? { ...titleObj, en: data.missionSection.title }
-            : {
-                ...titleObj,
-                ...(data.missionSection.title as Record<string, any>),
-              };
+      // Non-image fields: update if provided, else empty
+      if (data.missionSection.title !== undefined) {
+        if (data.missionSection.title) {
+          const existingTitle = (landingPage.missionSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.missionSection as any).title =
+            typeof data.missionSection.title === "string"
+              ? { ...titleObj, en: data.missionSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.missionSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.missionSection as any).title = {};
+        }
       }
 
       if (data.missionSection.description !== undefined) {
-        const existingDesc = (landingPage.missionSection as any)?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.missionSection as any).description =
-          typeof data.missionSection.description === "string"
-            ? { ...descObj, en: data.missionSection.description }
-            : {
-                ...descObj,
-                ...(data.missionSection.description as Record<string, any>),
-              };
+        if (data.missionSection.description) {
+          const existingDesc = (landingPage.missionSection as any)?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.missionSection as any).description =
+            typeof data.missionSection.description === "string"
+              ? { ...descObj, en: data.missionSection.description }
+              : {
+                  ...descObj,
+                  ...(data.missionSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.missionSection as any).description = {};
+        }
+      }
+
+      if (data.missionSection.isEnabled !== undefined) {
+        (landingPage.missionSection as any).isEnabled = data.missionSection.isEnabled;
+      }
+
+      if (data.missionSection.order !== undefined) {
+        (landingPage.missionSection as any).order = data.missionSection.order;
+      }
+    }
+
+    // Update community section
+    if (data.communitySection) {
+      if (!landingPage.communitySection) {
+        (landingPage as any).communitySection = {};
+      }
+      
+      // Image fields: only update if explicitly provided
+      if (data.communitySection.backgroundImage !== undefined) {
+        (landingPage.communitySection as any).backgroundImage =
+          data.communitySection.backgroundImage ?? "";
+      }
+      
+      // Non-image fields: update if provided, else empty
+      if (data.communitySection.title !== undefined) {
+        if (data.communitySection.title) {
+          const existingTitle = (landingPage.communitySection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.communitySection as any).title =
+            typeof data.communitySection.title === "string"
+              ? { ...titleObj, en: data.communitySection.title }
+              : {
+                  ...titleObj,
+                  ...(data.communitySection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.communitySection as any).title = {};
+        }
+      }
+      if (data.communitySection.subTitle !== undefined) {
+        if (data.communitySection.subTitle) {
+          const existingSub = (landingPage.communitySection as any)?.subTitle;
+          const subObj =
+            existingSub &&
+            typeof existingSub === "object" &&
+            !Array.isArray(existingSub)
+              ? (existingSub as Record<string, any>)
+              : {};
+          (landingPage.communitySection as any).subTitle =
+            typeof data.communitySection.subTitle === "string"
+              ? { ...subObj, en: data.communitySection.subTitle }
+              : {
+                  ...subObj,
+                  ...(data.communitySection.subTitle as Record<string, any>),
+                };
+        } else {
+          (landingPage.communitySection as any).subTitle = {};
+        }
+      }
+      if (Array.isArray(data.communitySection.metrics)) {
+        (landingPage.communitySection as any).metrics = data.communitySection.metrics.map(
+          (metric: any, index: number) => ({
+            label:
+              typeof metric.label === "string"
+                ? { en: metric.label }
+                : (metric as any).label ?? {},
+            value: metric.value ?? "",
+            order: metric.order ?? index,
+          })
+        );
+      } else if (data.communitySection.metrics !== undefined) {
+        // If metrics is explicitly set to null/empty, clear it
+        (landingPage.communitySection as any).metrics = [];
+      }
+      if (data.communitySection.isEnabled !== undefined) {
+        (landingPage.communitySection as any).isEnabled = data.communitySection.isEnabled;
+      }
+      if (data.communitySection.order !== undefined) {
+        (landingPage.communitySection as any).order = data.communitySection.order;
       }
     }
 
     // Update features section
     if (data.featuresSection) {
-      if (data.featuresSection.title) {
-        if (!landingPage.featuresSection) {
-          (landingPage as any).featuresSection = {};
+      if (!landingPage.featuresSection) {
+        (landingPage as any).featuresSection = {};
+      }
+
+      // Non-image fields: update if provided, else empty
+      if (data.featuresSection.title !== undefined) {
+        if (data.featuresSection.title) {
+          const existingTitle = (landingPage.featuresSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.featuresSection as any).title =
+            typeof data.featuresSection.title === "string"
+              ? { ...titleObj, en: data.featuresSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.featuresSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.featuresSection as any).title = {};
         }
-        const existingTitle = (landingPage.featuresSection as any)?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.featuresSection as any).title =
-          typeof data.featuresSection.title === "string"
-            ? { ...titleObj, en: data.featuresSection.title }
-            : {
-                ...titleObj,
-                ...(data.featuresSection.title as Record<string, any>),
-              };
       }
 
       if (data.featuresSection.description !== undefined) {
-        if (!landingPage.featuresSection) {
-          (landingPage as any).featuresSection = {};
+        if (data.featuresSection.description) {
+          const existingDesc = (landingPage.featuresSection as any)?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.featuresSection as any).description =
+            typeof data.featuresSection.description === "string"
+              ? { ...descObj, en: data.featuresSection.description }
+              : {
+                  ...descObj,
+                  ...(data.featuresSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.featuresSection as any).description = {};
         }
-        const existingDesc = (landingPage.featuresSection as any)?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.featuresSection as any).description =
-          typeof data.featuresSection.description === "string"
-            ? { ...descObj, en: data.featuresSection.description }
-            : {
-                ...descObj,
-                ...(data.featuresSection.description as Record<string, any>),
-              };
       }
 
-      if (data.featuresSection.features) {
+      if (data.featuresSection.isEnabled !== undefined) {
+        (landingPage.featuresSection as any).isEnabled = data.featuresSection.isEnabled;
+      }
+
+      if (data.featuresSection.order !== undefined) {
+        (landingPage.featuresSection as any).order = data.featuresSection.order;
+      }
+
+      // Features array: update if provided, preserve images if not provided
+      if (Array.isArray(data.featuresSection.features)) {
         const existingFeatures =
           (landingPage.featuresSection as any)?.features || [];
         const updatedFeatures = data.featuresSection.features.map(
           (feature, index) => {
             const existingFeature: any = existingFeatures[index] || {};
-            const existingTitle = existingFeature.title;
-            const existingDesc = existingFeature.description;
-            const titleObj =
-              existingTitle &&
-              typeof existingTitle === "object" &&
-              !Array.isArray(existingTitle)
-                ? (existingTitle as Record<string, any>)
+            
+            // Image field: update if provided, else preserve existing
+            const icon =
+              feature.icon !== undefined
+                ? (feature.icon == null ? "" : feature.icon)
+                : (existingFeature.icon ?? "");
+            
+            // Non-image fields: update if provided, else empty
+            const title = feature.title !== undefined
+              ? (typeof feature.title === "string"
+                  ? { en: feature.title }
+                  : (feature.title as Record<string, any>))
+              : {};
+            const description =
+              feature.description !== undefined
+                ? (typeof feature.description === "string"
+                    ? { en: feature.description }
+                    : (feature.description as Record<string, any>))
                 : {};
-            const descObj =
-              existingDesc &&
-              typeof existingDesc === "object" &&
-              !Array.isArray(existingDesc)
-                ? (existingDesc as Record<string, any>)
-                : {};
+            const order =
+              feature.order !== undefined
+                ? feature.order
+                : index;
 
-            return {
-              icon:
-                feature.icon !== undefined
-                  ? feature.icon
-                  : existingFeature.icon || "",
-              title: feature.title
-                ? typeof feature.title === "string"
-                  ? { ...titleObj, en: feature.title }
-                  : { ...titleObj, ...(feature.title as Record<string, any>) }
-                : existingFeature.title || {},
-              description:
-                feature.description !== undefined
-                  ? typeof feature.description === "string"
-                    ? { ...descObj, en: feature.description }
-                    : {
-                        ...descObj,
-                        ...(feature.description as Record<string, any>),
-                      }
-                  : existingFeature.description || {},
-              order:
-                feature.order !== undefined
-                  ? feature.order
-                  : existingFeature.order !== undefined
-                  ? existingFeature.order
-                  : index,
-            };
+            return { icon, title, description, order };
           }
         );
 
-        if (!landingPage.featuresSection) {
-          (landingPage as any).featuresSection = {};
-        }
         (landingPage.featuresSection as any).features = updatedFeatures;
+      } else if (data.featuresSection.features !== undefined) {
+        // If features is explicitly set to null/empty, clear it
+        (landingPage.featuresSection as any).features = [];
       }
     }
 
     // Update designed by science section
     if (data.designedByScienceSection) {
-      if (data.designedByScienceSection.title) {
-        if (!landingPage.designedByScienceSection) {
-          (landingPage as any).designedByScienceSection = {};
+      if (!landingPage.designedByScienceSection) {
+        (landingPage as any).designedByScienceSection = {};
+      }
+
+      // Non-image fields: update if provided, else empty
+      if (data.designedByScienceSection.title !== undefined) {
+        if (data.designedByScienceSection.title) {
+          const existingTitle = (landingPage.designedByScienceSection as any)
+            ?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.designedByScienceSection as any).title =
+            typeof data.designedByScienceSection.title === "string"
+              ? { ...titleObj, en: data.designedByScienceSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.designedByScienceSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.designedByScienceSection as any).title = {};
         }
-        const existingTitle = (landingPage.designedByScienceSection as any)
-          ?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.designedByScienceSection as any).title =
-          typeof data.designedByScienceSection.title === "string"
-            ? { ...titleObj, en: data.designedByScienceSection.title }
-            : {
-                ...titleObj,
-                ...(data.designedByScienceSection.title as Record<string, any>),
-              };
       }
 
       if (data.designedByScienceSection.description !== undefined) {
-        if (!landingPage.designedByScienceSection) {
-          (landingPage as any).designedByScienceSection = {};
+        if (data.designedByScienceSection.description) {
+          const existingDesc = (landingPage.designedByScienceSection as any)
+            ?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.designedByScienceSection as any).description =
+            typeof data.designedByScienceSection.description === "string"
+              ? { ...descObj, en: data.designedByScienceSection.description }
+              : {
+                  ...descObj,
+                  ...(data.designedByScienceSection.description as Record<
+                    string,
+                    any
+                  >),
+                };
+        } else {
+          (landingPage.designedByScienceSection as any).description = {};
         }
-        const existingDesc = (landingPage.designedByScienceSection as any)
-          ?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.designedByScienceSection as any).description =
-          typeof data.designedByScienceSection.description === "string"
-            ? { ...descObj, en: data.designedByScienceSection.description }
-            : {
-                ...descObj,
-                ...(data.designedByScienceSection.description as Record<
-                  string,
-                  any
-                >),
-              };
       }
 
-      if (data.designedByScienceSection.steps) {
+      if (data.designedByScienceSection.isEnabled !== undefined) {
+        (landingPage.designedByScienceSection as any).isEnabled = data.designedByScienceSection.isEnabled;
+      }
+
+      if (data.designedByScienceSection.order !== undefined) {
+        (landingPage.designedByScienceSection as any).order = data.designedByScienceSection.order;
+      }
+
+      // Steps: update if provided, preserve images if not provided
+      if (Array.isArray(data.designedByScienceSection.steps)) {
         const existingSteps =
           (landingPage.designedByScienceSection as any)?.steps || [];
         const updatedSteps = data.designedByScienceSection.steps.map(
           (step, index) => {
             const existingStep: any = existingSteps[index] || {};
-            const existingTitle = existingStep.title;
-            const existingDesc = existingStep.description;
-            const titleObj =
-              existingTitle &&
-              typeof existingTitle === "object" &&
-              !Array.isArray(existingTitle)
-                ? (existingTitle as Record<string, any>)
+            
+            // Image field: update if provided, else preserve existing
+            const image =
+              step.image !== undefined
+                ? (step.image == null ? "" : step.image)
+                : (existingStep.image ?? "");
+            
+            // Non-image fields: update if provided, else empty
+            const title = step.title !== undefined
+              ? (typeof step.title === "string"
+                  ? { en: step.title }
+                  : (step.title as Record<string, any>))
+              : {};
+            const description =
+              step.description !== undefined
+                ? (typeof step.description === "string"
+                    ? { en: step.description }
+                    : (step.description as Record<string, any>))
                 : {};
-            const descObj =
-              existingDesc &&
-              typeof existingDesc === "object" &&
-              !Array.isArray(existingDesc)
-                ? (existingDesc as Record<string, any>)
-                : {};
+            const order =
+              step.order !== undefined
+                ? step.order
+                : index;
 
-            return {
-              image:
-                step.image !== undefined
-                  ? step.image
-                  : existingStep.image || "",
-              title: step.title
-                ? typeof step.title === "string"
-                  ? { ...titleObj, en: step.title }
-                  : { ...titleObj, ...(step.title as Record<string, any>) }
-                : existingStep.title || {},
-              description:
-                step.description !== undefined
-                  ? typeof step.description === "string"
-                    ? { ...descObj, en: step.description }
-                    : {
-                        ...descObj,
-                        ...(step.description as Record<string, any>),
-                      }
-                  : existingStep.description || {},
-              order:
-                step.order !== undefined
-                  ? step.order
-                  : existingStep.order !== undefined
-                  ? existingStep.order
-                  : index,
-            };
+            return { image, title, description, order };
           }
         );
 
@@ -1904,43 +2490,60 @@ class LandingPageService {
         (landingPage as any).customerResultsSection = {};
       }
 
-      if (data.customerResultsSection.title) {
-        const existingTitle = (landingPage.customerResultsSection as any)
-          ?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.customerResultsSection as any).title =
-          typeof data.customerResultsSection.title === "string"
-            ? { ...titleObj, en: data.customerResultsSection.title }
-            : {
-                ...titleObj,
-                ...(data.customerResultsSection.title as Record<string, any>),
-              };
+      // Non-image fields: update if provided, else empty
+      if (data.customerResultsSection.title !== undefined) {
+        if (data.customerResultsSection.title) {
+          const existingTitle = (landingPage.customerResultsSection as any)
+            ?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.customerResultsSection as any).title =
+            typeof data.customerResultsSection.title === "string"
+              ? { ...titleObj, en: data.customerResultsSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.customerResultsSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.customerResultsSection as any).title = {};
+        }
       }
 
       if (data.customerResultsSection.description !== undefined) {
-        const existingDesc = (landingPage.customerResultsSection as any)
-          ?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.customerResultsSection as any).description =
-          typeof data.customerResultsSection.description === "string"
-            ? { ...descObj, en: data.customerResultsSection.description }
-            : {
-                ...descObj,
-                ...(data.customerResultsSection.description as Record<
-                  string,
-                  any
-                >),
-              };
+        if (data.customerResultsSection.description) {
+          const existingDesc = (landingPage.customerResultsSection as any)
+            ?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.customerResultsSection as any).description =
+            typeof data.customerResultsSection.description === "string"
+              ? { ...descObj, en: data.customerResultsSection.description }
+              : {
+                  ...descObj,
+                  ...(data.customerResultsSection.description as Record<
+                    string,
+                    any
+                  >),
+                };
+        } else {
+          (landingPage.customerResultsSection as any).description = {};
+        }
+      }
+
+      if (data.customerResultsSection.isEnabled !== undefined) {
+        (landingPage.customerResultsSection as any).isEnabled = data.customerResultsSection.isEnabled;
+      }
+
+      if (data.customerResultsSection.order !== undefined) {
+        (landingPage.customerResultsSection as any).order = data.customerResultsSection.order;
       }
     }
 
@@ -1950,128 +2553,176 @@ class LandingPageService {
         (landingPage as any).blogSection = {};
       }
 
-      if (data.blogSection.title) {
-        const existingTitle = (landingPage.blogSection as any)?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.blogSection as any).title =
-          typeof data.blogSection.title === "string"
-            ? { ...titleObj, en: data.blogSection.title }
-            : {
-                ...titleObj,
-                ...(data.blogSection.title as Record<string, any>),
-              };
+      // Non-image fields: update if provided, else empty
+      if (data.blogSection.title !== undefined) {
+        if (data.blogSection.title) {
+          const existingTitle = (landingPage.blogSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.blogSection as any).title =
+            typeof data.blogSection.title === "string"
+              ? { ...titleObj, en: data.blogSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.blogSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.blogSection as any).title = {};
+        }
       }
 
       if (data.blogSection.description !== undefined) {
-        const existingDesc = (landingPage.blogSection as any)?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.blogSection as any).description =
-          typeof data.blogSection.description === "string"
-            ? { ...descObj, en: data.blogSection.description }
-            : {
-                ...descObj,
-                ...(data.blogSection.description as Record<string, any>),
-              };
+        if (data.blogSection.description) {
+          const existingDesc = (landingPage.blogSection as any)?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.blogSection as any).description =
+            typeof data.blogSection.description === "string"
+              ? { ...descObj, en: data.blogSection.description }
+              : {
+                  ...descObj,
+                  ...(data.blogSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.blogSection as any).description = {};
+        }
+      }
+
+      if (data.blogSection.isEnabled !== undefined) {
+        (landingPage.blogSection as any).isEnabled = data.blogSection.isEnabled;
+      }
+
+      if (data.blogSection.order !== undefined) {
+        (landingPage.blogSection as any).order = data.blogSection.order;
       }
     }
 
     // Update FAQ section
     if (data.faqSection) {
-      if (data.faqSection.title) {
-        if (!landingPage.faqSection) {
-          (landingPage as any).faqSection = {};
+      if (!landingPage.faqSection) {
+        (landingPage as any).faqSection = {};
+      }
+
+      // Non-image fields: update if provided, else empty
+      if (data.faqSection.title !== undefined) {
+        if (data.faqSection.title) {
+          const existingTitle = (landingPage.faqSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.faqSection as any).title =
+            typeof data.faqSection.title === "string"
+              ? { ...titleObj, en: data.faqSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.faqSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.faqSection as any).title = {};
         }
-        const existingTitle = (landingPage.faqSection as any)?.title;
-        const titleObj =
-          existingTitle &&
-          typeof existingTitle === "object" &&
-          !Array.isArray(existingTitle)
-            ? (existingTitle as Record<string, any>)
-            : {};
-        (landingPage.faqSection as any).title =
-          typeof data.faqSection.title === "string"
-            ? { ...titleObj, en: data.faqSection.title }
-            : {
-                ...titleObj,
-                ...(data.faqSection.title as Record<string, any>),
-              };
       }
 
       if (data.faqSection.description !== undefined) {
-        if (!landingPage.faqSection) {
-          (landingPage as any).faqSection = {};
+        if (data.faqSection.description) {
+          const existingDesc = (landingPage.faqSection as any)?.description;
+          const descObj =
+            existingDesc &&
+            typeof existingDesc === "object" &&
+            !Array.isArray(existingDesc)
+              ? (existingDesc as Record<string, any>)
+              : {};
+          (landingPage.faqSection as any).description =
+            typeof data.faqSection.description === "string"
+              ? { ...descObj, en: data.faqSection.description }
+              : {
+                  ...descObj,
+                  ...(data.faqSection.description as Record<string, any>),
+                };
+        } else {
+          (landingPage.faqSection as any).description = {};
         }
-        const existingDesc = (landingPage.faqSection as any)?.description;
-        const descObj =
-          existingDesc &&
-          typeof existingDesc === "object" &&
-          !Array.isArray(existingDesc)
-            ? (existingDesc as Record<string, any>)
-            : {};
-        (landingPage.faqSection as any).description =
-          typeof data.faqSection.description === "string"
-            ? { ...descObj, en: data.faqSection.description }
-            : {
-                ...descObj,
-                ...(data.faqSection.description as Record<string, any>),
-              };
       }
 
-      if (data.faqSection.faqs) {
-        const existingFAQs = (landingPage.faqSection as any)?.faqs || [];
-        const updatedFAQs = data.faqSection.faqs.map((faq, index) => {
-          const existingFAQ: any = existingFAQs[index] || {};
-          const existingQuestion = existingFAQ.question;
-          const existingAnswer = existingFAQ.answer;
-          const questionObj =
-            existingQuestion &&
-            typeof existingQuestion === "object" &&
-            !Array.isArray(existingQuestion)
-              ? (existingQuestion as Record<string, any>)
-              : {};
-          const answerObj =
-            existingAnswer &&
-            typeof existingAnswer === "object" &&
-            !Array.isArray(existingAnswer)
-              ? (existingAnswer as Record<string, any>)
-              : {};
-
-          return {
-            question: faq.question
-              ? typeof faq.question === "string"
-                ? { ...questionObj, en: faq.question }
-                : { ...questionObj, ...(faq.question as Record<string, any>) }
-              : existingFAQ.question || {},
-            answer:
-              faq.answer !== undefined
-                ? typeof faq.answer === "string"
-                  ? { ...answerObj, en: faq.answer }
-                  : { ...answerObj, ...(faq.answer as Record<string, any>) }
-                : existingFAQ.answer || {},
-            order:
-              faq.order !== undefined
-                ? faq.order
-                : existingFAQ.order !== undefined
-                ? existingFAQ.order
-                : index,
-          };
-        });
-
-        if (!landingPage.faqSection) {
-          (landingPage as any).faqSection = {};
-        }
-        (landingPage.faqSection as any).faqs = updatedFAQs;
+      if (data.faqSection.isEnabled !== undefined) {
+        (landingPage.faqSection as any).isEnabled = data.faqSection.isEnabled;
       }
+
+      if (data.faqSection.order !== undefined) {
+        (landingPage.faqSection as any).order = data.faqSection.order;
+      }
+
+      // FAQs are not updated here - they are fetched dynamically from FAQs model
+    }
+
+    // Update testimonials section
+    if (data.testimonialsSection) {
+      if (!landingPage.testimonialsSection) {
+        (landingPage as any).testimonialsSection = {};
+      }
+
+      // Non-image fields: update if provided, else empty
+      if (data.testimonialsSection.title !== undefined) {
+        if (data.testimonialsSection.title) {
+          const existingTitle = (landingPage.testimonialsSection as any)?.title;
+          const titleObj =
+            existingTitle &&
+            typeof existingTitle === "object" &&
+            !Array.isArray(existingTitle)
+              ? (existingTitle as Record<string, any>)
+              : {};
+          (landingPage.testimonialsSection as any).title =
+            typeof data.testimonialsSection.title === "string"
+              ? { ...titleObj, en: data.testimonialsSection.title }
+              : {
+                  ...titleObj,
+                  ...(data.testimonialsSection.title as Record<string, any>),
+                };
+        } else {
+          (landingPage.testimonialsSection as any).title = {};
+        }
+      }
+
+      if (data.testimonialsSection.subTitle !== undefined) {
+        if (data.testimonialsSection.subTitle) {
+          const existingSub = (landingPage.testimonialsSection as any)?.subTitle;
+          const subObj =
+            existingSub &&
+            typeof existingSub === "object" &&
+            !Array.isArray(existingSub)
+              ? (existingSub as Record<string, any>)
+              : {};
+          (landingPage.testimonialsSection as any).subTitle =
+            typeof data.testimonialsSection.subTitle === "string"
+              ? { ...subObj, en: data.testimonialsSection.subTitle }
+              : {
+                  ...subObj,
+                  ...(data.testimonialsSection.subTitle as Record<string, any>),
+                };
+        } else {
+          (landingPage.testimonialsSection as any).subTitle = {};
+        }
+      }
+
+      if (data.testimonialsSection.isEnabled !== undefined) {
+        (landingPage.testimonialsSection as any).isEnabled = data.testimonialsSection.isEnabled;
+      }
+
+      if (data.testimonialsSection.order !== undefined) {
+        (landingPage.testimonialsSection as any).order = data.testimonialsSection.order;
+      }
+
+      // Testimonials are not updated here - they are fetched dynamically from ProductTestimonials model
     }
 
     if (data.isActive !== undefined) {

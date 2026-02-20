@@ -31,10 +31,12 @@ class AdminProductTestimonialController {
     async (req: AuthenticatedRequest, res: Response) => {
       // Data is already parsed by middleware, but we'll extract for clarity
       const products: string[] = req.body.products || [];
+      const productsForDetailsPage: string[] = req.body.productsForDetailsPage || [];
       const isVisibleOnHomepage: boolean =
         req.body.isVisibleOnHomepage || false;
       const isFeatured: boolean = req.body.isFeatured || false;
       const isVisibleInLP: boolean = req.body.isVisibleInLP || false;
+      const isActive: boolean = req.body.isActive ?? true;
       const displayOrder: number = req.body.displayOrder || 0;
       const metadata: any = req.body.metadata || {};
 
@@ -51,6 +53,17 @@ class AdminProductTestimonialController {
         return new mongoose.Types.ObjectId(id);
       });
 
+      // Validate productsForDetailsPage IDs if provided
+      let productsForDetailsPageIds: mongoose.Types.ObjectId[] = [];
+      if (productsForDetailsPage && productsForDetailsPage.length > 0) {
+        productsForDetailsPageIds = productsForDetailsPage.map((id: string) => {
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            throw new AppError(`Invalid product ID for details page: ${id}`, 400);
+          }
+          return new mongoose.Types.ObjectId(id);
+        });
+      }
+
       // Get files from multer.fields
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
@@ -60,12 +73,20 @@ class AdminProductTestimonialController {
       }
 
       // Parallelize: Verify products exist AND upload files simultaneously
-      const [existingProducts, videoUrl, videoThumbnail] = await Promise.all([
+      const [existingProducts, existingProductsForDetailsPage, videoUrl, videoThumbnail] = await Promise.all([
         // Verify products exist
         Products.find({
           _id: { $in: productIds },
           isDeleted: { $ne: true },
         }).lean(),
+
+        // Verify productsForDetailsPage exist if provided
+        productsForDetailsPageIds.length > 0
+          ? Products.find({
+              _id: { $in: productsForDetailsPageIds },
+              isDeleted: { $ne: true },
+            }).lean()
+          : Promise.resolve([]),
 
         // Upload video (required)
         fileStorageService
@@ -92,15 +113,21 @@ class AdminProductTestimonialController {
         throw new AppError("One or more products not found", 404);
       }
 
+      // Validate productsForDetailsPage exist if provided
+      if (productsForDetailsPageIds.length > 0 && existingProductsForDetailsPage.length !== productsForDetailsPageIds.length) {
+        throw new AppError("One or more products for details page not found", 404);
+      }
+
       // Create testimonial with populated products in one go
       const testimonial = await ProductTestimonials.create({
         videoUrl,
         videoThumbnail,
         products: productIds,
+        productsForDetailsPage: productsForDetailsPageIds.length > 0 ? productsForDetailsPageIds : undefined,
         isVisibleOnHomepage,
         isFeatured,
         isVisibleInLP,
-        isActive: true,
+        isActive,
         displayOrder,
         metadata,
         createdBy: req.user?._id,
@@ -109,6 +136,7 @@ class AdminProductTestimonialController {
 
       // Populate products in parallel with response preparation
       await testimonial.populate("products", "title slug productImage");
+      await testimonial.populate("productsForDetailsPage", "title slug productImage");
 
       res.apiSuccess(
         { testimonial },
@@ -174,6 +202,7 @@ class AdminProductTestimonialController {
       const [testimonials, total] = await Promise.all([
         ProductTestimonials.find(query)
           .populate("products", "title slug productImage")
+          .populate("productsForDetailsPage", "title slug productImage")
           .populate("createdBy", "name email")
           .populate("updatedBy", "name email")
           .sort({ displayOrder: 1, createdAt: -1 })
@@ -213,6 +242,7 @@ class AdminProductTestimonialController {
         isDeleted: { $ne: true },
       })
         .populate("products", "title slug productImage")
+        .populate("productsForDetailsPage", "title slug productImage")
         .populate("createdBy", "name email")
         .populate("updatedBy", "name email");
 
@@ -237,9 +267,11 @@ class AdminProductTestimonialController {
       const { id } = req.params;
       const {
         products,
+        productsForDetailsPage,
         isVisibleOnHomepage,
         isFeatured,
         isVisibleInLP,
+        isActive,
         displayOrder,
         metadata,
       } = req.body;
@@ -291,6 +323,37 @@ class AdminProductTestimonialController {
               return existingProducts;
             })
         );
+      }
+
+      // Handle productsForDetailsPage update if provided
+      if (productsForDetailsPage !== undefined) {
+        if (Array.isArray(productsForDetailsPage) && productsForDetailsPage.length > 0) {
+          const productsForDetailsPageIds = productsForDetailsPage.map((productId: string) => {
+            if (!mongoose.Types.ObjectId.isValid(productId)) {
+              throw new AppError(`Invalid product ID for details page: ${productId}`, 400);
+            }
+            return new mongoose.Types.ObjectId(productId);
+          });
+
+          // Verify productsForDetailsPage exist (add to parallel operations)
+          parallelOperations.push(
+            Products.find({
+              _id: { $in: productsForDetailsPageIds },
+              isDeleted: { $ne: true },
+            })
+              .lean()
+              .then((existingProducts) => {
+                if (existingProducts.length !== productsForDetailsPageIds.length) {
+                  throw new AppError("One or more products for details page not found", 404);
+                }
+                testimonial.productsForDetailsPage = productsForDetailsPageIds;
+                return existingProducts;
+              })
+          );
+        } else {
+          // If empty array is provided, set to empty array
+          testimonial.productsForDetailsPage = [];
+        }
       }
 
       // Handle video upload if new video provided
@@ -345,6 +408,10 @@ class AdminProductTestimonialController {
         testimonial.isVisibleInLP = isVisibleInLP;
       }
 
+      if (isActive !== undefined) {
+        testimonial.isActive = isActive;
+      }
+
       if (displayOrder !== undefined) {
         testimonial.displayOrder = displayOrder;
       }
@@ -358,6 +425,7 @@ class AdminProductTestimonialController {
       await testimonial.save();
 
       await testimonial.populate("products", "title slug productImage");
+      await testimonial.populate("productsForDetailsPage", "title slug productImage");
 
       res.apiSuccess(
         { testimonial },

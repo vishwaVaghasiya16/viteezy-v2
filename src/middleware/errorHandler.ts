@@ -177,8 +177,16 @@ export const errorHandler = (
   if (error instanceof AppError) {
     statusCode = error.statusCode;
     message = error.message;
-    errorType = error.errorType || errorType;
-    errorText = error.message; // Use the error message as error text
+    errorType = (error as any).errorType || errorType;
+    
+    // Check if this is a validation error with detailed errors
+    if (((error as any).errorType === "Validation error" || (error as any).errorType === "Validation Error") && (error as any).error) {
+      // Use the detailed error message we set (contains all errors)
+      errorText = (error as any).error || error.message;
+      message = "Validation error";
+    } else {
+      errorText = error.message; // Use the error message as error text
+    }
   }
   // Handle Mongoose validation errors
   else if (error.name === "ValidationError") {
@@ -267,13 +275,24 @@ export const errorHandler = (
   });
 
   // Send standardized error response
-  const response: ApiResponse = {
+  const response: any = {
     success: false,
     message,
     errorType: errorType || "Server Error",
     error: errorText || message,
     data: null,
   };
+
+  // If this is a validation error with detailed errors array, include it in response
+  if (error instanceof AppError && ((error as any).errorType === "Validation error" || (error as any).errorType === "Validation Error") && (error as any).errors) {
+    // Set clear validation error message
+    response.message = "Validation error";
+    response.errorType = "Validation error";
+    // Include detailed validation errors array
+    response.errors = (error as any).errors;
+    // Use the combined error messages we set
+    response.error = (error as any).error || errorText || message;
+  }
 
   res.status(statusCode).json(response);
 };

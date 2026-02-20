@@ -26,6 +26,7 @@ router.use(authorize("Admin"));
  * @query {String} [search] - Search by name or email
  * @query {Boolean} [isActive] - Filter by active status (true/false)
  * @query {String} [userType] - Filter by user type: "new" or "recurring"
+ * @query {String} [registrationDate] - Filter by registration date (format: YYYY-MM-DD, e.g., 2025-02-21)
  */
 router.get(
   "/",

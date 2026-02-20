@@ -28,7 +28,14 @@ class CouponController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { cartId, couponCode, language = DEFAULT_LANGUAGE } = req.body;
+      const {
+        cartId,
+        couponCode,
+        language = DEFAULT_LANGUAGE,
+        planDurationDays,
+        isSubscription,
+        variantType: overrideVariantType,
+      } = req.body;
 
       // Get and validate cart
       const cart = await Carts.findOne({
@@ -134,8 +141,8 @@ class CouponController {
           throw new AppError("This coupon has expired", 400);
         }
 
-        // Check global usage limit
-        if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+        // Check global usage limit (0 means infinite, so skip check if 0 or undefined)
+        if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
           // Remove coupon from cart if usage limit reached
           await Carts.findByIdAndUpdate(
             cart._id,
@@ -149,8 +156,8 @@ class CouponController {
           throw new AppError("This coupon has reached its usage limit", 400);
         }
 
-        // Check user usage limit
-        if (coupon.userUsageLimit) {
+        // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
+        if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
           const userCouponUsageCount = await Orders.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
             couponCode: coupon.code,
@@ -177,9 +184,7 @@ class CouponController {
 
         // Calculate order amount (discounted price total before coupon) - same logic as cartService.applyCoupon
         // We need to calculate totals without coupon to get the base amount for validation
-        const totalsWithoutCoupon = await (
-          cartService as any
-        ).calculateCartTotalsWithVariantType(
+        const totalsWithoutCoupon = await (cartService as any).calculateCartTotalsWithVariantType(
           cart.items,
           cart.variantType as ProductVariant,
           0 // No coupon discount
@@ -210,6 +215,68 @@ class CouponController {
             } is required for this coupon`,
             400
           );
+        }
+
+        // Additional validation: recurringMonths for subscription sachet plans
+        // This ensures coupon only applies to specific subscription plan durations
+        if (
+          isSubscription &&
+          (overrideVariantType || cart.variantType) === ProductVariant.SACHETS &&
+          Array.isArray((coupon as any).recurringMonths) &&
+          (coupon as any).recurringMonths.length > 0
+        ) {
+          if (!planDurationDays) {
+            // Remove coupon from cart if planDurationDays is not provided
+            await Carts.findByIdAndUpdate(
+              cart._id,
+              {
+                couponCode: null,
+                couponDiscountAmount: 0,
+                updatedAt: new Date(),
+              },
+              { new: true }
+            );
+            throw new AppError(
+              "This coupon is only valid for specific subscription plans",
+              400
+            );
+          }
+
+          const recurringMonths: number[] = (coupon as any).recurringMonths;
+
+          // Map recurring month values to allowed duration days
+          // 1 -> 30 days, 2 -> 60 days, 3 -> 90 days, 6 -> 180 days
+          const monthToDuration: Record<number, number> = {
+            1: 30,
+            2: 60,
+            3: 90,
+            6: 180,
+          };
+
+          const allowedDurations = new Set<number>();
+          for (const month of recurringMonths) {
+            const mappedDuration = monthToDuration[month];
+            if (mappedDuration) {
+              allowedDurations.add(mappedDuration);
+            }
+          }
+
+          if (!allowedDurations.has(planDurationDays)) {
+            // Remove coupon from cart if plan duration is not allowed
+            await Carts.findByIdAndUpdate(
+              cart._id,
+              {
+                couponCode: null,
+                couponDiscountAmount: 0,
+                updatedAt: new Date(),
+              },
+              { new: true }
+            );
+            throw new AppError(
+              "This coupon is not applicable to the selected subscription plan",
+              400
+            );
+          }
         }
 
         // Get product IDs and category IDs from cart

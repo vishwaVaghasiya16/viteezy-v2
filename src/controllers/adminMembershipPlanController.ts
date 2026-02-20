@@ -112,6 +112,24 @@ class AdminMembershipPlanController {
         throw new AppError("Name is required", 400);
       }
 
+      // Check maximum active plans limit (max 3 active plans allowed)
+      // If creating a new plan with isActive=true, check active count
+      const willBeActive = isActive !== undefined ? isActive : true;
+      
+      if (willBeActive) {
+        const activePlansCount = await MembershipPlans.countDocuments({
+          isDeleted: false,
+          isActive: true,
+        });
+
+        if (activePlansCount >= 3) {
+          throw new AppError(
+            `Maximum 3 active membership plans allowed. Currently ${activePlansCount} active plans exist. Please deactivate an existing plan before creating a new one.`,
+            400
+          );
+        }
+      }
+
       if (await this.isNameTaken(name)) {
         throw new AppError(
           "Membership plan with this name already exists",
@@ -339,6 +357,28 @@ class AdminMembershipPlanController {
           plan._id as mongoose.Types.ObjectId
         );
       }
+      // Check maximum active plans limit when activating a plan
+      if (isActive !== undefined && isActive === true) {
+        // If this plan is currently inactive, check if we can activate it
+        if (plan.isActive === false) {
+          const activePlansCount = await MembershipPlans.countDocuments({
+            isDeleted: false,
+            isActive: true,
+            _id: { $ne: plan._id }, // Exclude current plan
+          });
+
+          if (activePlansCount >= 3) {
+            throw new AppError(
+              `Maximum 3 active membership plans allowed. Currently ${activePlansCount} active plans exist. Please deactivate an existing plan before activating this one.`,
+              400
+            );
+          }
+        }
+        updateData.isActive = isActive;
+      } else if (isActive !== undefined) {
+        updateData.isActive = isActive;
+      }
+
       if (shortDescription !== undefined)
         updateData.shortDescription = shortDescription;
       if (description !== undefined) updateData.description = description;
@@ -346,7 +386,6 @@ class AdminMembershipPlanController {
       if (interval !== undefined) updateData.interval = interval;
       if (durationDays !== undefined) updateData.durationDays = durationDays;
       if (benefits !== undefined) updateData.benefits = benefits;
-      if (isActive !== undefined) updateData.isActive = isActive;
       if (isAutoRenew !== undefined) updateData.isAutoRenew = isAutoRenew;
       if (metadata !== undefined) updateData.metadata = metadata;
       if (discountPercentage !== undefined) {

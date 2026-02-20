@@ -46,6 +46,14 @@ export interface IUser extends Document {
   passwordResetToken?: string;
   passwordResetTokenExpires?: Date;
   registeredAt?: Date;
+  // Push notification device tokens with metadata
+  deviceTokens?: string[]; // Array of device tokens (backward compatibility)
+  deviceTokenMetadata?: Array<{
+    token: string;
+    platform: "mobile" | "web";
+    provider: "onesignal" | "firebase";
+    addedAt?: Date;
+  }>; // Device tokens with platform and provider info
   // Family member fields
   isSubMember?: boolean; // Indicates if this is a family/sub-member
   parentMemberId?: Schema.Types.ObjectId; // Reference to parent/main member
@@ -148,8 +156,6 @@ const userSchema = new Schema<IUser>(
         "German",
         "French",
         "Spanish",
-        "Italian",
-        "Portuguese",
       ],
     },
     registeredAt: {
@@ -215,6 +221,40 @@ const userSchema = new Schema<IUser>(
     passwordResetTokenExpires: {
       type: Date,
       select: false,
+    },
+    // Push notification device tokens (backward compatibility)
+    deviceTokens: {
+      type: [String],
+      default: [],
+      select: false, // Don't include in queries by default for security
+    },
+    // Device tokens with metadata (platform and provider)
+    deviceTokenMetadata: {
+      type: [
+        {
+          token: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+          platform: {
+            type: String,
+            enum: ["mobile", "web"],
+            required: true,
+          },
+          provider: {
+            type: String,
+            enum: ["onesignal", "firebase"],
+            required: true,
+          },
+          addedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+      default: [],
+      select: false, // Don't include in queries by default for security
     },
     // Family member fields
     isSubMember: {

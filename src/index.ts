@@ -5,16 +5,18 @@
  * @author Viteezy Development Team
  * @version 2.0.0
  */
-// Note: Module aliases are handled by:
-// - Development: tsconfig-paths/register (via nodemon exec)
-// - Production: module-alias/register (via npm start script)
+// Module aliases: loaded by the run script, not here, so dev uses src and prod uses dist.
+// - npm run dev:node uses ts-node -r tsconfig-paths/register → @/* resolves to src/*
+// - npm start uses node -r module-alias/register → @/* resolves to dist/*
+// Do NOT import "module-alias/register" here or dev will resolve to dist and ignore source changes.
 import express, { Application, Request, Response } from "express";
 import { IncomingMessage, ServerResponse } from "http";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
+// Rate limiting disabled - commented out as per request
+// import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
@@ -76,11 +78,12 @@ app.use(helmet());
 
 /**
  * CORS (Cross-Origin Resource Sharing) Configuration
- * Allows requests from configured origins with credentials support
+ * Allow all origins (no specific URL or port restriction)
+ * origin: true reflects the request origin, allowing any domain with credentials
  */
 app.use(
   cors({
-    origin: config.cors.origin,
+    origin: true, // Allow any origin
     credentials: true, // Allow cookies and authentication headers
   })
 );
@@ -107,15 +110,17 @@ if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
  * Prevents abuse by limiting the number of requests from a single IP
  * Configured via environment variables with sensible defaults
  * Note: Webhook routes are excluded from rate limiting (registered before this middleware)
+ * 
+ * COMMENTED OUT: Rate limiting disabled as per request
  */
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs, // Time window in milliseconds (15 minutes default)
-  max: config.rateLimit.maxRequests, // Maximum requests per window per IP
-  message: "Too many requests from this IP, please try again later.",
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
-});
-app.use(limiter);
+// const limiter = rateLimit({
+//   windowMs: config.rateLimit.windowMs, // Time window in milliseconds (15 minutes default)
+//   max: config.rateLimit.maxRequests, // Maximum requests per window per IP
+//   message: "Too many requests from this IP, please try again later.",
+//   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+//   legacyHeaders: false, // Disable `X-RateLimit-*` headers
+// });
+// app.use(limiter);
 
 /**
  * IMPORTANT: Webhook routes must be registered BEFORE JSON parser
@@ -384,59 +389,102 @@ app.use(
  * - /api/v1/docs (Python FastAPI docs)
  * - /api/v1/redoc (Python FastAPI ReDoc)
  */
+// Path filter function for Python proxy
+const pythonApiPathFilter = (pathname: string, req: IncomingMessage): boolean => {
+  // Get the actual path from the request
+  const expressReq = req as Request;
+  const actualPath = expressReq.path || pathname;
+  
+  logger.debug(`[Python Proxy PathFilter] Checking path: ${actualPath} (pathname: ${pathname})`);
+  
+  // Proxy these specific Python routes
+  const pythonRoutes = [
+    "/api/v1/health",
+    "/api/v1/sessions",
+    "/api/v1/chat",
+    "/api/v1/useridLogin",
+    "/api/v1/docs",
+    "/api/v1/redoc",
+    "/api/v1/openapi.json",
+  ];
+  
+  // Check exact matches
+  if (pythonRoutes.includes(actualPath)) {
+    logger.info(`[Python Proxy PathFilter] Matched exact route: ${actualPath}`);
+    return true;
+  }
+  
+  // Check if path starts with /api/v1/sessions/ (for session-specific routes)
+  if (actualPath.startsWith("/api/v1/sessions/")) {
+    logger.info(`[Python Proxy PathFilter] Matched sessions route: ${actualPath}`);
+    return true;
+  }
+  
+  logger.debug(`[Python Proxy PathFilter] No match for: ${actualPath}`);
+  return false;
+};
+
 const pythonApiProxyOptions: Options<Request, Response> = {
   target: "http://localhost:8000",
   changeOrigin: true,
-  pathFilter: (pathname: string, req: IncomingMessage) => {
-    // Proxy these specific Python routes
-    const pythonRoutes = [
-      "/api/v1/health",
-      "/api/v1/sessions",
-      "/api/v1/chat",
-      "/api/v1/useridLogin",
-      "/api/v1/docs",
-      "/api/v1/redoc",
-      "/api/v1/openapi.json",
-    ];
-    
-    // Check exact matches
-    if (pythonRoutes.includes(pathname)) {
-      return true;
-    }
-    
-    // Check if path starts with /api/v1/sessions/ (for session-specific routes)
-    if (pathname.startsWith("/api/v1/sessions/")) {
-      return true;
-    }
-    
-    return false;
-  },
+  pathFilter: pythonApiPathFilter,
   onProxyReq: (proxyReq: IncomingMessage, req: IncomingMessage, res: ServerResponse) => {
     const expressReq = req as Request;
-    console.log(`[Python Proxy] ${expressReq.method} ${expressReq.url} -> http://localhost:8000${expressReq.url}`);
+    logger.info(`[Python Proxy] Proxying ${expressReq.method} ${expressReq.url} -> http://localhost:8000${expressReq.url}`);
+  },
+  onError: (err: Error, req: IncomingMessage, res: ServerResponse) => {
+    const expressReq = req as Request;
+    logger.error(`[Python Proxy] Error proxying ${expressReq.method} ${expressReq.url}: ${err.message}`);
+    if (!res.headersSent) {
+      (res as Response).status(503).json({
+        success: false,
+        message: "Python API service is unavailable",
+        errorType: "Service Unavailable",
+        error: err.message,
+        data: null,
+      });
+    }
+  },
+  onProxyRes: (proxyRes: ServerResponse, req: IncomingMessage, res: ServerResponse) => {
+    const expressReq = req as Request;
+    logger.info(`[Python Proxy] Response ${proxyRes.statusCode} for ${expressReq.method} ${expressReq.url}`);
   },
 } as Options<Request, Response>;
 
 const pythonApiProxy = createProxyMiddleware(pythonApiProxyOptions);
 
 // Error handling wrapper for Python proxy
+// Note: The pathFilter in pythonApiProxyOptions already handles route matching
+// This wrapper just adds error handling and logging
 const pythonApiProxyWithErrorHandling = (
   req: Request,
   res: Response,
   next: express.NextFunction
 ) => {
+  // Log incoming request
+  logger.info(`[Python Proxy Middleware] ${req.method} ${req.originalUrl}`);
+  
+  // Let the proxy middleware handle path filtering internally
+  // It will call next() automatically if path doesn't match
   pythonApiProxy(req, res, (err: any) => {
     if (err) {
-      console.error("Python API Proxy Error:", err.message);
+      logger.error(`[Python Proxy Middleware] Error: ${err.message}`, err);
       if (!res.headersSent) {
         res.status(503).json({
-          status: "error",
+          success: false,
           message: "Python API service is unavailable",
-          error_code: "SERVICE_UNAVAILABLE",
+          errorType: "Service Unavailable",
+          error: err.message,
+          data: null,
         });
       }
     } else {
-      next();
+      // Proxy middleware handles routing - if it doesn't proxy, it calls next()
+      // If response was sent, don't call next()
+      if (!res.headersSent) {
+        logger.debug(`[Python Proxy Middleware] Request not proxied, continuing to next middleware`);
+        next();
+      }
     }
   });
 };
@@ -498,6 +546,26 @@ const startServer = async (): Promise<void> => {
   try {
     // Connect to MongoDB database
     await connectDatabase();
+
+    // Initialize subscription renewal cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/subscriptionRenewalJob");
+      logger.info("✅ Subscription renewal cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize subscription renewal job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize header banner schedule cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/headerBannerScheduleJob");
+      logger.info("✅ Header banner schedule cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize header banner schedule job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
 
     // Start HTTP server and listen on configured port and host
     // Use 0.0.0.0 to accept connections from any IP address (public access)

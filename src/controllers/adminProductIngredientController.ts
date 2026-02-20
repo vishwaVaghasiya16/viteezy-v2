@@ -15,6 +15,117 @@ interface AuthenticatedRequest extends Request {
 }
 
 class AdminProductIngredientController {
+  /**
+   * Add ingredient ID to products' ingredients array
+   */
+  private async addIngredientIdToProducts(
+    ingredientId: mongoose.Types.ObjectId,
+    productIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (productIds.length === 0 || !ingredientId) {
+      return;
+    }
+
+    try {
+      const result = await Products.updateMany(
+        {
+          _id: { $in: productIds },
+          isDeleted: false,
+        },
+        {
+          $addToSet: { ingredients: ingredientId }, // Add if not already present
+        }
+      );
+
+      logger.info(
+        `Added ingredient ID ${ingredientId} to ${result.modifiedCount} out of ${result.matchedCount} products`
+      );
+    } catch (error: any) {
+      logger.error("Error adding ingredient ID to products", {
+        ingredientId,
+        productIds,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Remove ingredient ID from products' ingredients array
+   */
+  private async removeIngredientIdFromProducts(
+    ingredientId: mongoose.Types.ObjectId | string,
+    productIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (productIds.length === 0 || !ingredientId) {
+      return;
+    }
+
+    try {
+      // Ensure ingredientId is properly converted to ObjectId
+      const ingredientObjectId =
+        ingredientId instanceof mongoose.Types.ObjectId
+          ? ingredientId
+          : new mongoose.Types.ObjectId(String(ingredientId));
+
+      const result = await Products.updateMany(
+        {
+          _id: { $in: productIds },
+          isDeleted: false,
+        },
+        {
+          $pull: { ingredients: ingredientObjectId },
+        }
+      );
+
+      logger.info(
+        `Removed ingredient ID ${ingredientObjectId} from ${result.modifiedCount} out of ${result.matchedCount} products`
+      );
+    } catch (error: any) {
+      logger.error("Error removing ingredient ID from products", {
+        ingredientId,
+        productIds,
+        error: error.message,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Update products' ingredients array when ingredient products change
+   */
+  private async updateIngredientIdInProducts(
+    ingredientId: mongoose.Types.ObjectId,
+    oldProductIds: mongoose.Types.ObjectId[],
+    newProductIds: mongoose.Types.ObjectId[]
+  ): Promise<void> {
+    if (!ingredientId) {
+      return;
+    }
+
+    // Find products to remove from (in old but not in new)
+    const productsToRemove = oldProductIds.filter(
+      (oldId) =>
+        !newProductIds.some((newId) => newId.toString() === oldId.toString())
+    );
+
+    // Find products to add to (in new but not in old)
+    const productsToAdd = newProductIds.filter(
+      (newId) =>
+        !oldProductIds.some((oldId) => oldId.toString() === newId.toString())
+    );
+
+    // Remove from old products
+    if (productsToRemove.length > 0) {
+      await this.removeIngredientIdFromProducts(ingredientId, productsToRemove);
+    }
+
+    // Add to new products
+    if (productsToAdd.length > 0) {
+      await this.addIngredientIdToProducts(ingredientId, productsToAdd);
+    }
+  }
+
   private async uploadImage(
     file?: Express.Multer.File
   ): Promise<MediaType | null> {
@@ -128,6 +239,31 @@ class AdminProductIngredientController {
           : undefined,
       });
 
+      // Add ingredient ID to products' ingredients array
+      if (productIds.length > 0) {
+        // Get ingredient ID - handle both _id and id properties
+        let ingredientId: mongoose.Types.ObjectId;
+
+        if (ingredient._id) {
+          ingredientId =
+            ingredient._id instanceof mongoose.Types.ObjectId
+              ? ingredient._id
+              : new mongoose.Types.ObjectId(ingredient._id.toString());
+        } else if ((ingredient as any).id) {
+          ingredientId = new mongoose.Types.ObjectId((ingredient as any).id);
+        } else {
+          logger.error("Ingredient ID not found after creation", {
+            ingredient: ingredient.toObject
+              ? ingredient.toObject()
+              : ingredient,
+          });
+          throw new AppError("Failed to get ingredient ID after creation", 500);
+        }
+
+        // Add ingredient ID to all associated products
+        await this.addIngredientIdToProducts(ingredientId, productIds);
+      }
+
       res.status(201).json({
         success: true,
         message: "Product ingredient created successfully",
@@ -195,7 +331,8 @@ class AdminProductIngredientController {
   );
 
   /**
-   * Get a single ingredient by id (with linked product count)
+   * Get a single ingredient by id with full product data (like product GET by id).
+   * Populates products array with full product documents so response has complete product data.
    */
   getIngredientById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
@@ -204,11 +341,35 @@ class AdminProductIngredientController {
       const ingredient = await ProductIngredients.findOne({
         _id: id,
         isDeleted: { $ne: true },
-      }).lean();
+      })
+        .populate({
+          path: "products",
+          model: "products",
+          match: { isDeleted: false },
+          options: { lean: true },
+          populate: [
+            {
+              path: "ingredients",
+              model: "product_ingredients",
+              select: "name description image",
+            },
+            {
+              path: "categories",
+              model: "product_categories",
+              select: "sId slug name description sortOrder icon image productCount",
+            },
+          ],
+        })
+        .lean();
 
       if (!ingredient) {
         throw new AppError("Product ingredient not found", 404);
       }
+
+      // Ensure products is always an array (populate may leave nulls for deleted refs)
+      const products = Array.isArray(ingredient.products)
+        ? ingredient.products.filter((p: any) => p != null)
+        : [];
 
       res.status(200).json({
         success: true,
@@ -216,7 +377,8 @@ class AdminProductIngredientController {
         data: {
           ingredient: {
             ...ingredient,
-            linkedProductCount: ingredient.products?.length || 0,
+            products,
+            linkedProductCount: products.length,
           },
         },
       });
@@ -230,7 +392,7 @@ class AdminProductIngredientController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
       const requesterId = req.user?._id;
-      const { name, description, products, isActive } = req.body;
+      let { name, description, products, isActive } = req.body;
 
       const existing = await ProductIngredients.findOne({
         _id: id,
@@ -241,57 +403,81 @@ class AdminProductIngredientController {
         throw new AppError("Product ingredient not found", 404);
       }
 
-      // Handle name update - merge with existing if provided
-      let finalName = existing.name || {};
-      if (name) {
-        // Check if English name is being changed
-        const newEnglishName = name.en;
-        const existingEnglishName = existing.name?.en;
+      // Normalize name: allow plain string from validation (e.g. when translation didn't run)
+      if (typeof name === "string" && name.trim()) {
+        name = { en: name.trim() };
+      }
 
+      // Convert existing I18n subdocuments to plain objects so merge works (Mongoose subdocuments have getters)
+      const existingNamePlain =
+        existing.name && typeof existing.name === "object"
+          ? (existing.name as any).toObject
+            ? (existing.name as any).toObject()
+            : { ...(existing.name as object) }
+          : {};
+      const existingDescPlain =
+        existing.description && typeof existing.description === "object"
+          ? (existing.description as any).toObject
+            ? (existing.description as any).toObject()
+            : { ...(existing.description as object) }
+          : {};
+
+      // Handle name update - merge with existing if provided
+      const existingEnglishName = existingNamePlain.en;
+      let finalName: Record<string, string> = { ...existingNamePlain };
+      if (name && typeof name === "object") {
+        const newEnglishName = name.en;
         if (newEnglishName && newEnglishName !== existingEnglishName) {
           await this.assertNameUnique(newEnglishName, id);
         }
-
-        // Merge name fields
-        finalName = {
-          ...finalName,
-          ...name,
-        };
+        finalName = { ...finalName, ...name };
       }
 
-      // Handle description update - merge with existing if provided
-      let finalDescription = existing.description || {};
+      // Handle description update - merge with existing if provided (description can be I18n object or plain string from form)
+      let finalDescription: Record<string, string> = { ...existingDescPlain };
       if (description !== undefined) {
+        const descObj =
+          typeof description === "string"
+            ? { en: description }
+            : description;
         finalDescription = {
           ...finalDescription,
-          ...description,
+          ...(descObj && typeof descObj === "object" ? descObj : {}),
         };
       }
 
-      // Validate products if provided
-      let productIds = existing.products;
-      if (products && Array.isArray(products)) {
+      // Normalize and validate products if provided (allow array of IDs or array of objects with _id)
+      const oldProductIds = Array.isArray(existing.products)
+        ? existing.products.map((p: any) =>
+            p instanceof mongoose.Types.ObjectId ? p : new mongoose.Types.ObjectId(p?.toString?.() ?? p)
+          )
+        : [];
+      let productIds = oldProductIds;
+      if (products !== undefined && Array.isArray(products)) {
         if (products.length === 0) {
-          throw new AppError("At least one product must be selected", 400);
-        }
+          // Empty array = keep current products (no change)
+          productIds = oldProductIds;
+        } else {
+          productIds = products.map((item: any) => {
+            const productId =
+              typeof item === "string" ? item : item?._id ?? item?.id;
+            if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+              throw new AppError(`Invalid product ID: ${productId}`, 400);
+            }
+            return new mongoose.Types.ObjectId(productId);
+          });
 
-        productIds = products.map((productId: string) => {
-          if (!mongoose.Types.ObjectId.isValid(productId)) {
-            throw new AppError(`Invalid product ID: ${productId}`, 400);
+          const existingProducts = await Products.find({
+            _id: { $in: productIds },
+            isDeleted: false,
+          });
+          if (existingProducts.length !== productIds.length) {
+            throw new AppError("One or more products not found", 404);
           }
-          return new mongoose.Types.ObjectId(productId);
-        });
-
-        // Verify products exist
-        const existingProducts = await Products.find({
-          _id: { $in: productIds },
-          isDeleted: false,
-        });
-
-        if (existingProducts.length !== productIds.length) {
-          throw new AppError("One or more products not found", 404);
         }
       }
+
+      const ingredientId = new mongoose.Types.ObjectId(id);
 
       // Handle image upload
       let imageData = existing.image;
@@ -317,30 +503,71 @@ class AdminProductIngredientController {
         }
       }
 
-      // Transform image type to match Mongoose enum (capitalized) if imageData changed
+      // Transform image type to match Mongoose enum (capitalized) only when image actually changed
       const transformedImage =
         imageData && imageData !== existing.image
           ? {
               ...imageData,
               type: imageData.type === "image" ? "Image" : "Video",
             }
-          : imageData;
+          : undefined;
 
-      const updateData: any = {};
-      if (name !== undefined) updateData.name = finalName;
-      if (description !== undefined) updateData.description = finalDescription;
+      // Build only the fields we want to set; use $set so DB is updated correctly (partial update).
+      // Name and description are I18n subdocuments - set via dot notation so Mongoose/MongoDB persist them reliably.
+      const updateData: Record<string, any> = {};
+      const I18N_LANGS: Array<"en" | "nl" | "de" | "fr" | "es"> = ["en", "nl", "de", "fr", "es"];
+      if (name !== undefined) {
+        const plainName =
+          (typeof finalName === "object" && finalName !== null && !Array.isArray(finalName)
+            ? { ...finalName }
+            : { en: String(finalName ?? "") }) as Record<string, string>;
+        I18N_LANGS.forEach((lang) => {
+          const val = plainName[lang];
+          if (val !== undefined && val !== null) {
+            updateData[`name.${lang}`] = String(val).trim();
+          }
+        });
+      }
+      if (description !== undefined) {
+        const plainDesc =
+          (typeof finalDescription === "object" && finalDescription !== null && !Array.isArray(finalDescription)
+            ? { ...finalDescription }
+            : { en: String(finalDescription ?? "") }) as Record<string, string>;
+        I18N_LANGS.forEach((lang) => {
+          const val = plainDesc[lang];
+          if (val !== undefined && val !== null) {
+            updateData[`description.${lang}`] = String(val).trim();
+          }
+        });
+      }
       if (products !== undefined) updateData.products = productIds;
       if (isActive !== undefined) updateData.isActive = isActive;
-      if (imageData !== undefined) updateData.image = transformedImage;
-      updateData.updatedBy = requesterId
-        ? new mongoose.Types.ObjectId(requesterId)
-        : undefined;
+      if (transformedImage !== undefined) updateData.image = transformedImage;
+      if (requesterId) updateData.updatedBy = new mongoose.Types.ObjectId(requesterId);
+
+      if (Object.keys(updateData).length === 0) {
+        res.status(200).json({
+          success: true,
+          message: "No changes to update",
+          data: { ingredient: existing.toObject ? existing.toObject() : existing },
+        });
+        return;
+      }
 
       const updated = await ProductIngredients.findByIdAndUpdate(
         id,
-        updateData,
+        { $set: updateData },
         { new: true, runValidators: true }
       ).lean();
+
+      // Update products' ingredients array if products changed
+      if (products && Array.isArray(products)) {
+        await this.updateIngredientIdInProducts(
+          ingredientId,
+          oldProductIds,
+          productIds
+        );
+      }
 
       res.status(200).json({
         success: true,
@@ -370,6 +597,30 @@ class AdminProductIngredientController {
       // Delete image if exists
       if (ingredient.image) {
         await this.deleteImage(ingredient.image);
+      }
+
+      // Remove ingredient ID from all products' ingredients array
+      const productIds = ingredient.products || [];
+      if (productIds.length > 0) {
+        // Get ingredient ID - handle both _id and id properties, ensure proper ObjectId conversion
+        let ingredientId: mongoose.Types.ObjectId;
+
+        if (ingredient._id) {
+          ingredientId =
+            ingredient._id instanceof mongoose.Types.ObjectId
+              ? ingredient._id
+              : new mongoose.Types.ObjectId(ingredient._id.toString());
+        } else if ((ingredient as any).id) {
+          ingredientId = new mongoose.Types.ObjectId((ingredient as any).id);
+        } else {
+          // Use the id from params as fallback
+          ingredientId = new mongoose.Types.ObjectId(id);
+        }
+
+        logger.info(
+          `Removing ingredient ID ${ingredientId} from ${productIds.length} products`
+        );
+        await this.removeIngredientIdFromProducts(ingredientId, productIds);
       }
 
       await ProductIngredients.findByIdAndUpdate(

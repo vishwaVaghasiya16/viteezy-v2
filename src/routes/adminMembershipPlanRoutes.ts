@@ -12,6 +12,8 @@ import {
   membershipPlanIdParamsSchema,
   getAllMembershipPlansQuerySchema,
 } from "@/validation/adminMembershipPlanValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 
 const router = Router();
 
@@ -23,9 +25,12 @@ router.use(authorize("Admin"));
  * @route   POST /api/v1/admin/membership-plans
  * @desc    Create membership plan (Admin only)
  * @access  Private (Admin)
+ * @body {String} [shortDescription] - Short description in English (plain string, will be auto-translated to all languages)
+ * @body {String} [description] - Description in English (plain string, will be auto-translated to all languages)
  */
 router.post(
   "/",
+  autoTranslateMiddleware("membershipPlans"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(createMembershipPlanSchema),
   adminMembershipPlanController.createMembershipPlan
 );
@@ -37,6 +42,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("membershipPlans"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getAllMembershipPlansQuerySchema),
   adminMembershipPlanController.getAllMembershipPlans
 );
@@ -48,6 +54,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("membershipPlans"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(membershipPlanIdParamsSchema),
   adminMembershipPlanController.getMembershipPlanById
 );
@@ -56,10 +63,13 @@ router.get(
  * @route   PUT /api/v1/admin/membership-plans/:id
  * @desc    Update membership plan (Admin only)
  * @access  Private (Admin)
+ * @body {String} [shortDescription] - Short description in English (plain string, will be auto-translated to all languages)
+ * @body {String} [description] - Description in English (plain string, will be auto-translated to all languages)
  */
 router.put(
   "/:id",
   validateParams(membershipPlanIdParamsSchema),
+  autoTranslateMiddleware("membershipPlans"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(updateMembershipPlanSchema),
   adminMembershipPlanController.updateMembershipPlan
 );

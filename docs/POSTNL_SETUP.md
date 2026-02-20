@@ -69,7 +69,7 @@ If you don't need PostNL validation in development:
 ### Test with Valid API Key:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/addresses \
+curl -X POST http://localhost:8080/api/v1/addresses \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{

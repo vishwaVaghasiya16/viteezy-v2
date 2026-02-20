@@ -5,6 +5,8 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminBlogCategoryController } from "@/controllers/adminBlogCategoryController";
 import {
   createBlogCategorySchema,
@@ -29,21 +31,24 @@ router.use(authorize("Admin"));
  */
 router.post(
   "/",
+  autoTranslateMiddleware("blogCategories"), // Auto-translate English to all languages
   validateJoi(createBlogCategorySchema),
   adminBlogCategoryController.createCategory
 );
 
 /**
  * @route GET /api/v1/admin/blog-categories
- * @desc Get paginated list of blog categories
+ * @desc Get paginated list of blog categories with overall blog count per category
  * @access Admin
  * @query {Number} [page] - Page number (default: 1)
  * @query {Number} [limit] - Items per page (default: 10)
  * @query {String} [search] - Search by title or slug
  * @query {String} [status] - Filter by status: "active", "inactive", or "all"
+ * @returns {Array} items - Array of categories, each with blogCount field (overall blogs not deleted)
  */
 router.get(
   "/",
+  transformResponseMiddleware("blogCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(paginationQuerySchema),
   adminBlogCategoryController.getCategories
 );
@@ -56,6 +61,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("blogCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(blogCategoryIdParamsSchema),
   adminBlogCategoryController.getCategoryById
 );
@@ -72,6 +78,7 @@ router.get(
  */
 router.put(
   "/:id",
+  autoTranslateMiddleware("blogCategories"), // Auto-translate English to all languages
   validateParams(blogCategoryIdParamsSchema),
   validateJoi(updateBlogCategorySchema),
   adminBlogCategoryController.updateCategory

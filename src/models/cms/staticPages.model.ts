@@ -10,7 +10,12 @@ import {
   SeoType,
   AuditType,
 } from "../common.model";
-import { StaticPageStatus, STATIC_PAGE_STATUS_VALUES } from "../enums";
+import {
+  StaticPageStatus,
+  STATIC_PAGE_STATUS_VALUES,
+  SystemPageType,
+  SYSTEM_PAGE_TYPE_VALUES,
+} from "../enums";
 
 export interface IStaticPage extends Document, AuditType {
   slug: string;
@@ -18,7 +23,10 @@ export interface IStaticPage extends Document, AuditType {
   content: I18nTextType;
   status: StaticPageStatus;
   seo: SeoType;
+  isSystemPage?: boolean; // Indicates if this is a pre-defined system page
+  systemPageType?: SystemPageType; // Type of system page (about-us, our-team, etc.)
   isDeleted?: boolean;
+  route?:string | null;
   deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +58,21 @@ const StaticPageSchema = new Schema<IStaticPage>(
       type: SeoSchema,
       default: () => ({}),
     },
+    isSystemPage: {
+      type: Boolean,
+      default: false,
+    },
+    systemPageType: {
+      type: String,
+      enum: SYSTEM_PAGE_TYPE_VALUES,
+      required: function (this: IStaticPage) {
+        return this.isSystemPage === true;
+      },
+    },
+    route: {
+      type: String,
+      default: null
+    },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),
   },
@@ -76,6 +99,9 @@ StaticPageSchema.index(
 
 // Status and slug index for efficient queries
 StaticPageSchema.index({ status: 1, slug: 1 });
+
+// Index for system pages
+StaticPageSchema.index({ isSystemPage: 1, systemPageType: 1 });
 
 export const StaticPages = mongoose.model<IStaticPage>(
   "static_pages",

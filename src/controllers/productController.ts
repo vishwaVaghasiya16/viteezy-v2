@@ -8,6 +8,7 @@ import {
   ProductPriceSource,
 } from "../utils/membershipPrice";
 import { AppError } from "../utils/AppError";
+import { logger } from "../utils/logger";
 import { ProductCategory, Products, Wishlists } from "../models/commerce";
 import { User } from "../models/core";
 import {
@@ -16,6 +17,11 @@ import {
   DEFAULT_LANGUAGE,
   SupportedLanguage,
 } from "../models/common.model";
+import { translateProductForUser, translateProductsForUser } from "../services/productTranslationCommonService";
+import {
+  getTestimonialsForProductDetail,
+  getTestimonialsForProductsListing,
+} from "../services/productTestimonialService";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -41,16 +47,19 @@ const mapLanguageToCode = (language?: string): SupportedLanguage => {
   return languageMap[language] || DEFAULT_LANGUAGE;
 };
 
+const SUPPORTED_LANG_CODES: SupportedLanguage[] = ["en", "nl", "de", "fr", "es"];
+
 /**
- * Get user language from request (from token if authenticated, otherwise default to English)
+ * Get user language from request: query param (lang) > token/profile > default English
  */
 const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
-  // Check if user is authenticated and has language preference
+  const queryLang = req.query?.lang;
+  if (typeof queryLang === "string" && SUPPORTED_LANG_CODES.includes(queryLang as SupportedLanguage)) {
+    return queryLang as SupportedLanguage;
+  }
   if (req.user?.language) {
     return mapLanguageToCode(req.user.language);
   }
-
-  // Default to English if not authenticated or no language preference
   return DEFAULT_LANGUAGE;
 };
 
@@ -132,20 +141,57 @@ const transformProductForLanguage = (
     // Transform populated ingredients for language
     // Always include image field (null/empty if not present) for FE consistency
     ingredients:
-      product.ingredients?.map((ingredient: any) => ({
-        _id: ingredient._id,
-        name: getTranslatedString(ingredient.name, lang),
-        description: getTranslatedText(ingredient.description, lang),
-        image: ingredient.image || null, // Always include image field, null if not present
-      })) || [],
+      product.ingredients && Array.isArray(product.ingredients) && product.ingredients.length > 0
+        ? product.ingredients
+            .filter((ingredient: any) => {
+              // Filter out IDs (strings or ObjectIds) - only keep populated objects
+              return ingredient && typeof ingredient === 'object' && ingredient._id;
+            })
+            .map((ingredient: any) => ({
+              _id: ingredient._id,
+              name: getTranslatedString(ingredient.name, lang),
+              description: getTranslatedText(ingredient.description, lang),
+              image: ingredient.image || null, // Always include image field, null if not present
+            }))
+        : [],
     // Transform populated categories for language
     categories:
-      product.categories?.map((category: any) => ({
-        ...category,
-        name: getTranslatedString(category.name, lang),
-        description: getTranslatedText(category.description, lang),
-        image: category.image || undefined,
-      })) || [],
+      product.categories?.map((category: any) => {
+        // Normalize image field - return as object { type, url, sortOrder }
+        let normalizedImage: { type: string; url: string; sortOrder: number } | null = null;
+        if (category.image) {
+          if (typeof category.image === 'string') {
+            normalizedImage = { type: 'image', url: category.image, sortOrder: 0 };
+          } else if (typeof category.image === 'object' && category.image.url) {
+            normalizedImage = {
+              type: category.image.type || 'image',
+              url: category.image.url,
+              sortOrder: category.image.sortOrder ?? 0,
+            };
+          }
+        }
+
+        // Normalize icon field - ensure it's a string or null
+        let normalizedIcon: string | null = null;
+        if (category.icon) {
+          if (typeof category.icon === 'string') {
+            normalizedIcon = category.icon;
+          } else if (typeof category.icon === 'object' && category.icon.url) {
+            normalizedIcon = category.icon.url;
+          }
+        }
+
+        return {
+          _id: category._id,
+          slug: category.slug,
+          name: getTranslatedString(category.name, lang),
+          description: getTranslatedText(category.description, lang),
+          sortOrder: category.sortOrder || 0,
+          icon: normalizedIcon,
+          image: normalizedImage,
+          productCount: category.productCount || 0,
+        };
+      }) || [],
     // Transform FAQs for language (return empty array if no FAQs)
     faqs:
       product.faqs?.map((faq: any) => ({
@@ -188,10 +234,17 @@ export class ProductController {
   ) {
     try {
       const userId = req.user?.id || req.userId;
+      const userEmail = req.user?.email || "Unknown";
+      const productTitle = req.body?.title || "Unknown";
+      
+      logger.info(`[Product Controller] Create product request received - UserId: ${userId}, UserEmail: ${userEmail}, ProductTitle: "${productTitle}"`);
+      
       const result = await productService.createProduct({
         ...req.body,
         createdBy: userId ? new mongoose.Types.ObjectId(userId) : undefined,
       });
+
+      logger.info(`[Product Controller] Product created successfully - ProductId: ${result.product?._id}, Slug: "${result.product?.slug}", UserId: ${userId}`);
 
       res.status(201).json({
         success: true,
@@ -200,7 +253,8 @@ export class ProductController {
           product: result.product,
         },
       });
-    } catch (error) {
+    } catch (error: any) {
+      logger.error(`[Product Controller] Error creating product - UserId: ${req.user?.id || req.userId}, Error: ${error.message || error}`, error);
       next(error);
     }
   }
@@ -263,11 +317,11 @@ export class ProductController {
         }
       );
 
-      // Get user ID if authenticated (optional)
+      // Get user ID if authenticated (optional) - for wishlist/cart
       const userId = req.user?._id || req.userId;
 
-      // Get user language (defaults to English if not authenticated)
-      const userLang = getUserLanguage(req);
+      // Get target language from user's token/profile, default to English
+      const targetLanguage: SupportedLanguage = getUserLanguage(req);
 
       // Get user's wishlist items if authenticated
       let userWishlistProductIds: Set<string> = new Set();
@@ -288,14 +342,27 @@ export class ProductController {
         cartProductIds = await cartService.getCartProductIds(userId);
       }
 
-      // Calculate member prices for all products and transform for language
+      // Translate products using common service (automatically detects language from token)
+      const productsToProcess = await translateProductsForUser(result.products, req);
+
+      // Calculate member prices for all products
+      const productIds = productsToProcess
+        .map((p: any) =>
+          p._id ? (typeof p._id === "string" ? p._id : p._id.toString()) : ""
+        )
+        .filter(Boolean);
+      const userLang = getUserLanguage(req);
+
+      // Fetch testimonials for all products (listing flow: uses products array)
+      const testimonialsMap = await getTestimonialsForProductsListing(
+        productIds,
+        userLang
+      );
+
       const productsWithMemberPrices = await Promise.all(
-        result.products.map(async (product: any) => {
-          // First transform product for user's language
-          const transformedProduct = transformProductForLanguage(
-            product,
-            userLang
-          );
+        productsToProcess.map(async (product: any) => {
+          // Product is already translated if needed
+          const transformedProduct = product;
           const productPriceSource: ProductPriceSource = {
             price: transformedProduct.price,
             // Check for product-specific member price overrides in metadata
@@ -354,6 +421,11 @@ export class ProductController {
             enrichedProduct.isInCart = false;
           }
 
+          // Add testimonials (listing flow: testimonials where product is in products)
+          const pid =
+            transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.testimonials = testimonialsMap.get(pid) || [];
+
           return enrichedProduct;
         })
       );
@@ -364,6 +436,100 @@ export class ProductController {
         success: true,
         message: "Products retrieved successfully",
         data: productsWithMemberPrices,
+        pagination,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get all products for admin (active + inactive), with pagination and same filters.
+   * @route GET /api/v1/admin/products
+   */
+  static async getAllProductsForAdmin(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const {
+        search,
+        status,
+        variant,
+        hasStandupPouch,
+        categories,
+        healthGoals,
+        ingredients,
+        sortBy,
+      } = req.query;
+
+      const searchTerm =
+        typeof search === "string" && search.trim().length
+          ? search.trim()
+          : undefined;
+      const parsedCategories = parseArrayQuery(
+        categories as string | string[] | undefined
+      );
+      const parsedHealthGoals = parseArrayQuery(
+        healthGoals as string | string[] | undefined
+      );
+      const parsedIngredients = parseArrayQuery(
+        ingredients as string | string[] | undefined
+      );
+
+      const sortByValue = isValidSortOption(sortBy) ? sortBy : undefined;
+
+      const result = await productService.getAllProducts(
+        page,
+        limit,
+        skip,
+        sort,
+        {
+          search: searchTerm,
+          status: status as any,
+          variant: variant as any,
+          hasStandupPouch:
+            hasStandupPouch !== undefined
+              ? hasStandupPouch === "true"
+              : undefined,
+          categories: parsedCategories,
+          healthGoals: parsedHealthGoals,
+          ingredients: parsedIngredients,
+          sortBy: sortByValue,
+          includeInactive: true,
+        }
+      );
+
+      const productsToProcess = await translateProductsForUser(result.products, req);
+      const productIds = productsToProcess
+        .map((p: any) =>
+          p._id ? (typeof p._id === "string" ? p._id : p._id.toString()) : ""
+        )
+        .filter(Boolean);
+      const userLang = getUserLanguage(req);
+      const testimonialsMap = await getTestimonialsForProductsListing(
+        productIds,
+        userLang
+      );
+
+      const productsWithTestimonials = productsToProcess.map((product: any) => {
+        const productId = product._id
+          ? (typeof product._id === "string" ? product._id : product._id.toString())
+          : "";
+        return {
+          ...product,
+          testimonials: testimonialsMap.get(productId) || [],
+        };
+      });
+
+      const pagination = getPaginationMeta(page, limit, result.total);
+
+      res.status(200).json({
+        success: true,
+        message: "Products retrieved successfully",
+        data: productsWithTestimonials,
         pagination,
       });
     } catch (error) {
@@ -518,6 +684,8 @@ export class ProductController {
   /**
    * Get product by ID
    * Includes member pricing if user is authenticated and a member
+   * @route GET /api/v1/products/:id
+   * @query lang - Language code (en, nl, de, fr, es). Overrides user/token language when provided.
    */
   static async getProductById(
     req: AuthenticatedRequest,
@@ -531,14 +699,8 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Get user language (defaults to English if not authenticated)
-      const userLang = getUserLanguage(req);
-
-      // Transform product for user's language first
-      const transformedProduct = transformProductForLanguage(
-        result.product,
-        userLang
-      );
+      // Translate product using common service (automatically detects language from token)
+      const transformedProduct = await translateProductForUser(result.product, req);
 
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {
@@ -554,7 +716,7 @@ export class ProductController {
       );
 
       // Remove variants before spreading to avoid conflicts
-      const { variants: _______, ...transformedWithoutVariants6 } = transformedProduct;
+      const { variants: _______, faqs: _faqsIgnore, ...transformedWithoutVariants6 } = transformedProduct;
 
       // Variants are now string arrays, not objects - skip member price processing
       // Add variants array explicitly based on hasStandupPouch
@@ -562,12 +724,28 @@ export class ProductController {
         ? ["sachets", "stand_up_pouch"]
         : ["sachets"];
 
-      // Keep transformed product structure intact
+      // FAQs: Use result.product.faqs (already flattened in productService) - guaranteed plain strings
+      // Fallback: flatten from transformedProduct if structure differs
+      const flattenFaqField = (val: any): string => {
+        if (val == null) return "";
+        if (typeof val === "string") return val;
+        if (typeof val === "object") return val.en ?? val[getUserLanguage(req)] ?? "";
+        return "";
+      };
+      const sourceFaqs = result.product?.faqs ?? transformedProduct.faqs ?? [];
+      const flattenedFaqs = sourceFaqs.map((faq: any) => ({
+        _id: faq._id,
+        question: flattenFaqField(faq.question),
+        answer: flattenFaqField(faq.answer),
+        sortOrder: faq.sortOrder ?? 0,
+      }));
+
+      // Build response - faqs excluded from spread, added explicitly as flattened
       const enrichedProduct: any = {
         ...transformedWithoutVariants6,
-        // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
         variants: variantsArray3,
+        faqs: flattenedFaqs,
       };
 
       // Add member pricing fields at product level
@@ -603,6 +781,13 @@ export class ProductController {
         enrichedProduct.isInCart = false;
       }
 
+      // Add testimonials (new flow: productsForDetailsPage first, fallback to products)
+      const userLang = getUserLanguage(req);
+      enrichedProduct.testimonials = await getTestimonialsForProductDetail(
+        id,
+        userLang
+      );
+
       res.status(200).json({
         success: true,
         message: "Product retrieved successfully",
@@ -618,6 +803,8 @@ export class ProductController {
   /**
    * Get product by slug
    * Includes member pricing if user is authenticated and a member
+   * @route GET /api/v1/products/slug/:slug
+   * @query lang - Language code (en, nl, de, fr, es). Overrides user/token language when provided.
    */
   static async getProductBySlug(
     req: AuthenticatedRequest,
@@ -631,14 +818,8 @@ export class ProductController {
       // Get user ID if authenticated (optional)
       const userId = req.user?._id || req.userId;
 
-      // Get user language (defaults to English if not authenticated)
-      const userLang = getUserLanguage(req);
-
-      // Transform product for user's language first
-      const transformedProduct = transformProductForLanguage(
-        result.product,
-        userLang
-      );
+      // Translate product using common service (automatically detects language from token)
+      const transformedProduct = await translateProductForUser(result.product, req);
 
       // Calculate member price for the product
       const productPriceSource: ProductPriceSource = {
@@ -668,6 +849,13 @@ export class ProductController {
         // Keep price object exactly as it was - don't modify it
         price: transformedProduct.price,
         variants: variantsArray4,
+        // Ensure FAQs have plain question/answer strings (not { en: "x" })
+        faqs: (transformedProduct.faqs || []).map((faq: any) => ({
+          _id: faq._id,
+          question: getTranslatedString(faq.question, getUserLanguage(req)),
+          answer: getTranslatedText(faq.answer, getUserLanguage(req)),
+          sortOrder: faq.sortOrder ?? 0,
+        })),
       };
 
       // Add member pricing fields at product level
@@ -702,6 +890,13 @@ export class ProductController {
       } else {
         enrichedProduct.isInCart = false;
       }
+
+      // Add testimonials (new flow: productsForDetailsPage first, fallback to products)
+      const userLang = getUserLanguage(req);
+      enrichedProduct.testimonials = await getTestimonialsForProductDetail(
+        transformedProduct._id.toString(),
+        userLang
+      );
 
       res.status(200).json({
         success: true,
@@ -867,7 +1062,7 @@ export class ProductController {
    * Get list of active product categories with top 3 products each (for navbar)
    * @route GET /api/v1/products/categories/list
    * @access Authenticated users only
-   * @query lan - Language code (en, nl, de, fr, es)
+   * @query lang - Language code (en, nl, de, fr, es)
    */
   static async listCategoriesWithProducts(
     req: AuthenticatedRequest,
@@ -875,36 +1070,19 @@ export class ProductController {
     next: NextFunction
   ) {
     try {
-      // Check authentication
-      if (!req.user || !req.user._id) {
-        return next(new AppError("User not authenticated", 401));
-      }
-
-      // Get language from query parameter or user preference
-      const { lan } = req.query as { lan?: string };
+      // Get language priority: query param (lang) > user token > default "en"
+      const { lang } = req.query as {
+        lang?: "en" | "nl" | "de" | "fr" | "es";
+      };
 
       let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
-
-      // Priority: query parameter > user profile > default
-      if (lan) {
-        // Map language code from query
-        const langMap: Record<string, SupportedLanguage> = {
-          en: "en",
-          nl: "nl",
-          de: "de",
-          fr: "fr",
-          es: "es",
-        };
-        userLang = langMap[lan.toLowerCase()] || DEFAULT_LANGUAGE;
+      
+      if (lang) {
+        // Use language from query parameter if provided
+        userLang = lang;
       } else {
-        // Get user language from profile
-        const user = await User.findById(req.user._id)
-          .select("language")
-          .lean();
-
-        if (user && user.language) {
-          userLang = mapLanguageToCode(user.language);
-        }
+        // Fall back to user's token/profile language
+        userLang = getUserLanguage(req);
       }
 
       // Fetch active categories
@@ -936,7 +1114,11 @@ export class ProductController {
             slug: product.slug,
             productImage: product.productImage || null,
             galleryImages: product.galleryImages || [],
-            shortDescription: product.shortDescription || "",
+            // Ensure shortDescription is always a single-language string
+            shortDescription: getTranslatedString(
+              product.shortDescription as any,
+              userLang
+            ),
           }));
 
           // Transform category for the response

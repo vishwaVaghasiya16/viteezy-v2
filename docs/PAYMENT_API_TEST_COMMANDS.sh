@@ -53,8 +53,8 @@ test_create_payment_basic() {
       -d '{
         "orderId": "REPLACE_WITH_ORDER_ID",
         "paymentMethod": "MOLLIE",
-        "returnUrl": "http://localhost:3000/payment/return",
-        "cancelUrl": "http://localhost:3000/payment/cancel"
+        "returnUrl": "http://localhost:8080/payment/return",
+        "cancelUrl": "http://localhost:8080/payment/cancel"
       }' | jq '.'
     
     print_success "Test completed"
@@ -74,8 +74,8 @@ test_create_payment_intent_basic() {
       -d '{
         "orderId": "REPLACE_WITH_ORDER_ID",
         "paymentMethod": "MOLLIE",
-        "returnUrl": "http://localhost:3000/payment/return",
-        "cancelUrl": "http://localhost:3000/payment/cancel"
+        "returnUrl": "http://localhost:8080/payment/return",
+        "cancelUrl": "http://localhost:8080/payment/cancel"
       }' | jq '.'
     
     print_success "Test completed"
@@ -100,8 +100,8 @@ test_create_payment_custom_amount() {
           "currency": "EUR"
         },
         "description": "Custom payment for testing",
-        "returnUrl": "http://localhost:3000/payment/return",
-        "cancelUrl": "http://localhost:3000/payment/cancel"
+        "returnUrl": "http://localhost:8080/payment/return",
+        "cancelUrl": "http://localhost:8080/payment/cancel"
       }' | jq '.'
     
     print_success "Test completed"
@@ -126,8 +126,8 @@ test_create_payment_with_metadata() {
           "version": "2.0",
           "platform": "ios"
         },
-        "returnUrl": "http://localhost:3000/payment/return",
-        "cancelUrl": "http://localhost:3000/payment/cancel"
+        "returnUrl": "http://localhost:8080/payment/return",
+        "cancelUrl": "http://localhost:8080/payment/cancel"
       }' | jq '.'
     
     print_success "Test completed"
@@ -173,8 +173,8 @@ test_subscription_order_payment() {
           -d "{
             \"orderId\": \"${ORDER_ID}\",
             \"paymentMethod\": \"MOLLIE\",
-            \"returnUrl\": \"http://localhost:3000/payment/return\",
-            \"cancelUrl\": \"http://localhost:3000/payment/cancel\"
+            \"returnUrl\": \"http://localhost:8080/payment/return\",
+            \"cancelUrl\": \"http://localhost:8080/payment/cancel\"
           }" | jq '.'
         
         print_success "Payment created - subscription will be auto-created after webhook"
@@ -198,7 +198,7 @@ test_response_consistency() {
       -d '{
         "orderId": "REPLACE_WITH_ORDER_ID",
         "paymentMethod": "MOLLIE",
-        "returnUrl": "http://localhost:3000/payment/return"
+        "returnUrl": "http://localhost:8080/payment/return"
       }')
     
     print_info "Creating payment via /intent API..."
@@ -208,7 +208,7 @@ test_response_consistency() {
       -d '{
         "orderId": "REPLACE_WITH_ORDER_ID",
         "paymentMethod": "MOLLIE",
-        "returnUrl": "http://localhost:3000/payment/return"
+        "returnUrl": "http://localhost:8080/payment/return"
       }')
     
     print_info "Comparing response structures..."

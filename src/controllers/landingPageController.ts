@@ -28,25 +28,28 @@ const mapLanguageToCode = (language: string): SupportedLanguage => {
 
 /**
  * Get user language from request
- * Priority: 1. Query parameter (lang) 2. User token 3. Default to English
+ * Priority:
+ *  1. User token (`req.user.language`)
+ *  2. Query param (`?lang=` or `?language=`)
+ *  3. Default to English
  */
 const getUserLanguage = (req: Request): SupportedLanguage => {
-  // Check query parameter first
-  const langParam = req.query.lang as string;
-  if (langParam) {
-    const validLang = ["en", "nl", "de", "fr", "es"].includes(langParam.toLowerCase())
-      ? (langParam.toLowerCase() as SupportedLanguage)
-      : DEFAULT_LANGUAGE;
-    return validLang;
-  }
-
-  // Check if user is authenticated and has language preference
   const authenticatedReq = req as any;
+
+  // 1) From authenticated user token
   if (authenticatedReq.user?.language) {
     return mapLanguageToCode(authenticatedReq.user.language);
   }
 
-  // Default to English
+  // 2) From query param ?lang= or ?language=
+  const queryLang =
+    (req.query?.lang as string | undefined) ||
+    (req.query?.language as string | undefined);
+  if (queryLang) {
+    return mapLanguageToCode(queryLang);
+  }
+
+  // 3) Fallback to default
   return DEFAULT_LANGUAGE;
 };
 
@@ -130,20 +133,20 @@ class LandingPageController {
   );
 
   /**
-   * Get active landing page (public endpoint)
-   * @route GET /api/v1/landing-page?lang=en
-   * @access Public
-   * @query {String} [lang] - Language code (en, nl, de, fr, es) or language name (english, dutch, etc.)
+   * Get active landing page (public endpoint with optional authentication)
+   * @route GET /api/v1/landing-page
+   * @access Public (optional authentication)
+   * @description Language is automatically detected from user token. If no token or no language preference, defaults to English.
    */
   getActiveLandingPage = asyncHandler(
-    async (req: Request, res: Response) => {
-      // Get language from query parameter or user token
+    async (req: AuthenticatedRequest, res: Response) => {
+      // Get language from user token (automatically detected from token)
       const lang = getUserLanguage(req);
       
-      // Debug: Log the language being used
-      console.log(`[Landing Page API] Language requested: ${req.query.lang}, Resolved: ${lang}`);
+      // Get userId if user is authenticated (from optionalAuth middleware)
+      const userId = req.user?._id || null;
       
-      const result = await landingPageService.getActiveLandingPage(lang);
+      const result = await landingPageService.getActiveLandingPage(lang, userId);
 
       // Add language info to response headers
       res.setHeader("X-Content-Language", lang);

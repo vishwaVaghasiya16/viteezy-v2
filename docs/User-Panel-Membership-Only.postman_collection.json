@@ -1,0 +1,144 @@
+{
+  "info": {
+    "name": "User Panel - Membership Only",
+    "description": "Complete Membership APIs for User Panel Settings > Membership tab. List user memberships, get details, cancel membership.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8050"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "membership_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "📋 Get User Memberships",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/memberships?page=1&limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "memberships"],
+          "query": [
+            {
+              "key": "status",
+              "value": "",
+              "description": "Filter: all | None | Pending | Active | Expired | Cancelled (leave empty for all)"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        },
+        "description": "Get all memberships for logged-in user. Shows Active, Cancelled, Expired memberships with plan details, dates, amounts, and reasons."
+      }
+    },
+    {
+      "name": "🔍 Get Membership Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/memberships/{{membership_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "memberships", "{{membership_id}}"]
+        },
+        "description": "Get full details of a specific membership including plan info, dates, cancellation details, and metadata."
+      }
+    },
+    {
+      "name": "❌ Cancel Membership",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cancellationReason\": \"Account or card issue.\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/memberships/{{membership_id}}/cancel",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "memberships", "{{membership_id}}", "cancel"]
+        },
+        "description": "Cancel a membership. Optional cancellationReason (max 500 chars). Status becomes Cancelled with cancelledAt timestamp."
+      }
+    },
+    {
+      "name": "📊 Dashboard Widget",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/memberships/widget/overview",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "memberships", "widget", "overview"]
+        },
+        "description": "Get widget data for dashboard - shows active membership status, next billing/expiry dates, and quick actions."
+      }
+    },
+    {
+      "name": "🛍️ Get Available Plans (Public)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/memberships/plans",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "memberships", "plans"],
+          "query": [
+            {
+              "key": "interval",
+              "value": "Monthly",
+              "description": "Filter: Monthly | Quarterly | Yearly"
+            },
+            {
+              "key": "lang",
+              "value": "en",
+              "description": "Language: en | nl | de | fr | es"
+            }
+          ]
+        },
+        "description": "Get all available membership plans for purchase. No authentication required."
+      }
+    }
+  ]
+}

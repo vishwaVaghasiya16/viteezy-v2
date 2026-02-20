@@ -13,6 +13,8 @@ import {
   teamMemberIdParamsSchema,
   getTeamMembersQuerySchema,
 } from "@/validation/teamMemberValidation";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
 
 const router = Router();
 
@@ -24,10 +26,12 @@ router.use(authorize("Admin"));
  * @desc Create a new team member
  * @access Admin
  * @contentType multipart/form-data
+ * @note I18n fields (name, designation, content) can be sent as plain strings or I18n objects. Plain strings will be automatically converted to I18n objects.
  */
 router.post(
   "/",
   handleMulterError(upload.single("image"), "image"),
+  autoTranslateMiddleware("teamMembers"), // Converts plain strings to I18n objects for supported fields
   validateJoi(createTeamMemberSchema),
   adminTeamMemberController.createTeamMember
 );
@@ -41,10 +45,13 @@ router.post(
  * @query {String} [search] - Search by name or designation
  * @query {String} [sort] - Sort field (default: sortOrder)
  * @query {String} [order] - Sort order: "asc" or "desc" (default: "asc")
+ * @query {String} [lang] - Language code (en, nl, de, fr, es). If not provided, uses authenticated user's language or defaults to English.
+ * @note I18n fields will be automatically transformed to single language strings based on detected language.
  */
 router.get(
   "/",
   validateQuery(getTeamMembersQuerySchema),
+  transformResponseMiddleware("teamMembers"),
   adminTeamMemberController.getTeamMembers
 );
 
@@ -53,10 +60,13 @@ router.get(
  * @desc Get team member by ID
  * @access Admin
  * @param {String} id - Team member ID (MongoDB ObjectId)
+ * @query {String} [lang] - Language code (en, nl, de, fr, es). If not provided, uses authenticated user's language or defaults to English.
+ * @note I18n fields will be automatically transformed to single language strings based on detected language.
  */
 router.get(
   "/:id",
   validateParams(teamMemberIdParamsSchema),
+  transformResponseMiddleware("teamMembers"),
   adminTeamMemberController.getTeamMemberById
 );
 
@@ -65,11 +75,13 @@ router.get(
  * @desc Update team member
  * @access Admin
  * @contentType multipart/form-data
+ * @note I18n fields (name, designation, content) can be sent as plain strings or I18n objects. Plain strings will be automatically converted to I18n objects.
  */
 router.put(
   "/:id",
   handleMulterError(upload.single("image"), "image"),
   validateParams(teamMemberIdParamsSchema),
+  autoTranslateMiddleware("teamMembers"), // Converts plain strings to I18n objects for supported fields
   validateJoi(updateTeamMemberSchema),
   adminTeamMemberController.updateTeamMember
 );

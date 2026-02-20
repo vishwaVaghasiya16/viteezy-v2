@@ -28,9 +28,9 @@ export class StripeAdapter implements IPaymentGateway {
     });
 
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    this.defaultSuccessUrl = `${frontendUrl}/payment/success`;
-    this.defaultCancelUrl = `${frontendUrl}/payment/cancel`;
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    this.defaultSuccessUrl = `${frontendUrl}/orderConfirmed/success`;
+    this.defaultCancelUrl = `${frontendUrl}/orderConfirmed/cancel`;
 
     logger.info("Stripe payment gateway initialized");
   }
@@ -41,14 +41,25 @@ export class StripeAdapter implements IPaymentGateway {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
+      // Check if this is a membership payment (has membershipId in metadata)
+      const isMembershipPayment = !!data.metadata?.membershipId;
+
       const session = await this.stripe.checkout.sessions.create({
         mode: "payment",
         payment_method_types: ["card"],
         billing_address_collection: "required",
         customer_email: data.customerEmail,
         line_items: this.buildLineItems(data),
-        success_url: this.buildSuccessUrl(data.returnUrl, data.orderId),
-        cancel_url: this.buildCancelUrl(data.cancelUrl, data.orderId),
+        success_url: this.buildSuccessUrl(
+          data.returnUrl,
+          data.orderId,
+          isMembershipPayment
+        ),
+        cancel_url: this.buildCancelUrl(
+          data.cancelUrl,
+          data.orderId,
+          isMembershipPayment
+        ),
         client_reference_id: data.orderId,
         metadata: {
           orderId: data.orderId,
@@ -268,12 +279,46 @@ export class StripeAdapter implements IPaymentGateway {
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
           console.log("⚠️ [STRIPE ADAPTER] - Payment canceled");
 
+          // Check if this is a subscription-related payment intent
+          const paymentIntentAny = paymentIntent as any;
+          const isSubscriptionPayment = paymentIntent.metadata?.isSubscription === "true" ||
+            paymentIntent.metadata?.subscriptionId ||
+            paymentIntentAny.invoice;
+
+          if (isSubscriptionPayment) {
+            console.log("ℹ️ [STRIPE ADAPTER] - Subscription payment intent canceled, handled by subscription webhook");
+            // Return success to acknowledge, but subscription webhook will handle it
+            return {
+              success: true,
+              paymentId: paymentIntent.id,
+              gatewayTransactionId: paymentIntent.id,
+              status: PaymentStatus.CANCELLED,
+              gatewayResponse: paymentIntent as any,
+            };
+          }
+
           return {
-            success: false,
+            success: true, // Changed to true to acknowledge gracefully
             paymentId: paymentIntent.id,
             gatewayTransactionId: paymentIntent.id,
             status: PaymentStatus.CANCELLED,
             gatewayResponse: paymentIntent as any,
+          };
+        }
+        case "checkout.session.expired": {
+          console.log("🟡 [STRIPE ADAPTER] - Handling checkout.session.expired");
+          const session = event.data.object as Stripe.Checkout.Session;
+          console.log("ℹ️ [STRIPE ADAPTER] - Checkout session expired (informational event)");
+
+          // This is an informational event - just acknowledge it
+          return {
+            success: true,
+            paymentId: session.id,
+            gatewayTransactionId: session.id,
+            sessionId: session.id,
+            status: PaymentStatus.CANCELLED,
+            error: "Unhandled event type: checkout.session.expired (acknowledged)",
+            gatewayResponse: session as any,
           };
         }
         case "charge.succeeded":
@@ -375,6 +420,34 @@ export class StripeAdapter implements IPaymentGateway {
               charge.failure_message || charge.failure_code || "Charge failed",
             gatewayResponse: charge as any,
           };
+        }
+        // Subscription events - handle via subscription webhook service
+        case "invoice.paid":
+        case "invoice.payment_failed":
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted":
+        case "customer.subscription.paused":
+        case "customer.subscription.resumed": {
+          console.log(`🟡 [STRIPE ADAPTER] - Handling subscription event: ${event.type}`);
+          try {
+            const { subscriptionWebhookService } = await import("@/services/subscriptionWebhookService");
+            await subscriptionWebhookService.handleStripeSubscriptionEvent(event);
+            console.log(`✅ [STRIPE ADAPTER] - Subscription event ${event.type} processed`);
+            return {
+              success: true,
+              status: PaymentStatus.PENDING, // Subscription events don't directly affect payment status
+              gatewayResponse: event as any,
+            };
+          } catch (error: any) {
+            console.error(`❌ [STRIPE ADAPTER] - Failed to process subscription event: ${error.message}`);
+            logger.error(`Failed to process subscription event: ${error.message}`);
+            // Still return success to acknowledge webhook
+            return {
+              success: true,
+              status: PaymentStatus.PENDING,
+              gatewayResponse: event as any,
+            };
+          }
         }
         default:
           console.warn(
@@ -514,9 +587,14 @@ export class StripeAdapter implements IPaymentGateway {
 
   private buildSuccessUrl(
     returnUrl: string | undefined,
-    orderId: string
+    orderId: string,
+    skipQueryParams: boolean = false
   ): string {
     const base = returnUrl || this.defaultSuccessUrl;
+    // For membership payments, return clean URL without query params
+    if (skipQueryParams) {
+      return base;
+    }
     return this.appendQueryParams(base, {
       orderId,
       session_id: "{CHECKOUT_SESSION_ID}",
@@ -525,9 +603,14 @@ export class StripeAdapter implements IPaymentGateway {
 
   private buildCancelUrl(
     cancelUrl: string | undefined,
-    orderId: string
+    orderId: string,
+    skipQueryParams: boolean = false
   ): string {
     const base = cancelUrl || this.defaultCancelUrl;
+    // For membership payments, return clean URL without query params
+    if (skipQueryParams) {
+      return base;
+    }
     return this.appendQueryParams(base, {
       orderId,
       reason: "cancelled",

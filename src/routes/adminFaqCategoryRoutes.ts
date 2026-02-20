@@ -5,13 +5,14 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import { adminFaqCategoryController } from "@/controllers/adminFaqCategoryController";
 import {
   createFaqCategorySchema,
   updateFaqCategorySchema,
   faqCategoryIdParamsSchema,
 } from "@/validation/adminFaqCategoryValidation";
-import { paginationQuerySchema } from "../validation/commonValidation";
 import {
   categoryImageUpload,
   handleCategoryImageUploadError,
@@ -36,18 +37,21 @@ router.post(
   handleCategoryImageUploadError(
     categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
   ),
+  autoTranslateMiddleware("faqCategories"), // Auto-translate English to all languages
   validateJoi(createFaqCategorySchema),
   adminFaqCategoryController.createCategory
 );
 
 /**
  * @route GET /api/v1/admin/faq-categories
- * @desc Get paginated list of FAQ categories
+ * @desc Get all FAQ categories
  * @access Admin
+ * @query {String} [search] - Search by title or slug
+ * @query {String} [status] - Filter by status: "active", "inactive", or "all"
  */
 router.get(
   "/",
-  validateQuery(paginationQuerySchema),
+  transformResponseMiddleware("faqCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   adminFaqCategoryController.getCategories
 );
 
@@ -58,6 +62,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("faqCategories"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(faqCategoryIdParamsSchema),
   adminFaqCategoryController.getCategoryById
 );
@@ -78,6 +83,7 @@ router.put(
   handleCategoryImageUploadError(
     categoryImageUpload.fields([{ name: "icon", maxCount: 1 }])
   ),
+  autoTranslateMiddleware("faqCategories"), // Auto-translate English to all languages
   validateJoi(updateFaqCategorySchema),
   adminFaqCategoryController.updateCategory
 );

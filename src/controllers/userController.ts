@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { FilterQuery } from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
+import { logger } from "@/utils/logger";
 import { User } from "@/models/index.model";
 import { Payments } from "@/models/commerce";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
@@ -180,6 +181,216 @@ class UserController {
           },
         },
         "User profile updated successfully"
+      );
+    }
+  );
+
+  /**
+   * Register device token for push notifications
+   * @route POST /api/v1/users/device-token
+   * @access Private
+   * @body {String} deviceToken - Device token (OneSignal player ID for mobile, FCM token for web)
+   * @body {String} platform - Platform: "mobile" or "web" (default: "mobile")
+   * @body {String} provider - Provider: "onesignal" or "firebase" (auto-detected if not provided)
+   */
+  registerDeviceToken = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { deviceToken, platform, provider } = req.body;
+
+      if (!deviceToken || typeof deviceToken !== "string" || deviceToken.trim().length === 0) {
+        throw new AppError("Device token is required", 400);
+      }
+
+      // Determine platform and provider
+      const devicePlatform = (platform || "mobile").toLowerCase();
+      let deviceProvider = provider?.toLowerCase();
+
+      // Auto-detect provider based on platform if not provided
+      if (!deviceProvider) {
+        deviceProvider = devicePlatform === "web" ? "firebase" : "onesignal";
+      }
+
+      // Validate platform
+      if (devicePlatform !== "mobile" && devicePlatform !== "web") {
+        throw new AppError('Platform must be Mobile or Web', 400);
+      }
+
+      // Validate provider
+      if (deviceProvider !== "onesignal" && deviceProvider !== "firebase") {
+        throw new AppError('Provider must be OneSignal or Firebase', 400);
+      }
+
+      // Validate provider-platform combination
+      if (devicePlatform === "mobile" && deviceProvider !== "onesignal") {
+        throw new AppError('Mobile platform requires OneSignal provider', 400);
+      }
+
+      if (devicePlatform === "web" && deviceProvider !== "firebase") {
+        throw new AppError('Web platform requires Firebase provider', 400);
+      }
+
+      const tokenToAdd = deviceToken.trim();
+
+      // Validate token format based on provider
+      if (deviceProvider === "onesignal") {
+        // OneSignal player IDs must be UUIDs: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(tokenToAdd)) {
+          // Check if it looks like an FCM token
+          const isFcmToken = tokenToAdd.includes(':') && tokenToAdd.length > 50;
+          const errorMessage = isFcmToken
+            ? 'Invalid token format: You are trying to register an FCM token (Firebase token) as a OneSignal player ID. ' +
+              'For mobile apps: Use OneSignal SDK to get the player ID (UUID format). ' +
+              'For web apps: Use platform="web" and provider="firebase" instead. ' +
+              'OneSignal player IDs are UUIDs like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+            : 'Invalid OneSignal player ID format. OneSignal requires UUID format (e.g., xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). ' +
+              'Make sure you are using the OneSignal SDK to get the player ID, not an FCM token.';
+          
+          throw new AppError(errorMessage, 400);
+        }
+      } else if (deviceProvider === "firebase") {
+        // FCM tokens typically start with a prefix and contain colons
+        // Basic validation: should not be a UUID (to catch if OneSignal ID is sent as Firebase)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(tokenToAdd)) {
+          throw new AppError(
+            'Invalid Firebase token format. The provided token appears to be a OneSignal player ID (UUID) instead of an FCM token.',
+            400
+          );
+        }
+        // FCM tokens are typically longer and contain specific patterns
+        if (tokenToAdd.length < 20) {
+          throw new AppError(
+            'Invalid Firebase token format. FCM tokens are typically longer strings.',
+            400
+          );
+        }
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Initialize metadata array if not exists
+      if (!user.deviceTokenMetadata) {
+        user.deviceTokenMetadata = [];
+      }
+
+      // Check if token already exists in metadata
+      const existingTokenIndex = user.deviceTokenMetadata.findIndex(
+        (tokenMeta: any) => tokenMeta.token === tokenToAdd
+      );
+
+      if (existingTokenIndex === -1) {
+        // Add new token with metadata
+        user.deviceTokenMetadata.push({
+          token: tokenToAdd,
+          platform: devicePlatform,
+          provider: deviceProvider,
+          addedAt: new Date(),
+        });
+      } else {
+        // Update existing token metadata
+        user.deviceTokenMetadata[existingTokenIndex].platform = devicePlatform;
+        user.deviceTokenMetadata[existingTokenIndex].provider = deviceProvider;
+        user.deviceTokenMetadata[existingTokenIndex].addedAt = new Date();
+      }
+
+      // Also add to old format for backward compatibility
+      const currentTokens = (user.deviceTokens || []) as string[];
+      if (!currentTokens.includes(tokenToAdd)) {
+        currentTokens.push(tokenToAdd);
+        user.deviceTokens = currentTokens;
+      }
+
+      await user.save();
+
+      logger.info(
+        `Device token registered for user: ${req.user._id}, platform: ${devicePlatform}, provider: ${deviceProvider}`,
+        {
+          userId: req.user._id,
+          deviceToken: tokenToAdd.substring(0, 20) + "...", // Log first 20 chars for security
+          platform: devicePlatform,
+          provider: deviceProvider,
+          tokenCount: user.deviceTokenMetadata.length,
+        }
+      );
+
+      res.apiSuccess(
+        {
+          tokenCount: user.deviceTokenMetadata.length,
+          platform: devicePlatform,
+          provider: deviceProvider,
+          tokenRegistered: true,
+        },
+        "Device token registered successfully"
+      );
+    }
+  );
+
+  /**
+   * Remove device token for push notifications
+   * @route DELETE /api/v1/users/device-token
+   * @access Private
+   * @body {String} deviceToken - Device token to remove
+   */
+  removeDeviceToken = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { deviceToken } = req.body;
+
+      if (!deviceToken || typeof deviceToken !== "string" || deviceToken.trim().length === 0) {
+        throw new AppError("Device token is required", 400);
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      const tokenToRemove = deviceToken.trim();
+      let removed = false;
+
+      // Remove from metadata format
+      if (user.deviceTokenMetadata && Array.isArray(user.deviceTokenMetadata)) {
+        const originalLength = user.deviceTokenMetadata.length;
+        user.deviceTokenMetadata = user.deviceTokenMetadata.filter(
+          (tokenMeta: any) => tokenMeta.token !== tokenToRemove
+        );
+        if (user.deviceTokenMetadata.length !== originalLength) {
+          removed = true;
+        }
+      }
+
+      // Also remove from old format for backward compatibility
+      const currentTokens = (user.deviceTokens || []) as string[];
+      const updatedTokens = currentTokens.filter((token) => token !== tokenToRemove);
+
+      if (updatedTokens.length !== currentTokens.length) {
+        user.deviceTokens = updatedTokens;
+        removed = true;
+      }
+
+      if (removed) {
+        await user.save();
+        logger.info(`Device token removed for user: ${req.user._id}`);
+      }
+
+      const finalTokenCount = user.deviceTokenMetadata?.length || user.deviceTokens?.length || 0;
+
+      res.apiSuccess(
+        {
+          tokenCount: finalTokenCount,
+        },
+        "Device token removed successfully"
       );
     }
   );

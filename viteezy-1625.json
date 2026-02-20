@@ -8931,27 +8931,27 @@
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_en",
+											"key": "banner_banner_description_en",
 											"value": "We are passionate about innovation and excellence",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_nl",
+											"key": "banner_banner_description_nl",
 											"value": "We zijn gepassioneerd over innovatie en excellentie",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_de",
+											"key": "banner_banner_description_de",
 											"value": "Wir sind leidenschaftlich über Innovation und Exzellenz",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_fr",
+											"key": "banner_banner_description_fr",
 											"value": "Nous sommes passionnés par l'innovation et l'excellence",
 											"type": "text"
 										},
 										{
-											"key": "banner_banner_subtitle_es",
+											"key": "banner_banner_description_es",
 											"value": "Estamos apasionados por la innovación y la excelencia",
 											"type": "text"
 										},

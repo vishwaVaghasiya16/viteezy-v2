@@ -13,7 +13,13 @@ import {
   OrderStatus,
   PaymentStatus,
 } from "@/models/enums";
-import { PriceType } from "@/models/common.model";
+import {
+  PriceType,
+  I18nStringType,
+  I18nTextType,
+  DEFAULT_LANGUAGE,
+  SupportedLanguage,
+} from "@/models/common.model";
 import {
   getSubscriptionPriceFromProduct,
   getBaseSubtotalForSubscription,
@@ -22,8 +28,64 @@ import {
 interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
+    language?: string;
   };
 }
+
+const mapLanguageToCode = (language?: string): SupportedLanguage => {
+  const languageMap: Record<string, SupportedLanguage> = {
+    English: "en",
+    Spanish: "es",
+    French: "fr",
+    Dutch: "nl",
+    German: "de",
+  };
+  return language ? (languageMap[language] || DEFAULT_LANGUAGE) : DEFAULT_LANGUAGE;
+};
+
+const getUserLanguage = async (
+  req: AuthenticatedRequest,
+  userId: string
+): Promise<SupportedLanguage> => {
+  if (req.user?.language) return mapLanguageToCode(req.user.language);
+  try {
+    const user = await User.findById(userId).select("language").lean();
+    if (user?.language) return mapLanguageToCode(user.language);
+  } catch {
+    // ignore
+  }
+  return DEFAULT_LANGUAGE;
+};
+
+const getI18nString = (
+  val: I18nStringType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val[lang] || val.en || "";
+};
+
+const getI18nText = (
+  val: I18nTextType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val[lang] || val.en || "";
+};
+
+const transformOrderProductForLanguage = (
+  product: any,
+  lang: SupportedLanguage
+): any => {
+  if (!product || typeof product !== "object") return product;
+  return {
+    ...product,
+    title: getI18nString(product.title, lang),
+    description: getI18nText(product.description, lang),
+  };
+};
 
 interface MembershipPayload {
   isMember?: boolean;
@@ -157,11 +219,13 @@ const validateCouponForOrder = async ({
     throw new AppError("This coupon has expired", 400);
   }
 
-  if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+  // Check usage limit (0 means infinite, so skip check if 0 or undefined)
+  if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
     throw new AppError("This coupon has reached its usage limit", 400);
   }
 
-  if (coupon.userUsageLimit) {
+  // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
+  if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
     const userUsageCount = await Orders.countDocuments({
       userId: new mongoose.Types.ObjectId(userId),
       couponCode: coupon.code,
@@ -414,16 +478,6 @@ class OrderController {
         ) {
           throw new AppError(
             "For subscription plans, planDurationDays must be 30, 60, 90, or 180",
-            400
-          );
-        }
-      }
-
-      // Validate capsuleCount for STAND_UP_POUCH
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        if (!capsuleCount || ![30, 60].includes(capsuleCount)) {
-          throw new AppError(
-            "Valid capsuleCount (30 or 60) is required for STAND_UP_POUCH variant",
             400
           );
         }
@@ -694,14 +748,6 @@ class OrderController {
             );
           }
 
-          // Use standup pouch pricing based on capsuleCount
-          if (!capsuleCount || ![30, 60].includes(capsuleCount)) {
-            throw new AppError(
-              "Valid capsuleCount (30 or 60) is required for STAND_UP_POUCH variant",
-              400
-            );
-          }
-
           itemCapsuleCount = capsuleCount;
           const standupPrice = product.standupPouchPrice as any;
 
@@ -908,6 +954,20 @@ class OrderController {
         notes,
       });
 
+      // Send order placed notification
+      try {
+        const { orderNotifications } = await import("@/utils/notificationHelpers");
+        await orderNotifications.orderPlaced(
+          userId,
+          String(order._id),
+          order.orderNumber,
+          userId
+        );
+      } catch (error: any) {
+        logger.error(`Failed to send order placed notification: ${error.message}`);
+        // Don't fail the order creation if notification fails
+      }
+
       // Check if couponCode is a referral code and create referral record
       if (normalizedCouponCode) {
         try {
@@ -919,7 +979,9 @@ class OrderController {
 
           if (referrer && referrer._id.toString() !== userId.toString()) {
             // It's a referral code, create referral record
-            const { referralService } = await import("@/services/referralService");
+            const { referralService } = await import(
+              "@/services/referralService"
+            );
             await referralService.createReferralRecord(
               referrer._id.toString(),
               userId.toString(),
@@ -1015,6 +1077,8 @@ class OrderController {
         .limit(limit)
         .lean();
 
+      const userLang = await getUserLanguage(req, req.user!._id.toString());
+
       // Transform orders for response
       const transformedOrders = orders.map((order: any) => ({
         id: order._id,
@@ -1025,7 +1089,9 @@ class OrderController {
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: order.items.map((item: any) => ({
-          productId: item.productId,
+          productId: item.productId
+            ? transformOrderProductForLanguage(item.productId, userLang)
+            : item.productId,
           name: item.name,
           amount: item.amount,
           discountedPrice: item.discountedPrice,
@@ -1106,6 +1172,8 @@ class OrderController {
         throw new AppError("Order not found", 404);
       }
 
+      const userLang = await getUserLanguage(req, req.user!._id.toString());
+
       // Get payment details for this order
       let paymentData = null;
       const payment = await Payments.findOne({
@@ -1138,7 +1206,9 @@ class OrderController {
 
       // Transform order items with product details
       const itemsWithProducts = order.items.map((item: any) => ({
-        productId: item.productId,
+        productId: item.productId
+          ? transformOrderProductForLanguage(item.productId, userLang)
+          : item.productId,
         name: item.name,
         amount: item.amount,
         discountedPrice: item.discountedPrice,

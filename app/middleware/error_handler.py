@@ -29,9 +29,14 @@ async def exception_handler_middleware(request: Request, call_next: Callable) ->
     Global exception handler middleware that catches all exceptions
     and returns standardized error responses.
     """
+    from fastapi import HTTPException as FastAPIHTTPException
+    
     try:
         response = await call_next(request)
         return response
+    except FastAPIHTTPException:
+        # Let FastAPI handle HTTPException - don't catch it here
+        raise
     except Exception as exc:
         return await handle_exception(exc, request)
 

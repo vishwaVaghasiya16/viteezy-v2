@@ -61,7 +61,6 @@ const MembershipPlanSchema = new Schema<IMembershipPlan>(
     interval: {
       type: String,
       enum: MEMBERSHIP_INTERVAL_VALUES,
-      required: true,
     },
     durationDays: {
       type: Number,

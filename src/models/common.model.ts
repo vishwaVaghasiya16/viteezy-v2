@@ -30,7 +30,7 @@ export interface I18nTextType {
 }
 
 export interface MediaType {
-  type: "image" | "video";
+  type: "image" | "video" | "Image" | "Video";
   url: string;
   sortOrder?: number;
 }

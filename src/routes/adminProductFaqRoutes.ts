@@ -6,6 +6,8 @@ import {
   validateQuery,
 } from "@/middleware/joiValidation";
 import { adminProductFaqController } from "@/controllers/adminProductFaqController";
+import { autoTranslateMiddleware } from "@/middleware/translationMiddleware";
+import { transformResponseMiddleware } from "@/middleware/responseTransformMiddleware";
 import {
   createProductFaqSchema,
   updateProductFaqSchema,
@@ -23,9 +25,12 @@ router.use(authorize("Admin"));
  * @route POST /api/v1/admin/product-faqs
  * @desc Create a new product FAQ
  * @access Admin
+ * @body {String} question - FAQ question in English (plain string, will be auto-translated to all languages)
+ * @body {String} [answer] - FAQ answer in English (plain string, will be auto-translated to all languages)
  */
 router.post(
   "/",
+  autoTranslateMiddleware("productFaqs"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(createProductFaqSchema),
   adminProductFaqController.createProductFaq
 );
@@ -43,6 +48,7 @@ router.post(
  */
 router.get(
   "/",
+  transformResponseMiddleware("productFaqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateQuery(getProductFaqsSchema),
   adminProductFaqController.getProductFaqs
 );
@@ -55,6 +61,7 @@ router.get(
  */
 router.get(
   "/product/:productId",
+  transformResponseMiddleware("productFaqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(productIdParamsSchema),
   adminProductFaqController.getProductFaqsByProductId
 );
@@ -67,6 +74,7 @@ router.get(
  */
 router.get(
   "/:id",
+  transformResponseMiddleware("productFaqs"), // Detects language from admin token and transforms I18n fields to single language strings
   validateParams(productFaqIdParamsSchema),
   adminProductFaqController.getProductFaqById
 );
@@ -75,10 +83,13 @@ router.get(
  * @route PUT /api/v1/admin/product-faqs/:id
  * @desc Update product FAQ
  * @access Admin
+ * @body {String} [question] - FAQ question in English (plain string, will be auto-translated to all languages)
+ * @body {String} [answer] - FAQ answer in English (plain string, will be auto-translated to all languages)
  */
 router.put(
   "/:id",
   validateParams(productFaqIdParamsSchema),
+  autoTranslateMiddleware("productFaqs"), // Auto-translate English to all languages - converts plain strings to I18n objects
   validateJoi(updateProductFaqSchema),
   adminProductFaqController.updateProductFaq
 );
