@@ -1980,6 +1980,27 @@ class LandingPageService {
         }
       }
 
+      if (data.howItWorksSection.subTitle !== undefined) {
+        if (data.howItWorksSection.subTitle) {
+          const existingSubTitle = (landingPage.howItWorksSection as any)?.subTitle;
+          const subTitleObj =
+            existingSubTitle &&
+            typeof existingSubTitle === "object" &&
+            !Array.isArray(existingSubTitle)
+              ? (existingSubTitle as Record<string, any>)
+              : {};
+          (landingPage.howItWorksSection as any).subTitle =
+            typeof data.howItWorksSection.subTitle === "string"
+              ? { ...subTitleObj, en: data.howItWorksSection.subTitle }
+              : {
+                  ...subTitleObj,
+                  ...(data.howItWorksSection.subTitle as Record<string, any>),
+                };
+        } else {
+          (landingPage.howItWorksSection as any).subTitle = {};
+        }
+      }
+
       if (data.howItWorksSection.description !== undefined) {
         if (data.howItWorksSection.description) {
           const existingDesc = (landingPage.howItWorksSection as any)?.description;

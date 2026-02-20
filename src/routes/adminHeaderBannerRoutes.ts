@@ -54,6 +54,16 @@ router.get(
 );
 
 /**
+ * @route   POST /api/v1/admin/header-banners/run-schedule-job
+ * @desc    Manually trigger the scheduled banner cron job (Admin only)
+ * @access  Private (Admin)
+ */
+router.post(
+  "/run-schedule-job",
+  adminHeaderBannerController.runScheduleJob
+);
+
+/**
  * @route   GET /api/v1/admin/header-banners/:id
  * @desc    Get header banner by ID (Admin only)
  * @access  Private (Admin)
