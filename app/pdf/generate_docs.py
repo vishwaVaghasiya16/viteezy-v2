@@ -56,7 +56,7 @@ class Config:
         mongo_url = os.getenv("MONGODB_URI")
         mongo_db = os.getenv("MONGODB_DB")
         spaces_access_key = os.getenv("DIGITALOCEAN_ACCESS_KEY")
-        spaces_secret_key = os.getenv("DIGITALOCEAN_SPACES_SECRET_KEY") or os.getenv("DIGITALOCEAN_CLIENT_SECRET")
+        spaces_secret_key = os.getenv("DIGITALOCEAN_CLIENT_SECRET") or os.getenv("DIGITALOCEAN_SPACES_SECRET_KEY")
         spaces_bucket = os.getenv("DIGITALOCEAN_BUCKET_NAME")
         spaces_region = os.getenv("DIGITALOCEAN_SPACES_REGION")
         spaces_endpoint = os.getenv("DIGITALOCEAN_SPACES_ENDPOINT")
@@ -64,8 +64,8 @@ class Config:
         missing = [
             key
             for key, value in [
-                ("MONGODB_URL", mongo_url),
-                ("MONGODB_DATABASE", mongo_db),
+                ("MONGODB_URI", mongo_url),
+                ("MONGODB_DB", mongo_db),
                 ("DIGITALOCEAN_ACCESS_KEY", spaces_access_key),
                 ("DIGITALOCEAN_SPACES_SECRET_KEY|DIGITALOCEAN_CLIENT_SECRET", spaces_secret_key),
                 ("DIGITALOCEAN_BUCKET_NAME", spaces_bucket),
@@ -328,6 +328,7 @@ def find_order(orders_collection: Any, order_id: str) -> dict[str, Any] | None:
 
 
 def generate_and_upload_pdf(config: Config, order_id: str) -> str:
+    LOGGER.info("Starting PDF generation for order_id=%s", order_id)
     projection = {
         "orderNumber": 1,
         "userId": 1,
@@ -338,17 +339,27 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
         "createdAt": 1,
     }
 
-    with MongoClient(config.mongo_url) as client:
+    with MongoClient(
+        config.mongo_url,
+        serverSelectionTimeoutMS=10000,
+        connectTimeoutMS=10000,
+        socketTimeoutMS=30000,
+    ) as client:
+        LOGGER.info("Connecting to MongoDB for order lookup")
+        client.admin.command("ping")
         db = client[config.mongo_db]
         orders_collection = db["orders"]
         order = find_order(orders_collection, order_id)
         if not order:
+            LOGGER.warning("Order not found for order_id=%s", order_id)
             raise HTTPException(status_code=404, detail="Order not found")
 
         order = orders_collection.find_one({"_id": order["_id"]}, projection)
         if not order:
+            LOGGER.warning("Order projection lookup failed for order_id=%s", order_id)
             raise HTTPException(status_code=404, detail="Order not found")
 
+        LOGGER.info("Rendering DOCX for order_id=%s", order_id)
         template = DocxTemplate(str(config.template_path))
         context = build_context_for_order(db, order, template, config.images_dir)
 
@@ -360,6 +371,7 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
         template.render(context)
         template.save(str(output_docx))
 
+        LOGGER.info("Converting DOCX to PDF for order_id=%s", order_id)
         if not convert_docx_to_pdf(output_docx, output_pdf):
             raise HTTPException(
                 status_code=500,
@@ -367,6 +379,7 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
             )
 
         try:
+            LOGGER.info("Uploading PDF to DigitalOcean Spaces for order_id=%s", order_id)
             pdf_url = upload_pdf_to_spaces(config, output_pdf)
         except Exception as exc:
             LOGGER.exception("DigitalOcean upload failed: %s", exc)
@@ -376,6 +389,7 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
             {"_id": order["_id"], "status": "Confirmed"},
             {"$set": {"status": "PACKING_SLIP_READY"}},
         )
+        LOGGER.info("PDF generation completed for order_id=%s", order_id)
         return pdf_url
 
 
@@ -390,9 +404,17 @@ ensure_dirs(APP_CONFIG)
 
 @router.post("/generate-pdf")
 def generate_pdf(payload: GeneratePdfRequest) -> dict[str, Any]:
-    pdf_url = generate_and_upload_pdf(APP_CONFIG, payload.order_id)
-    return {
-        "success": True,
-        "message": "Pdf generated successfully",
-        "data": {"pdf_url": pdf_url},
-    }
+    LOGGER.info("Received generate-pdf request for order_id=%s", payload.order_id)
+    try:
+        pdf_url = generate_and_upload_pdf(APP_CONFIG, payload.order_id)
+        return {
+            "success": True,
+            "message": "Pdf generated successfully",
+            "data": {"pdf_url": pdf_url},
+        }
+    except HTTPException:
+        LOGGER.exception("generate-pdf request failed for order_id=%s", payload.order_id)
+        raise
+    except Exception:
+        LOGGER.exception("Unexpected error in generate-pdf for order_id=%s", payload.order_id)
+        raise
