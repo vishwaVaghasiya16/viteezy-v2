@@ -1,6 +1,8 @@
 import sgMail from "@sendgrid/mail";
 import { logger } from "../utils/logger";
 import { AddressSnapshotType } from "@/models/common.model";
+import * as fs from "fs";
+import * as path from "path";
 
 interface EmailOptions {
   to: string;
@@ -2075,6 +2077,120 @@ The Viteezy Team
 © ${new Date().getFullYear()} Viteezy. All rights reserved.
 This is an automated message, please do not reply to this email.
     `;
+  }
+
+  /**
+   * Send pharmacist request email with CSV attachments
+   */
+  async sendPharmacistRequestEmail(options: {
+    to: string;
+    subject: string;
+    files: string[];
+  }): Promise<void> {
+    try {
+      if (!this.isConfigured) {
+        logger.warn(
+          "Email service not configured. Skipping pharmacist request email."
+        );
+        return;
+      }
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .message { margin: 20px 0; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Pharmacist Order CSV Files</h1>
+            </div>
+            <div class="content">
+              <p>Dear Pharmacist,</p>
+              <div class="message">
+                <p>Please find attached ${options.files.length} CSV file(s) containing order information for processing.</p>
+                <p>Files attached:</p>
+                <ul>
+                  ${options.files.map((file) => `<li>${path.basename(file)}</li>`).join("")}
+                </ul>
+              </div>
+              <p>Thank you for your service.</p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const attachments = options.files.map((filePath) => {
+        const fileName = path.basename(filePath);
+        const fileContent = fs.readFileSync(filePath);
+        return {
+          content: fileContent.toString("base64"),
+          filename: fileName,
+          type: "text/csv",
+          disposition: "attachment",
+        };
+      });
+
+      const msg: any = {
+        to: options.to,
+        from: {
+          email: this.fromEmail,
+          name: this.fromName,
+        },
+        replyTo: this.fromEmail,
+        subject: options.subject,
+        html: html,
+        text: html.replace(/<[^>]*>/g, ""),
+        attachments: attachments,
+        headers: {
+          "X-Entity-Ref-ID": `viteezy-pharmacist-${Date.now()}`,
+          "X-Mailer": "Viteezy Email Service",
+        },
+        categories: ["viteezy", "pharmacist", "csv"],
+        mailSettings: {
+          sandboxMode: {
+            enable: process.env.NODE_ENV === "test",
+          },
+          bypassListManagement: {
+            enable: true,
+          },
+        },
+        trackingSettings: {
+          clickTracking: {
+            enable: false,
+          },
+          openTracking: {
+            enable: true,
+          },
+          subscriptionTracking: {
+            enable: false,
+          },
+        },
+      };
+
+      await sgMail.send(msg);
+      logger.info(`Pharmacist request email sent successfully to ${options.to} with ${options.files.length} attachment(s)`);
+    } catch (error: any) {
+      logger.error(`Failed to send pharmacist request email: ${error.message}`, {
+        to: options.to,
+        files: options.files,
+        error: error.message,
+      });
+      throw error;
+    }
   }
 }
 
