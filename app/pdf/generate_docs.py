@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-import mimetypes
 import os
 import re
 import shutil
@@ -15,10 +14,10 @@ import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 from typing import Any
-from urllib.parse import urlparse
 
 import boto3
 import requests
@@ -27,6 +26,7 @@ from docx.shared import Mm
 from docxtpl import DocxTemplate, InlineImage
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
+from PIL import Image as PILImage, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
@@ -40,9 +40,6 @@ class Config:
     mongo_url: str
     mongo_db: str
     template_path: Path
-    output_docx_dir: Path
-    output_pdf_dir: Path
-    images_dir: Path
     spaces_access_key: str
     spaces_secret_key: str
     spaces_bucket: str
@@ -81,9 +78,6 @@ class Config:
             mongo_url=mongo_url,
             mongo_db=mongo_db,
             template_path=Path(__file__).parent / "template.docx",
-            output_docx_dir=Path(__file__).parent / "output" / "docx",
-            output_pdf_dir=Path(__file__).parent / "output" / "pdf",
-            images_dir=Path(__file__).parent / "output" / "images",
             spaces_access_key=spaces_access_key,
             spaces_secret_key=spaces_secret_key,
             spaces_bucket=spaces_bucket,
@@ -94,12 +88,6 @@ class Config:
 
 class GeneratePdfRequest(BaseModel):
     order_id: str = Field(..., min_length=1)
-
-
-def ensure_dirs(config: Config) -> None:
-    config.output_docx_dir.mkdir(parents=True, exist_ok=True)
-    config.output_pdf_dir.mkdir(parents=True, exist_ok=True)
-    config.images_dir.mkdir(parents=True, exist_ok=True)
 
 
 def slugify(value: str) -> str:
@@ -165,7 +153,7 @@ def get_ingredient_names(ingredients_collection: Any, product_id: ObjectId) -> l
     return names
 
 
-def download_image(image_url: str, images_dir: Path) -> Path | None:
+def download_image(image_url: str) -> BytesIO | None:
     normalized_url = str(image_url).strip().strip("\"'").replace("\n", "").replace("\r", "")
     if not normalized_url:
         return None
@@ -177,10 +165,21 @@ def download_image(image_url: str, images_dir: Path) -> Path | None:
         LOGGER.warning("Failed to download image %s: %s", normalized_url, exc)
         return None
 
-    suffix = Path(urlparse(normalized_url).path).suffix or ".png"
-    with NamedTemporaryFile(delete=False, suffix=suffix, dir=images_dir) as temp_file:
-        temp_file.write(response.content)
-        return Path(temp_file.name)
+    # Normalize to a PNG that python-docx can always parse.
+    try:
+        with PILImage.open(BytesIO(response.content)) as img:
+            img.load()
+            normalized = img.convert("RGBA") if "A" in img.getbands() else img.convert("RGB")
+            image_stream = BytesIO()
+            normalized.save(image_stream, format="PNG")
+            image_stream.seek(0)
+            return image_stream
+    except UnidentifiedImageError:
+        LOGGER.warning("Downloaded content is not a supported image %s", normalized_url)
+        return None
+    except Exception as exc:
+        LOGGER.warning("Failed to normalize image %s: %s", normalized_url, exc)
+        return None
 
 
 def convert_docx_to_pdf(input_docx: Path, output_pdf: Path) -> bool:
@@ -242,7 +241,6 @@ def build_context_for_order(
     db: Any,
     order: dict[str, Any],
     template: DocxTemplate,
-    images_dir: Path,
 ) -> dict[str, Any]:
     users_collection = db["users"]
     products_collection = db["products"]
@@ -261,9 +259,9 @@ def build_context_for_order(
         image_url = get_product_image_url(product_doc)
         image_value: Any = ""
         if image_url:
-            image_path = download_image(image_url, images_dir)
-            if image_path:
-                image_value = InlineImage(template, str(image_path), width=Mm(22))
+            image_stream = download_image(image_url)
+            if image_stream:
+                image_value = InlineImage(template, image_stream, width=Mm(22))
 
         components = [{"name": n, "amount": "-", "perc": "-"} for n in ingredient_names]
         if not components:
@@ -300,7 +298,6 @@ def build_context_for_order(
 
 def upload_pdf_to_spaces(config: Config, pdf_path: Path) -> str:
     key = f"Viteezy_PDF_AI/{pdf_path.name}"
-    content_type = mimetypes.guess_type(str(pdf_path))[0] or "application/pdf"
 
     s3_client = boto3.client(
         "s3",
@@ -313,7 +310,7 @@ def upload_pdf_to_spaces(config: Config, pdf_path: Path) -> str:
         str(pdf_path),
         config.spaces_bucket,
         key,
-        ExtraArgs={"ACL": "public-read", "ContentType": content_type},
+        ExtraArgs={"ACL": "public-read", "ContentType": "application/pdf"},
     )
     return f"https://{config.spaces_bucket}.{config.spaces_region}.digitaloceanspaces.com/{key}"
 
@@ -361,29 +358,31 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
 
         LOGGER.info("Rendering DOCX for order_id=%s", order_id)
         template = DocxTemplate(str(config.template_path))
-        context = build_context_for_order(db, order, template, config.images_dir)
+        context = build_context_for_order(db, order, template)
 
         order_number = order.get("orderNumber") or str(order.get("_id"))
         filename_base = f"{slugify(str(order_number))}-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
-        output_docx = config.output_docx_dir / f"{filename_base}.docx"
-        output_pdf = config.output_pdf_dir / f"{filename_base}.pdf"
+        with TemporaryDirectory(prefix="viteezy_pdf_") as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_docx = tmp_path / f"{filename_base}.docx"
+            output_pdf = tmp_path / f"{filename_base}.pdf"
 
-        template.render(context)
-        template.save(str(output_docx))
+            template.render(context)
+            template.save(str(output_docx))
 
-        LOGGER.info("Converting DOCX to PDF for order_id=%s", order_id)
-        if not convert_docx_to_pdf(output_docx, output_pdf):
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to convert DOCX to PDF. Ensure Microsoft Word or LibreOffice is installed on this machine.",
-            )
+            LOGGER.info("Converting DOCX to PDF for order_id=%s", order_id)
+            if not convert_docx_to_pdf(output_docx, output_pdf):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to convert DOCX to PDF. Ensure Microsoft Word or LibreOffice is installed on this machine.",
+                )
 
-        try:
-            LOGGER.info("Uploading PDF to DigitalOcean Spaces for order_id=%s", order_id)
-            pdf_url = upload_pdf_to_spaces(config, output_pdf)
-        except Exception as exc:
-            LOGGER.exception("DigitalOcean upload failed: %s", exc)
-            raise HTTPException(status_code=500, detail="Failed to upload PDF to DigitalOcean Spaces") from exc
+            try:
+                LOGGER.info("Uploading PDF to DigitalOcean Spaces for order_id=%s", order_id)
+                pdf_url = upload_pdf_to_spaces(config, output_pdf)
+            except Exception as exc:
+                LOGGER.exception("DigitalOcean upload failed: %s", exc)
+                raise HTTPException(status_code=500, detail="Failed to upload PDF to DigitalOcean Spaces") from exc
 
         orders_collection.update_one(
             {"_id": order["_id"], "status": "Confirmed"},
@@ -399,7 +398,6 @@ APP_CONFIG = Config.from_env()
 
 if not APP_CONFIG.template_path.exists():
     raise FileNotFoundError(f"Template not found: {APP_CONFIG.template_path}")
-ensure_dirs(APP_CONFIG)
 
 
 @router.post("/generate-pdf")
