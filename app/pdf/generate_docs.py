@@ -26,7 +26,7 @@ from bson import ObjectId
 from docx.shared import Mm
 from docxtpl import DocxTemplate, InlineImage
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
 
@@ -53,8 +53,8 @@ class Config:
     def from_env() -> "Config":
         load_dotenv()
 
-        mongo_url = os.getenv("MONGODB_URL")
-        mongo_db = os.getenv("MONGODB_DATABASE")
+        mongo_url = os.getenv("MONGODB_URI")
+        mongo_db = os.getenv("MONGODB_DB")
         spaces_access_key = os.getenv("DIGITALOCEAN_ACCESS_KEY")
         spaces_secret_key = os.getenv("DIGITALOCEAN_SPACES_SECRET_KEY") or os.getenv("DIGITALOCEAN_CLIENT_SECRET")
         spaces_bucket = os.getenv("DIGITALOCEAN_BUCKET_NAME")
@@ -80,10 +80,10 @@ class Config:
         return Config(
             mongo_url=mongo_url,
             mongo_db=mongo_db,
-            template_path=Path("template.docx"),
-            output_docx_dir=Path("output/docx"),
-            output_pdf_dir=Path("output/pdf"),
-            images_dir=Path("output/images"),
+            template_path=Path(__file__).parent / "template.docx",
+            output_docx_dir=Path(__file__).parent / "output" / "docx",
+            output_pdf_dir=Path(__file__).parent / "output" / "pdf",
+            images_dir=Path(__file__).parent / "output" / "images",
             spaces_access_key=spaces_access_key,
             spaces_secret_key=spaces_secret_key,
             spaces_bucket=spaces_bucket,
@@ -367,14 +367,20 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
             )
 
         try:
-            return upload_pdf_to_spaces(config, output_pdf)
+            pdf_url = upload_pdf_to_spaces(config, output_pdf)
         except Exception as exc:
             LOGGER.exception("DigitalOcean upload failed: %s", exc)
             raise HTTPException(status_code=500, detail="Failed to upload PDF to DigitalOcean Spaces") from exc
 
+        orders_collection.update_one(
+            {"_id": order["_id"], "status": "Confirmed"},
+            {"$set": {"status": "PACKING_SLIP_READY"}},
+        )
+        return pdf_url
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-app = FastAPI(title="Viteezy PDF Service")
+router = APIRouter()
 APP_CONFIG = Config.from_env()
 
 if not APP_CONFIG.template_path.exists():
@@ -382,11 +388,11 @@ if not APP_CONFIG.template_path.exists():
 ensure_dirs(APP_CONFIG)
 
 
-@app.post("/generate-pdf")
+@router.post("/generate-pdf")
 def generate_pdf(payload: GeneratePdfRequest) -> dict[str, Any]:
     pdf_url = generate_and_upload_pdf(APP_CONFIG, payload.order_id)
     return {
         "success": True,
         "message": "Pdf generated successfully",
-        "data": [{"pdf_url": pdf_url}],
+        "data": {"pdf_url": pdf_url},
     }

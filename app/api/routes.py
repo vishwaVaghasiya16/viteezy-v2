@@ -38,6 +38,7 @@ from app.schemas.session import SessionCreate, SessionResponse
 from app.services.chat_service import ChatService, SessionNotFoundError
 from app.services.openai_service import OpenAIChatService
 from app.services.product_service import ProductService
+from app.pdf.generate_docs import router as pdf_router
 
 router = APIRouter()
 
@@ -1415,3 +1416,7 @@ async def delete_session(
                 data=deletion_data
             ).model_dump()
         ) from e
+
+
+# Include PDF router
+router.include_router(pdf_router, tags=["PDF"])

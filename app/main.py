@@ -8,6 +8,7 @@ from app.config.logging import configure_logging
 from app.config.settings import settings
 from app.dependencies.db import close_client
 from app.middleware.error_handler import exception_handler_middleware
+from app.pdf.generate_docs import router as pdf_router
 
 
 @asynccontextmanager
@@ -36,3 +37,4 @@ app.add_middleware(
 app.middleware("http")(exception_handler_middleware)
 
 app.include_router(router, prefix="/api/v1")
+app.include_router(pdf_router)
