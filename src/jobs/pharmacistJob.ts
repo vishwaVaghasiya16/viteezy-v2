@@ -468,27 +468,28 @@ export class PharmacistJob {
    * Email CSV files to pharmacist
    */
   private async emailResultsToPharmacist(): Promise<void> {
+    // Find all CSV files in the directory
+    const files = fs.readdirSync(this.CSV_FOLDER).filter((file) =>
+      file.endsWith(this.CSV_FILE_EXTENSION)
+    );
+
+    if (files.length === 0) {
+      logger.info("No CSV files to send to pharmacist");
+      return;
+    }
+
+    logger.info(`Found ${files.length} CSV files to send to pharmacist`);
+
+    // Get pharmacist email from environment
+    const pharmacistEmail =
+      process.env.PHARMACIST_EMAIL || "pharmacist@viteezy.com";
+
+    // Prepare file paths
+    const filePaths = files.map((file) => path.join(this.CSV_FOLDER, file));
+
+    // Try to send email with CSV attachments
+    // If email fails, we still update order statuses (CSV files are created successfully)
     try {
-      // Find all CSV files in the directory
-      const files = fs.readdirSync(this.CSV_FOLDER).filter((file) =>
-        file.endsWith(this.CSV_FILE_EXTENSION)
-      );
-
-      if (files.length === 0) {
-        logger.info("No CSV files to send to pharmacist");
-        return;
-      }
-
-      logger.info(`Found ${files.length} CSV files to send to pharmacist`);
-
-      // Get pharmacist email from environment
-      const pharmacistEmail =
-        process.env.PHARMACIST_EMAIL || "pharmacist@viteezy.com";
-
-      // Prepare file paths
-      const filePaths = files.map((file) => path.join(this.CSV_FOLDER, file));
-
-      // Send email with CSV attachments
       await emailService.sendPharmacistRequestEmail({
         to: pharmacistEmail,
         files: filePaths,
@@ -496,32 +497,38 @@ export class PharmacistJob {
       });
 
       logger.info(`Sent ${files.length} CSV files to pharmacist at ${pharmacistEmail}`);
+    } catch (error: any) {
+      logger.error(`Failed to email CSV files to pharmacist: ${error.message}`, {
+        error: error.message,
+        hint: "CSV files are created successfully. Please check SendGrid API key configuration.",
+      });
+      // Don't throw error - continue to update order statuses even if email fails
+    }
 
-      // Update order statuses to READY_FOR_SHIPMENT
-      // Find all orders that were processed (have pharmacistOrderNumber in metadata)
+    // Update order statuses to READY_FOR_SHIPMENT
+    // This happens regardless of email success/failure since CSV files are created
+    try {
       const orders = await Orders.find({
         status: OrderStatus.PACKING_SLIP_READY,
         isDeleted: false,
         "metadata.pharmacistOrderNumber": { $exists: true },
       });
 
-      for (const order of orders) {
-        await Orders.updateOne(
-          { _id: order._id },
+      if (orders.length > 0) {
+        await Orders.updateMany(
+          {
+            status: OrderStatus.PACKING_SLIP_READY,
+            isDeleted: false,
+            "metadata.pharmacistOrderNumber": { $exists: true },
+          },
           { $set: { status: OrderStatus.READY_FOR_SHIPMENT } }
         );
+
+        logger.info(`Updated ${orders.length} orders to READY_FOR_SHIPMENT status`);
       }
-
-      logger.info(`Updated ${orders.length} orders to READY_FOR_SHIPMENT status`);
-
-      // Optionally, delete CSV files after sending (or archive them)
-      // Uncomment if you want to clean up after sending
-      // for (const filePath of filePaths) {
-      //   fs.unlinkSync(filePath);
-      // }
     } catch (error: any) {
-      logger.error(`Failed to email CSV files to pharmacist: ${error.message}`);
-      throw error;
+      logger.error(`Failed to update order statuses: ${error.message}`);
+      // This is more critical, but we'll log and continue
     }
   }
 
