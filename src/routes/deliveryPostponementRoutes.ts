@@ -34,7 +34,7 @@ router.post(
  * @route   GET /api/postponements
  * @desc    Get user's postponement history (Paginated)
  * @access  Private
- * @query   status, orderId, page, limit
+ * @query   status, orderId, subscriptionId, page, limit
  */
 router.get(
   "/",

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Orders, DeliveryPostponements } from "@/models/commerce";
+import { Orders, DeliveryPostponements, Subscriptions } from "@/models/commerce";
 import { OrderPlanType, PostponementStatus } from "@/models/enums";
 import { emailService } from "@/services/emailService";
 import { logger } from "@/utils/logger";
@@ -247,7 +247,7 @@ class DeliveryPostponementController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { status, orderId } = req.query;
+      const { status, orderId, subscriptionId } = req.query;
       const userId = new mongoose.Types.ObjectId(req.user._id);
 
       const paginationOptions = getPaginationOptions(req);
@@ -263,7 +263,29 @@ class DeliveryPostponementController {
         query.status = status;
       }
 
-      if (orderId) {
+      // Filter by subscriptionId - find the subscription and get its orderId
+      if (subscriptionId) {
+        if (!mongoose.Types.ObjectId.isValid(subscriptionId as string)) {
+          throw new AppError("Invalid subscriptionId format", 400);
+        }
+
+        // Find the subscription to get its orderId
+        const subscription = await Subscriptions.findOne({
+          _id: new mongoose.Types.ObjectId(subscriptionId as string),
+          userId,
+          isDeleted: { $ne: true },
+        })
+          .select("orderId")
+          .lean();
+
+        if (!subscription) {
+          throw new AppError("Subscription not found", 404);
+        }
+
+        // Filter postponements by the orderId from the subscription
+        query.orderId = subscription.orderId;
+      } else if (orderId) {
+        // Only use orderId if subscriptionId is not provided
         query.orderId = new mongoose.Types.ObjectId(orderId as string);
       }
 
@@ -278,10 +300,62 @@ class DeliveryPostponementController {
         DeliveryPostponements.countDocuments(query),
       ]);
 
+      // Get subscriptionIds for the orders in postponements
+      // Extract orderIds from postponements (handle both populated object and ObjectId)
+      const orderIds = postponements
+        .map((p: any) => {
+          if (!p.orderId) return null;
+          // If orderId is populated (object with _id), use _id, otherwise use orderId directly
+          const orderId = p.orderId._id || p.orderId;
+          return orderId ? orderId.toString() : null;
+        })
+        .filter((id: any) => id && mongoose.Types.ObjectId.isValid(id));
+
+      // Find subscriptions for these orders (only if there are orderIds)
+      const orderToSubscriptionMap = new Map<string, mongoose.Types.ObjectId>();
+      if (orderIds.length > 0) {
+        const subscriptions = await Subscriptions.find({
+          orderId: { $in: orderIds.map((id: string) => new mongoose.Types.ObjectId(id)) },
+          userId,
+          isDeleted: { $ne: true },
+        })
+          .select("_id orderId")
+          .lean();
+
+        // Create a map of orderId (string) -> subscriptionId
+        subscriptions.forEach((sub: any) => {
+          const orderIdStr = sub.orderId?.toString();
+          if (orderIdStr) {
+            orderToSubscriptionMap.set(orderIdStr, sub._id);
+          }
+        });
+      }
+
+      // Add subscriptionId to each postponement
+      const postponementsWithSubscription = postponements.map((postponement: any) => {
+        let subscriptionId: mongoose.Types.ObjectId | null = null;
+        
+        if (postponement.orderId) {
+          // Get orderId - handle both populated (object) and non-populated (ObjectId) cases
+          const orderId = postponement.orderId._id || postponement.orderId;
+          const orderIdStr = orderId?.toString() || (orderId instanceof mongoose.Types.ObjectId ? orderId.toString() : null);
+          
+          // Look up subscriptionId from the map
+          if (orderIdStr) {
+            subscriptionId = orderToSubscriptionMap.get(orderIdStr) || null;
+          }
+        }
+
+        return {
+          ...postponement,
+          subscriptionId,
+        };
+      });
+
       res.status(200).json({
         success: true,
         message: "Postponement history retrieved successfully",
-        data: postponements,
+        data: postponementsWithSubscription,
         pagination: getPaginationMeta(
           paginationOptions.page,
           paginationOptions.limit,
