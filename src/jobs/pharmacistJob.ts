@@ -412,11 +412,11 @@ export class PharmacistJob {
       fs.writeFileSync(filePath, csvContent, "utf-8");
       logger.info(`Created CSV file: ${fileName} with ${pharmacistOrderLines.length} order lines`);
 
-      // Update orders with pharmacist order number
+      // Update orders with pharmacist order number (preserve other metadata)
       const orderIds = pharmacistOrderLines.map((line) => line.orderId);
       await Orders.updateMany(
         { _id: { $in: orderIds } },
-        { $set: { metadata: { ...{}, pharmacistOrderNumber } } }
+        { $set: { "metadata.pharmacistOrderNumber": pharmacistOrderNumber } }
       );
     } catch (error: any) {
       logger.error(`Failed to create CSV file ${fileName}: ${error.message}`);

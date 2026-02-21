@@ -211,6 +211,15 @@ export const config = {
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || DEFAULT_VALUES.GOOGLE_CLIENT_ID,
   },
+  /**
+   * Infobip SMS (V1-compatible) – pickup point notifications
+   * @property {string} url - Infobip API base URL
+   * @property {string} apiKey - Infobip API key
+   */
+  infobip: {
+    url: process.env.INFOBIP_URL || "https://dmdlzg.api.infobip.com",
+    apiKey: process.env.INFOBIP_API_KEY || "",
+  },
 } as const;
 
 /**
