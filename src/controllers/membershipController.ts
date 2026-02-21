@@ -1,12 +1,17 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
-import { asyncHandler } from "@/utils";
+import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { MembershipPlans } from "@/models/commerce";
+import { MembershipPlans, Memberships } from "@/models/commerce";
 import { membershipService } from "@/services/membershipService";
 import { paymentService } from "@/services/payment/PaymentService";
 import { PaymentMethod } from "@/models/enums";
 import { MemberReferrals } from "@/models/core/memberReferrals.model";
+import { User } from "@/models/index.model";
+import { 
+  MembershipStatus, 
+  MembershipInterval 
+} from "@/models/enums";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -247,6 +252,488 @@ class MembershipController {
             gatewayTransactionId: paymentResponse.payment.gatewayTransactionId,
             redirectUrl: paymentResponse.result.redirectUrl,
             clientSecret: paymentResponse.result.clientSecret,
+          },
+        },
+      });
+    }
+  );
+
+  /**
+   * Get user's memberships (subscriptions)
+   * @route GET /api/memberships
+   * @access Private
+   */
+  getUserMemberships = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { status, page = 1, limit = 20 } = req.query;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const paginationOptions = getPaginationOptions(req);
+      const skip = (paginationOptions.page - 1) * paginationOptions.limit;
+
+      // Build query - get ALL memberships regardless of status
+      const query: any = {
+        userId,
+        isDeleted: false,
+      };
+
+      // Only filter by status if explicitly provided
+      if (status && status !== "all") {
+        query.status = status;
+      }
+
+      // Get memberships
+      const [memberships, total] = await Promise.all([
+        Memberships.find(query)
+          .populate("planId", "name slug interval durationDays price benefits")
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(paginationOptions.limit)
+          .lean(),
+        Memberships.countDocuments(query),
+      ]);
+
+      const paginationMeta = getPaginationMeta(
+        paginationOptions.page,
+        paginationOptions.limit,
+        total
+      );
+
+      // Format response to match Postman collection expectations
+      const formattedMemberships = memberships.map((membership: any) => {
+        const now = new Date();
+        const daysUntilExpiry = membership.expiresAt
+          ? Math.ceil(
+              (membership.expiresAt.getTime() - now.getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          : null;
+
+        const daysUntilNextBilling = membership.nextBillingDate
+          ? Math.ceil(
+              (membership.nextBillingDate.getTime() - now.getTime()) /
+                (1000 * 60 * 60 * 24)
+            )
+          : null;
+
+        // Get plan label from interval
+        const getPlanLabel = (interval: string): string => {
+          const labels: Record<string, string> = {
+            [MembershipInterval.MONTHLY]: "Monthly",
+            [MembershipInterval.QUARTERLY]: "Quarterly", 
+            [MembershipInterval.YEARLY]: "Yearly",
+          };
+          return labels[interval] || interval;
+        };
+
+        // Get amount display
+        const amount = membership.planSnapshot?.price;
+        const amountDisplay = amount 
+          ? `${amount.currency} ${amount.amount.toFixed(2)}/${getPlanLabel(membership.planSnapshot?.interval)}`
+          : null;
+
+        return {
+          id: membership._id,
+          status: membership.status,
+          planLabel: getPlanLabel(membership.planSnapshot?.interval),
+          planId: membership.planId,
+          planSnapshot: membership.planSnapshot,
+          amountDisplay,
+          startDate: membership.startedAt,
+          expiryDate: membership.expiresAt,
+          nextBillingDate: membership.nextBillingDate,
+          cancelDate: membership.cancelledAt,
+          pauseDate: null, // Memberships don't support pause
+          daysUntilExpiry,
+          daysUntilNextBilling,
+          cancellationReason: membership.cancellationReason,
+          pauseReason: null, // Memberships don't support pause
+          isAutoRenew: membership.isAutoRenew,
+          createdAt: membership.createdAt,
+          updatedAt: membership.updatedAt,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Memberships retrieved successfully",
+        data: formattedMemberships,
+        pagination: paginationMeta,
+      });
+    }
+  );
+
+  /**
+   * Get membership details
+   * @route GET /api/memberships/:membershipId
+   * @access Private
+   */
+  getMembershipDetails = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { membershipId } = req.params;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const membership = await Memberships.findOne({
+        _id: new mongoose.Types.ObjectId(membershipId),
+        userId,
+        isDeleted: false,
+      })
+        .populate("planId", "name slug interval durationDays price benefits")
+        .lean();
+
+      if (!membership) {
+        throw new AppError("Membership not found", 404);
+      }
+
+      const now = new Date();
+      const daysUntilExpiry = membership.expiresAt
+        ? Math.ceil(
+            (membership.expiresAt.getTime() - now.getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        : null;
+
+      const daysUntilNextBilling = membership.nextBillingDate
+        ? Math.ceil(
+            (membership.nextBillingDate.getTime() - now.getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        : null;
+
+      // Get plan label from interval
+      const getPlanLabel = (interval: string): string => {
+        const labels: Record<string, string> = {
+          [MembershipInterval.MONTHLY]: "Monthly",
+          [MembershipInterval.QUARTERLY]: "Quarterly",
+          [MembershipInterval.YEARLY]: "Yearly",
+        };
+        return labels[interval] || interval;
+      };
+
+      // Get amount display
+      const amount = membership.planSnapshot?.price;
+      const amountDisplay = amount 
+        ? `${amount.currency} ${amount.amount.toFixed(2)}/${getPlanLabel(membership.planSnapshot?.interval)}`
+        : null;
+
+      res.status(200).json({
+        success: true,
+        message: "Membership details retrieved successfully",
+        data: {
+          membership: {
+            id: membership._id,
+            status: membership.status,
+            planLabel: getPlanLabel(membership.planSnapshot?.interval),
+            planId: membership.planId,
+            planSnapshot: membership.planSnapshot,
+            amountDisplay,
+            startDate: membership.startedAt,
+            expiryDate: membership.expiresAt,
+            nextBillingDate: membership.nextBillingDate,
+            cancelDate: membership.cancelledAt,
+            pauseDate: null, // Memberships don't support pause
+            daysUntilExpiry,
+            daysUntilNextBilling,
+            cancellationReason: membership.cancellationReason,
+            pauseReason: null, // Memberships don't support pause
+            isAutoRenew: membership.isAutoRenew,
+            metadata: membership.metadata,
+            createdAt: membership.createdAt,
+            updatedAt: membership.updatedAt,
+          },
+        },
+      });
+    }
+  );
+
+  /**
+   * Cancel membership
+   * @route POST /api/memberships/:membershipId/cancel
+   * @access Private
+   *
+   * Cancellation window:
+   * - Cancellation is NOT allowed in the last 15 days before membership expiry (any plan).
+   * - Example: 1-month plan → cancel allowed in first ~15 days; not in last 15 days.
+   *
+   * Refund Rules:
+   * - Quarterly Plan: No cancellation or refund allowed
+   * - Annual Plan:
+   *   - No cancellation allowed during first quarter
+   *   - Post first quarter: Refund for remaining full quarters only
+   *   - No partial refunds
+   *   - If cancelled mid-quarter, access remains till quarter end
+   */
+  cancelMembership = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { membershipId } = req.params;
+      const { cancellationReason } = req.body;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const membership = await Memberships.findOne({
+        _id: new mongoose.Types.ObjectId(membershipId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!membership) {
+        throw new AppError("Membership not found", 404);
+      }
+
+      if (membership.status === MembershipStatus.CANCELLED) {
+        throw new AppError("Membership is already cancelled", 400);
+      }
+
+      // Do not allow cancellation in the last 15 days before expiry (any plan)
+      const LAST_DAYS_NO_CANCEL = 15;
+      const expiresAt = membership.expiresAt ? new Date(membership.expiresAt) : null;
+      if (expiresAt) {
+        const now = new Date();
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const daysUntilExpiry = Math.ceil((expiresAt.getTime() - now.getTime()) / msPerDay);
+        if (daysUntilExpiry <= LAST_DAYS_NO_CANCEL && daysUntilExpiry > 0) {
+          throw new AppError(
+            `Cancellation is not allowed in the last ${LAST_DAYS_NO_CANCEL} days before membership expiry. Your membership expires in ${daysUntilExpiry} day(s).`,
+            400
+          );
+        }
+        if (daysUntilExpiry <= 0) {
+          throw new AppError("Membership has already expired", 400);
+        }
+      }
+
+      const interval = membership.planSnapshot?.interval;
+
+      // Quarterly Plan: No cancellation or refund allowed
+      if (interval === MembershipInterval.QUARTERLY) {
+        throw new AppError(
+          "Cancellation is not allowed for Quarterly membership plans",
+          400
+        );
+      }
+
+      // Annual Plan: Check if cancellation is allowed
+      let refundDetails: {
+        refundAmount: number;
+        refundableQuarters: number;
+        currentQuarter: number;
+        accessEndDate: Date;
+      } | null = null;
+      let refundProcessed = false;
+      let refundAmount = 0;
+
+      if (interval === MembershipInterval.YEARLY) {
+        refundDetails = membershipService.calculateRefundAmount(membership);
+
+        // No cancellation allowed during first quarter
+        if (!refundDetails) {
+          const startedAt = membership.startedAt || membership.createdAt;
+          const now = new Date();
+          const daysElapsed = Math.ceil(
+            (now.getTime() - new Date(startedAt).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const daysPerQuarter = 365 / 4; // ~91.25 days per quarter
+          const currentQuarter = Math.floor(daysElapsed / daysPerQuarter) + 1;
+
+          if (currentQuarter === 1) {
+            throw new AppError(
+              "Cancellation is not allowed during the first quarter of Annual membership",
+              400
+            );
+          }
+        }
+
+        // Process refund if applicable
+        let accessEndDate = membership.expiresAt || new Date();
+
+        if (refundDetails && refundDetails.refundAmount > 0) {
+          // Set access end date (quarter end if cancelled mid-quarter)
+          accessEndDate = refundDetails.accessEndDate;
+
+          // Process refund through payment service
+          if (membership.paymentId) {
+            try {
+              await paymentService.refundPayment({
+                paymentId: membership.paymentId.toString(),
+                amount: refundDetails.refundAmount,
+                reason: `Membership cancellation refund - ${refundDetails.refundableQuarters} quarter(s) remaining`,
+                metadata: {
+                  membershipId: String(membership._id),
+                  refundableQuarters: refundDetails.refundableQuarters.toString(),
+                  currentQuarter: refundDetails.currentQuarter.toString(),
+                },
+              });
+              refundProcessed = true;
+              refundAmount = refundDetails.refundAmount;
+            } catch (error: any) {
+              // Log error but don't fail cancellation if refund fails
+              console.error("Refund processing failed:", error);
+              // Continue with cancellation even if refund fails
+            }
+          }
+        }
+
+        // Update membership with access end date
+        membership.expiresAt = accessEndDate;
+      }
+
+      // Cancel membership
+      membership.status = MembershipStatus.CANCELLED;
+      membership.cancelledAt = new Date();
+      if (cancellationReason && typeof cancellationReason === "string") {
+        membership.cancellationReason = cancellationReason.trim().substring(0, 500);
+      }
+
+      await membership.save();
+
+      // Update user's membership status
+      await User.findByIdAndUpdate(membership.userId, {
+        isMember: false,
+        membershipStatus: MembershipStatus.CANCELLED,
+      });
+
+      const responseData: any = {
+        id: membership._id,
+        status: membership.status,
+        cancelledAt: membership.cancelledAt,
+        cancellationReason: membership.cancellationReason,
+        accessEndDate: membership.expiresAt,
+      };
+
+      // Add refund information if applicable
+      if (interval === MembershipInterval.YEARLY) {
+        if (refundDetails && refundAmount > 0) {
+          responseData.refund = {
+            amount: refundAmount,
+            refundableQuarters: refundDetails.refundableQuarters,
+            processed: refundProcessed,
+          };
+        } else {
+          responseData.refund = {
+            amount: 0,
+            message: "No refund applicable",
+          };
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Membership cancelled successfully",
+        data: {
+          membership: responseData,
+        },
+      });
+    }
+  );
+
+  /**
+   * Membership widget overview for user dashboard
+   * @route GET /api/memberships/widget/overview
+   * @access Private
+   */
+  getMembershipWidget = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      const membership = await Memberships.findOne({
+        userId,
+        isDeleted: false,
+        status: { $in: [MembershipStatus.ACTIVE] }, // Only active memberships since PAUSED is not supported
+      })
+        .populate("planId", "name slug interval durationDays price")
+        .sort({ nextBillingDate: 1, createdAt: -1 })
+        .lean();
+
+      if (!membership) {
+        res.status(200).json({
+          success: true,
+          message: "No active membership",
+          data: {
+            widget: {
+              hasActiveSubscription: false,
+              headline: "Try Membership Plans - Get exclusive benefits and save more",
+              cta: {
+                label: "Explore Plans",
+                action: "explore-memberships",
+              },
+            },
+          },
+        });
+        return;
+      }
+
+      const now = new Date();
+      const daysUntilExpiry = membership.expiresAt
+        ? Math.ceil(
+            (membership.expiresAt.getTime() - now.getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        : null;
+
+      const daysUntilNextBilling = membership.nextBillingDate
+        ? Math.ceil(
+            (membership.nextBillingDate.getTime() - now.getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        : null;
+
+      // Get plan label from interval
+      const getPlanLabel = (interval: string): string => {
+        const labels: Record<string, string> = {
+          [MembershipInterval.MONTHLY]: "Monthly",
+          [MembershipInterval.QUARTERLY]: "Quarterly",
+          [MembershipInterval.YEARLY]: "Yearly",
+        };
+        return labels[interval] || interval;
+      };
+
+      // Get amount display
+      const amount = membership.planSnapshot?.price;
+      const amountDisplay = amount 
+        ? `${amount.currency} ${amount.amount.toFixed(2)}/${getPlanLabel(membership.planSnapshot?.interval)}`
+        : null;
+
+      res.status(200).json({
+        success: true,
+        message: "Membership widget data retrieved successfully",
+        data: {
+          widget: {
+            hasActiveSubscription: true,
+            membershipId: membership._id,
+            status: membership.status,
+            planLabel: getPlanLabel(membership.planSnapshot?.interval),
+            amountDisplay,
+            expiryDate: membership.expiresAt,
+            nextBillingDate: membership.nextBillingDate,
+            daysUntilExpiry,
+            daysUntilNextBilling,
+            actions: {
+              manage: {
+                label: "Manage Plan",
+                action: "manage-membership",
+                membershipId: membership._id,
+              },
+              cancel: {
+                label: "Cancel Plan",
+                action: "cancel-membership",
+                membershipId: membership._id,
+              },
+            },
           },
         },
       });

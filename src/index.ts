@@ -557,6 +557,66 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
+    // Initialize header banner schedule cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/headerBannerScheduleJob");
+      logger.info("✅ Header banner schedule cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize header banner schedule job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize packing slip PDF generation cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/packingSlipPdfJob");
+      logger.info("✅ Packing slip PDF generation cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize packing slip PDF generation job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize pharmacist job cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/pharmacistJob");
+      logger.info("✅ Pharmacist job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize pharmacist job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize PostNL Fulfilment job cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/postNLFulfilmentJob");
+      logger.info("✅ PostNL Fulfilment job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Fulfilment job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize PostNL Response job cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/postNLResponseJob");
+      logger.info("✅ PostNL Response job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Response job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize PostNL Status Sync job cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/postNLStatusSyncJob");
+      logger.info("✅ PostNL Status Sync job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Status Sync job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
     // Start HTTP server and listen on configured port and host
     // Use 0.0.0.0 to accept connections from any IP address (public access)
     server = app.listen(PORT, "0.0.0.0", () => {

@@ -73,8 +73,63 @@ export const createHeaderBannerSchema = Joi.object(
         "any.only": `Device type must be one of: ${DEVICE_TYPE_VALUES.join(", ")}`,
       }),
     isActive: Joi.boolean().optional().default(false),
+    isScheduled: Joi.boolean().optional().default(false),
+    startDate: Joi.date()
+      .iso()
+      .custom((value, helpers) => {
+        if (!value) return value;
+        const date = new Date(value);
+        const now = new Date();
+        if (date <= now) {
+          return helpers.error("date.future");
+        }
+        return value;
+      })
+      .when("isScheduled", {
+        is: true,
+        then: Joi.required(),
+        otherwise: Joi.optional().allow(null),
+      })
+      .messages({
+        "date.base": "Start date must be a valid date",
+        "date.future": "Start date must be in the future",
+        "any.required": "Start date is required when banner is scheduled",
+      }),
+    endDate: Joi.date()
+      .iso()
+      .custom((value, helpers) => {
+        if (!value) return value;
+        const startDate = helpers.state.ancestors[0]?.startDate;
+        if (startDate) {
+          const endDate = new Date(value);
+          const start = new Date(startDate);
+          if (endDate <= start) {
+            return helpers.error("date.after");
+          }
+        }
+        return value;
+      })
+      .when("isScheduled", {
+        is: true,
+        then: Joi.required(),
+        otherwise: Joi.optional().allow(null),
+      })
+      .messages({
+        "date.base": "End date must be a valid date",
+        "date.after": "End date must be after start date",
+        "any.required": "End date is required when banner is scheduled",
+      }),
   })
-).label("CreateHeaderBannerPayload");
+)
+  .when(Joi.object({ isScheduled: Joi.boolean().valid(true) }).unknown(), {
+    then: Joi.object().custom((value, helpers) => {
+      if (value.isScheduled && (!value.startDate || !value.endDate)) {
+        return helpers.error("any.required");
+      }
+      return value;
+    }),
+  })
+  .label("CreateHeaderBannerPayload");
 
 export const updateHeaderBannerSchema = Joi.object(
   withFieldLabels({
@@ -86,8 +141,63 @@ export const updateHeaderBannerSchema = Joi.object(
         "any.only": `Device type must be one of: ${DEVICE_TYPE_VALUES.join(", ")}`,
       }),
     isActive: Joi.boolean().optional(),
+    isScheduled: Joi.boolean().optional(),
+    startDate: Joi.date()
+      .iso()
+      .custom((value, helpers) => {
+        if (!value) return value;
+        const date = new Date(value);
+        const now = new Date();
+        if (date <= now) {
+          return helpers.error("date.future");
+        }
+        return value;
+      })
+      .when("isScheduled", {
+        is: true,
+        then: Joi.required(),
+        otherwise: Joi.optional().allow(null),
+      })
+      .messages({
+        "date.base": "Start date must be a valid date",
+        "date.future": "Start date must be in the future",
+        "any.required": "Start date is required when banner is scheduled",
+      }),
+    endDate: Joi.date()
+      .iso()
+      .custom((value, helpers) => {
+        if (!value) return value;
+        const startDate = helpers.state.ancestors[0]?.startDate;
+        if (startDate) {
+          const endDate = new Date(value);
+          const start = new Date(startDate);
+          if (endDate <= start) {
+            return helpers.error("date.after");
+          }
+        }
+        return value;
+      })
+      .when("isScheduled", {
+        is: true,
+        then: Joi.required(),
+        otherwise: Joi.optional().allow(null),
+      })
+      .messages({
+        "date.base": "End date must be a valid date",
+        "date.after": "End date must be after start date",
+        "any.required": "End date is required when banner is scheduled",
+      }),
   })
-).label("UpdateHeaderBannerPayload");
+)
+  .when(Joi.object({ isScheduled: Joi.boolean().valid(true) }).unknown(), {
+    then: Joi.object().custom((value, helpers) => {
+      if (value.isScheduled && (!value.startDate || !value.endDate)) {
+        return helpers.error("any.required");
+      }
+      return value;
+    }),
+  })
+  .label("UpdateHeaderBannerPayload");
 
 export const headerBannerIdParamsSchema = Joi.object(
   withFieldLabels({

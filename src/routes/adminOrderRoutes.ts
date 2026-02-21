@@ -13,6 +13,7 @@ import {
   updateTrackingNumberSchema,
   getAllOrdersQuerySchema,
   createManualOrderSchema,
+  partialRefundSchema,
 } from "@/validation/adminOrderValidation";
 
 const router = Router();
@@ -138,6 +139,24 @@ router.post(
   "/manual",
   validateJoi(createManualOrderSchema),
   adminOrderController.createManualOrder
+);
+
+/**
+ * @route POST /api/v1/admin/orders/:id/partial-refund
+ * @desc Process partial refund for specific products in an order
+ * @access Admin
+ * @param {String} id - Order ID (MongoDB ObjectId)
+ * @body {Array<String>} productIds - Array of product IDs to refund
+ * @body {Number} [refundAmount] - Refund amount (optional, will calculate automatically)
+ * @body {String} [refundMethod] - Refund method: "manual" or "gateway" (default: "gateway")
+ * @body {String} [reason] - Refund reason (optional)
+ * @body {Object} [metadata] - Additional metadata (optional)
+ */
+router.post(
+  "/:id/partial-refund",
+  validateParams(orderIdParamsSchema),
+  validateJoi(partialRefundSchema),
+  adminOrderController.processPartialRefund
 );
 
 export default router;

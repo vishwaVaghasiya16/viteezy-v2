@@ -75,6 +75,8 @@ export enum OrderStatus {
   PENDING = "Pending",
   CONFIRMED = "Confirmed",
   PROCESSING = "Processing",
+  PACKING_SLIP_READY = "PACKING_SLIP_READY",
+  READY_FOR_SHIPMENT = "READY_FOR_SHIPMENT",
   SHIPPED = "Shipped",
   DELIVERED = "Delivered",
   CANCELLED = "Cancelled",
@@ -103,7 +105,7 @@ export enum PaymentMethod {
 export enum OrderPlanType {
   ONE_TIME = "One-Time",
   SUBSCRIPTION = "Subscription",
-  MIXED = "Mixed", // Order contains both subscription (SACHETS) and one-time (STAND_UP_POUCH) items
+  MIXED = "Mixed", // Contains both one-time and subscription products
 }
 
 // Shipment Status
@@ -112,6 +114,7 @@ export enum ShipmentStatus {
   PICKED_UP = "Picked Up",
   IN_TRANSIT = "In Transit",
   OUT_FOR_DELIVERY = "Out for Delivery",
+  AT_PICKUP_POINT = "AT_PICKUP_POINT",
   DELIVERED = "Delivered",
   EXCEPTION = "Exception",
   RETURNED = "Returned",

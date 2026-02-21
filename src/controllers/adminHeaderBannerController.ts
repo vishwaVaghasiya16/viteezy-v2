@@ -73,17 +73,65 @@ const getTranslatedString = (
 
 class AdminHeaderBannerController {
   /**
+   * Check for schedule conflicts with existing banners
+   * @param deviceType - Device type to check
+   * @param startDate - Start date of the banner
+   * @param endDate - End date of the banner
+   * @param excludeId - Banner ID to exclude from conflict check (for updates)
+   * @returns true if conflict exists, false otherwise
+   */
+  private async checkScheduleConflict(
+    deviceType: DeviceType,
+    startDate: Date,
+    endDate: Date,
+    excludeId?: string
+  ): Promise<boolean> {
+    const query: any = {
+      deviceType,
+      isDeleted: { $ne: true },
+      isScheduled: true,
+      $or: [
+        // Case 1: New banner starts during an existing banner's active period
+        {
+          startDate: { $lte: startDate },
+          endDate: { $gte: startDate },
+        },
+        // Case 2: New banner ends during an existing banner's active period
+        {
+          startDate: { $lte: endDate },
+          endDate: { $gte: endDate },
+        },
+        // Case 3: New banner completely encompasses an existing banner
+        {
+          startDate: { $gte: startDate },
+          endDate: { $lte: endDate },
+        },
+      ],
+    };
+
+    if (excludeId) {
+      query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
+    }
+
+    const conflictingBanner = await HeaderBanner.findOne(query);
+    return !!conflictingBanner;
+  }
+
+  /**
    * Create header banner (Admin only)
    * @route POST /api/v1/admin/header-banners
    * @access Private (Admin)
    * @body {String} text - Banner text in English only (simple string)
    * @body {String} deviceType - Device type (WEB or MOBILE)
    * @body {Boolean} [isActive] - Active status (default: false)
+   * @body {Boolean} [isScheduled] - Whether banner is scheduled (default: false)
+   * @body {Date} [startDate] - Scheduled start date (required if isScheduled is true)
+   * @body {Date} [endDate] - Scheduled end date (required if isScheduled is true)
    * @note Auto-translate middleware will convert English text to all supported languages
    */
   createHeaderBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const { text, deviceType, isActive } = req.body;
+      const { text, deviceType, isActive, isScheduled, startDate, endDate } = req.body;
 
       // Validate text - can be either a string or I18n object
       let i18nText: any;
@@ -106,11 +154,58 @@ class AdminHeaderBannerController {
         throw new AppError("Banner text must be a non-empty string or I18n object with 'en' field", 400);
       }
 
-      // If setting as active, deactivate all other banners for this device type
-      if (isActive === true) {
+      const bannerDeviceType = deviceType as DeviceType;
+      const bannerIsScheduled = isScheduled === true;
+      const bannerStartDate = startDate ? new Date(startDate) : null;
+      const bannerEndDate = endDate ? new Date(endDate) : null;
+
+      // Validate scheduled banner
+      if (bannerIsScheduled) {
+        if (!bannerStartDate || !bannerEndDate) {
+          throw new AppError(
+            "Start date and end date are required when banner is scheduled",
+            400
+          );
+        }
+
+        if (bannerStartDate >= bannerEndDate) {
+          throw new AppError("End date must be after start date", 400);
+        }
+
+        if (bannerStartDate <= new Date()) {
+          throw new AppError("Start date must be in the future", 400);
+        }
+
+        // Check for schedule conflicts
+        const hasConflict = await this.checkScheduleConflict(
+          bannerDeviceType,
+          bannerStartDate,
+          bannerEndDate
+        );
+
+        if (hasConflict) {
+          throw new AppError(
+            "A scheduled banner already exists for this device type during the specified time period",
+            400
+          );
+        }
+      }
+
+      // Determine initial active status
+      // For scheduled banners: only active if startDate is in the past (shouldn't happen due to validation, but handle it)
+      // For direct publish: use isActive value
+      let initialIsActive = false;
+      if (bannerIsScheduled && bannerStartDate) {
+        initialIsActive = bannerStartDate <= new Date();
+      } else {
+        initialIsActive = isActive === true;
+      }
+
+      // If setting as active (direct publish), deactivate all other banners for this device type
+      if (initialIsActive && !bannerIsScheduled) {
         await HeaderBanner.updateMany(
           {
-            deviceType: deviceType as DeviceType,
+            deviceType: bannerDeviceType,
             isActive: true,
             isDeleted: { $ne: true },
           },
@@ -123,8 +218,11 @@ class AdminHeaderBannerController {
       // Create header banner with I18n text object (all languages stored)
       const headerBanner = await HeaderBanner.create({
         text: i18nText,
-        deviceType: deviceType as DeviceType,
-        isActive: isActive === true,
+        deviceType: bannerDeviceType,
+        isActive: initialIsActive,
+        isScheduled: bannerIsScheduled,
+        startDate: bannerStartDate,
+        endDate: bannerEndDate,
         createdBy: req.user?._id
           ? new mongoose.Types.ObjectId(req.user._id)
           : undefined,
@@ -272,7 +370,7 @@ class AdminHeaderBannerController {
   updateHeaderBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { text, deviceType, isActive } = req.body;
+      const { text, deviceType, isActive, isScheduled, startDate, endDate } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
         throw new AppError("Invalid header banner ID", 400);
@@ -287,13 +385,51 @@ class AdminHeaderBannerController {
         throw new AppError("Header banner not found", 404);
       }
 
+      const targetDeviceType = (deviceType || headerBanner.deviceType) as DeviceType;
+      const targetIsScheduled = isScheduled !== undefined ? isScheduled === true : headerBanner.isScheduled;
+      const targetStartDate = startDate !== undefined ? (startDate ? new Date(startDate) : null) : headerBanner.startDate;
+      const targetEndDate = endDate !== undefined ? (endDate ? new Date(endDate) : null) : headerBanner.endDate;
+
+      // Validate scheduled banner if isScheduled is being set or updated
+      if (targetIsScheduled) {
+        if (!targetStartDate || !targetEndDate) {
+          throw new AppError(
+            "Start date and end date are required when banner is scheduled",
+            400
+          );
+        }
+
+        if (targetStartDate >= targetEndDate) {
+          throw new AppError("End date must be after start date", 400);
+        }
+
+        if (targetStartDate <= new Date()) {
+          throw new AppError("Start date must be in the future", 400);
+        }
+
+        // Check for schedule conflicts (exclude current banner)
+        const hasConflict = await this.checkScheduleConflict(
+          targetDeviceType,
+          targetStartDate,
+          targetEndDate,
+          id
+        );
+
+        if (hasConflict) {
+          throw new AppError(
+            "A scheduled banner already exists for this device type during the specified time period",
+            400
+          );
+        }
+      }
+
       // If device type is being changed, check if new device type already has an active banner
       if (deviceType && deviceType !== headerBanner.deviceType) {
-        // If setting as active, deactivate all other banners for the new device type
-        if (isActive === true) {
+        // If setting as active (and not scheduled), deactivate all other banners for the new device type
+        if (isActive === true && !targetIsScheduled) {
           await HeaderBanner.updateMany(
             {
-              deviceType: deviceType as DeviceType,
+              deviceType: targetDeviceType,
               isActive: true,
               isDeleted: { $ne: true },
               _id: { $ne: new mongoose.Types.ObjectId(id) },
@@ -303,11 +439,11 @@ class AdminHeaderBannerController {
             }
           );
         }
-        headerBanner.deviceType = deviceType as DeviceType;
+        headerBanner.deviceType = targetDeviceType;
       }
 
-      // If setting as active, deactivate all other banners for this device type
-      if (isActive === true && headerBanner.isActive !== true) {
+      // If setting as active (direct publish, not scheduled), deactivate all other banners for this device type
+      if (isActive === true && headerBanner.isActive !== true && !targetIsScheduled) {
         await HeaderBanner.updateMany(
           {
             deviceType: headerBanner.deviceType,
@@ -345,8 +481,26 @@ class AdminHeaderBannerController {
           throw new AppError("Banner text must be a non-empty string or I18n object with 'en' field", 400);
         }
       }
+      // Update schedule fields
+      if (isScheduled !== undefined) {
+        headerBanner.isScheduled = targetIsScheduled;
+      }
+      if (startDate !== undefined) {
+        headerBanner.startDate = targetStartDate;
+      }
+      if (endDate !== undefined) {
+        headerBanner.endDate = targetEndDate;
+      }
+
+      // Update active status
+      // For scheduled banners: only set active if startDate is in the past (shouldn't happen due to validation)
+      // For direct publish: use isActive value
       if (isActive !== undefined) {
-        headerBanner.isActive = isActive === true;
+        if (targetIsScheduled && targetStartDate) {
+          headerBanner.isActive = targetStartDate <= new Date();
+        } else {
+          headerBanner.isActive = isActive === true;
+        }
       }
 
       headerBanner.updatedBy = req.user?._id
@@ -459,6 +613,28 @@ class AdminHeaderBannerController {
         success: true,
         message: `Header banner ${newActiveStatus ? "activated" : "deactivated"} successfully`,
         data: { headerBanner },
+      });
+    }
+  );
+
+  /**
+   * Manually run the scheduled banner job (Admin only)
+   * @route POST /api/v1/admin/header-banners/run-schedule-job
+   */
+  runScheduleJob = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { headerBannerScheduleJob } = await import("@/jobs/headerBannerScheduleJob");
+      const result = await headerBannerScheduleJob.processScheduledBanners();
+      const status = headerBannerScheduleJob.getStatus();
+
+      res.status(200).json({
+        success: true,
+        message: "Schedule job ran successfully",
+        data: {
+          result: { activated: result.activated, deactivated: result.deactivated, processed: result.processed },
+          jobStatus: status,
+          serverTimeUTC: new Date().toISOString(),
+        },
       });
     }
   );

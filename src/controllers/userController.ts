@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { FilterQuery } from "mongoose";
+import mongoose, { FilterQuery } from "mongoose";
 import { asyncHandler, getPaginationMeta, getPaginationOptions } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { User } from "@/models/index.model";
-import { Payments } from "@/models/commerce";
+import { Payments, Subscriptions } from "@/models/commerce";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import { IPayment } from "@/models/commerce/payments.model";
 import { fileStorageService } from "@/services/fileStorageService";
@@ -507,7 +507,7 @@ class UserController {
         isDeleted: { $ne: true },
       };
 
-      const { status, paymentMethod, search } = req.query;
+      const { status, paymentMethod, search, subscriptionId } = req.query;
 
       if (typeof status === "string" && status.trim().length) {
         filters.status = status as PaymentStatus;
@@ -515,6 +515,15 @@ class UserController {
 
       if (typeof paymentMethod === "string" && paymentMethod.trim().length) {
         filters.paymentMethod = paymentMethod as PaymentMethod;
+      }
+
+      if (typeof subscriptionId === "string" && subscriptionId.trim().length) {
+        // Validate ObjectId format
+        if (mongoose.Types.ObjectId.isValid(subscriptionId.trim())) {
+          filters.subscriptionId = new mongoose.Types.ObjectId(subscriptionId.trim());
+        } else {
+          throw new AppError("Invalid subscriptionId format", 400);
+        }
       }
 
       if (typeof search === "string" && search.trim()) {
@@ -529,8 +538,13 @@ class UserController {
       const [transactions, total] = await Promise.all([
         Payments.find(filters)
           .select(
-            "paymentMethod status amount currency transactionId gatewayTransactionId gatewaySessionId processedAt createdAt orderId membershipId"
+            "paymentMethod status amount currency transactionId gatewayTransactionId gatewaySessionId processedAt createdAt orderId membershipId subscriptionId"
           )
+          .populate({
+            path: "subscriptionId",
+            select: "subscriptionNumber status planType cycleDays subscriptionStartDate subscriptionEndDate nextDeliveryDate nextBillingDate lastBilledDate isAutoRenew renewalCount items",
+            match: { isDeleted: { $ne: true } },
+          })
           .sort(sort)
           .skip(skip)
           .limit(limit)
@@ -538,23 +552,56 @@ class UserController {
         Payments.countDocuments(filters),
       ]);
 
-      const formattedTransactions = transactions.map((payment) => ({
-        id: payment._id,
-        paymentMethod: payment.paymentMethod,
-        status: payment.status,
-        transactionId:
-          payment.transactionId ||
-          payment.gatewayTransactionId ||
-          payment.gatewaySessionId ||
-          null,
-        amount: payment.amount?.amount ?? null,
-        currency: payment.amount?.currency || payment.currency || "EUR",
-        taxRate: payment.amount?.taxRate ?? null,
-        processedAt: payment.processedAt || payment.createdAt,
-        orderId: payment.orderId,
-        membershipId: payment.membershipId,
-        createdAt: payment.createdAt,
-      }));
+      const formattedTransactions = transactions.map((payment: any) => {
+        const transaction: any = {
+          id: payment._id,
+          paymentMethod: payment.paymentMethod,
+          status: payment.status,
+          transactionId:
+            payment.transactionId ||
+            payment.gatewayTransactionId ||
+            payment.gatewaySessionId ||
+            null,
+          amount: payment.amount?.amount ?? null,
+          currency: payment.amount?.currency || payment.currency || "EUR",
+          taxRate: payment.amount?.taxRate ?? null,
+          processedAt: payment.processedAt || payment.createdAt,
+          orderId: payment.orderId,
+          membershipId: payment.membershipId,
+          subscriptionId: payment.subscriptionId,
+          createdAt: payment.createdAt,
+        };
+
+        // Include subscription details if populated
+        // When populated, subscriptionId will be an object with subscription data
+        // When not populated or subscription is deleted, it will be null or just an ObjectId
+        if (
+          payment.subscriptionId &&
+          typeof payment.subscriptionId === "object" &&
+          payment.subscriptionId._id
+        ) {
+          const subscription = payment.subscriptionId;
+          transaction.subscription = {
+            id: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            status: subscription.status,
+            planType: subscription.planType,
+            cycleDays: subscription.cycleDays,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
+            nextDeliveryDate: subscription.nextDeliveryDate,
+            nextBillingDate: subscription.nextBillingDate,
+            lastBilledDate: subscription.lastBilledDate,
+            isAutoRenew: subscription.isAutoRenew,
+            renewalCount: subscription.renewalCount,
+            items: subscription.items || [],
+          };
+          // Keep subscriptionId reference as well
+          transaction.subscriptionId = subscription._id;
+        }
+
+        return transaction;
+      });
 
       res.apiPaginated(
         formattedTransactions,

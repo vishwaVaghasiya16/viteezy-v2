@@ -17,6 +17,9 @@ export interface IHeaderBanner extends Document, AuditType {
   text: I18nStringType; // Banner text (separate for web and mobile)
   deviceType: DeviceType; // WEB or MOBILE
   isActive: boolean; // Only one banner per device type can be active
+  isScheduled?: boolean; // Whether this banner is scheduled (vs direct publish)
+  startDate?: Date | null; // Scheduled start date and time
+  endDate?: Date | null; // Scheduled end date and time
   isDeleted?: boolean;
   deletedAt?: Date | null;
   createdAt: Date;
@@ -44,6 +47,21 @@ const headerBannerSchema: Schema<IHeaderBanner> = new Schema(
       default: false,
       index: true,
     },
+    isScheduled: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    startDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    endDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     ...SoftDelete,
     ...(AuditSchema.obj as Record<string, unknown>),
   },
@@ -63,7 +81,8 @@ headerBannerSchema.index(
   }
 );
 
-// Indexes
+// Indexes for scheduled banners
+headerBannerSchema.index({ isDeleted: 1, deviceType: 1, isScheduled: 1, startDate: 1, endDate: 1 });
 headerBannerSchema.index({ isDeleted: 1, deviceType: 1, isActive: 1 });
 headerBannerSchema.index({ createdAt: -1 });
 

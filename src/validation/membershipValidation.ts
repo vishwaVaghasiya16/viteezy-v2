@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import {
   PAYMENT_METHOD_VALUES,
   MEMBERSHIP_INTERVAL_VALUES,
+  MEMBERSHIP_STATUS_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
@@ -47,3 +48,36 @@ export const getMembershipPlansSchema = Joi.object(
 )
   .unknown(false)
   .label("MembershipPlansQuery");
+
+/**
+ * Joi schema for getting membership details
+ */
+export const getMembershipDetailsParamsSchema = Joi.object(
+  withFieldLabels({
+    membershipId: objectIdSchema.required(),
+  })
+).label("MembershipDetailsParams");
+
+/**
+ * Joi schema for getting user's memberships
+ */
+export const getMembershipsQuerySchema = Joi.object(
+  withFieldLabels({
+    status: Joi.string()
+      .valid(...MEMBERSHIP_STATUS_VALUES, "all")
+      .optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  })
+)
+  .default({})
+  .label("MembershipsQuery");
+
+/**
+ * Joi schema for cancelling membership (optional reason)
+ */
+export const cancelMembershipSchema = Joi.object(
+  withFieldLabels({
+    cancellationReason: Joi.string().trim().max(500).optional().label("Cancellation reason"),
+  })
+).label("CancelMembershipPayload");

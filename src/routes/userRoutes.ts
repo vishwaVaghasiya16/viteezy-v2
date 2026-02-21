@@ -59,7 +59,7 @@ router.delete("/me/avatar", authenticate, userController.removeAvatar);
 
 /**
  * Get transaction history for the logged-in user with optional filters
- * Query params: page, limit, sort, order, status, paymentMethod, search
+ * Query params: page, limit, sort, order, status, paymentMethod, search, subscriptionId
  */
 router.get(
   "/me/transactions",

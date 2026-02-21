@@ -12,8 +12,16 @@ import {
   calculateMemberPrice,
   ProductPriceSource,
 } from "../utils/membershipPrice";
-import { I18nStringType } from "../models/common.model";
-import { getTranslatedString } from "../utils/translationUtils";
+import {
+  I18nStringType,
+  SupportedLanguage,
+  DEFAULT_LANGUAGE,
+} from "../models/common.model";
+import {
+  getTranslatedString,
+  getUserLanguageCode,
+} from "../utils/translationUtils";
+import { User } from "../models/core";
 
 interface PurchasePlan {
   planType: "oneTime" | "subscription";
@@ -181,7 +189,7 @@ class CheckoutService {
    * Extracts English value from I18n objects or returns string as-is
    */
   private convertFeaturesToStringArray(
-    features?: (I18nStringType | string)[]
+    features?: (I18nStringType | string)[],
   ): string[] | undefined {
     if (!features || !Array.isArray(features) || features.length === 0) {
       return undefined;
@@ -203,7 +211,7 @@ class CheckoutService {
    */
   async getPurchasePlans(
     userId: string,
-    selectedPlans?: Record<string, { planKey: string; capsuleCount?: number }>
+    selectedPlans?: Record<string, { planKey: string; capsuleCount?: number }>,
   ): Promise<PurchasePlansResponse> {
     // Get user's cart
     const cart = await Carts.findOne({
@@ -237,7 +245,7 @@ class CheckoutService {
 
     for (const product of products) {
       const cartItem = cart.items.find(
-        (item: any) => item.productId.toString() === product._id.toString()
+        (item: any) => item.productId.toString() === product._id.toString(),
       );
 
       if (!cartItem) continue;
@@ -321,7 +329,7 @@ class CheckoutService {
               savingsPercentage:
                 product.sachetPrices.thirtyDays.savingsPercentage,
               features: this.convertFeaturesToStringArray(
-                product.sachetPrices.thirtyDays.features as any
+                product.sachetPrices.thirtyDays.features as any,
               ),
               icon: product.sachetPrices.thirtyDays.icon,
               label: "30 Days",
@@ -347,7 +355,7 @@ class CheckoutService {
               savingsPercentage:
                 product.sachetPrices.sixtyDays.savingsPercentage,
               features: this.convertFeaturesToStringArray(
-                product.sachetPrices.sixtyDays.features as any
+                product.sachetPrices.sixtyDays.features as any,
               ),
               icon: product.sachetPrices.sixtyDays.icon,
               label: "60 Days",
@@ -378,7 +386,7 @@ class CheckoutService {
               },
               savingsPercentage: this.NINETY_DAY_DISCOUNT_PERCENTAGE,
               features: this.convertFeaturesToStringArray(
-                ninetyDaysPrice.features as any
+                ninetyDaysPrice.features as any,
               ),
               icon: ninetyDaysPrice.icon,
               label: "90 Days",
@@ -407,7 +415,7 @@ class CheckoutService {
               savingsPercentage:
                 product.sachetPrices.oneEightyDays.savingsPercentage,
               features: this.convertFeaturesToStringArray(
-                product.sachetPrices.oneEightyDays.features as any
+                product.sachetPrices.oneEightyDays.features as any,
               ),
               icon: product.sachetPrices.oneEightyDays.icon,
               label: "180 Days",
@@ -497,7 +505,7 @@ class CheckoutService {
               (p) =>
                 p.planKey === selectedPlan.planKey &&
                 (!selectedPlan.capsuleCount ||
-                  p.capsuleCount === selectedPlan.capsuleCount)
+                  p.capsuleCount === selectedPlan.capsuleCount),
             ) || plans[0]
           : plans[0];
 
@@ -545,7 +553,7 @@ class CheckoutService {
     // Process each product to merge sachetPrices
     for (const product of products) {
       const cartItem = cart.items.find(
-        (item: any) => item.productId.toString() === product._id.toString()
+        (item: any) => item.productId.toString() === product._id.toString(),
       );
       if (!cartItem) continue;
 
@@ -684,21 +692,21 @@ class CheckoutService {
     if (mergedSachetPrices.oneTime) {
       if (mergedSachetPrices.oneTime.count30) {
         mergedSachetPrices.oneTime.count30.amount = roundPrice(
-          mergedSachetPrices.oneTime.count30.amount
+          mergedSachetPrices.oneTime.count30.amount,
         );
         if (mergedSachetPrices.oneTime.count30.discountedPrice) {
           mergedSachetPrices.oneTime.count30.discountedPrice = roundPrice(
-            mergedSachetPrices.oneTime.count30.discountedPrice
+            mergedSachetPrices.oneTime.count30.discountedPrice,
           );
         }
       }
       if (mergedSachetPrices.oneTime.count60) {
         mergedSachetPrices.oneTime.count60.amount = roundPrice(
-          mergedSachetPrices.oneTime.count60.amount
+          mergedSachetPrices.oneTime.count60.amount,
         );
         if (mergedSachetPrices.oneTime.count60.discountedPrice) {
           mergedSachetPrices.oneTime.count60.discountedPrice = roundPrice(
-            mergedSachetPrices.oneTime.count60.discountedPrice
+            mergedSachetPrices.oneTime.count60.discountedPrice,
           );
         }
       }
@@ -714,7 +722,7 @@ class CheckoutService {
             plan.discountedPrice = roundPrice(plan.discountedPrice);
           }
         }
-      }
+      },
     );
 
     return {
@@ -755,7 +763,7 @@ class CheckoutService {
    */
   async getPlanSelection(
     userId: string,
-    payload: PlanSelectionRequest
+    payload: PlanSelectionRequest,
   ): Promise<PlanSelectionResponse> {
     const { planDurationDays, isSubscription, supplementsCount, variantType } =
       payload;
@@ -784,7 +792,7 @@ class CheckoutService {
       if (!supplementsCount) {
         throw new AppError(
           "Supplements count is required for one-time purchases",
-          400
+          400,
         );
       }
       planKey = "oneTime";
@@ -813,7 +821,7 @@ class CheckoutService {
 
       if (isSubscription) {
         matchingPlan = product.plans.find(
-          (p) => p.planType === "subscription" && p.planKey === planKey
+          (p) => p.planType === "subscription" && p.planKey === planKey,
         );
       } else {
         // One-time: match by capsule count where applicable
@@ -840,7 +848,7 @@ class CheckoutService {
       }).lean();
 
       const cartItem = cart?.items?.find(
-        (item: any) => item.productId.toString() === product.productId
+        (item: any) => item.productId.toString() === product.productId,
       );
 
       const quantity = 1; // Quantity removed from cart, each item is 1
@@ -861,7 +869,7 @@ class CheckoutService {
           matchingPlan.price.discountedPrice ||
           baseAmount;
         ninetyDayPlanDiscountAmount = this.roundAmount(
-          (originalAmount - discountedAmount) * quantity
+          (originalAmount - discountedAmount) * quantity,
         );
       }
 
@@ -891,7 +899,7 @@ class CheckoutService {
 
         const memberPriceResult = await calculateMemberPrice(
           productPriceSource,
-          userId
+          userId,
         );
 
         if (memberPriceResult.isMember) {
@@ -901,7 +909,7 @@ class CheckoutService {
             taxRate: memberPriceResult.memberPrice.taxRate,
           };
           membershipDiscountAmount = this.roundAmount(
-            memberPriceResult.discountAmount * quantity
+            memberPriceResult.discountAmount * quantity,
           );
           membershipDiscountPercentage = memberPriceResult.discountPercentage;
           membershipDiscountTotal += membershipDiscountAmount;
@@ -949,7 +957,11 @@ class CheckoutService {
     // Calculate total amount: subtotal (already includes member prices) - 90-day discount - coupon discount + tax + shipping
     // Note: subtotal already uses member prices if user is a member, so we don't subtract membershipDiscount again
     const totalAmount = this.roundAmount(
-      subtotal - ninetyDayPlanDiscountTotal - discountPrice + tax + shippingFees
+      subtotal -
+        ninetyDayPlanDiscountTotal -
+        discountPrice +
+        tax +
+        shippingFees,
     );
 
     return {
@@ -1018,12 +1030,21 @@ class CheckoutService {
     }
 
     // Check usage limit (0 means infinite, so skip check if 0 or undefined)
-    if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0 && coupon.usageCount >= coupon.usageLimit) {
+    if (
+      coupon.usageLimit !== null &&
+      coupon.usageLimit !== undefined &&
+      coupon.usageLimit > 0 &&
+      coupon.usageCount >= coupon.usageLimit
+    ) {
       throw new AppError("This coupon has reached its usage limit", 400);
     }
 
     // Check user usage limit (0 means infinite, so skip check if 0 or undefined)
-    if (coupon.userUsageLimit !== null && coupon.userUsageLimit !== undefined && coupon.userUsageLimit > 0) {
+    if (
+      coupon.userUsageLimit !== null &&
+      coupon.userUsageLimit !== undefined &&
+      coupon.userUsageLimit > 0
+    ) {
       const userUsageCount = await Orders.countDocuments({
         userId: new mongoose.Types.ObjectId(userId),
         couponCode: coupon.code,
@@ -1033,7 +1054,7 @@ class CheckoutService {
       if (userUsageCount >= coupon.userUsageLimit) {
         throw new AppError(
           "You have reached the maximum usage limit for this coupon",
-          400
+          400,
         );
       }
     }
@@ -1041,7 +1062,7 @@ class CheckoutService {
     if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
       throw new AppError(
         `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
-        400
+        400,
       );
     }
 
@@ -1051,12 +1072,12 @@ class CheckoutService {
       !productIds.some((id) =>
         coupon.applicableProducts
           .map((productId) => productId.toString())
-          .includes(id)
+          .includes(id),
       )
     ) {
       throw new AppError(
         "This coupon is not applicable to the selected products",
-        400
+        400,
       );
     }
 
@@ -1066,12 +1087,12 @@ class CheckoutService {
       !categoryIds.some((id) =>
         coupon.applicableCategories
           .map((categoryId) => categoryId.toString())
-          .includes(id)
+          .includes(id),
       )
     ) {
       throw new AppError(
         "This coupon is not applicable to the selected categories",
-        400
+        400,
       );
     }
 
@@ -1086,7 +1107,7 @@ class CheckoutService {
       if (!planDurationDays) {
         throw new AppError(
           "This coupon is only valid for specific subscription plans",
-          400
+          400,
         );
       }
 
@@ -1112,7 +1133,7 @@ class CheckoutService {
       if (!allowedDurations.has(planDurationDays)) {
         throw new AppError(
           "This coupon is not applicable to the selected subscription plan",
-          400
+          400,
         );
       }
     }
@@ -1123,12 +1144,12 @@ class CheckoutService {
       productIds.some((id) =>
         coupon.excludedProducts
           .map((productId) => productId.toString())
-          .includes(id)
+          .includes(id),
       )
     ) {
       throw new AppError(
         "This coupon cannot be applied to one or more selected products",
-        400
+        400,
       );
     }
 
@@ -1170,7 +1191,7 @@ class CheckoutService {
       supplementsCount?: 30 | 60;
       variantType?: ProductVariant;
       couponCode?: string;
-    }
+    },
   ): Promise<{
     products: Array<{
       productId: string;
@@ -1239,7 +1260,7 @@ class CheckoutService {
 
           const memberPriceResult = await calculateMemberPrice(
             productPriceSource,
-            userId
+            userId,
           );
 
           let memberUnitPrice:
@@ -1255,7 +1276,7 @@ class CheckoutService {
               taxRate: memberPriceResult.memberPrice.taxRate,
             };
             membershipDiscountAmount = this.roundAmount(
-              memberPriceResult.discountAmount // Quantity removed from cart, each item is 1
+              memberPriceResult.discountAmount, // Quantity removed from cart, each item is 1
             );
             membershipDiscountPercentage = memberPriceResult.discountPercentage;
           }
@@ -1274,19 +1295,19 @@ class CheckoutService {
             lineSubtotal,
             lineTotal,
           };
-        })
+        }),
       );
 
       // Calculate total membership discount
       const membershipDiscountTotal = productsWithMembership.reduce(
         (sum, product) => sum + (product.membershipDiscountAmount || 0),
-        0
+        0,
       );
 
       // Calculate subtotal after membership discount
       const subtotalAfterMembership = productsWithMembership.reduce(
         (sum, product) => sum + product.lineSubtotal,
-        0
+        0,
       );
 
       // Get product IDs and category IDs for coupon validation
@@ -1300,8 +1321,8 @@ class CheckoutService {
         new Set(
           productDocs
             .flatMap((p) => p.categories || [])
-            .map((c) => c.toString())
-        )
+            .map((c) => c.toString()),
+        ),
       );
 
       // Validate and calculate coupon discount
@@ -1331,7 +1352,7 @@ class CheckoutService {
           ninetyDayPlanDiscount -
           discountPrice +
           tax +
-          shippingFees
+          shippingFees,
       );
 
       return {
@@ -1352,7 +1373,7 @@ class CheckoutService {
     // If no plan selection, return empty result (fallback to old behavior)
     throw new AppError(
       "Plan selection parameters are required for checkout summary",
-      400
+      400,
     );
   }
 
@@ -1374,7 +1395,7 @@ class CheckoutService {
       planType: "SACHET" | "STANDUP_POUCH";
       capsuleCount?: 30 | 60; // For one-time purchases
       couponCode?: string;
-    }
+    },
   ): Promise<{
     success: boolean;
     data: {
@@ -1455,7 +1476,7 @@ class CheckoutService {
 
     for (const product of products) {
       const cartItem = cart.items.find(
-        (item: any) => item.productId.toString() === product._id.toString()
+        (item: any) => item.productId.toString() === product._id.toString(),
       );
 
       if (!cartItem) continue;
@@ -1538,7 +1559,7 @@ class CheckoutService {
 
       const memberPriceResult = await calculateMemberPrice(
         productPriceSource,
-        userId
+        userId,
       );
 
       let membershipDiscountPerUnit = 0;
@@ -1576,7 +1597,7 @@ class CheckoutService {
     // Calculate subtotal (sum of final prices)
     let subtotal = cartItems.reduce(
       (sum, item) => sum + item.finalPrice, // Quantity removed from cart, each item is 1
-      0
+      0,
     );
 
     // Apply coupon discount if provided
@@ -1592,8 +1613,8 @@ class CheckoutService {
           new Set(
             productDocs
               .flatMap((p) => p.categories || [])
-              .map((c) => c.toString())
-          )
+              .map((c) => c.toString()),
+          ),
         );
 
         const couponResult = await this.validateCouponForSummary({
@@ -1622,7 +1643,7 @@ class CheckoutService {
 
     // Calculate grand total
     const grandTotal = this.roundAmount(
-      subtotal - couponDiscountTotal + tax + shipping
+      subtotal - couponDiscountTotal + tax + shipping,
     );
 
     return {
@@ -1679,7 +1700,7 @@ class CheckoutService {
   private getPlanLabel(
     durationDays: number,
     planType: string,
-    capsuleCount?: number
+    capsuleCount?: number,
   ): string {
     if (planType === "STANDUP_POUCH") {
       return `Stand-up Pouch (${capsuleCount || 30} count)`;
@@ -1713,7 +1734,7 @@ class CheckoutService {
       couponCode?: string;
       shippingAddressId?: string | null;
       billingAddressId?: string | null;
-    } = {}
+    } = {},
   ): Promise<{
     success: boolean;
     data: {
@@ -1822,10 +1843,10 @@ class CheckoutService {
 
     // Separate items by variantType
     const sachetItems = cart.items.filter(
-      (item: any) => item.variantType === ProductVariant.SACHETS
+      (item: any) => item.variantType === ProductVariant.SACHETS,
     );
     const standupPouchItems = cart.items.filter(
-      (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+      (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH,
     );
 
     if (sachetItems.length === 0 && standupPouchItems.length === 0) {
@@ -1840,13 +1861,13 @@ class CheckoutService {
     if (sachetItems.length > 0 && !sachetsConfig) {
       throw new AppError(
         "sachets configuration is required when cart contains SACHETS items",
-        400
+        400,
       );
     }
     if (standupPouchItems.length > 0 && !standUpPouchConfig) {
       throw new AppError(
         "standUpPouch configuration is required when cart contains STAND_UP_POUCH items",
-        400
+        400,
       );
     }
 
@@ -1872,14 +1893,14 @@ class CheckoutService {
       }).lean();
 
       const productMapForUpdate = new Map(
-        productsForUpdate.map((p: any) => [p._id.toString(), p])
+        productsForUpdate.map((p: any) => [p._id.toString(), p]),
       );
 
       for (const itemQty of standUpPouchConfig.itemQuantities) {
         const itemIndex = updatedItems.findIndex(
           (item: any) =>
             item.productId.toString() === itemQty.productId &&
-            item.variantType === ProductVariant.STAND_UP_POUCH
+            item.variantType === ProductVariant.STAND_UP_POUCH,
         );
 
         if (itemIndex >= 0 && itemQty.quantity >= 1) {
@@ -1932,7 +1953,10 @@ class CheckoutService {
           let discountedPrice = 0;
           let taxRate = 0;
 
-          if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
+          if (
+            itemVariantType === ProductVariant.SACHETS &&
+            product.sachetPrices
+          ) {
             const thirtyDaysPlan = product.sachetPrices.thirtyDays;
             if (thirtyDaysPlan) {
               originalAmount =
@@ -1974,7 +1998,8 @@ class CheckoutService {
 
           subtotalAmount += originalAmount * itemQuantity;
           totalTaxAmount += taxRate * itemQuantity;
-          const itemDiscount = (originalAmount - discountedPrice) * itemQuantity;
+          const itemDiscount =
+            (originalAmount - discountedPrice) * itemQuantity;
           totalDiscount += itemDiscount;
         });
 
@@ -1982,9 +2007,8 @@ class CheckoutService {
         subtotalAmount = Math.round(subtotalAmount * 100) / 100;
         totalTaxAmount = Math.round(totalTaxAmount * 100) / 100;
         totalDiscount = Math.round(totalDiscount * 100) / 100;
-        const couponDiscountAmount = Math.round(
-          (cart.couponDiscountAmount || 0) * 100
-        ) / 100;
+        const couponDiscountAmount =
+          Math.round((cart.couponDiscountAmount || 0) * 100) / 100;
 
         const total =
           Math.round(
@@ -1992,7 +2016,7 @@ class CheckoutService {
               totalTaxAmount -
               totalDiscount -
               couponDiscountAmount) *
-              100
+              100,
           ) / 100;
 
         // Update cart with new quantities and recalculated totals
@@ -2006,7 +2030,7 @@ class CheckoutService {
             total: Math.max(0, total),
             updatedAt: new Date(),
           },
-          { new: true }
+          { new: true },
         );
 
         // Refresh cart from database
@@ -2021,7 +2045,7 @@ class CheckoutService {
           Object.assign(cart, updatedCart);
           // Re-separate items after update
           const updatedStandupPouchItems = cart.items.filter(
-            (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+            (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH,
           );
           standupPouchItems.length = 0;
           standupPouchItems.push(...updatedStandupPouchItems);
@@ -2058,7 +2082,7 @@ class CheckoutService {
 
       if (existingSubscription) {
         logger.warn(
-          `User ${userId} already has an active ${selectedPlanDays}-day subscription (${existingSubscription.subscriptionNumber}). User cannot create a new subscription with the same cycle days. They must cancel existing subscription first.`
+          `User ${userId} already has an active ${selectedPlanDays}-day subscription (${existingSubscription.subscriptionNumber}). User cannot create a new subscription with the same cycle days. They must cancel existing subscription first.`,
         );
       }
     }
@@ -2072,7 +2096,7 @@ class CheckoutService {
     // Process SACHETS items
     const sachetCartItemsPromises = sachetItems.map(async (item: any) => {
       const product = products.find(
-        (p) => p._id.toString() === item.productId.toString()
+        (p) => p._id.toString() === item.productId.toString(),
       );
 
       if (!product || !product.sachetPrices) return null;
@@ -2122,12 +2146,13 @@ class CheckoutService {
           taxRate: 0,
         },
         memberPrice: (product as any).metadata?.memberPrice,
-        memberDiscountOverride: (product as any).metadata?.memberDiscountOverride,
+        memberDiscountOverride: (product as any).metadata
+          ?.memberDiscountOverride,
       };
 
       const memberPriceResult = await calculateMemberPrice(
         productPriceSource,
-        userId
+        userId,
       );
 
       const membershipDiscount = memberPriceResult.isMember
@@ -2150,7 +2175,7 @@ class CheckoutService {
     const standupPouchCartItemsPromises = standupPouchItems.map(
       async (item: any) => {
         const product = products.find(
-          (p) => p._id.toString() === item.productId.toString()
+          (p) => p._id.toString() === item.productId.toString(),
         );
 
         if (!product || !product.hasStandupPouch || !product.standupPouchPrice)
@@ -2221,7 +2246,7 @@ class CheckoutService {
 
         const memberPriceResult = await calculateMemberPrice(
           productPriceSource,
-          userId
+          userId,
         );
 
         const membershipDiscount = memberPriceResult.isMember
@@ -2237,15 +2262,17 @@ class CheckoutService {
           variant: ProductVariant.STAND_UP_POUCH,
           quantity: itemQuantity,
           basePlanPrice,
-          membershipDiscount: this.roundAmount(membershipDiscount * itemQuantity),
+          membershipDiscount: this.roundAmount(
+            membershipDiscount * itemQuantity,
+          ),
           taxRate: (basePlanPrice.taxRate || 0) * itemQuantity,
         };
-      }
+      },
     );
 
     // Combine all cart items
     const sachetCartItems = (await Promise.all(sachetCartItemsPromises)).filter(
-      (item) => item !== null
+      (item) => item !== null,
     );
     const standupPouchCartItems = (
       await Promise.all(standupPouchCartItemsPromises)
@@ -2289,7 +2316,7 @@ class CheckoutService {
         if (product.sachetPrices) {
           const sachetPrices = product.sachetPrices as any;
           const cartItem = sachetItems.find(
-            (item: any) => item.productId.toString() === product._id.toString()
+            (item: any) => item.productId.toString() === product._id.toString(),
           );
           if (!cartItem) continue;
           const quantity = 1; // Quantity removed from cart, each item is 1
@@ -2382,7 +2409,7 @@ class CheckoutService {
                 existing.supplementsCount += capsuleCount;
                 if (planData.features && Array.isArray(planData.features)) {
                   planData.features.forEach((f: string) =>
-                    existing.features.add(f)
+                    existing.features.add(f),
                   );
                 }
               } else {
@@ -2421,7 +2448,7 @@ class CheckoutService {
         if (product.hasStandupPouch && product.standupPouchPrice) {
           const standupPrice = product.standupPouchPrice as any;
           const cartItem = standupPouchItems.find(
-            (item: any) => item.productId.toString() === product._id.toString()
+            (item: any) => item.productId.toString() === product._id.toString(),
           );
           if (!cartItem) continue;
           const quantity = (cartItem as any).quantity || 1; // Quantity from cart for stand-up pouch
@@ -2477,7 +2504,7 @@ class CheckoutService {
           isSubscription: boolean;
         }
       >,
-      variantType: "SACHETS" | "STAND_UP_POUCH"
+      variantType: "SACHETS" | "STAND_UP_POUCH",
     ) => {
       return Array.from(plansMap.values())
         .map((plan) => {
@@ -2509,8 +2536,8 @@ class CheckoutService {
               plan.planKey === "count30"
                 ? 30
                 : plan.planKey === "count60"
-                ? 60
-                : 0;
+                  ? 60
+                  : 0;
             isSelected = planCapsuleCount === selectedCapsuleCount;
           }
 
@@ -2547,10 +2574,7 @@ class CheckoutService {
         : undefined;
 
     // For backward compatibility, create combined array for plan selection logic
-    const allPlans = [
-      ...(sachetsPlans || []),
-      ...(standUpPouchPlans || []),
-    ];
+    const allPlans = [...(sachetsPlans || []), ...(standUpPouchPlans || [])];
 
     // Calculate separate pricing for SACHETS items
     let sachetSubtotal = 0;
@@ -2562,12 +2586,12 @@ class CheckoutService {
     if (sachetItems.length > 0) {
       const selectedSachetPlan = isOneTimePurchase
         ? sachetsPlans?.find(
-            (p) => p.durationDays === selectedPlanDays && !p.isSubscription
+            (p) => p.durationDays === selectedPlanDays && !p.isSubscription,
           ) ||
           sachetsPlans?.find((p) => p.planKey === "oneTime60") ||
           sachetsPlans?.find((p) => p.durationDays > 0)
         : sachetsPlans?.find(
-            (p) => p.durationDays === selectedPlanDays && p.isSubscription
+            (p) => p.durationDays === selectedPlanDays && p.isSubscription,
           ) ||
           sachetsPlans?.find((p) => p.planKey === "oneEightyDays") ||
           sachetsPlans?.find((p) => p.durationDays > 0);
@@ -2583,31 +2607,31 @@ class CheckoutService {
           sachetDiscountedPrice > 0
         ) {
           sachetSubscriptionPlanDiscountAmount = this.roundAmount(
-            sachetDiscountedPrice * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100)
+            sachetDiscountedPrice * (this.NINETY_DAY_DISCOUNT_PERCENTAGE / 100),
           );
         }
       } else {
         // Calculate from cart items if plan not found
         sachetSubtotal = sachetCartItems.reduce(
           (sum, item: any) => sum + (item.basePlanPrice.amount || 0),
-          0
+          0,
         );
         sachetDiscountedPrice = sachetCartItems.reduce(
           (sum, item: any) => sum + (item.basePlanPrice.discountedPrice || 0),
-          0
+          0,
         );
       }
 
       // Calculate SACHETS membership discount
       sachetMembershipDiscount = sachetCartItems.reduce(
         (sum, item: any) => sum + (item.membershipDiscount || 0),
-        0
+        0,
       );
 
       // Calculate SACHETS tax
       sachetTaxAmount = sachetCartItems.reduce(
         (sum, item: any) => sum + (item.taxRate || 0),
-        0
+        0,
       );
     }
 
@@ -2621,7 +2645,7 @@ class CheckoutService {
       const selectedStandupPlan = standUpPouchPlans?.find(
         (p) =>
           (p.planKey === "count30" && selectedCapsuleCount === 30) ||
-          (p.planKey === "count60" && selectedCapsuleCount === 60)
+          (p.planKey === "count60" && selectedCapsuleCount === 60),
       );
 
       if (selectedStandupPlan) {
@@ -2632,49 +2656,49 @@ class CheckoutService {
         standupPouchSubtotal = standupPouchCartItems.reduce(
           (sum, item: any) =>
             sum + (item.basePlanPrice.amount || 0) * (item.quantity || 1),
-          0
+          0,
         );
         standupPouchDiscountedPrice = standupPouchCartItems.reduce(
           (sum, item: any) =>
             sum +
             (item.basePlanPrice.discountedPrice || 0) * (item.quantity || 1),
-          0
+          0,
         );
       }
 
       // Calculate STAND_UP_POUCH membership discount
       standupPouchMembershipDiscount = standupPouchCartItems.reduce(
         (sum, item: any) => sum + (item.membershipDiscount || 0),
-        0
+        0,
       );
 
       // Calculate STAND_UP_POUCH tax
       standupPouchTaxAmount = standupPouchCartItems.reduce(
         (sum, item: any) => sum + (item.taxRate || 0),
-        0
+        0,
       );
     }
 
     // Calculate overall totals from both variantTypes
     const subtotal = this.roundAmount(sachetSubtotal + standupPouchSubtotal);
     const totalDiscountedPrice = this.roundAmount(
-      sachetDiscountedPrice + standupPouchDiscountedPrice
+      sachetDiscountedPrice + standupPouchDiscountedPrice,
     );
     const membershipDiscountTotal = this.roundAmount(
-      sachetMembershipDiscount + standupPouchMembershipDiscount
+      sachetMembershipDiscount + standupPouchMembershipDiscount,
     );
     const subscriptionPlanDiscountAmount = sachetSubscriptionPlanDiscountAmount;
     const taxAmount = this.roundAmount(sachetTaxAmount + standupPouchTaxAmount);
 
     // Calculate subtotal after plan discount and membership discount
     const subtotalAfterDiscounts = this.roundAmount(
-      totalDiscountedPrice - membershipDiscountTotal
+      totalDiscountedPrice - membershipDiscountTotal,
     );
 
     // Calculate order amount for coupon validation (before coupon, after all discounts + tax)
     // This should match the grandTotal before coupon is applied
     const orderAmountForCoupon = this.roundAmount(
-      subtotalAfterDiscounts + taxAmount
+      subtotalAfterDiscounts + taxAmount,
     );
 
     // Validate and apply coupon if provided
@@ -2735,7 +2759,7 @@ class CheckoutService {
             couponDiscountAmount: this.roundAmount(couponDiscountAmount),
             updatedAt: new Date(),
           },
-          { new: true }
+          { new: true },
         );
       } catch (error: any) {
         // Coupon validation failed, but don't throw error
@@ -2746,7 +2770,7 @@ class CheckoutService {
           message: error.message || "Invalid coupon code",
         };
         logger.warn(
-          `Coupon validation failed for ${couponCodeToProcess}: ${error.message}`
+          `Coupon validation failed for ${couponCodeToProcess}: ${error.message}`,
         );
 
         // Update cart to remove invalid coupon
@@ -2757,7 +2781,7 @@ class CheckoutService {
             couponDiscountAmount: 0,
             updatedAt: new Date(),
           },
-          { new: true }
+          { new: true },
         );
       }
     } else {
@@ -2770,7 +2794,7 @@ class CheckoutService {
           couponDiscountAmount: 0,
           updatedAt: new Date(),
         },
-        { new: true }
+        { new: true },
       );
     }
 
@@ -2778,7 +2802,7 @@ class CheckoutService {
     // Note: couponDiscountAmount is calculated on orderAmountForCoupon (which includes tax)
     // So we subtract it from subtotalAfterDiscounts (before tax)
     const subtotalAfterCoupon = this.roundAmount(
-      subtotalAfterDiscounts - couponDiscountAmount
+      subtotalAfterDiscounts - couponDiscountAmount,
     );
 
     // Ensure subtotalAfterCoupon doesn't go negative
@@ -2790,7 +2814,7 @@ class CheckoutService {
     // Calculate total discount amount (plan discount + membership discount + coupon discount)
     const planDiscount = this.roundAmount(subtotal - totalDiscountedPrice);
     const totalDiscountAmount = this.roundAmount(
-      planDiscount + membershipDiscountTotal + couponDiscountAmount
+      planDiscount + membershipDiscountTotal + couponDiscountAmount,
     );
 
     // Get suggested products (3-5 products not in cart)
@@ -2798,7 +2822,7 @@ class CheckoutService {
       userId,
       allProductIds,
       3,
-      5
+      5,
     );
 
     const result: any = {
@@ -2823,10 +2847,11 @@ class CheckoutService {
                   ? new Date(existingSubscription.nextBillingDate).toISOString()
                   : null,
                 nextDeliveryDate: existingSubscription.nextDeliveryDate
-                  ? new Date(existingSubscription.nextDeliveryDate).toISOString()
+                  ? new Date(
+                      existingSubscription.nextDeliveryDate,
+                    ).toISOString()
                   : null,
-                message:
-                  `You already have an active ${selectedPlanDays}-day subscription plan. You cannot create a new subscription with the same cycle days. If you want to proceed with this plan, please cancel your existing subscription first, then you can continue with this plan.`,
+                message: `You already have an active ${selectedPlanDays}-day subscription plan. You cannot create a new subscription with the same cycle days. If you want to proceed with this plan, please cancel your existing subscription first, then you can continue with this plan.`,
                 actionRequired: "cancel_existing_subscription",
               }
             : null,
@@ -2837,16 +2862,16 @@ class CheckoutService {
               subTotal: this.roundAmount(sachetSubtotal),
               discountedPrice: this.roundAmount(sachetDiscountedPrice),
               membershipDiscountAmount: this.roundAmount(
-                sachetMembershipDiscount
+                sachetMembershipDiscount,
               ),
               subscriptionPlanDiscountAmount: this.roundAmount(
-                sachetSubscriptionPlanDiscountAmount
+                sachetSubscriptionPlanDiscountAmount,
               ),
               taxAmount: this.roundAmount(sachetTaxAmount),
               total: this.roundAmount(
                 sachetDiscountedPrice -
                   sachetMembershipDiscount +
-                  sachetTaxAmount
+                  sachetTaxAmount,
               ),
               currency,
             },
@@ -2857,13 +2882,13 @@ class CheckoutService {
               subTotal: this.roundAmount(standupPouchSubtotal),
               discountedPrice: this.roundAmount(standupPouchDiscountedPrice),
               membershipDiscountAmount: this.roundAmount(
-                standupPouchMembershipDiscount
+                standupPouchMembershipDiscount,
               ),
               taxAmount: this.roundAmount(standupPouchTaxAmount),
               total: this.roundAmount(
                 standupPouchDiscountedPrice -
                   standupPouchMembershipDiscount +
-                  standupPouchTaxAmount
+                  standupPouchTaxAmount,
               ),
               currency,
             },
@@ -2875,7 +2900,7 @@ class CheckoutService {
             couponDiscountAmount: this.roundAmount(couponDiscountAmount),
             membershipDiscountAmount: this.roundAmount(membershipDiscountTotal),
             subscriptionPlanDiscountAmount: this.roundAmount(
-              subscriptionPlanDiscountAmount
+              subscriptionPlanDiscountAmount,
             ), // 15% discount for 90-day sachets, 0 for others
             taxAmount: this.roundAmount(taxAmount),
             grandTotal: this.roundAmount(grandTotal),
@@ -2903,7 +2928,7 @@ class CheckoutService {
     userId: string,
     excludeProductIds: mongoose.Types.ObjectId[],
     minCount: number = 3,
-    maxCount: number = 5
+    maxCount: number = 5,
   ): Promise<
     Array<{
       productId: string;

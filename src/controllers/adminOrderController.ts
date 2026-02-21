@@ -3,7 +3,13 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
-import { Orders, Payments, Products, Subscriptions, Carts } from "@/models/commerce";
+import {
+  Orders,
+  Payments,
+  Products,
+  Subscriptions,
+  Carts,
+} from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
 import {
   OrderStatus,
@@ -13,6 +19,10 @@ import {
 } from "@/models/enums";
 import { emailService } from "@/services/emailService";
 import { cartService } from "@/services/cartService";
+import { orderService } from "@/services/orderService";
+import { getTranslatedString } from "@/utils/translationUtils";
+import { getUserLanguageCode } from "@/utils/translationUtils";
+import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -38,12 +48,12 @@ class AdminOrderController {
   getOrderStats = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const now = new Date();
-      
+
       // Current month
       const startOfCurrentMonth = new Date(
         now.getFullYear(),
         now.getMonth(),
-        1
+        1,
       );
       const endOfCurrentMonth = new Date(
         now.getFullYear(),
@@ -52,14 +62,14 @@ class AdminOrderController {
         23,
         59,
         59,
-        999
+        999,
       );
 
       // Last month
       const startOfLastMonth = new Date(
         now.getFullYear(),
         now.getMonth() - 1,
-        1
+        1,
       );
       const endOfLastMonth = new Date(
         now.getFullYear(),
@@ -68,7 +78,7 @@ class AdminOrderController {
         23,
         59,
         59,
-        999
+        999,
       );
 
       // Get all stats in parallel
@@ -161,7 +171,7 @@ class AdminOrderController {
       // Calculate percentage changes
       const calculatePercentageChange = (
         current: number,
-        last: number
+        last: number,
       ): number => {
         if (last === 0) return current > 0 ? 100 : 0;
         return Math.round(((current - last) / last) * 100 * 10) / 10;
@@ -181,7 +191,7 @@ class AdminOrderController {
               lastMonth: totalOrdersLast,
               changePercentage: calculatePercentageChange(
                 totalOrdersCurrent,
-                totalOrdersLast
+                totalOrdersLast,
               ),
             },
             delivered: {
@@ -189,7 +199,7 @@ class AdminOrderController {
               lastMonth: deliveredLast,
               changePercentage: calculatePercentageChange(
                 deliveredCurrent,
-                deliveredLast
+                deliveredLast,
               ),
             },
             processing: {
@@ -197,7 +207,7 @@ class AdminOrderController {
               lastMonth: processingLast,
               changePercentage: calculatePercentageChange(
                 processingCurrent,
-                processingLast
+                processingLast,
               ),
             },
             shipped: {
@@ -205,7 +215,7 @@ class AdminOrderController {
               lastMonth: shippedLast,
               changePercentage: calculatePercentageChange(
                 shippedCurrent,
-                shippedLast
+                shippedLast,
               ),
             },
             cancelled: {
@@ -213,7 +223,7 @@ class AdminOrderController {
               lastMonth: cancelledLast,
               changePercentage: calculatePercentageChange(
                 cancelledCurrent,
-                cancelledLast
+                cancelledLast,
               ),
             },
             pending: {
@@ -221,14 +231,14 @@ class AdminOrderController {
               lastMonth: pendingLast,
               changePercentage: calculatePercentageChange(
                 pendingCurrent,
-                pendingLast
+                pendingLast,
               ),
             },
           },
         },
-        "Order statistics retrieved successfully"
+        "Order statistics retrieved successfully",
       );
-    }
+    },
   );
 
   /**
@@ -256,7 +266,7 @@ class AdminOrderController {
         startDate,
         endDate,
         customerId,
-      
+
         // 🔥 NEW
         date,
         minTotal,
@@ -270,7 +280,7 @@ class AdminOrderController {
         startDate?: string;
         endDate?: string;
         customerId?: string;
-      
+
         date?: string;
         minTotal?: string;
         maxTotal?: string;
@@ -289,20 +299,20 @@ class AdminOrderController {
       if (date) {
         const from = new Date(date);
         from.setHours(0, 0, 0, 0);
-      
+
         const to = new Date(date);
         to.setHours(23, 59, 59, 999);
-      
+
         filter.createdAt = { $gte: from, $lte: to };
       }
 
       if (minTotal || maxTotal) {
         filter.grandTotal = {};
-      
+
         if (minTotal) {
           filter.grandTotal.$gte = Number(minTotal);
         }
-      
+
         if (maxTotal) {
           filter.grandTotal.$lte = Number(maxTotal);
         }
@@ -310,15 +320,15 @@ class AdminOrderController {
 
       if (productName) {
         const productRegex = { $regex: productName, $options: "i" };
-      
+
         const matchingProducts = await Products.find({
           title: productRegex,
         })
           .select("_id")
           .lean();
-      
+
         const productIds = matchingProducts.map((p) => p._id);
-      
+
         if (productIds.length > 0) {
           filter["items.productId"] = { $in: productIds };
         } else {
@@ -360,7 +370,7 @@ class AdminOrderController {
       // Search filter - search by order number, customer name, or email
       if (search) {
         const searchRegex = { $regex: search, $options: "i" };
-        
+
         // First, find user IDs matching the search
         const matchingUsers = await User.find({
           $or: [
@@ -368,7 +378,9 @@ class AdminOrderController {
             { lastName: searchRegex },
             { email: searchRegex },
           ],
-        }).select("_id").lean();
+        })
+          .select("_id")
+          .lean();
 
         const userIds = matchingUsers.map((u) => u._id);
 
@@ -389,22 +401,53 @@ class AdminOrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt userId"
+          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt userId",
         )
         .populate("userId", "firstName lastName email")
-        .populate("items.productId", "title slug description media categories tags status galleryImages productImage")
-        .populate("shippingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
-        .populate("billingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
+        .populate(
+          "items.productId",
+          "title slug description media categories tags status galleryImages productImage",
+        )
+        .populate(
+          "shippingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+        )
+        .populate(
+          "billingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+        )
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
         .lean();
 
+      // Get user languages for all orders (for feature translation)
+      const userIds = orders
+        .map((order: any) => order.userId?._id || order.userId)
+        .filter((id: any) => id);
+      const users = await User.find({ _id: { $in: userIds } })
+        .select("_id language")
+        .lean();
+      const userLanguageMap = new Map<string, SupportedLanguage>();
+      users.forEach((user: any) => {
+        const lang = user.language
+          ? getUserLanguageCode(user.language)
+          : DEFAULT_LANGUAGE;
+        userLanguageMap.set(user._id.toString(), lang);
+      });
+
       // Transform orders for response
       const transformedOrders = orders.map((order: any) => {
         // Type guard for populated user
         const user = order.userId as any;
-        const isPopulatedUser = user && typeof user === 'object' && user.firstName !== undefined;
+        const isPopulatedUser =
+          user && typeof user === "object" && user.firstName !== undefined;
+
+        // Get user language for feature translation
+        const userId = user?._id?.toString() || order.userId?.toString();
+        const userLang = userId
+          ? userLanguageMap.get(userId) || DEFAULT_LANGUAGE
+          : DEFAULT_LANGUAGE;
 
         return {
           id: order._id,
@@ -419,60 +462,69 @@ class AdminOrderController {
                 fullName: `${user.firstName} ${user.lastName}`.trim(),
               }
             : null,
-        planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        items: order.items.map((item: any) => ({
-          productId: item.productId?._id || item.productId,
-          product: item.productId
-            ? {
-                id: item.productId._id,
-                title: item.productId.title,
-                slug: item.productId.slug,
-              }
-            : null,
-          name: item.name,
-          amount: item.amount,
-          discountedPrice: item.discountedPrice,
-          taxRate: item.taxRate,
-          totalAmount: item.totalAmount,
-          durationDays: item.durationDays,
-          capsuleCount: item.capsuleCount,
-          savingsPercentage: item.savingsPercentage,
-          features: item.features,
-        })),
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
-        paymentMethod: order.paymentMethod,
-        couponCode: order.couponCode,
-        couponMetadata: order.couponMetadata,
-        membershipMetadata: order.membershipMetadata,
-        shippingAddress: order.shippingAddressId,
-        billingAddress: order.billingAddressId,
-        trackingNumber: order.trackingNumber,
-        shippedAt: order.shippedAt,
-        deliveredAt: order.deliveredAt,
-        notes: order.notes,
-        metadata: order.metadata,
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt,
+          planType: order.planType,
+          isOneTime: order.isOneTime,
+          variantType: order.variantType,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          items: order.items.map((item: any) => ({
+            productId: item.productId?._id || item.productId,
+            product: item.productId
+              ? {
+                  id: item.productId._id,
+                  title: item.productId.title,
+                  slug: item.productId.slug,
+                }
+              : null,
+            name: item.name,
+            amount: item.amount,
+            discountedPrice: item.discountedPrice,
+            taxRate: item.taxRate,
+            totalAmount: item.totalAmount,
+            durationDays: item.durationDays,
+            capsuleCount: item.capsuleCount,
+            savingsPercentage: item.savingsPercentage,
+            features: Array.isArray(item.features)
+              ? item.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang),
+                )
+              : item.features,
+          })),
+          pricing: {
+            subTotal: order.subTotal,
+            discountedPrice: order.discountedPrice,
+            couponDiscountAmount: order.couponDiscountAmount,
+            membershipDiscountAmount: order.membershipDiscountAmount,
+            subscriptionPlanDiscountAmount:
+              order.subscriptionPlanDiscountAmount,
+            taxAmount: order.taxAmount,
+            grandTotal: order.grandTotal,
+            currency: order.currency,
+          },
+          paymentMethod: order.paymentMethod,
+          couponCode: order.couponCode,
+          couponMetadata: order.couponMetadata,
+          membershipMetadata: order.membershipMetadata,
+          shippingAddress: order.shippingAddressId,
+          billingAddress: order.billingAddressId,
+          trackingNumber: order.trackingNumber,
+          shippedAt: order.shippedAt,
+          deliveredAt: order.deliveredAt,
+          notes: order.notes,
+          metadata: order.metadata,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
         };
       });
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(transformedOrders, pagination, "Orders retrieved successfully");
-    }
+      res.apiPaginated(
+        transformedOrders,
+        pagination,
+        "Orders retrieved successfully",
+      );
+    },
   );
 
   /**
@@ -483,7 +535,7 @@ class AdminOrderController {
   getOrderById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
-  
+
       // Fetch the order with populated references
       const order = await Orders.findOne({
         _id: id,
@@ -492,25 +544,25 @@ class AdminOrderController {
         .populate("userId", "firstName lastName email phone")
         .populate(
           "items.productId",
-          "title slug description media categories tags status galleryImages productImage"
+          "title slug description media categories tags status galleryImages productImage",
         )
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
         )
         .lean();
-  
+
       if (!order) {
         throw new AppError("Order not found", 404);
       }
 
       // Safely get user
-      const user = order.userId ? order.userId as any : null;
-  
+      const user = order.userId ? (order.userId as any) : null;
+
       // Fetch payment info
       const payment = await Payments.findOne({
         orderId: order._id,
@@ -518,7 +570,21 @@ class AdminOrderController {
       })
         .select("paymentMethod status gatewayTransactionId")
         .lean();
-  
+
+      // Get user language for feature translation
+      let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
+      if (user?._id) {
+        try {
+          const userData = await User.findById(user._id)
+            .select("language")
+            .lean();
+          if (userData?.language) {
+            userLang = getUserLanguageCode(userData.language);
+          }
+        } catch (error) {
+          // Use default language if fetch fails
+        }
+      }
 
       const totalOrders = await Orders.countDocuments({
         userId: order.userId,
@@ -528,7 +594,8 @@ class AdminOrderController {
       const subscription = await Subscriptions.findOne({
         orderId: order._id,
         isDeleted: { $ne: true },
-      }).select("subscriptionNumber createdAt nextBillingDate cycleDays status")
+      })
+        .select("subscriptionNumber createdAt nextBillingDate cycleDays status")
         .lean();
 
       const transformedOrder = {
@@ -536,14 +603,16 @@ class AdminOrderController {
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         totalOrders: totalOrders ? totalOrders : 0,
-        subscription: subscription ? {
-          id: subscription._id,
-          subscriptionNumber: subscription.subscriptionNumber,
-          createdAt: subscription.createdAt,
-          nextBillingDate: subscription.nextBillingDate,
-          cycleDays: subscription.cycleDays,
-          status: subscription.status,
-        } : null,
+        subscription: subscription
+          ? {
+              id: subscription._id,
+              subscriptionNumber: subscription.subscriptionNumber,
+              createdAt: subscription.createdAt,
+              nextBillingDate: subscription.nextBillingDate,
+              cycleDays: subscription.cycleDays,
+              status: subscription.status,
+            }
+          : null,
         customer: user
           ? {
               id: user._id || null,
@@ -583,7 +652,11 @@ class AdminOrderController {
               durationDays: item.durationDays,
               capsuleCount: item.capsuleCount,
               savingsPercentage: item.savingsPercentage,
-              features: item.features,
+              features: Array.isArray(item.features)
+                ? item.features.map((feature: any) =>
+                    getTranslatedString(feature, userLang),
+                  )
+                : item.features,
             }))
           : [],
         pricing: {
@@ -616,9 +689,12 @@ class AdminOrderController {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
       };
-  
-      res.apiSuccess({ order: transformedOrder }, "Order retrieved successfully");
-    }
+
+      res.apiSuccess(
+        { order: transformedOrder },
+        "Order retrieved successfully",
+      );
+    },
   );
 
   /**
@@ -668,8 +744,9 @@ class AdminOrderController {
 
       // Send notifications based on status change
       try {
-        const { orderNotifications } = await import("@/utils/notificationHelpers");
-        
+        const { orderNotifications } =
+          await import("@/utils/notificationHelpers");
+
         if (status !== previousStatus) {
           switch (status) {
             case OrderStatus.SHIPPED:
@@ -678,7 +755,7 @@ class AdminOrderController {
                 String(order._id),
                 order.orderNumber,
                 order.trackingNumber,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.DELIVERED:
@@ -686,7 +763,7 @@ class AdminOrderController {
                 order.userId,
                 String(order._id),
                 order.orderNumber,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.CANCELLED:
@@ -695,7 +772,7 @@ class AdminOrderController {
                 String(order._id),
                 order.orderNumber,
                 undefined,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.PROCESSING:
@@ -704,18 +781,20 @@ class AdminOrderController {
                 order.userId,
                 String(order._id),
                 order.orderNumber,
-                requesterId
+                requesterId,
               );
               break;
           }
         }
       } catch (error: any) {
-        logger.error(`Failed to send order status notification: ${error.message}`);
+        logger.error(
+          `Failed to send order status notification: ${error.message}`,
+        );
         // Don't fail status update if notification fails
       }
 
       res.apiSuccess({ order }, "Order status updated successfully");
-    }
+    },
   );
 
   /**
@@ -728,7 +807,10 @@ class AdminOrderController {
       const { id } = req.params;
       const { paymentStatus } = req.body;
 
-      if (!paymentStatus || !Object.values(PaymentStatus).includes(paymentStatus)) {
+      if (
+        !paymentStatus ||
+        !Object.values(PaymentStatus).includes(paymentStatus)
+      ) {
         throw new AppError("Valid payment status is required", 400);
       }
 
@@ -754,7 +836,7 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess({ order }, "Payment status updated successfully");
-    }
+    },
   );
 
   /**
@@ -799,7 +881,7 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess({ order }, "Tracking number updated successfully");
-    }
+    },
   );
 
   /**
@@ -825,7 +907,7 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess(null, "Order deleted successfully");
-    }
+    },
   );
 
   /**
@@ -891,7 +973,7 @@ class AdminOrderController {
       }
 
       const productMap = new Map(
-        products.map((p: any) => [p._id.toString(), p])
+        products.map((p: any) => [p._id.toString(), p]),
       );
 
       // Build order items with product details
@@ -904,14 +986,20 @@ class AdminOrderController {
         const productTitle =
           typeof product.title === "string"
             ? product.title
-            : product.title?.en || product.title?.nl || product.slug || "Product";
+            : product.title?.en ||
+              product.title?.nl ||
+              product.slug ||
+              "Product";
 
         // Calculate pricing based on variant type
         let amount = 0;
         let discountedPricePerUnit = 0;
         let taxRate = 0;
 
-        if (item.variantType === ProductVariant.SACHETS && product.sachetPrices) {
+        if (
+          item.variantType === ProductVariant.SACHETS &&
+          product.sachetPrices
+        ) {
           const planKey = item.planDays
             ? this.getPlanKeyFromDays(item.planDays)
             : "thirtyDays";
@@ -1032,11 +1120,11 @@ class AdminOrderController {
               });
             } catch (error: any) {
               logger.error(
-                `Failed to add item ${item.productId} to cart: ${error.message}`
+                `Failed to add item ${item.productId} to cart: ${error.message}`,
               );
               throw new AppError(
                 `Failed to add item to cart: ${error.message}`,
-                500
+                500,
               );
             }
           }
@@ -1046,7 +1134,9 @@ class AdminOrderController {
             try {
               await cartService.applyCoupon(userId, couponCode);
             } catch (error: any) {
-              logger.warn(`Failed to apply coupon ${couponCode}: ${error.message}`);
+              logger.warn(
+                `Failed to apply coupon ${couponCode}: ${error.message}`,
+              );
               // Continue even if coupon fails
             }
           }
@@ -1059,7 +1149,9 @@ class AdminOrderController {
 
           cartId = updatedCart?._id ? String(updatedCart._id) : null;
         } catch (error: any) {
-          logger.error(`Failed to create cart for manual order: ${error.message}`);
+          logger.error(
+            `Failed to create cart for manual order: ${error.message}`,
+          );
           // Continue even if cart creation fails - we'll still generate a payment link
         }
 
@@ -1072,15 +1164,19 @@ class AdminOrderController {
           paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
         }
 
-        logger.info(`Generated payment link for order ${order.orderNumber}: ${paymentLink}`);
+        logger.info(
+          `Generated payment link for order ${order.orderNumber}: ${paymentLink}`,
+        );
 
         // Send payment request email
         try {
           await this.sendPaymentRequestEmail(user, order, paymentLink);
-          logger.info(`Payment request email sent to ${user.email} for order ${order.orderNumber}`);
+          logger.info(
+            `Payment request email sent to ${user.email} for order ${order.orderNumber}`,
+          );
         } catch (error: any) {
           logger.error(
-            `Failed to send payment request email: ${error.message}`
+            `Failed to send payment request email: ${error.message}`,
           );
           // Don't fail order creation if email fails
         }
@@ -1106,7 +1202,7 @@ class AdminOrderController {
             ? "Order created successfully (Already Paid)"
             : "Order created successfully. Payment request email sent to customer.",
       });
-    }
+    },
   );
 
   /**
@@ -1133,9 +1229,10 @@ class AdminOrderController {
   private async sendPaymentRequestEmail(
     user: any,
     order: any,
-    paymentLink: string | null
+    paymentLink: string | null,
   ): Promise<void> {
-    const userName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
+    const userName =
+      `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
     const orderNumber = order.orderNumber;
     const orderTotal = `${order.currency || "EUR"} ${order.grandTotal.toFixed(2)}`;
 
@@ -1143,7 +1240,9 @@ class AdminOrderController {
     if (!paymentLink) {
       const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
       paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
-      logger.warn(`Payment link was null, generated fallback link: ${paymentLink}`);
+      logger.warn(
+        `Payment link was null, generated fallback link: ${paymentLink}`,
+      );
     }
 
     const emailSubject = `Payment Request for Order ${orderNumber}`;
@@ -1242,16 +1341,85 @@ The Viteezy Team
 This is an automated email. Please do not reply to this message.
     `;
 
-    logger.info(`Sending payment request email to ${user.email} with payment link: ${paymentLink}`);
+    logger.info(
+      `Sending payment request email to ${user.email} with payment link: ${paymentLink}`,
+    );
 
     await emailService.sendCustomEmail(
       user.email,
       emailSubject,
       emailHtml,
-      emailText
+      emailText,
     );
   }
+
+  /*
+   * Process partial refund for specific products in an order
+   * @route POST /api/v1/admin/orders/:id/partial-refund
+   * @access Admin
+   *
+   * This endpoint allows admin to:
+   * - Refund specific products from an order
+   * - Remove refunded products from the order
+   * - Remove refunded products from associated subscription (if applicable)
+   * - Process refund via gateway or mark for manual processing
+   */
+  processPartialRefund = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const {
+        productIds,
+        refundAmount,
+        refundMethod = "gateway",
+        reason,
+        metadata,
+      } = req.body;
+
+      if (
+        !productIds ||
+        !Array.isArray(productIds) ||
+        productIds.length === 0
+      ) {
+        throw new AppError("At least one product ID is required", 400);
+      }
+
+      const adminId = req.user?._id;
+
+      const result = await orderService.processPartialRefund({
+        orderId: id,
+        productIds,
+        refundAmount,
+        refundMethod,
+        reason,
+        metadata,
+        adminId: adminId ? String(adminId) : undefined,
+      });
+
+      // Fetch updated order
+      const updatedOrder = await Orders.findOne({
+        _id: id,
+        isDeleted: { $ne: true },
+      })
+        .populate("userId", "firstName lastName email")
+        .populate("items.productId", "title slug")
+        .lean();
+
+      res.apiSuccess(
+        {
+          refund: {
+            refundedItems: result.refundedItems,
+            refundAmount: result.refundAmount,
+            refundMethod,
+            orderUpdated: result.orderUpdated,
+            subscriptionUpdated: result.subscriptionUpdated,
+            refundProcessed: result.refundProcessed,
+          },
+          order: updatedOrder,
+        },
+        result.message,
+      );
+    },
+  );
 }
 
 export const adminOrderController = new AdminOrderController();
-

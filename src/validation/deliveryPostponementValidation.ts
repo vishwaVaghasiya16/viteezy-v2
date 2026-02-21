@@ -46,6 +46,7 @@ export const getPostponementHistoryQuerySchema = Joi.object(
       .valid(...POSTPONEMENT_STATUS_VALUES)
       .optional(),
     orderId: objectIdSchema.optional(),
+    subscriptionId: objectIdSchema.optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
   })
