@@ -2089,35 +2089,57 @@ export class PaymentService {
         "🟢 [SUBSCRIPTION] Step 6: Creating subscription in database..."
       );
 
-      const subscription = await Subscriptions.create(
-        [
-          {
-            userId: order.userId,
-            orderId: order._id,
-            planType: OrderPlanType.SUBSCRIPTION,
-            cycleDays: cycleDays as SubscriptionCycle,
-            subscriptionStartDate,
-            subscriptionEndDate,
-            items: subscriptionItems,
-            initialDeliveryDate,
-            nextDeliveryDate,
-            nextBillingDate,
-            lastBilledDate,
-            status: SubscriptionStatus.ACTIVE,
-            isAutoRenew: true, // Enable auto-renewal by default
-            renewalCount: 0, // Initial subscription is not a renewal
-            metadata: {
-              autoCreated: true,
-              createdFromPayment: payment._id
-                ? payment._id.toString()
-                : payment.id || payment._id,
-              orderNumber: order.orderNumber,
-              createdAt: now.toISOString(),
-            },
-          },
-        ],
+      // Build subscription data
+      // Note: gatewaySubscriptionId is intentionally omitted to avoid sparse index conflicts
+      // When creating subscriptions from orders (not from gateway), gatewaySubscriptionId should not be set
+      const subscriptionData: any = {
+        userId: order.userId,
+        orderId: order._id,
+        planType: OrderPlanType.SUBSCRIPTION,
+        cycleDays: cycleDays as SubscriptionCycle,
+        subscriptionStartDate,
+        subscriptionEndDate,
+        items: subscriptionItems,
+        initialDeliveryDate,
+        nextDeliveryDate,
+        nextBillingDate,
+        lastBilledDate,
+        status: SubscriptionStatus.ACTIVE,
+        isAutoRenew: true, // Enable auto-renewal by default
+        renewalCount: 0, // Initial subscription is not a renewal
+        metadata: {
+          autoCreated: true,
+          createdFromPayment: payment._id
+            ? payment._id.toString()
+            : payment.id || payment._id,
+          orderNumber: order.orderNumber,
+          createdAt: now.toISOString(),
+        },
+      };
+
+      // Create subscription - gatewaySubscriptionId will be set to null by Mongoose default
+      // We'll unset it immediately after creation to avoid sparse index conflicts
+      const subscription = await Subscriptions.create([subscriptionData], {
+        session,
+      });
+
+      // Immediately unset gatewaySubscriptionId to prevent duplicate key errors
+      // This removes the field from the document, allowing multiple subscriptions with null gatewaySubscriptionId
+      await Subscriptions.updateOne(
+        { _id: subscription[0]._id },
+        { $unset: { gatewaySubscriptionId: "" } },
         { session }
       );
+
+      // Refresh the subscription document to get the updated version without gatewaySubscriptionId
+      const updatedSubscription = await Subscriptions.findById(
+        subscription[0]._id
+      ).session(session);
+      
+      // Replace the subscription object with the updated one
+      if (updatedSubscription) {
+        subscription[0] = updatedSubscription;
+      }
 
       console.log("✅ [SUBSCRIPTION] - Subscription created successfully!");
       console.log(
