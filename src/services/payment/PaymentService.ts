@@ -2263,6 +2263,62 @@ export class PaymentService {
         subscriptionItems.length
       );
 
+      // ========== STEP 5.5: Calculate SACHETS Pricing ==========
+      console.log("🟢 [SUBSCRIPTION] Step 5.5: Calculating SACHETS pricing...");
+      
+      let sachetsPricing: any = null;
+      
+      // Try to get pricing from order's pricing field (if available)
+      if (order.pricing && order.pricing.sachets) {
+        sachetsPricing = {
+          subTotal: order.pricing.sachets.subTotal || 0,
+          discountedPrice: order.pricing.sachets.discountedPrice || 0,
+          membershipDiscountAmount: order.pricing.sachets.membershipDiscountAmount || 0,
+          subscriptionPlanDiscountAmount: order.pricing.sachets.subscriptionPlanDiscountAmount || 0,
+          taxAmount: order.pricing.sachets.taxAmount || 0,
+          total: order.pricing.sachets.total || 0,
+          currency: order.pricing.sachets.currency || order.currency || "EUR",
+        };
+        console.log("✅ [SUBSCRIPTION] - Using pricing from order.pricing.sachets");
+      } else {
+        // Calculate pricing from subscription items
+        const sachetSubTotal = subscriptionItems.reduce(
+          (sum: number, item: any) => sum + (item.amount || 0),
+          0
+        );
+        const sachetDiscountedPrice = subscriptionItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice || 0),
+          0
+        );
+        const sachetTaxAmount = subscriptionItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice || 0;
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        
+        // Get membership and subscription plan discounts from order if available
+        const sachetMembershipDiscountAmount = order.pricing?.sachets?.membershipDiscountAmount || 0;
+        const sachetSubscriptionPlanDiscountAmount = order.pricing?.sachets?.subscriptionPlanDiscountAmount || 
+          (order.subscriptionPlanDiscountAmount || 0);
+        
+        const sachetTotal = sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount;
+        
+        sachetsPricing = {
+          subTotal: Math.round(sachetSubTotal * 100) / 100,
+          discountedPrice: Math.round(sachetDiscountedPrice * 100) / 100,
+          membershipDiscountAmount: Math.round(sachetMembershipDiscountAmount * 100) / 100,
+          subscriptionPlanDiscountAmount: Math.round(sachetSubscriptionPlanDiscountAmount * 100) / 100,
+          taxAmount: Math.round(sachetTaxAmount * 100) / 100,
+          total: Math.round(sachetTotal * 100) / 100,
+          currency: order.currency || "EUR",
+        };
+        console.log("✅ [SUBSCRIPTION] - Calculated pricing from subscription items");
+      }
+      
+      console.log("🟢 [SUBSCRIPTION] - SACHETS Pricing:", JSON.stringify(sachetsPricing, null, 2));
+
       // ========== STEP 6: Create Subscription ==========
       console.log(
         "🟢 [SUBSCRIPTION] Step 6: Creating subscription in database..."
@@ -2279,6 +2335,7 @@ export class PaymentService {
         subscriptionStartDate,
         subscriptionEndDate,
         items: subscriptionItems,
+        pricing: sachetsPricing,
         initialDeliveryDate,
         nextDeliveryDate,
         nextBillingDate,

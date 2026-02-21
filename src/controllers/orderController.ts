@@ -551,9 +551,12 @@ class OrderController {
         }
       }
 
-      // Get product IDs from cart
-      const productObjectIds = cart.items.map(
-        (item: any) => new mongoose.Types.ObjectId(item.productId)
+      // Get product IDs from cart (remove duplicates to allow same product with different variant types)
+      const uniqueProductIds = new Set(
+        cart.items.map((item: any) => item.productId.toString())
+      );
+      const productObjectIds = Array.from(uniqueProductIds).map(
+        (id: string) => new mongoose.Types.ObjectId(id)
       );
 
       // Use planDurationDays from new structure or legacy field (already validated above)
@@ -573,6 +576,7 @@ class OrderController {
         .select(selectFields)
         .lean();
 
+      // Check if all unique products were found (allowing same product with different variant types)
       if (products.length !== productObjectIds.length) {
         throw new AppError("One or more products are unavailable", 400);
       }
@@ -910,6 +914,108 @@ class OrderController {
       // Store membership metadata if provided
       const membershipMetadata = membership?.metadata || {};
 
+      // Calculate pricing breakdown by variant type
+      const calculatePricingBreakdown = () => {
+        // Calculate SACHETS pricing
+        const sachetOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.SACHETS
+        );
+        const sachetSubTotal = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const sachetDiscountedPrice = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const sachetTaxAmount = sachetOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for sachets (proportional to sachets subtotal)
+        const sachetMembershipDiscountAmount = sachetSubTotal > 0
+          ? roundAmount((membershipDiscountAmount * sachetSubTotal) / subTotal)
+          : 0;
+        // Subscription plan discount only applies to sachets
+        const sachetSubscriptionPlanDiscountAmount = subscriptionPlanDiscountAmount;
+        const sachetTotal = roundAmount(
+          sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount
+        );
+
+        // Calculate STAND_UP_POUCH pricing
+        const standUpPouchOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+        );
+        const standUpPouchSubTotal = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchDiscountedPrice = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchTaxAmount = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for standUpPouch (proportional to standUpPouch subtotal)
+        const standUpPouchMembershipDiscountAmount = standUpPouchSubTotal > 0
+          ? roundAmount((membershipDiscountAmount * standUpPouchSubTotal) / subTotal)
+          : 0;
+        const standUpPouchTotal = roundAmount(
+          standUpPouchDiscountedPrice - standUpPouchMembershipDiscountAmount + standUpPouchTaxAmount
+        );
+
+        // Build pricing breakdown
+        const pricingBreakdown: any = {
+          overall: {
+            subTotal: roundAmount(subTotal),
+            discountedPrice: roundAmount(discountedPrice),
+            couponDiscountAmount: roundAmount(couponDiscountAmount),
+            membershipDiscountAmount: roundAmount(membershipDiscountAmount),
+            subscriptionPlanDiscountAmount: roundAmount(subscriptionPlanDiscountAmount),
+            taxAmount: roundAmount(taxAmount),
+            grandTotal: roundAmount(grandTotal),
+            currency: normalizedCurrency,
+          },
+        };
+
+        // Add sachets pricing if there are sachet items
+        if (sachetOrderItems.length > 0) {
+          pricingBreakdown.sachets = {
+            subTotal: roundAmount(sachetSubTotal),
+            discountedPrice: roundAmount(sachetDiscountedPrice),
+            membershipDiscountAmount: roundAmount(sachetMembershipDiscountAmount),
+            subscriptionPlanDiscountAmount: roundAmount(sachetSubscriptionPlanDiscountAmount),
+            taxAmount: roundAmount(sachetTaxAmount),
+            total: sachetTotal,
+            currency: normalizedCurrency,
+          };
+        }
+
+        // Add standUpPouch pricing if there are standUpPouch items
+        if (standUpPouchOrderItems.length > 0) {
+          pricingBreakdown.standUpPouch = {
+            subTotal: roundAmount(standUpPouchSubTotal),
+            discountedPrice: roundAmount(standUpPouchDiscountedPrice),
+            membershipDiscountAmount: roundAmount(standUpPouchMembershipDiscountAmount),
+            taxAmount: roundAmount(standUpPouchTaxAmount),
+            total: standUpPouchTotal,
+            currency: normalizedCurrency,
+          };
+        }
+
+        return pricingBreakdown;
+      };
+
+      const pricingBreakdown = calculatePricingBreakdown();
+
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
@@ -928,6 +1034,7 @@ class OrderController {
         taxAmount: roundAmount(taxAmount),
         grandTotal: roundAmount(grandTotal),
         currency: normalizedCurrency,
+        pricing: pricingBreakdown,
         shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
         billingAddressId: billingAddressId
           ? new mongoose.Types.ObjectId(billingAddressId)

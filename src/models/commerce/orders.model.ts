@@ -48,6 +48,36 @@ export interface IOrder extends Document {
   taxAmount: number; // Tax amount
   grandTotal: number; // Final total after all discounts and tax
   currency: string; // Currency code (e.g., "EUR")
+  // Pricing breakdown by variant type
+  pricing?: {
+    sachets?: {
+      subTotal: number;
+      discountedPrice: number;
+      membershipDiscountAmount: number;
+      subscriptionPlanDiscountAmount: number;
+      taxAmount: number;
+      total: number;
+      currency: string;
+    };
+    standUpPouch?: {
+      subTotal: number;
+      discountedPrice: number;
+      membershipDiscountAmount: number;
+      taxAmount: number;
+      total: number;
+      currency: string;
+    };
+    overall: {
+      subTotal: number;
+      discountedPrice: number;
+      couponDiscountAmount: number;
+      membershipDiscountAmount: number;
+      subscriptionPlanDiscountAmount: number;
+      taxAmount: number;
+      grandTotal: number;
+      currency: string;
+    };
+  };
   shippingAddressId: mongoose.Types.ObjectId; // Reference to Address model
   billingAddressId?: mongoose.Types.ObjectId; // Reference to Address model
   paymentMethod: string;
@@ -192,6 +222,47 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       default: "EUR",
       trim: true,
+    },
+    pricing: {
+      type: {
+        sachets: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            total: { type: Number, default: 0 },
+            currency: { type: String, default: "EUR" },
+          },
+          required: false,
+        },
+        standUpPouch: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            total: { type: Number, default: 0 },
+            currency: { type: String, default: "EUR" },
+          },
+          required: false,
+        },
+        overall: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            couponDiscountAmount: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            grandTotal: { type: Number, default: 0 },
+            currency: { type: String, default: "EUR" },
+          },
+          required: true,
+        },
+      },
+      required: false,
     },
     shippingAddressId: {
       type: Schema.Types.ObjectId,

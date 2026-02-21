@@ -56,6 +56,16 @@ export interface ISubscription extends Document {
   retryCount?: number; // Number of payment retry attempts
   lastRetryDate?: Date; // Last payment retry date
   nextRetryDate?: Date; // Next payment retry date
+  // Pricing breakdown for SACHETS items only
+  pricing?: {
+    subTotal: number;
+    discountedPrice: number;
+    membershipDiscountAmount: number;
+    subscriptionPlanDiscountAmount: number;
+    taxAmount: number;
+    total: number;
+    currency: string;
+  };
   // Metadata
   metadata?: Record<string, any>;
   createdAt: Date;
@@ -255,6 +265,18 @@ const SubscriptionSchema = new Schema<ISubscription>(
     nextRetryDate: {
       type: Date,
       default: null,
+    },
+    pricing: {
+      type: {
+        subTotal: { type: Number, default: 0 },
+        discountedPrice: { type: Number, default: 0 },
+        membershipDiscountAmount: { type: Number, default: 0 },
+        subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+        taxAmount: { type: Number, default: 0 },
+        total: { type: Number, default: 0 },
+        currency: { type: String, default: "EUR" },
+      },
+      required: false,
     },
     metadata: {
       type: Schema.Types.Mixed,

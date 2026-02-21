@@ -1063,6 +1063,113 @@ class AdminOrderController {
           ? PaymentStatus.COMPLETED
           : PaymentStatus.PENDING;
 
+      // Calculate pricing breakdown by variant type
+      const calculatePricingBreakdown = () => {
+        // Helper function to round amounts
+        const roundAmount = (amount: number): number => {
+          return Math.round(amount * 100) / 100;
+        };
+
+        // Calculate SACHETS pricing
+        const sachetOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.SACHETS
+        );
+        const sachetSubTotal = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const sachetDiscountedPrice = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const sachetTaxAmount = sachetOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for sachets (proportional to sachets subtotal)
+        const sachetMembershipDiscountAmount = sachetSubTotal > 0 && subTotal > 0
+          ? roundAmount((membershipDiscountAmount * sachetSubTotal) / subTotal)
+          : 0;
+        // Subscription plan discount only applies to sachets
+        const sachetSubscriptionPlanDiscountAmount = subscriptionPlanDiscountAmount || 0;
+        const sachetTotal = roundAmount(
+          sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount
+        );
+
+        // Calculate STAND_UP_POUCH pricing
+        const standUpPouchOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+        );
+        const standUpPouchSubTotal = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchDiscountedPrice = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchTaxAmount = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for standUpPouch (proportional to standUpPouch subtotal)
+        const standUpPouchMembershipDiscountAmount = standUpPouchSubTotal > 0 && subTotal > 0
+          ? roundAmount((membershipDiscountAmount * standUpPouchSubTotal) / subTotal)
+          : 0;
+        const standUpPouchTotal = roundAmount(
+          standUpPouchDiscountedPrice - standUpPouchMembershipDiscountAmount + standUpPouchTaxAmount
+        );
+
+        // Build pricing breakdown
+        const pricingBreakdown: any = {
+          overall: {
+            subTotal: roundAmount(subTotal),
+            discountedPrice: roundAmount(discountedPrice),
+            couponDiscountAmount: roundAmount(couponDiscountAmount || 0),
+            membershipDiscountAmount: roundAmount(membershipDiscountAmount || 0),
+            subscriptionPlanDiscountAmount: roundAmount(subscriptionPlanDiscountAmount || 0),
+            taxAmount: roundAmount(taxAmount || 0),
+            grandTotal: roundAmount(grandTotal),
+            currency: currency || "EUR",
+          },
+        };
+
+        // Add sachets pricing if there are sachet items
+        if (sachetOrderItems.length > 0) {
+          pricingBreakdown.sachets = {
+            subTotal: roundAmount(sachetSubTotal),
+            discountedPrice: roundAmount(sachetDiscountedPrice),
+            membershipDiscountAmount: roundAmount(sachetMembershipDiscountAmount),
+            subscriptionPlanDiscountAmount: roundAmount(sachetSubscriptionPlanDiscountAmount),
+            taxAmount: roundAmount(sachetTaxAmount),
+            total: sachetTotal,
+            currency: currency || "EUR",
+          };
+        }
+
+        // Add standUpPouch pricing if there are standUpPouch items
+        if (standUpPouchOrderItems.length > 0) {
+          pricingBreakdown.standUpPouch = {
+            subTotal: roundAmount(standUpPouchSubTotal),
+            discountedPrice: roundAmount(standUpPouchDiscountedPrice),
+            membershipDiscountAmount: roundAmount(standUpPouchMembershipDiscountAmount),
+            taxAmount: roundAmount(standUpPouchTaxAmount),
+            total: standUpPouchTotal,
+            currency: currency || "EUR",
+          };
+        }
+
+        return pricingBreakdown;
+      };
+
+      const pricingBreakdown = calculatePricingBreakdown();
+
       // Create order
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
@@ -1081,6 +1188,7 @@ class AdminOrderController {
         taxAmount: taxAmount || 0,
         grandTotal: grandTotal,
         currency: currency || "EUR",
+        pricing: pricingBreakdown,
         shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
         billingAddressId: billingAddressId
           ? new mongoose.Types.ObjectId(billingAddressId)
