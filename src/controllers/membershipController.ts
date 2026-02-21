@@ -458,10 +458,14 @@ class MembershipController {
    * Cancel membership
    * @route POST /api/memberships/:membershipId/cancel
    * @access Private
-   * 
+   *
+   * Cancellation window:
+   * - Cancellation is NOT allowed in the last 15 days before membership expiry (any plan).
+   * - Example: 1-month plan → cancel allowed in first ~15 days; not in last 15 days.
+   *
    * Refund Rules:
    * - Quarterly Plan: No cancellation or refund allowed
-   * - Annual Plan: 
+   * - Annual Plan:
    *   - No cancellation allowed during first quarter
    *   - Post first quarter: Refund for remaining full quarters only
    *   - No partial refunds
@@ -489,6 +493,24 @@ class MembershipController {
 
       if (membership.status === MembershipStatus.CANCELLED) {
         throw new AppError("Membership is already cancelled", 400);
+      }
+
+      // Do not allow cancellation in the last 15 days before expiry (any plan)
+      const LAST_DAYS_NO_CANCEL = 15;
+      const expiresAt = membership.expiresAt ? new Date(membership.expiresAt) : null;
+      if (expiresAt) {
+        const now = new Date();
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const daysUntilExpiry = Math.ceil((expiresAt.getTime() - now.getTime()) / msPerDay);
+        if (daysUntilExpiry <= LAST_DAYS_NO_CANCEL && daysUntilExpiry > 0) {
+          throw new AppError(
+            `Cancellation is not allowed in the last ${LAST_DAYS_NO_CANCEL} days before membership expiry. Your membership expires in ${daysUntilExpiry} day(s).`,
+            400
+          );
+        }
+        if (daysUntilExpiry <= 0) {
+          throw new AppError("Membership has already expired", 400);
+        }
       }
 
       const interval = membership.planSnapshot?.interval;
