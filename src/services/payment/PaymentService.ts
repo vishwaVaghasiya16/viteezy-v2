@@ -2214,8 +2214,49 @@ export class PaymentService {
       console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription[0]._id);
       console.log("✅ [SUBSCRIPTION] - Status:", subscription[0].status);
 
+      // ========== STEP 7: Update Payment with Subscription ID ==========
+      console.log("🟢 [SUBSCRIPTION] Step 7: Updating payment with subscriptionId...");
+      
+      // Get payment ID from payment object (could be mongoose document or plain object)
+      const paymentId = payment._id 
+        ? (payment._id.toString ? payment._id.toString() : payment._id)
+        : payment.id;
+      
+      if (paymentId) {
+        try {
+          // Update payment to link it with the subscription
+          await Payments.findByIdAndUpdate(
+            paymentId,
+            { 
+              subscriptionId: subscription[0]._id 
+            },
+            { session }
+          );
+          console.log("✅ [SUBSCRIPTION] - Payment updated with subscriptionId:", subscription[0]._id);
+          logger.info(
+            `Payment ${paymentId} updated with subscriptionId ${subscription[0]._id} for subscription ${subscription[0].subscriptionNumber}`
+          );
+        } catch (updateError: any) {
+          console.error("⚠️ [SUBSCRIPTION] - Failed to update payment with subscriptionId:", updateError.message);
+          logger.warn(
+            `Failed to update payment ${paymentId} with subscriptionId: ${updateError.message}`
+          );
+          // Don't fail subscription creation if payment update fails
+        }
+      } else {
+        console.warn("⚠️ [SUBSCRIPTION] - Payment ID not found, cannot update payment with subscriptionId");
+        logger.warn(
+          `Payment ID not found in payment object, cannot update payment with subscriptionId for subscription ${subscription[0].subscriptionNumber}`
+        );
+      }
+
+      // ========== STEP 8: Commit Transaction ==========
+      await session.commitTransaction();
+      console.log("✅ [SUBSCRIPTION] - Transaction committed");
+
       // Send subscription activated notification (only after payment success)
       // Payment status is COMPLETED at this point, so subscription is activated
+      // Note: Notification is sent after transaction commit to avoid holding transaction open
       try {
         const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
         await subscriptionNotifications.subscriptionActivated(
@@ -2231,10 +2272,6 @@ export class PaymentService {
         logger.error(`Failed to send subscription activated notification: ${error.message}`);
         // Don't fail subscription creation if notification fails
       }
-
-      // ========== STEP 7: Commit Transaction ==========
-      await session.commitTransaction();
-      console.log("✅ [SUBSCRIPTION] - Transaction committed");
 
       logger.info(
         `✅ Subscription ${subscription[0].subscriptionNumber} created for order ${order.orderNumber}`
