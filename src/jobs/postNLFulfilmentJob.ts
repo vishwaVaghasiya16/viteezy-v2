@@ -286,7 +286,7 @@ export class PostNLFulfilmentJob {
       });
       // Log where the file is stored for manual upload
       logger.warn(`⚠️ XML file saved locally at: ${filePath}`, {
-        fileName: fileName,
+        fileName: path.basename(filePath),
         fullPath: filePath,
         storageFolder: this.XML_FOLDER,
         note: "Configure SFTP_PRIVATEKEY_FILENAME or SFTP_PRIVATE_KEY in .env to enable automatic upload",
