@@ -567,15 +567,13 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
-    // Initialize packing slip PDF generation cron job
-    // This import will trigger the cron schedule defined in the file
-    try {
-      await import("@/jobs/packingSlipPdfJob");
-      logger.info("✅ Packing slip PDF generation cron job initialized");
-    } catch (jobError: any) {
-      logger.warn(`⚠️ Failed to initialize packing slip PDF generation job: ${jobError.message}`);
-      // Don't fail server startup if job initialization fails
-    }
+    // Packing slip PDF generation cron job - DISABLED for now
+    // try {
+    //   await import("@/jobs/packingSlipPdfJob");
+    //   logger.info("✅ Packing slip PDF generation cron job initialized");
+    // } catch (jobError: any) {
+    //   logger.warn(`⚠️ Failed to initialize packing slip PDF generation job: ${jobError.message}`);
+    // }
 
     // Initialize pharmacist job cron job
     // This import will trigger the cron schedule defined in the file
