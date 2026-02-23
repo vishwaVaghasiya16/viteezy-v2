@@ -347,8 +347,8 @@ export class PostNLStatusSyncJob {
 // Create singleton instance
 export const postNLStatusSyncJob = new PostNLStatusSyncJob();
 
-// Schedule the job to run every 1 minute (or as configured)
-const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "* * * * *";
+// Schedule: every 30 minutes (override via POSTNL_STATUS_SYNC_SCHEDULE)
+const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "*/30 * * * *";
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {
