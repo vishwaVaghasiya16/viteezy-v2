@@ -286,7 +286,7 @@ export class PostNLFulfilmentJob {
       });
       // Log where the file is stored for manual upload
       logger.warn(`⚠️ XML file saved locally at: ${filePath}`, {
-        fileName: fileName,
+        fileName: path.basename(filePath),
         fullPath: filePath,
         storageFolder: this.XML_FOLDER,
         note: "Configure SFTP_PRIVATEKEY_FILENAME or SFTP_PRIVATE_KEY in .env to enable automatic upload",
@@ -320,9 +320,9 @@ export class PostNLFulfilmentJob {
 // Create singleton instance
 export const postNLFulfilmentJob = new PostNLFulfilmentJob();
 
-// Schedule the job to run every 1 minute (or as configured)
+// Schedule: every 5 minutes (override via POSTNL_FULFILMENT_JOB_SCHEDULE)
 const cronSchedule =
-  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "* * * * *";
+  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "*/5 * * * *";
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

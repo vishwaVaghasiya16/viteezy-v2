@@ -13,7 +13,7 @@ import axios from "axios";
  * - Calls Python PDF generation API to generate packing slip
  * - Python API updates order status to PACKING_SLIP_READY
  * 
- * Runs every 1 minute to process new orders
+ * Runs every 5 minutes to process new orders
  */
 export class PackingSlipPdfJob {
   private isRunning: boolean = false;
@@ -181,10 +181,9 @@ export class PackingSlipPdfJob {
 // Create singleton instance
 export const packingSlipPdfJob = new PackingSlipPdfJob();
 
-// Schedule the job to run every 1 minute
-// Cron format: minute hour day month day-of-week
-// "* * * * *" = every 1 minute
-cron.schedule("* * * * *", async () => {
+// Schedule: every 5 minutes (override via PACKING_SLIP_PDF_JOB_SCHEDULE)
+const packingSlipCronSchedule = process.env.PACKING_SLIP_PDF_JOB_SCHEDULE || "*/5 * * * *";
+cron.schedule(packingSlipCronSchedule, async () => {
   try {
     await packingSlipPdfJob.processOrders();
   } catch (error: any) {
@@ -192,4 +191,4 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-logger.info("✅ Packing slip PDF cron job scheduled (runs every 1 minute)");
+logger.info(`✅ Packing slip PDF cron job scheduled: ${packingSlipCronSchedule}`);

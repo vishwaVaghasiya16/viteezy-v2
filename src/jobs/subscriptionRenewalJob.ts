@@ -88,12 +88,10 @@ export class SubscriptionRenewalJob {
 export const subscriptionRenewalJob = new SubscriptionRenewalJob();
 
 // Initialize cron job when this module is imported
-// Schedule: Run daily at 2 AM (0 2 * * *)
-// For testing: "* * * * *" runs every minute
-// For production: "0 2 * * *" runs daily at 2 AM
+// Schedule: Run daily at 2 AM in production; every hour in development
 const cronSchedule = process.env.NODE_ENV === "production" 
-  ? "0 2 * * *" // Daily at 2 AM in production
-  : "* * * * *"; // Every 5 minutes in development (for testing)
+  ? "0 2 * * *"   // Daily at 2 AM in production
+  : "0 * * * *";  // Every hour in development (override via SUBSCRIPTION_RENEWAL_CRON if needed)
 
 // Initialize and start the cron job
 const cronTask = cron.schedule(cronSchedule, async () => {

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<deliveryOrderMessage>
+  <messageNo>6998510f6e84393bfa277be5</messageNo>
+  <messageDate>2026-02-20</messageDate>
+  <messageTime>17:48:23</messageTime>
+  <deliveryOrder>
+    <orderNo>VTZ-1771589903937-6988</orderNo>
+    <webOrderNo>6998510f6e84393bfa277be5</webOrderNo>
+    <orderDate>2026-02-20</orderDate>
+    <orderTime>17:48:23</orderTime>
+    <customerNo>693bbebe933967934a5f23f7</customerNo>
+    <onlyHomeAddress>false</onlyHomeAddress>
+    <shipToFirstName>Chavda</shipToFirstName>
+    <shipToLastName>Harsh</shipToLastName>
+    <shipToStreet>Damrak</shipToStreet>
+    <shipToHouseNo>1</shipToHouseNo>
+    <shipToAnnex>A</shipToAnnex>
+    <shipToPostalCode>1012LG</shipToPostalCode>
+    <shipToCity>Amsterdams</shipToCity>
+    <shipToCountryCode>NL</shipToCountryCode>
+    <shipToPhone>+31612345678</shipToPhone>
+    <shipToEmail>harsh.logicgo6@gmail.com</shipToEmail>
+    <language>NL</language>
+    <shippingAgentCode>03085</shippingAgentCode>
+    <shipmentType>Commercial Goods</shipmentType>
+    <deliveryOrderLines>
+    <deliveryOrderLine>
+      <itemNo>VIT30</itemNo>
+      <itemDescription>Vitamine packs</itemDescription>
+      <quantity>1</quantity>
+    </deliveryOrderLine>
+    </deliveryOrderLines>
+  </deliveryOrder>
+</deliveryOrderMessage>
