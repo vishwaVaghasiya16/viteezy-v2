@@ -40,7 +40,7 @@ dotenv.config();
  * @constant {number} BODY_SIZE_LIMIT - Maximum size for request body (10MB)
  * @constant {string} API_VERSION - API version prefix for routes
  * @constant {string} HEALTH_CHECK_PATH - Health check endpoint path
- * @constant {string} API_DOCS_PATH - Swagger documentation endpoint path
+ * @constant {string} API_DOCS_PATH - Swagger documentation endpoint 
  */
 const BODY_SIZE_LIMIT = "10mb";
 const API_VERSION = "/api/v1";
