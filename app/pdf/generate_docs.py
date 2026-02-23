@@ -12,6 +12,7 @@ import sys
 import time
 import threading
 import uuid
+import atexit
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -26,6 +27,7 @@ from docx.shared import Mm
 from docxtpl import DocxTemplate, InlineImage
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from PIL import Image as PILImage, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -33,6 +35,10 @@ from pymongo import MongoClient
 
 LOGGER = logging.getLogger("pdf_service")
 WORD_CONVERSION_LOCK = threading.Lock()
+MONGO_CLIENT_LOCK = threading.Lock()
+SPACES_CLIENT_LOCK = threading.Lock()
+MONGO_CLIENT: MongoClient | None = None
+SPACES_CLIENT: Any | None = None
 
 
 @dataclass
@@ -90,6 +96,14 @@ class GeneratePdfRequest(BaseModel):
     order_id: str = Field(..., min_length=1)
 
 
+def build_api_response(success: bool, message: str, data: Any | None = None) -> dict[str, Any]:
+    return {
+        "success": success,
+        "message": message,
+        "data": data or {},
+    }
+
+
 def slugify(value: str) -> str:
     value = value.strip().lower()
     value = re.sub(r"[^a-z0-9]+", "-", value)
@@ -127,30 +141,17 @@ def get_product_image_url(product_doc: dict[str, Any] | None) -> str | None:
     return None
 
 
-def get_ingredient_names(ingredients_collection: Any, product_id: ObjectId) -> list[str]:
-    ingredient_docs = ingredients_collection.find(
-        {
-            "products": product_id,
-            "isDeleted": {"$ne": True},
-        },
-        {"name": 1},
-    )
-
-    names: list[str] = []
-    for ing in ingredient_docs:
-        name_obj = ing.get("name")
-        name_en = None
-        if isinstance(name_obj, dict):
-            name_en = name_obj.get("en") or next((v for v in name_obj.values() if isinstance(v, str)), None)
-        elif isinstance(name_obj, str):
-            name_en = name_obj
-
-        if name_en:
-            clean_name = str(name_en).strip()
-            if clean_name and clean_name not in names:
-                names.append(clean_name)
-
-    return names
+def extract_ingredient_name(ingredient_doc: dict[str, Any]) -> str | None:
+    name_obj = ingredient_doc.get("name")
+    name_en = None
+    if isinstance(name_obj, dict):
+        name_en = name_obj.get("en") or next((v for v in name_obj.values() if isinstance(v, str)), None)
+    elif isinstance(name_obj, str):
+        name_en = name_obj
+    if not name_en:
+        return None
+    clean_name = str(name_en).strip()
+    return clean_name or None
 
 
 def download_image(image_url: str) -> BytesIO | None:
@@ -238,23 +239,19 @@ def convert_docx_to_pdf(input_docx: Path, output_pdf: Path) -> bool:
 
 
 def build_context_for_order(
-    db: Any,
     order: dict[str, Any],
     template: DocxTemplate,
+    user_doc: dict[str, Any] | None,
+    product_docs_by_id: dict[ObjectId, dict[str, Any]],
+    ingredients_by_product_id: dict[ObjectId, list[str]],
 ) -> dict[str, Any]:
-    users_collection = db["users"]
-    products_collection = db["products"]
-    ingredients_collection = db["product_ingredients"]
-
-    user_id = safe_object_id(order.get("userId"))
-    user_doc = users_collection.find_one({"_id": user_id}) if user_id else None
     user_name = extract_user_name(user_doc)
 
     blend: list[dict[str, Any]] = []
     for item in order.get("items", []):
         product_id = safe_object_id(item.get("productId"))
-        product_doc = products_collection.find_one({"_id": product_id}) if product_id else None
-        ingredient_names = get_ingredient_names(ingredients_collection, product_id) if product_id else []
+        product_doc = product_docs_by_id.get(product_id) if product_id else None
+        ingredient_names = ingredients_by_product_id.get(product_id, []) if product_id else []
 
         image_url = get_product_image_url(product_doc)
         image_value: Any = ""
@@ -296,16 +293,59 @@ def build_context_for_order(
     }
 
 
+def get_mongo_client(config: Config) -> MongoClient:
+    global MONGO_CLIENT
+    if MONGO_CLIENT is not None:
+        return MONGO_CLIENT
+
+    with MONGO_CLIENT_LOCK:
+        if MONGO_CLIENT is not None:
+            return MONGO_CLIENT
+        client = MongoClient(
+            config.mongo_url,
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=10000,
+            socketTimeoutMS=30000,
+            maxPoolSize=100,
+            minPoolSize=0,
+            appname="viteezy-pdf-service",
+        )
+        client.admin.command("ping")
+        MONGO_CLIENT = client
+        LOGGER.info("MongoDB client initialized with shared pool")
+        return MONGO_CLIENT
+
+
+def close_mongo_client() -> None:
+    global MONGO_CLIENT
+    if MONGO_CLIENT is not None:
+        try:
+            MONGO_CLIENT.close()
+        finally:
+            MONGO_CLIENT = None
+
+
+def get_spaces_client(config: Config) -> Any:
+    global SPACES_CLIENT
+    if SPACES_CLIENT is not None:
+        return SPACES_CLIENT
+
+    with SPACES_CLIENT_LOCK:
+        if SPACES_CLIENT is not None:
+            return SPACES_CLIENT
+        SPACES_CLIENT = boto3.client(
+            "s3",
+            region_name=config.spaces_region,
+            endpoint_url=config.spaces_endpoint,
+            aws_access_key_id=config.spaces_access_key,
+            aws_secret_access_key=config.spaces_secret_key,
+        )
+        return SPACES_CLIENT
+
+
 def upload_pdf_to_spaces(config: Config, pdf_path: Path) -> str:
     key = f"Viteezy_PDF_AI/{pdf_path.name}"
-
-    s3_client = boto3.client(
-        "s3",
-        region_name=config.spaces_region,
-        endpoint_url=config.spaces_endpoint,
-        aws_access_key_id=config.spaces_access_key,
-        aws_secret_access_key=config.spaces_secret_key,
-    )
+    s3_client = get_spaces_client(config)
     s3_client.upload_file(
         str(pdf_path),
         config.spaces_bucket,
@@ -336,65 +376,108 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
         "createdAt": 1,
     }
 
-    with MongoClient(
-        config.mongo_url,
-        serverSelectionTimeoutMS=10000,
-        connectTimeoutMS=10000,
-        socketTimeoutMS=30000,
-    ) as client:
-        LOGGER.info("Connecting to MongoDB for order lookup")
-        client.admin.command("ping")
-        db = client[config.mongo_db]
-        orders_collection = db["orders"]
-        order = find_order(orders_collection, order_id)
-        if not order:
-            LOGGER.warning("Order not found for order_id=%s", order_id)
-            raise HTTPException(status_code=404, detail="Order not found")
+    LOGGER.info("Fetching order context from MongoDB for order_id=%s", order_id)
+    client = get_mongo_client(config)
+    db = client[config.mongo_db]
+    orders_collection = db["orders"]
+    users_collection = db["users"]
+    products_collection = db["products"]
+    ingredients_collection = db["product_ingredients"]
 
-        order = orders_collection.find_one({"_id": order["_id"]}, projection)
-        if not order:
-            LOGGER.warning("Order projection lookup failed for order_id=%s", order_id)
-            raise HTTPException(status_code=404, detail="Order not found")
+    order = find_order(orders_collection, order_id)
+    if not order:
+        LOGGER.warning("Order not found for order_id=%s", order_id)
+        raise HTTPException(status_code=404, detail="Order not found")
 
-        LOGGER.info("Rendering DOCX for order_id=%s", order_id)
-        template = DocxTemplate(str(config.template_path))
-        context = build_context_for_order(db, order, template)
+    order = orders_collection.find_one({"_id": order["_id"]}, projection)
+    if not order:
+        LOGGER.warning("Order projection lookup failed for order_id=%s", order_id)
+        raise HTTPException(status_code=404, detail="Order not found")
 
-        order_number = order.get("orderNumber") or str(order.get("_id"))
-        filename_base = f"{slugify(str(order_number))}-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
-        with TemporaryDirectory(prefix="viteezy_pdf_") as tmp_dir:
-            tmp_path = Path(tmp_dir)
-            output_docx = tmp_path / f"{filename_base}.docx"
-            output_pdf = tmp_path / f"{filename_base}.pdf"
+    user_doc: dict[str, Any] | None = None
+    user_id = safe_object_id(order.get("userId"))
+    if user_id:
+        user_doc = users_collection.find_one({"_id": user_id}, {"name": 1, "firstName": 1, "lastName": 1})
 
-            template.render(context)
-            template.save(str(output_docx))
+    product_ids: list[ObjectId] = []
+    seen_ids: set[ObjectId] = set()
+    for item in order.get("items", []):
+        pid = safe_object_id(item.get("productId"))
+        if pid and pid not in seen_ids:
+            seen_ids.add(pid)
+            product_ids.append(pid)
 
-            LOGGER.info("Converting DOCX to PDF for order_id=%s", order_id)
-            if not convert_docx_to_pdf(output_docx, output_pdf):
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to convert DOCX to PDF. Ensure Microsoft Word or LibreOffice is installed on this machine.",
-                )
+    product_docs_by_id: dict[ObjectId, dict[str, Any]] = {}
+    ingredients_by_product_id: dict[ObjectId, list[str]] = {}
 
-            try:
-                LOGGER.info("Uploading PDF to DigitalOcean Spaces for order_id=%s", order_id)
-                pdf_url = upload_pdf_to_spaces(config, output_pdf)
-            except Exception as exc:
-                LOGGER.exception("DigitalOcean upload failed: %s", exc)
-                raise HTTPException(status_code=500, detail="Failed to upload PDF to DigitalOcean Spaces") from exc
+    if product_ids:
+        for product_doc in products_collection.find({"_id": {"$in": product_ids}}, {"name": 1, "productImage": 1}):
+            product_docs_by_id[product_doc["_id"]] = product_doc
 
-        orders_collection.update_one(
-            {"_id": order["_id"], "status": "Confirmed"},
-            {"$set": {"status": "PACKING_SLIP_READY"}},
+        ingredient_cursor = ingredients_collection.find(
+            {"products": {"$in": product_ids}, "isDeleted": {"$ne": True}},
+            {"name": 1, "products": 1},
         )
-        LOGGER.info("PDF generation completed for order_id=%s", order_id)
-        return pdf_url
+        for ingredient_doc in ingredient_cursor:
+            ingredient_name = extract_ingredient_name(ingredient_doc)
+            if not ingredient_name:
+                continue
+
+            products_field = ingredient_doc.get("products")
+            if isinstance(products_field, list):
+                related_ids = [pid for pid in products_field if isinstance(pid, ObjectId)]
+            elif isinstance(products_field, ObjectId):
+                related_ids = [products_field]
+            else:
+                related_ids = []
+
+            for pid in related_ids:
+                if pid not in seen_ids:
+                    continue
+                names = ingredients_by_product_id.setdefault(pid, [])
+                if ingredient_name not in names:
+                    names.append(ingredient_name)
+
+    LOGGER.info("Rendering DOCX for order_id=%s", order_id)
+    template = DocxTemplate(str(config.template_path))
+    context = build_context_for_order(order, template, user_doc, product_docs_by_id, ingredients_by_product_id)
+
+    order_number = order.get("orderNumber") or str(order.get("_id"))
+    filename_base = f"{slugify(str(order_number))}-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
+    with TemporaryDirectory(prefix="viteezy_pdf_") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        output_docx = tmp_path / f"{filename_base}.docx"
+        output_pdf = tmp_path / f"{filename_base}.pdf"
+
+        template.render(context)
+        template.save(str(output_docx))
+
+        LOGGER.info("Converting DOCX to PDF for order_id=%s", order_id)
+        if not convert_docx_to_pdf(output_docx, output_pdf):
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to convert DOCX to PDF. Ensure Microsoft Word or LibreOffice is installed on this machine.",
+            )
+
+        try:
+            LOGGER.info("Uploading PDF to DigitalOcean Spaces for order_id=%s", order_id)
+            pdf_url = upload_pdf_to_spaces(config, output_pdf)
+        except Exception as exc:
+            LOGGER.exception("DigitalOcean upload failed: %s", exc)
+            raise HTTPException(status_code=500, detail="Failed to upload PDF to DigitalOcean Spaces") from exc
+
+    orders_collection.update_one(
+        {"_id": order["_id"], "status": "Confirmed"},
+        {"$set": {"status": "PACKING_SLIP_READY"}},
+    )
+    LOGGER.info("PDF generation completed for order_id=%s", order_id)
+    return pdf_url
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 router = APIRouter()
 APP_CONFIG = Config.from_env()
+atexit.register(close_mongo_client)
 
 if not APP_CONFIG.template_path.exists():
     raise FileNotFoundError(f"Template not found: {APP_CONFIG.template_path}")
@@ -405,14 +488,23 @@ def generate_pdf(payload: GeneratePdfRequest) -> dict[str, Any]:
     LOGGER.info("Received generate-pdf request for order_id=%s", payload.order_id)
     try:
         pdf_url = generate_and_upload_pdf(APP_CONFIG, payload.order_id)
-        return {
-            "success": True,
-            "message": "Pdf generated successfully",
-            "data": {"pdf_url": pdf_url},
-        }
-    except HTTPException:
+        return build_api_response(True, "Pdf generated successfully", {"pdf_url": pdf_url})
+    except HTTPException as exc:
         LOGGER.exception("generate-pdf request failed for order_id=%s", payload.order_id)
-        raise
-    except Exception:
+        detail = exc.detail
+        if isinstance(detail, dict):
+            message = str(detail.get("message") or detail.get("detail") or "Request failed")
+            data = detail.get("data") if isinstance(detail.get("data"), dict) else {}
+        else:
+            message = str(detail or "Request failed")
+            data = {}
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=build_api_response(False, message, data),
+        )
+    except Exception as exc:
         LOGGER.exception("Unexpected error in generate-pdf for order_id=%s", payload.order_id)
-        raise
+        return JSONResponse(
+            status_code=500,
+            content=build_api_response(False, "Unexpected error while generating PDF", {"error": str(exc)}),
+        )
