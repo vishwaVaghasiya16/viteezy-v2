@@ -181,13 +181,13 @@ export class PackingSlipPdfJob {
 // Create singleton instance
 export const packingSlipPdfJob = new PackingSlipPdfJob();
 
-// Packing slip PDF cron - DISABLED for now (was calling Python /generate-pdf)
-// const packingSlipCronSchedule = process.env.PACKING_SLIP_PDF_JOB_SCHEDULE || "*/5 * * * *";
-// cron.schedule(packingSlipCronSchedule, async () => {
-//   try {
-//     await packingSlipPdfJob.processOrders();
-//   } catch (error: any) {
-//     logger.error(`Error in scheduled packing slip PDF job: ${error.message}`);
-//   }
-// });
-// logger.info(`✅ Packing slip PDF cron job scheduled: ${packingSlipCronSchedule}`);
+// Packing slip PDF cron schedule (default: every 5 minutes)
+const packingSlipCronSchedule = process.env.PACKING_SLIP_PDF_JOB_SCHEDULE || "*/5 * * * *";
+cron.schedule(packingSlipCronSchedule, async () => {
+  try {
+    await packingSlipPdfJob.processOrders();
+  } catch (error: any) {
+    logger.error(`Error in scheduled packing slip PDF job: ${error.message}`);
+  }
+});
+logger.info(`✅ Packing slip PDF cron job scheduled: ${packingSlipCronSchedule}`);

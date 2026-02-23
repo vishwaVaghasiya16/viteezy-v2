@@ -567,13 +567,14 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
-    // Packing slip PDF generation cron job - DISABLED for now
-    // try {
-    //   await import("@/jobs/packingSlipPdfJob");
-    //   logger.info("✅ Packing slip PDF generation cron job initialized");
-    // } catch (jobError: any) {
-    //   logger.warn(`⚠️ Failed to initialize packing slip PDF generation job: ${jobError.message}`);
-    // }
+    // Initialize packing slip PDF generation cron job
+    try {
+      await import("@/jobs/packingSlipPdfJob");
+      logger.info("✅ Packing slip PDF generation cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize packing slip PDF generation job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
 
     // Initialize pharmacist job cron job
     // This import will trigger the cron schedule defined in the file
@@ -585,31 +586,32 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
-    // PostNL jobs disabled until SFTP private key is configured (avoids event loop blocking)
-    // Uncomment when INFOBIP/SFTP keys are set and re-enable these jobs.
-    // // Initialize PostNL Fulfilment job cron job
-    // try {
-    //   await import("@/jobs/postNLFulfilmentJob");
-    //   logger.info("✅ PostNL Fulfilment job cron job initialized");
-    // } catch (jobError: any) {
-    //   logger.warn(`⚠️ Failed to initialize PostNL Fulfilment job: ${jobError.message}`);
-    // }
+    // Initialize PostNL Fulfilment job cron job
+    try {
+      await import("@/jobs/postNLFulfilmentJob");
+      logger.info("✅ PostNL Fulfilment job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Fulfilment job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
 
-    // // Initialize PostNL Response job cron job
-    // try {
-    //   await import("@/jobs/postNLResponseJob");
-    //   logger.info("✅ PostNL Response job cron job initialized");
-    // } catch (jobError: any) {
-    //   logger.warn(`⚠️ Failed to initialize PostNL Response job: ${jobError.message}`);
-    // }
+    // Initialize PostNL Response job cron job
+    try {
+      await import("@/jobs/postNLResponseJob");
+      logger.info("✅ PostNL Response job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Response job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
 
-    // // Initialize PostNL Status Sync job cron job
-    // try {
-    //   await import("@/jobs/postNLStatusSyncJob");
-    //   logger.info("✅ PostNL Status Sync job cron job initialized");
-    // } catch (jobError: any) {
-    //   logger.warn(`⚠️ Failed to initialize PostNL Status Sync job: ${jobError.message}`);
-    // }
+    // Initialize PostNL Status Sync job cron job
+    try {
+      await import("@/jobs/postNLStatusSyncJob");
+      logger.info("✅ PostNL Status Sync job cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize PostNL Status Sync job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
 
     // Start HTTP server and listen on configured port and host
     // Use 0.0.0.0 to accept connections from any IP address (public access)
