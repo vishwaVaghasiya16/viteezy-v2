@@ -568,7 +568,6 @@ const startServer = async (): Promise<void> => {
     }
 
     // Initialize packing slip PDF generation cron job
-    // This import will trigger the cron schedule defined in the file
     try {
       await import("@/jobs/packingSlipPdfJob");
       logger.info("✅ Packing slip PDF generation cron job initialized");
@@ -588,7 +587,6 @@ const startServer = async (): Promise<void> => {
     }
 
     // Initialize PostNL Fulfilment job cron job
-    // This import will trigger the cron schedule defined in the file
     try {
       await import("@/jobs/postNLFulfilmentJob");
       logger.info("✅ PostNL Fulfilment job cron job initialized");
@@ -598,7 +596,6 @@ const startServer = async (): Promise<void> => {
     }
 
     // Initialize PostNL Response job cron job
-    // This import will trigger the cron schedule defined in the file
     try {
       await import("@/jobs/postNLResponseJob");
       logger.info("✅ PostNL Response job cron job initialized");
@@ -608,7 +605,6 @@ const startServer = async (): Promise<void> => {
     }
 
     // Initialize PostNL Status Sync job cron job
-    // This import will trigger the cron schedule defined in the file
     try {
       await import("@/jobs/postNLStatusSyncJob");
       logger.info("✅ PostNL Status Sync job cron job initialized");

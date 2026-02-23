@@ -4,6 +4,8 @@ import { I18nString, SoftDelete, I18nStringType } from "../common.model";
 export interface IBlog extends Document {
   title: I18nStringType;
   description: I18nStringType;
+  /** Short text for cards/listing (I18n). Auto-generated from description if not set. Keeps landing-page query fast. */
+  excerpt?: I18nStringType;
   seo: {
     metaTitle?: string;
     metaSlug?: string;
@@ -27,6 +29,10 @@ const BlogSchema = new Schema<IBlog>(
       default: () => ({}),
     },
     description: {
+      type: I18nString,
+      default: () => ({}),
+    },
+    excerpt: {
       type: I18nString,
       default: () => ({}),
     },
@@ -93,5 +99,6 @@ BlogSchema.index({ authorId: 1, isActive: 1 });
 BlogSchema.index({ categoryId: 1, isActive: 1 });
 BlogSchema.index({ viewCount: -1 });
 BlogSchema.index({ isActive: 1, isDeleted: 1 });
+BlogSchema.index({ isActive: 1, isDeleted: 1, createdAt: -1 });
 
 export const Blogs = mongoose.model<IBlog>("blogs", BlogSchema);

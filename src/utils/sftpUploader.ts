@@ -1,5 +1,6 @@
 import * as fs from "fs";
-import { Client } from "ssh2";
+import * as path from "path";
+import { Client, ConnectConfig } from "ssh2";
 import { logger } from "./logger";
 
 /**
@@ -13,6 +14,101 @@ interface SFTPConfig {
   privateKeyPath?: string;
   privateKey?: string | Buffer;
   port?: number;
+  passphrase?: string;
+  algorithms?: { serverHostKey?: string[] };
+}
+
+/**
+ * Load SFTP config with resolved key path and key as string (avoids encoding issues).
+ * Throws if key is not configured or file missing.
+ */
+function getSFTPConfig(): SFTPConfig {
+  const config: SFTPConfig = {
+    host: process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net",
+    username: process.env.SFTP_USERNAME || "sftpviteezya",
+    port: parseInt(process.env.SFTP_PORT || "22"),
+    // Prefer newer RSA algorithms (many gateways e.g. IBM Sterling disable legacy ssh-rsa)
+    algorithms: {
+      serverHostKey: ["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"],
+    },
+  };
+
+  const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
+  if (privateKeyPath) {
+    const resolvedPath = path.isAbsolute(privateKeyPath)
+      ? privateKeyPath
+      : path.resolve(process.cwd(), privateKeyPath);
+    if (fs.existsSync(resolvedPath)) {
+      const raw = fs.readFileSync(resolvedPath);
+      config.privateKey = (typeof raw === "string" ? raw : raw.toString("utf8")).trim();
+      return config;
+    }
+  }
+  if (process.env.SFTP_PRIVATE_KEY) {
+    config.privateKey = process.env.SFTP_PRIVATE_KEY.trim();
+    return config;
+  }
+  throw new Error("SFTP private key not configured (set SFTP_PRIVATEKEY_FILENAME or SFTP_PRIVATE_KEY)");
+}
+
+/**
+ * Returns safe diagnostics about the configured SFTP key (for debugging auth failures).
+ * Does not expose key content.
+ */
+export function getSFTPKeyDiagnostics(): {
+  keyConfigured: boolean;
+  keyPathResolved?: string;
+  keyPathExists: boolean;
+  keyFormatValid: boolean;
+  host: string;
+  username: string;
+} {
+  const host = process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net";
+  const username = process.env.SFTP_USERNAME || "sftpviteezya";
+  const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
+  const fromEnv = !!process.env.SFTP_PRIVATE_KEY;
+
+  if (fromEnv) {
+    const raw = process.env.SFTP_PRIVATE_KEY || "";
+    const valid = raw.includes("-----BEGIN") && raw.includes("-----END");
+    return {
+      keyConfigured: true,
+      keyPathExists: true,
+      keyFormatValid: valid,
+      host,
+      username,
+    };
+  }
+
+  if (!privateKeyPath) {
+    return { keyConfigured: false, keyPathExists: false, keyFormatValid: false, host, username };
+  }
+
+  const resolvedPath = path.isAbsolute(privateKeyPath)
+    ? privateKeyPath
+    : path.resolve(process.cwd(), privateKeyPath);
+  const exists = fs.existsSync(resolvedPath);
+  let keyFormatValid = false;
+  if (exists) {
+    try {
+      const raw = fs.readFileSync(resolvedPath, "utf8").trim();
+      keyFormatValid =
+        (raw.startsWith("-----BEGIN RSA PRIVATE KEY-----") ||
+          raw.startsWith("-----BEGIN OPENSSH PRIVATE KEY-----")) &&
+        raw.includes("-----END");
+    } catch {
+      keyFormatValid = false;
+    }
+  }
+
+  return {
+    keyConfigured: !!privateKeyPath,
+    keyPathResolved: resolvedPath,
+    keyPathExists: exists,
+    keyFormatValid,
+    host,
+    username,
+  };
 }
 
 /**
@@ -23,23 +119,7 @@ export async function uploadToSFTP(
   remotePath: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const config: SFTPConfig = {
-      host: process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net",
-      username: process.env.SFTP_USERNAME || "sftpviteezya",
-      port: parseInt(process.env.SFTP_PORT || "22"),
-    };
-
-    // Load private key
-    const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
-    if (privateKeyPath && fs.existsSync(privateKeyPath)) {
-      config.privateKey = fs.readFileSync(privateKeyPath);
-    } else if (process.env.SFTP_PRIVATE_KEY) {
-      config.privateKey = process.env.SFTP_PRIVATE_KEY;
-    } else {
-      reject(new Error("SFTP private key not configured"));
-      return;
-    }
-
+    const config = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -88,7 +168,7 @@ export async function uploadToSFTP(
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config);
+      .connect(config as ConnectConfig);
   });
 }
 
@@ -100,23 +180,7 @@ export async function downloadFromSFTP(
   localFilePath: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const config: SFTPConfig = {
-      host: process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net",
-      username: process.env.SFTP_USERNAME || "sftpviteezya",
-      port: parseInt(process.env.SFTP_PORT || "22"),
-    };
-
-    // Load private key
-    const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
-    if (privateKeyPath && fs.existsSync(privateKeyPath)) {
-      config.privateKey = fs.readFileSync(privateKeyPath);
-    } else if (process.env.SFTP_PRIVATE_KEY) {
-      config.privateKey = process.env.SFTP_PRIVATE_KEY;
-    } else {
-      reject(new Error("SFTP private key not configured"));
-      return;
-    }
-
+    const config = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -149,7 +213,7 @@ export async function downloadFromSFTP(
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config);
+      .connect(config as ConnectConfig);
   });
 }
 
@@ -158,23 +222,7 @@ export async function downloadFromSFTP(
  */
 export async function listSFTPFiles(remoteDir: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const config: SFTPConfig = {
-      host: process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net",
-      username: process.env.SFTP_USERNAME || "sftpviteezya",
-      port: parseInt(process.env.SFTP_PORT || "22"),
-    };
-
-    // Load private key
-    const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
-    if (privateKeyPath && fs.existsSync(privateKeyPath)) {
-      config.privateKey = fs.readFileSync(privateKeyPath);
-    } else if (process.env.SFTP_PRIVATE_KEY) {
-      config.privateKey = process.env.SFTP_PRIVATE_KEY;
-    } else {
-      reject(new Error("SFTP private key not configured"));
-      return;
-    }
-
+    const config = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -206,6 +254,6 @@ export async function listSFTPFiles(remoteDir: string): Promise<string[]> {
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config);
+      .connect(config as ConnectConfig);
   });
 }

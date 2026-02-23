@@ -294,8 +294,8 @@ export class PostNLResponseJob {
 // Create singleton instance
 export const postNLResponseJob = new PostNLResponseJob();
 
-// Schedule the job to run every 1 minute (or as configured)
-const cronSchedule = process.env.POSTNL_RESPONSE_JOB_SCHEDULE || "* * * * *";
+// Schedule: every 5 minutes (override via POSTNL_RESPONSE_JOB_SCHEDULE)
+const cronSchedule = process.env.POSTNL_RESPONSE_JOB_SCHEDULE || "*/5 * * * *";
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

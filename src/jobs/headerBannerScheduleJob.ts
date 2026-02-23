@@ -10,7 +10,7 @@ import { DeviceType } from "@/models/enums";
  * - Activates banners whose startDate has arrived
  * - Deactivates banners whose endDate has passed
  * 
- * Runs every minute to ensure timely activation/deactivation
+ * Runs every 5 minutes to ensure timely activation/deactivation
  */
 export class HeaderBannerScheduleJob {
   private isRunning: boolean = false;
@@ -188,19 +188,19 @@ const runScheduleCheck = async () => {
   }
 };
 
-// 1) Cron: run at the start of every minute (backup)
-const cronSchedule = "*/1 * * * *";
+// 1) Cron: every 5 minutes
+const cronSchedule = process.env.HEADER_BANNER_CRON_SCHEDULE || "*/5 * * * *";
 const cronTask = cron.schedule(cronSchedule, () => {
   logger.info("🕐 [CRON] Scheduled header banner job triggered");
   runScheduleCheck();
 });
 cronTask.start();
 
-// 2) setInterval: run every 30 seconds so banners activate within 30 sec of start time
-const INTERVAL_MS = 30 * 1000;
+// 2) setInterval: run every 2 minutes so banners activate close to start time
+const INTERVAL_MS = 2 * 60 * 1000;
 const intervalId = setInterval(runScheduleCheck, INTERVAL_MS);
 
 // Run once on startup after 5 seconds (so DB is ready)
 setTimeout(runScheduleCheck, 5000);
 
-logger.info(`✅ Header banner schedule: cron every minute + check every 30s (${process.env.NODE_ENV || "development"} mode)`);
+logger.info(`✅ Header banner schedule: cron ${cronSchedule} + check every 2 min`);

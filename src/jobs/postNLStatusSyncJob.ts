@@ -2,7 +2,11 @@ import cron from "node-cron";
 import { Orders } from "@/models/commerce";
 import { Shipments } from "@/models/commerce";
 import { OrderStatus, ShipmentStatus } from "@/models/enums";
+import { User } from "@/models/core";
+import type { SupportedLanguage } from "@/models/common.model";
+import { getUserLanguageCode } from "@/utils/translationUtils";
 import { logger } from "@/utils/logger";
+import { sendPickupPointSms } from "@/services/smsService";
 import axios from "axios";
 
 /**
@@ -282,11 +286,11 @@ export class PostNLStatusSyncJob {
   }
 
   /**
-   * Send SMS to customer when shipment is at pickup point
+   * Send SMS to customer when shipment is at pickup point (Infobip).
+   * Message language = user's selected language in profile (User.language).
    */
   private async sendPickupPointSMS(shipment: any): Promise<void> {
     try {
-      // Get order and address to find customer phone
       const order = await Orders.findById(shipment.orderId)
         .populate("shippingAddressId")
         .lean();
@@ -296,7 +300,6 @@ export class PostNLStatusSyncJob {
         return;
       }
 
-      // Get phone from shipping address
       const address = order.shippingAddressId as any;
       const phone = address?.phone;
 
@@ -305,17 +308,32 @@ export class PostNLStatusSyncJob {
         return;
       }
 
-      // TODO: Implement SMS service (Infobip or similar)
-      // For now, just log - SMS service needs to be implemented
-      logger.info(
-        `SMS should be sent to ${phone} for shipment at pickup point. Order: ${order.orderNumber}, Tracking URL: ${shipment.trackingUrl}`
-      );
+      if (!shipment.trackingUrl) {
+        logger.warn(`Tracking URL not found for shipment ${shipment._id}`);
+        return;
+      }
 
-      // Example SMS service call (to be implemented):
-      // await smsService.sendSMS({
-      //   to: phone,
-      //   message: `Your order ${order.orderNumber} is ready for pickup at PostNL location. Track your package: ${shipment.trackingUrl}`
-      // });
+      // User's preferred language from profile (table selection in V2)
+      let language: SupportedLanguage = "en";
+      try {
+        const user = await User.findById((order as any).userId)
+          .select("language")
+          .lean();
+        if (user?.language) {
+          language = getUserLanguageCode(user.language);
+        }
+      } catch {
+        // fallback to en
+      }
+
+      await sendPickupPointSms({
+        toPhone: phone,
+        countryCode: address?.country || "NL",
+        firstName: address?.firstName || "",
+        trackingUrl: shipment.trackingUrl,
+        orderNumber: order.orderNumber,
+        language,
+      });
     } catch (error: any) {
       logger.error(`Failed to send pickup point SMS: ${error.message}`);
       // Don't throw - SMS failure shouldn't block status update
@@ -347,8 +365,8 @@ export class PostNLStatusSyncJob {
 // Create singleton instance
 export const postNLStatusSyncJob = new PostNLStatusSyncJob();
 
-// Schedule the job to run every 1 minute (or as configured)
-const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "* * * * *";
+// Schedule: every 30 minutes (override via POSTNL_STATUS_SYNC_SCHEDULE)
+const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "*/30 * * * *";
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

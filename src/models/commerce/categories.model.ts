@@ -85,9 +85,10 @@ ProductCategorySchema.index({
   "description.nl": "text",
 });
 
-// Other indexes
+// Other indexes (compound for landing page: find + sort createdAt)
 ProductCategorySchema.index({ isActive: 1, sortOrder: 1 });
 ProductCategorySchema.index({ isActive: 1, productCount: -1 });
+ProductCategorySchema.index({ isActive: 1, isDeleted: 1, createdAt: -1 });
 
 export const ProductCategory = mongoose.model<IProductCategory>(
   "product_categories",

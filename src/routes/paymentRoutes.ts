@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { paymentController } from "@/controllers/paymentController";
 import { authMiddleware } from "../middleware/auth";
+import { listSFTPFiles, getSFTPKeyDiagnostics } from "@/utils/sftpUploader";
 import {
   validatePayment,
   validatePaymentParams,
@@ -18,6 +19,54 @@ const router = Router();
 
 // IMPORTANT: Specific routes MUST come before parameterized routes (/:paymentId)
 // Otherwise, Express will match /method to /:paymentId with paymentId = "method"
+
+/**
+ * @route   GET /api/v1/payments/sftp/test
+ * @desc    Test SFTP connection (PostNL) – lists root dir to verify key & connectivity
+ * @access  Public (dev/test only)
+ */
+router.get("/sftp/test", async (req: Request, res: Response) => {
+  const diagnostics = getSFTPKeyDiagnostics();
+  try {
+    if (!diagnostics.keyConfigured || !diagnostics.keyPathExists) {
+      return res.status(400).json({
+        success: false,
+        message: "SFTP key not configured or file missing",
+        diagnostics,
+      });
+    }
+    if (!diagnostics.keyFormatValid) {
+      return res.status(400).json({
+        success: false,
+        message: "SFTP key file invalid (must be PEM: BEGIN ... END)",
+        diagnostics,
+      });
+    }
+    const dir = (req.query.dir as string) || "/";
+    const files = await listSFTPFiles(dir);
+    return res.status(200).json({
+      success: true,
+      message: "SFTP connection successful",
+      directory: dir,
+      fileCount: files.length,
+      files: files.slice(0, 20),
+      diagnostics: { host: diagnostics.host, username: diagnostics.username },
+    });
+  } catch (err: any) {
+    const isAuth = /authentication|auth methods failed/i.test(err?.message || "");
+    return res.status(500).json({
+      success: false,
+      message: "SFTP connection failed",
+      error: err?.message || String(err),
+      diagnostics,
+      hint: isAuth
+        ? "Key is loaded but server rejected it. Ensure this exact key is registered in PostNL portal for user '" +
+          diagnostics.username +
+          "' and the host is correct."
+        : undefined,
+    });
+  }
+});
 
 /**
  * @route   GET /api/v1/payments/methods

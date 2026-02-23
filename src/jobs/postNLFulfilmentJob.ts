@@ -320,9 +320,9 @@ export class PostNLFulfilmentJob {
 // Create singleton instance
 export const postNLFulfilmentJob = new PostNLFulfilmentJob();
 
-// Schedule the job to run every 1 minute (or as configured)
+// Schedule: every 5 minutes (override via POSTNL_FULFILMENT_JOB_SCHEDULE)
 const cronSchedule =
-  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "* * * * *";
+  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "*/5 * * * *";
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

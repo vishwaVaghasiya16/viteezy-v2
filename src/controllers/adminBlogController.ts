@@ -20,6 +20,22 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+const EXCERPT_MAX_LENGTH = 200;
+
+/** Generate excerpt from HTML/text: strip tags, trim, take first N chars. */
+function excerptFromI18n(i18nDesc: Record<string, string> | undefined): Record<string, string> {
+  if (!i18nDesc || typeof i18nDesc !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [lang, text] of Object.entries(i18nDesc)) {
+    if (typeof text !== "string") continue;
+    const stripped = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    out[lang] = stripped.length > EXCERPT_MAX_LENGTH
+      ? stripped.slice(0, EXCERPT_MAX_LENGTH).trim() + "…"
+      : stripped;
+  }
+  return out;
+}
+
 class AdminBlogController {
   private normalizeCoverImageInput(value: any): string | null {
     if (value === undefined || value === null) {
@@ -84,6 +100,7 @@ class AdminBlogController {
       const {
         title,
         description,
+        excerpt,
         seo,
         coverImage,
         isActive = true,
@@ -134,9 +151,15 @@ class AdminBlogController {
         }
       }
 
+      const desc = description || {};
+      const excerptValue = excerpt && Object.keys(excerpt).length > 0
+        ? excerpt
+        : excerptFromI18n(desc as Record<string, string>);
+
       const blog = await Blogs.create({
         title,
-        description: description || {},
+        description: desc,
+        excerpt: excerptValue,
         seo: seo || {},
         coverImage: coverImageUrl ?? null,
         isActive,
@@ -243,6 +266,7 @@ class AdminBlogController {
       const {
         title,
         description,
+        excerpt,
         seo,
         coverImage,
         isActive,
@@ -296,7 +320,17 @@ class AdminBlogController {
       }
 
       if (title) blog.title = title;
-      if (description) blog.description = description;
+      if (description) {
+        blog.description = description;
+        // Auto-fill excerpt from description if not provided
+        const newExcerpt = excerpt && Object.keys(excerpt).length > 0
+          ? excerpt
+          : excerptFromI18n(description as Record<string, string>);
+        if (Object.keys(newExcerpt).length > 0) {
+          blog.excerpt = { ...(blog.excerpt || {}), ...newExcerpt };
+        }
+      }
+      if (excerpt && Object.keys(excerpt).length > 0) blog.excerpt = excerpt;
       if (seo) blog.seo = seo;
       if (isActive !== undefined) blog.isActive = isActive;
 

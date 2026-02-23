@@ -460,8 +460,8 @@ class MembershipController {
    * @access Private
    *
    * Cancellation window:
-   * - Cancellation is NOT allowed in the last 15 days before membership expiry (any plan).
-   * - Example: 1-month plan → cancel allowed in first ~15 days; not in last 15 days.
+   * - Cancellation is NOT allowed in the last 10 days before membership expiry (any plan).
+   * - Example: 1-month plan → cancel allowed in first ~20 days; not in last 10 days.
    *
    * Refund Rules:
    * - Quarterly Plan: No cancellation or refund allowed
@@ -495,8 +495,8 @@ class MembershipController {
         throw new AppError("Membership is already cancelled", 400);
       }
 
-      // Do not allow cancellation in the last 15 days before expiry (any plan)
-      const LAST_DAYS_NO_CANCEL = 15;
+      // Do not allow cancellation in the last 10 days before expiry (any plan)
+      const LAST_DAYS_NO_CANCEL = 10;
       const expiresAt = membership.expiresAt ? new Date(membership.expiresAt) : null;
       if (expiresAt) {
         const now = new Date();
