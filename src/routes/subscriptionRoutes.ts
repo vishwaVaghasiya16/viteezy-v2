@@ -11,6 +11,8 @@ import {
   getSubscriptionDetailsParamsSchema,
   getSubscriptionsQuerySchema,
   pauseSubscriptionSchema,
+  addProductsToSubscriptionSchema,
+  removeProductsFromSubscriptionSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
 
@@ -100,5 +102,33 @@ router.post(
  * @access  Private
  */
 router.get("/widget/overview", subscriptionController.getSubscriptionWidget);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/products
+ * @desc    Add products to active subscription
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to add
+ */
+router.post(
+  "/:subscriptionId/products",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(addProductsToSubscriptionSchema),
+  subscriptionController.addProductsToSubscription
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/products/remove
+ * @desc    Remove products from active subscription
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to remove
+ */
+router.post(
+  "/:subscriptionId/products/remove",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(removeProductsFromSubscriptionSchema),
+  subscriptionController.removeProductsFromSubscription
+);
 
 export default router;

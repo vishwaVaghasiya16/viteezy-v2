@@ -110,3 +110,35 @@ export const getSubscriptionsQuerySchema = Joi.object(
 export const pauseSubscriptionSchema = Joi.object(withFieldLabels({})).label(
   "PauseSubscriptionPayload"
 );
+
+/**
+ * Joi schema for adding products to subscription
+ */
+export const addProductsToSubscriptionSchema = Joi.object(
+  withFieldLabels({
+    productIds: Joi.array()
+      .items(objectIdSchema)
+      .min(1)
+      .required()
+      .label("Product IDs"),
+    paymentMethod: Joi.string()
+      .valid(...PAYMENT_METHOD_VALUES)
+      .required()
+      .label("Payment Method"),
+    shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
+    billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
+  })
+).label("AddProductsToSubscriptionPayload");
+
+/**
+ * Joi schema for removing products from subscription
+ */
+export const removeProductsFromSubscriptionSchema = Joi.object(
+  withFieldLabels({
+    productIds: Joi.array()
+      .items(objectIdSchema)
+      .min(1)
+      .required()
+      .label("Product IDs"),
+  })
+).label("RemoveProductsFromSubscriptionPayload");

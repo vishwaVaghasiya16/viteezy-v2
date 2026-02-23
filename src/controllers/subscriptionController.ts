@@ -2,15 +2,23 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Subscriptions, Orders } from "@/models/commerce";
+import { Subscriptions, Orders, Products } from "@/models/commerce";
+import { User, Addresses } from "@/models/core";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
   OrderPlanType,
   PaymentStatus,
+  ProductVariant,
+  OrderStatus,
+  PaymentMethod,
 } from "@/models/enums";
 import { logger } from "@/utils/logger";
 import { computeSubscriptionMetrics } from "@/services/subscriptionService";
+import { getSubscriptionPriceFromProduct } from "@/utils/productSubscriptionPrice";
+import { calculateMemberPrice } from "@/utils/membershipPrice";
+import { getTranslatedString } from "@/utils/translationUtils";
+import { paymentService } from "@/services/payment/PaymentService";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -670,6 +678,582 @@ class SubscriptionController {
                 subscriptionId: subscription._id,
               },
             },
+          },
+        },
+      });
+    }
+  );
+
+  /**
+   * Add products to active subscription
+   * @route POST /api/subscriptions/:subscriptionId/products
+   * @access Private
+   */
+  addProductsToSubscription = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { productIds, paymentMethod, shippingAddressId, billingAddressId } = req.body;
+
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Validate payment method
+      if (!paymentMethod || !Object.values(PaymentMethod).includes(paymentMethod)) {
+        throw new AppError("Valid payment method is required", 400);
+      }
+
+      // Validate shipping address
+      if (!shippingAddressId) {
+        throw new AppError("Shipping address is required", 400);
+      }
+
+      // Verify shipping address belongs to user
+      const shippingAddress = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(shippingAddressId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!shippingAddress) {
+        throw new AppError("Shipping address not found or does not belong to user", 404);
+      }
+
+      // Verify billing address if provided
+      let billingAddress = null;
+      if (billingAddressId) {
+        billingAddress = await Addresses.findOne({
+          _id: new mongoose.Types.ObjectId(billingAddressId),
+          userId,
+          isDeleted: false,
+        });
+
+        if (!billingAddress) {
+          throw new AppError("Billing address not found or does not belong to user", 404);
+        }
+      }
+
+      // Find subscription
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Validate subscription is active
+      if (subscription.status !== SubscriptionStatus.ACTIVE) {
+        throw new AppError(
+          "Products can only be added to active subscriptions",
+          400
+        );
+      }
+
+      // Validate productIds
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        throw new AppError("At least one product ID is required", 400);
+      }
+
+      // Fetch products
+      const productObjectIds = productIds.map(
+        (id: string) => new mongoose.Types.ObjectId(id)
+      );
+      const products = await Products.find({
+        _id: { $in: productObjectIds },
+        isDeleted: false,
+      }).lean();
+
+      if (products.length !== productIds.length) {
+        throw new AppError("One or more products are unavailable", 400);
+      }
+
+      // Check if products already exist in subscription
+      const existingProductIds = subscription.items.map((item: any) =>
+        item.productId.toString()
+      );
+      const newProductIds = productIds.filter(
+        (id: string) => !existingProductIds.includes(id)
+      );
+
+      if (newProductIds.length === 0) {
+        throw new AppError(
+          "All products are already in the subscription",
+          400
+        );
+      }
+
+      // Validate products support SACHETS variant (subscriptions only support SACHETS)
+      const invalidProducts = products.filter(
+        (product: any) => !product.sachetPrices
+      );
+      if (invalidProducts.length > 0) {
+        throw new AppError(
+          "One or more products do not support subscription (SACHETS variant)",
+          400
+        );
+      }
+
+      // Calculate pricing for new products
+      const cycleDays = subscription.cycleDays;
+      const user = await User.findById(userId).lean();
+
+      const newItems: any[] = [];
+      for (const product of products) {
+        if (!newProductIds.includes(product._id.toString())) {
+          continue; // Skip if already in subscription
+        }
+
+        // Get subscription price based on cycleDays
+        const subscriptionPrice = getSubscriptionPriceFromProduct(
+          product,
+          cycleDays as SubscriptionCycle
+        );
+
+        // Calculate member price if user is a member
+        let finalPrice = subscriptionPrice.amount;
+        let membershipDiscountAmount = 0;
+        if (user) {
+          const memberPriceResult = await calculateMemberPrice(product, user);
+          if (memberPriceResult.isMember && memberPriceResult.discountAmount > 0) {
+            finalPrice = memberPriceResult.memberPrice.amount;
+            membershipDiscountAmount = memberPriceResult.discountAmount;
+          }
+        }
+
+        // Calculate tax
+        const taxAmount = finalPrice * (subscriptionPrice.taxRate || 0);
+
+        // Get plan details based on cycleDays
+        let planDays: number | undefined;
+        let selectedPlan: any = null;
+
+        switch (cycleDays) {
+          case 30:
+            selectedPlan = product.sachetPrices?.thirtyDays;
+            planDays = 30;
+            break;
+          case 60:
+            selectedPlan = product.sachetPrices?.sixtyDays;
+            planDays = 60;
+            break;
+          case 90:
+            selectedPlan = product.sachetPrices?.ninetyDays;
+            planDays = 90;
+            break;
+          case 180:
+            selectedPlan = product.sachetPrices?.oneEightyDays;
+            planDays = 180;
+            break;
+        }
+
+        if (!selectedPlan) {
+          const productTitle = typeof product.title === "string" 
+            ? product.title 
+            : getTranslatedString(product.title, "en") || product._id?.toString();
+          throw new AppError(
+            `Product ${productTitle} does not support ${cycleDays}-day subscription plan`,
+            400
+          );
+        }
+
+        // Calculate subscription plan discount (15% for 90-day plan)
+        let subscriptionPlanDiscountAmount = 0;
+        if (cycleDays === 90) {
+          subscriptionPlanDiscountAmount = finalPrice * 0.15;
+        }
+
+        // Total = discounted price (after membership discount) - subscription plan discount + tax
+        const totalAmount = finalPrice - subscriptionPlanDiscountAmount + taxAmount;
+
+        const productName = typeof product.title === "string"
+          ? product.title
+          : getTranslatedString(product.title, "en") || getTranslatedString(product.title, "nl") || product.slug || "Product";
+        
+        const productIdString = product._id?.toString ? product._id.toString() : String(product._id || "");
+        
+        newItems.push({
+          productId: new mongoose.Types.ObjectId(productIdString),
+          name: productName,
+          variantType: ProductVariant.SACHETS,
+          planDays,
+          capsuleCount: selectedPlan.capsuleCount,
+          quantity: 1, // SACHETS always have quantity 1
+          amount: Math.round(subscriptionPrice.amount * 100) / 100,
+          discountedPrice: Math.round(finalPrice * 100) / 100,
+          taxRate: subscriptionPrice.taxRate || 0,
+          totalAmount: Math.round(totalAmount * 100) / 100,
+          durationDays: selectedPlan.durationDays || planDays,
+          savingsPercentage: selectedPlan.savingsPercentage,
+          features: Array.isArray(selectedPlan.features) ? selectedPlan.features : [],
+        });
+      }
+
+      // Calculate pricing for NEW items only (for order)
+      const newItemsSubTotal = newItems.reduce(
+        (sum: number, item: any) => sum + (item.amount || 0),
+        0
+      );
+      const newItemsDiscountedPrice = newItems.reduce(
+        (sum: number, item: any) => sum + (item.discountedPrice || 0),
+        0
+      );
+      const newItemsMembershipDiscount = newItems.reduce(
+        (sum: number, item: any) => {
+          const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
+          return sum + Math.max(0, itemDiscount);
+        },
+        0
+      );
+      const newItemsSubscriptionPlanDiscount = cycleDays === 90
+        ? newItemsDiscountedPrice * 0.15
+        : 0;
+      const newItemsTaxAmount = newItems.reduce(
+        (sum: number, item: any) => {
+          const itemTotal = item.discountedPrice || 0;
+          return sum + (itemTotal * (item.taxRate || 0));
+        },
+        0
+      );
+      const newItemsGrandTotal = newItemsDiscountedPrice - newItemsSubscriptionPlanDiscount + newItemsTaxAmount;
+
+      // Generate order number
+      const generateOrderNumber = (): string => {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 9000) + 1000;
+        return `VTZ-${timestamp}-${random}`;
+      };
+
+      // Create order with new items
+      const order = await Orders.create({
+        orderNumber: generateOrderNumber(),
+        userId,
+        status: OrderStatus.PENDING,
+        planType: OrderPlanType.SUBSCRIPTION,
+        isOneTime: false,
+        variantType: ProductVariant.SACHETS,
+        selectedPlanDays: cycleDays,
+        items: newItems,
+        subTotal: Math.round(newItemsSubTotal * 100) / 100,
+        discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
+        couponDiscountAmount: 0,
+        membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
+        subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+        taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
+        grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
+        currency: subscription.pricing?.currency || "EUR",
+        pricing: {
+          sachets: {
+            subTotal: Math.round(newItemsSubTotal * 100) / 100,
+            discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
+            membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
+            subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+            taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
+            total: Math.round(newItemsGrandTotal * 100) / 100,
+            currency: subscription.pricing?.currency || "EUR",
+          },
+          overall: {
+            subTotal: Math.round(newItemsSubTotal * 100) / 100,
+            discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
+            couponDiscountAmount: 0,
+            membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
+            subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+            taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
+            grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
+            currency: subscription.pricing?.currency || "EUR",
+          },
+        },
+        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        billingAddressId: billingAddressId
+          ? new mongoose.Types.ObjectId(billingAddressId)
+          : undefined,
+        paymentMethod,
+        paymentStatus: PaymentStatus.PENDING,
+        metadata: {
+          subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+          subscriptionNumber: subscription.subscriptionNumber,
+          isSubscriptionAddItems: true,
+        },
+      });
+
+      // Create payment for the order
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const returnUrl = `${frontendUrl}/subscriptions/${subscriptionId}?payment=success`;
+      const cancelUrl = `${frontendUrl}/subscriptions/${subscriptionId}?payment=cancelled`;
+
+      const paymentResult = await paymentService.createPayment({
+        orderId: (order._id as mongoose.Types.ObjectId).toString(),
+        userId: userId.toString(),
+        paymentMethod: paymentMethod as PaymentMethod,
+        amount: {
+          value: Math.round(newItemsGrandTotal * 100) / 100,
+          currency: subscription.pricing?.currency || "EUR",
+        },
+        description: `Payment for adding products to subscription ${subscription.subscriptionNumber}`,
+        metadata: {
+          subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+          subscriptionNumber: subscription.subscriptionNumber,
+          isSubscriptionAddItems: "true",
+        },
+        returnUrl,
+        cancelUrl,
+      });
+
+      // Add new items to subscription
+      subscription.items.push(...newItems);
+
+      // Recalculate subscription pricing (for all items)
+      const subTotal = subscription.items.reduce(
+        (sum: number, item: any) => sum + (item.amount || 0),
+        0
+      );
+      const discountedPrice = subscription.items.reduce(
+        (sum: number, item: any) => sum + (item.discountedPrice || 0),
+        0
+      );
+      
+      // Calculate membership discount (difference between original and discounted price)
+      const membershipDiscountAmount = subscription.items.reduce(
+        (sum: number, item: any) => {
+          const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
+          return sum + Math.max(0, itemDiscount);
+        },
+        0
+      );
+      
+      // Calculate subscription plan discount (15% for 90-day plan, applied to discounted price)
+      const subscriptionPlanDiscountAmount = cycleDays === 90
+        ? discountedPrice * 0.15
+        : 0;
+      
+      // Calculate tax on discounted price (after membership discount, before subscription plan discount)
+      const taxAmount = subscription.items.reduce(
+        (sum: number, item: any) => {
+          const itemTotal = item.discountedPrice || 0;
+          return sum + (itemTotal * (item.taxRate || 0));
+        },
+        0
+      );
+      
+      // Total = discounted price - subscription plan discount + tax
+      const total = discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
+
+      // Update subscription pricing
+      subscription.pricing = {
+        subTotal: Math.round(subTotal * 100) / 100,
+        discountedPrice: Math.round(discountedPrice * 100) / 100,
+        membershipDiscountAmount: Math.round(membershipDiscountAmount * 100) / 100,
+        subscriptionPlanDiscountAmount: Math.round(subscriptionPlanDiscountAmount * 100) / 100,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        total: Math.round(total * 100) / 100,
+        currency: subscription.pricing?.currency || "EUR",
+      };
+
+      // Update subscription dates (start from today, end = start + cycleDays)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      subscription.subscriptionStartDate = today;
+      
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() + cycleDays);
+      subscription.subscriptionEndDate = endDate;
+
+      // Update next delivery and billing dates
+      subscription.nextDeliveryDate = today;
+      subscription.nextBillingDate = endDate;
+
+      // Save subscription
+      await subscription.save();
+
+      logger.info(
+        `Products added to subscription ${subscription.subscriptionNumber} by user ${userId}. Order ${order.orderNumber} created with payment.`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Products added to subscription successfully. Please complete payment.",
+        data: {
+          subscription: {
+            id: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            items: subscription.items,
+            pricing: subscription.pricing,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
+            nextDeliveryDate: subscription.nextDeliveryDate,
+            nextBillingDate: subscription.nextBillingDate,
+          },
+          order: {
+            id: order._id,
+            orderNumber: order.orderNumber,
+            grandTotal: order.grandTotal,
+            currency: order.currency,
+            paymentStatus: order.paymentStatus,
+          },
+          payment: {
+            id: paymentResult.payment._id,
+            status: paymentResult.payment.status,
+            amount: paymentResult.payment.amount,
+          },
+          paymentLink: paymentResult.result.redirectUrl || null,
+        },
+      });
+    }
+  );
+
+  /**
+   * Remove products from active subscription
+   * @route DELETE /api/subscriptions/:subscriptionId/products
+   * @access Private
+   */
+  removeProductsFromSubscription = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { productIds } = req.body;
+
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Find subscription
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Validate subscription is active
+      if (subscription.status !== SubscriptionStatus.ACTIVE) {
+        throw new AppError(
+          "Products can only be removed from active subscriptions",
+          400
+        );
+      }
+
+      // Validate productIds
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        throw new AppError("At least one product ID is required", 400);
+      }
+
+      // Check if products exist in subscription
+      const existingProductIds = subscription.items.map((item: any) =>
+        item.productId.toString()
+      );
+      const productsToRemove = productIds.filter((id: string) =>
+        existingProductIds.includes(id)
+      );
+
+      if (productsToRemove.length === 0) {
+        throw new AppError(
+          "None of the specified products are in the subscription",
+          400
+        );
+      }
+
+      // Remove products from subscription items
+      subscription.items = subscription.items.filter(
+        (item: any) => !productIds.includes(item.productId.toString())
+      );
+
+      // Validate at least one item remains
+      if (subscription.items.length === 0) {
+        throw new AppError(
+          "Cannot remove all products from subscription. Cancel the subscription instead.",
+          400
+        );
+      }
+
+      // Recalculate subscription pricing
+      const cycleDays = subscription.cycleDays;
+      const subTotal = subscription.items.reduce(
+        (sum: number, item: any) => sum + (item.amount || 0),
+        0
+      );
+      const discountedPrice = subscription.items.reduce(
+        (sum: number, item: any) => sum + (item.discountedPrice || 0),
+        0
+      );
+      
+      // Calculate membership discount (difference between original and discounted price)
+      const membershipDiscountAmount = subscription.items.reduce(
+        (sum: number, item: any) => {
+          const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
+          return sum + Math.max(0, itemDiscount);
+        },
+        0
+      );
+      
+      // Calculate subscription plan discount (15% for 90-day plan, applied to discounted price)
+      const subscriptionPlanDiscountAmount = cycleDays === 90
+        ? discountedPrice * 0.15
+        : 0;
+      
+      // Calculate tax on discounted price (after membership discount, before subscription plan discount)
+      const taxAmount = subscription.items.reduce(
+        (sum: number, item: any) => {
+          const itemTotal = item.discountedPrice || 0;
+          return sum + (itemTotal * (item.taxRate || 0));
+        },
+        0
+      );
+      
+      // Total = discounted price - subscription plan discount + tax
+      const total = discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
+
+      // Update subscription pricing
+      subscription.pricing = {
+        subTotal: Math.round(subTotal * 100) / 100,
+        discountedPrice: Math.round(discountedPrice * 100) / 100,
+        membershipDiscountAmount: Math.round(membershipDiscountAmount * 100) / 100,
+        subscriptionPlanDiscountAmount: Math.round(subscriptionPlanDiscountAmount * 100) / 100,
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        total: Math.round(total * 100) / 100,
+        currency: subscription.pricing?.currency || "EUR",
+      };
+
+      // Update subscription dates (start from today, end = start + cycleDays)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      subscription.subscriptionStartDate = today;
+      
+      const endDate = new Date(today);
+      endDate.setDate(endDate.getDate() + cycleDays);
+      subscription.subscriptionEndDate = endDate;
+
+      // Update next delivery and billing dates
+      subscription.nextDeliveryDate = today;
+      subscription.nextBillingDate = endDate;
+
+      // Save subscription
+      await subscription.save();
+
+      logger.info(
+        `Products removed from subscription ${subscription.subscriptionNumber} by user ${userId}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Products removed from subscription successfully",
+        data: {
+          subscription: {
+            id: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            items: subscription.items,
+            pricing: subscription.pricing,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
+            nextDeliveryDate: subscription.nextDeliveryDate,
+            nextBillingDate: subscription.nextBillingDate,
           },
         },
       });
