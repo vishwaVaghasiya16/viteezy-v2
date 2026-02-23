@@ -35,9 +35,10 @@ from pymongo import MongoClient
 
 LOGGER = logging.getLogger("pdf_service")
 WORD_CONVERSION_LOCK = threading.Lock()
-MONGO_CLIENT_LOCK = threading.Lock()
+MONGO_CLIENT_LOCK = threading.RLock()
 SPACES_CLIENT_LOCK = threading.Lock()
 MONGO_CLIENT: MongoClient | None = None
+MONGO_DB: Any | None = None
 SPACES_CLIENT: Any | None = None
 
 
@@ -316,13 +317,27 @@ def get_mongo_client(config: Config) -> MongoClient:
         return MONGO_CLIENT
 
 
+def get_mongo_db(config: Config) -> Any:
+    global MONGO_DB
+    if MONGO_DB is not None:
+        return MONGO_DB
+
+    with MONGO_CLIENT_LOCK:
+        if MONGO_DB is not None:
+            return MONGO_DB
+        client = get_mongo_client(config)
+        MONGO_DB = client[config.mongo_db]
+        return MONGO_DB
+
+
 def close_mongo_client() -> None:
-    global MONGO_CLIENT
+    global MONGO_CLIENT, MONGO_DB
     if MONGO_CLIENT is not None:
         try:
             MONGO_CLIENT.close()
         finally:
             MONGO_CLIENT = None
+            MONGO_DB = None
 
 
 def get_spaces_client(config: Config) -> Any:
@@ -377,8 +392,7 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
     }
 
     LOGGER.info("Fetching order context from MongoDB for order_id=%s", order_id)
-    client = get_mongo_client(config)
-    db = client[config.mongo_db]
+    db = MONGO_DB if MONGO_DB is not None else get_mongo_db(config)
     orders_collection = db["orders"]
     users_collection = db["users"]
     products_collection = db["products"]
@@ -477,6 +491,7 @@ def generate_and_upload_pdf(config: Config, order_id: str) -> str:
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 router = APIRouter()
 APP_CONFIG = Config.from_env()
+MONGO_DB = get_mongo_db(APP_CONFIG)
 atexit.register(close_mongo_client)
 
 if not APP_CONFIG.template_path.exists():
