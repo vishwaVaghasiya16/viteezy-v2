@@ -82,6 +82,13 @@ const ProductTestimonialSchema = new Schema<IProductTestimonial>(
 ProductTestimonialSchema.index({ isActive: 1, isVisibleOnHomepage: 1 });
 ProductTestimonialSchema.index({ isActive: 1, isFeatured: 1 });
 ProductTestimonialSchema.index({ isActive: 1, isVisibleInLP: 1 });
+ProductTestimonialSchema.index({
+  isActive: 1,
+  isVisibleInLP: 1,
+  isDeleted: 1,
+  isFeatured: -1,
+  createdAt: -1,
+});
 ProductTestimonialSchema.index({ products: 1 });
 ProductTestimonialSchema.index({ productsForDetailsPage: 1 });
 ProductTestimonialSchema.index({ displayOrder: 1 });

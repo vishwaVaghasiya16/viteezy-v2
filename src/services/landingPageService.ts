@@ -3,19 +3,29 @@ import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
 import { ProductCategory } from "../models/commerce/categories.model";
+import { Products } from "../models/commerce/products.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductTestimonials } from "../models/cms/productTestimonials.model";
 import { Blogs } from "../models/cms/blogs.model";
 import { FAQs } from "../models/cms/faqs.model";
 import { FAQStatus } from "../models/enums";
 import { Wishlists } from "../models/commerce/wishlists.model";
+import { User } from "../models/core/users.model";
 import { cartService } from "./cartService";
 import { transformProductForLanguage } from "./productEnrichmentService";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
+/** In-memory cache for public landing page by lang (TTL 60s) to avoid repeated DB load */
+const LANDING_PAGE_CACHE_TTL_MS = 60 * 1000;
+const landingPageCache = new Map<
+  string,
+  { data: { landingPage: any }; expiry: number }
+>();
+
 /**
- * Get translated string from I18nStringType
+ * Get string for requested language from stored I18n (no runtime translation).
+ * Landing page is stored multi-language at create time; we only pick the requested lang key.
  */
 const getTranslatedString = (
   i18nString: any,
@@ -55,7 +65,7 @@ const getTranslatedString = (
 };
 
 /**
- * Get translated text from I18nTextType (can be string or object)
+ * Get text for requested language from stored I18n (no runtime translation).
  */
 const getTranslatedText = (i18nText: any, lang: SupportedLanguage): string => {
   if (!i18nText) return "";
@@ -910,10 +920,11 @@ class LandingPageService {
   }
 
   /**
-   * Get active landing page (for public use)
-   * Populates related data: product categories, testimonials, blogs, FAQs
-   * Filters sections by isEnabled and sorts by order
-   * Transforms all I18n fields to requested language
+   * Get active landing page (for public use).
+   * Populates related data: product categories, testimonials, blogs, FAQs.
+   * Filters sections by isEnabled and sorts by order.
+   * Returns content in requested language by picking from stored I18n (no runtime translation;
+   * landing page is stored in multi-language at create/update time in admin).
    * @param lang - Language code (en, nl, de, fr, es). Defaults to "en"
    * @param userId - Optional user ID for authenticated users (to add is_liked and isInCart fields)
    */
@@ -921,25 +932,116 @@ class LandingPageService {
     lang: SupportedLanguage = "en",
     userId?: string | null
   ): Promise<{ landingPage: any }> {
-    // Debug: Log the language parameter
-    console.log(`[Landing Page Service] Processing with language: ${lang}`);
+    // Cache only for public (unauthenticated) requests
+    if (!userId) {
+      const cached = landingPageCache.get(lang);
+      if (cached && cached.expiry > Date.now()) {
+        return cached.data;
+      }
+    }
+
+    const t0 = Date.now();
+    logger.debug(`[Landing Page Service] Processing with language: ${lang}`);
 
     const landingPage = await LandingPages.findOne({
       isActive: true,
       isDeleted: { $ne: true },
     })
-      .sort({ createdAt: -1 }) // Get the most recent active landing page
+      .sort({ createdAt: -1 })
       .lean();
+    const t1 = Date.now();
+    if (process.env.NODE_ENV !== "test") {
+      logger.info(`[Landing Page] DB: LandingPages.findOne took ${t1 - t0}ms`);
+    }
 
     if (!landingPage) {
       throw new AppError("No active landing page found", 404);
     }
 
-    // Debug: Log sample data structure
-    if (landingPage.heroSection?.title) {
-      console.log(
-        `[Landing Page Service] Sample title structure:`,
-        JSON.stringify(landingPage.heroSection.title).substring(0, 100)
+    // Fetch categories, blogs, FAQs, and testimonials (first query) in parallel
+    const productCategoryEnabled =
+      landingPage.productCategorySection?.isEnabled !== false;
+    const blogSectionEnabled =
+      landingPage.blogSection?.isEnabled !== false;
+    const faqSectionEnabled =
+      landingPage.faqSection?.isEnabled !== false;
+    const testimonialsEnabled =
+      landingPage.testimonialsSection?.isEnabled !== false;
+
+    const withTiming = (label: string, p: Promise<any>) => {
+      const start = Date.now();
+      return p.finally(() => {
+        if (process.env.NODE_ENV !== "test") {
+          logger.info(`[Landing Page] DB: ${label} took ${Date.now() - start}ms`);
+        }
+      });
+    };
+
+    // Testimonials: fetch without populate to avoid 13s+ nested populate; we populate products/categories in batch later
+    const testimonialsQuery = () =>
+      ProductTestimonials.find({
+        isVisibleInLP: true,
+        isActive: true,
+        isDeleted: { $ne: true },
+      })
+        .select("_id videoUrl videoThumbnail products isFeatured displayOrder")
+        .sort({ isFeatured: -1, createdAt: -1 })
+        .limit(6)
+        .lean();
+
+    const [categoriesResult, blogsResult, faqsResult, testimonialsFirst] =
+      await Promise.all([
+        productCategoryEnabled
+          ? withTiming(
+              "categories",
+              ProductCategory.find({
+                isActive: true,
+                isDeleted: { $ne: true },
+              })
+                .select("_id slug name description sortOrder icon image productCount")
+                .sort({ createdAt: -1 })
+                .limit(10)
+                .lean()
+            )
+          : Promise.resolve([]),
+        // Select excerpt (short I18n) for cards; full description only on blog detail — keeps query fast.
+        blogSectionEnabled
+          ? withTiming(
+              "blogs",
+              Blogs.find({
+                isActive: true,
+                isDeleted: { $ne: true },
+              })
+                .select("_id title excerpt coverImage seo createdAt viewCount authorId")
+                .sort({ createdAt: -1 })
+                .limit(4)
+                .lean()
+            )
+          : Promise.resolve([]),
+        faqSectionEnabled
+          ? withTiming(
+              "faqs",
+              FAQs.find({
+                isDeleted: { $ne: true },
+                $or: [
+                  { status: FAQStatus.ACTIVE },
+                  { status: { $exists: false }, isActive: { $ne: false } },
+                ],
+              })
+                .select("_id question answer sortOrder")
+                .sort({ sortOrder: 1, createdAt: -1 })
+                .limit(8)
+                .lean()
+            )
+          : Promise.resolve([]),
+        testimonialsEnabled
+          ? withTiming("testimonials", testimonialsQuery())
+          : Promise.resolve([]),
+      ]);
+    const t2 = Date.now();
+    if (process.env.NODE_ENV !== "test") {
+      logger.info(
+        `[Landing Page] DB: Promise.all(categories,blogs,faqs,testimonials) took ${t2 - t1}ms`
       );
     }
 
@@ -997,24 +1099,14 @@ class LandingPageService {
       delete processedLandingPage.howItWorksSection;
     }
 
-    // Filter and populate Product Category Section
+    // Product Category Section (use pre-fetched categoriesResult)
     if (
       landingPage.productCategorySection &&
       landingPage.productCategorySection.isEnabled !== false
     ) {
-      // Fetch latest max 10 categories dynamically from product_categories table
-      const categories = await ProductCategory.find({
-        isActive: true,
-        isDeleted: { $ne: true },
-      })
-        .select("_id slug name description sortOrder icon image productCount")
-        .sort({ createdAt: -1 }) // Latest first
-        .limit(10) // Max 10 categories
-        .lean();
-
       processedLandingPage.productCategorySection = {
         ...landingPage.productCategorySection,
-        productCategories: categories,
+        productCategories: categoriesResult,
       };
     } else {
       delete processedLandingPage.productCategorySection;
@@ -1077,59 +1169,58 @@ class LandingPageService {
       delete processedLandingPage.designedByScienceSection;
     }
 
-    // Filter and populate Testimonials Section
-    // Always fetch testimonials from ProductTestimonials model (max 6)
-    // Priority: isFeatured = true first, then latest
+    // Testimonials Section (use pre-fetched testimonialsFirst; fallback query only if empty)
     if (
       landingPage.testimonialsSection &&
       landingPage.testimonialsSection.isEnabled !== false
     ) {
-      // First try to fetch testimonials where isVisibleInLP = true and isActive = true
-      // Sort: isFeatured = true first, then by createdAt descending (latest)
-      let testimonials = await ProductTestimonials.find({
-        isVisibleInLP: true,
-        isActive: true,
-        isDeleted: { $ne: true },
-      })
-        .populate({
-          path: "products",
-          match: { isDeleted: { $ne: true } },
-          populate: [
-            {
-              path: "categories",
-              select: "sId slug name description sortOrder icon image productCount",
-            },
-          ],
-        })
-        .select(
-          "_id videoUrl videoThumbnail products isFeatured displayOrder"
-        )
-        .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
-        .limit(6) // Max 6 testimonials
-        .lean();
+      let testimonials = Array.isArray(testimonialsFirst) ? testimonialsFirst : [];
 
-      // If no testimonials found with isVisibleInLP = true, fetch latest active testimonials
-      if (!testimonials || testimonials.length === 0) {
+      if (testimonials.length === 0) {
         testimonials = await ProductTestimonials.find({
           isActive: true,
           isDeleted: { $ne: true },
         })
-          .populate({
-            path: "products",
-            match: { isDeleted: { $ne: true } },
-            populate: [
-              {
-                path: "categories",
-                select: "sId slug name description sortOrder icon image productCount",
-              },
-            ],
-          })
-          .select(
-            "_id videoUrl videoThumbnail products isFeatured displayOrder"
-          )
-          .sort({ isFeatured: -1, createdAt: -1 }) // isFeatured = true first, then latest
-          .limit(6) // Max 6 testimonials
+          .select("_id videoUrl videoThumbnail products isFeatured displayOrder")
+          .sort({ isFeatured: -1, createdAt: -1 })
+          .limit(6)
           .lean();
+      }
+
+      // Batch populate products + categories (one query instead of nested populate)
+      const productIds = new Set<string>();
+      for (const t of testimonials) {
+        const list = (t as any).products;
+        if (Array.isArray(list)) {
+          list.forEach((id: any) => {
+            if (id && mongoose.Types.ObjectId.isValid(id)) {
+              productIds.add(id.toString());
+            }
+          });
+        }
+      }
+      let productsMap = new Map<string, any>();
+      if (productIds.size > 0) {
+        const products = await Products.find({
+          _id: { $in: Array.from(productIds).map((id) => new mongoose.Types.ObjectId(id)) },
+          isDeleted: { $ne: true },
+        })
+          .populate("categories", "sId slug name description sortOrder icon image productCount")
+          .lean();
+        products.forEach((p: any) => {
+          productsMap.set(p._id.toString(), p);
+        });
+      }
+      for (const t of testimonials) {
+        const list = (t as any).products;
+        if (Array.isArray(list)) {
+          (t as any).products = list
+            .map((id: any) => {
+              const key = id?.toString?.() ?? id;
+              return productsMap.get(key) ?? null;
+            })
+            .filter(Boolean);
+        }
       }
 
         // Manually populate ingredients for all products (since ingredients is string array, not ref)
@@ -1169,24 +1260,21 @@ class LandingPageService {
           });
         }
 
-        // Get user's wishlist and cart product IDs if authenticated
+        // Wishlist/cart only for authenticated users (saves 2 DB calls for public requests)
         let userWishlistProductIds: Set<string> = new Set();
         let cartProductIds: Set<string> = new Set();
-        
         if (userId) {
           try {
-            // Get wishlist product IDs
-            const wishlistItems = await Wishlists.find({
-              userId: new mongoose.Types.ObjectId(userId),
-            })
-              .select("productId")
-              .lean();
+            const [wishlistItems, cartIds] = await Promise.all([
+              Wishlists.find({ userId: new mongoose.Types.ObjectId(userId) })
+                .select("productId")
+                .lean(),
+              cartService.getCartProductIds(userId),
+            ]);
             userWishlistProductIds = new Set(
               wishlistItems.map((item: any) => item.productId.toString())
             );
-
-            // Get cart product IDs
-            cartProductIds = await cartService.getCartProductIds(userId);
+            cartProductIds = cartIds;
           } catch (error) {
             logger.warn("Failed to fetch wishlist or cart for landing page", error);
           }
@@ -1284,29 +1372,33 @@ class LandingPageService {
       delete processedLandingPage.customerResultsSection;
     }
 
-    // Filter and fetch Blogs Section
+    // Blogs Section (use pre-fetched blogsResult; batch-fetch authors to avoid slow populate)
     if (
       landingPage.blogSection &&
       landingPage.blogSection.isEnabled !== false
     ) {
-      // Fetch recent blogs (max 4)
-      const blogs = await Blogs.find({
-        isActive: true,
-        isDeleted: { $ne: true },
-      })
-        .select("_id title description coverImage seo createdAt viewCount authorId")
-        .populate("authorId", "firstName lastName")
-        .sort({ createdAt: -1 })
-        .limit(4) // Max 4 blogs
-        .lean();
-
-      // Map authorId to author name (combine firstName and lastName)
-      const blogsWithAuthor = blogs.map((blog: any) => {
-        let authorName = null;
-        if (blog.authorId && typeof blog.authorId === "object") {
-          const firstName = blog.authorId.firstName || "";
-          const lastName = blog.authorId.lastName || "";
-          authorName = `${firstName} ${lastName}`.trim() || null;
+      const authorIds = (blogsResult as any[])
+        .map((b) => b.authorId)
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(id));
+      const uniqueAuthorIds = [...new Set(authorIds.map((id: any) => id.toString()))];
+      let authorMap = new Map<string, { firstName?: string; lastName?: string }>();
+      if (uniqueAuthorIds.length > 0) {
+        const authors = await User.find({
+          _id: { $in: uniqueAuthorIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        })
+          .select("firstName lastName")
+          .lean();
+        authors.forEach((a: any) => {
+          authorMap.set(a._id.toString(), a);
+        });
+      }
+      const blogsWithAuthor = (blogsResult as any[]).map((blog: any) => {
+        let authorName: string | null = null;
+        if (blog.authorId) {
+          const a = authorMap.get(blog.authorId.toString?.() ?? blog.authorId);
+          if (a) {
+            authorName = `${a.firstName || ""} ${a.lastName || ""}`.trim() || null;
+          }
         }
         return {
           ...blog,
@@ -1322,25 +1414,9 @@ class LandingPageService {
       delete processedLandingPage.blogSection;
     }
 
-    // Filter and fetch FAQs Section
-    // Always fetch latest FAQs from FAQs model (max 8)
+    // FAQs Section (use pre-fetched faqsResult)
     if (landingPage.faqSection && landingPage.faqSection.isEnabled !== false) {
-      // Fetch recent FAQs from FAQs collection
-      const recentFaqs = await FAQs.find({
-        isDeleted: { $ne: true },
-        $or: [
-          { status: FAQStatus.ACTIVE },
-          { status: { $exists: false }, isActive: { $ne: false } },
-        ],
-      })
-        .select("_id question answer sortOrder")
-        .sort({ sortOrder: 1, createdAt: -1 })
-        .limit(8) // Max 8 FAQs
-        .lean();
-
-      // Map sortOrder to order to maintain same response structure
-      // Keep only the fields that match the original structure: _id, question, answer, order
-      const mappedFaqs = recentFaqs.map((faq: any) => ({
+      const mappedFaqs = faqsResult.map((faq: any) => ({
         _id: faq._id,
         question: faq.question,
         answer: faq.answer,
@@ -1436,25 +1512,41 @@ class LandingPageService {
     // Add sectionOrder array to indicate display order
     processedLandingPage.sectionOrder = sections.map((s) => s.name);
 
-    // Transform all I18n fields to requested language
+    const t3 = Date.now();
+    if (process.env.NODE_ENV !== "test") {
+      logger.info(
+        `[Landing Page] Sections build (testimonials/ingredients/wishlist) took ${t3 - t2}ms`
+      );
+    }
+
+    // Pick requested language from stored I18n (no translation API)
     const transformedLandingPage = this.transformToLanguage(
       processedLandingPage,
       lang
     );
 
-    return { landingPage: transformedLandingPage };
+    const t4 = Date.now();
+    if (process.env.NODE_ENV !== "test") {
+      logger.info(
+        `[Landing Page] transformToLanguage took ${t4 - t3}ms | total ${t4 - t0}ms`
+      );
+    }
+
+    const result = { landingPage: transformedLandingPage };
+    if (!userId) {
+      landingPageCache.set(lang, {
+        data: result,
+        expiry: Date.now() + LANDING_PAGE_CACHE_TTL_MS,
+      });
+    }
+    return result;
   }
 
   /**
-   * Transform all I18n fields in landing page to single language
+   * Pick requested language from stored I18n for each field (no runtime translation).
    */
   private transformToLanguage(landingPage: any, lang: SupportedLanguage): any {
-    // Debug: Log transformation start
-    console.log(`[Transform] Starting transformation to language: ${lang}`);
-    console.log(
-      `[Transform] Sample heroSection.title before:`,
-      JSON.stringify(landingPage.heroSection?.title).substring(0, 200)
-    );
+    logger.debug(`[Transform] Starting transformation to language: ${lang}`);
 
     const transformed: any = {
       _id: landingPage._id,
@@ -1470,7 +1562,6 @@ class LandingPageService {
         landingPage.heroSection.title,
         lang
       );
-      console.log(`[Transform] Hero title after transformation:`, heroTitle);
 
       transformed.heroSection = {
         imageUrl: landingPage.heroSection.imageUrl,
@@ -1497,11 +1588,6 @@ class LandingPageService {
         isEnabled: landingPage.heroSection.isEnabled,
         order: landingPage.heroSection.order,
       };
-
-      console.log(
-        `[Transform] Hero section transformed title:`,
-        transformed.heroSection.title
-      );
     }
 
     // Transform Membership Section
@@ -1695,12 +1781,12 @@ class LandingPageService {
         blogs: (landingPage.blogSection.blogs || []).map((blog: any) => ({
           _id: blog._id,
           title: getTranslatedString(blog.title, lang),
-          description: getTranslatedText(blog.description, lang),
+          description: getTranslatedText(blog.excerpt ?? blog.description, lang),
           coverImage: blog.coverImage,
           seo: blog.seo,
           createdAt: blog.createdAt,
           viewCount: blog.viewCount,
-          author: blog.author || null, // Author name (already mapped from authorId)
+          author: blog.author || null,
         })),
         isEnabled: landingPage.blogSection.isEnabled,
         order: landingPage.blogSection.order,

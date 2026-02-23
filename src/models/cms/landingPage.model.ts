@@ -710,8 +710,9 @@ const LandingPageSchema = new Schema<ILandingPage>(
   }
 );
 
-// Indexes
+// Indexes (compound for getActiveLandingPage: findOne + sort createdAt)
 LandingPageSchema.index({ isActive: 1, isDeleted: 1 });
+LandingPageSchema.index({ isActive: 1, isDeleted: 1, createdAt: -1 });
 
 export const LandingPages = mongoose.model<ILandingPage>(
   "landing_pages",
