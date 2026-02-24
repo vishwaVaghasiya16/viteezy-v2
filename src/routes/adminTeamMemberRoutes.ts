@@ -5,7 +5,10 @@ import {
   validateParams,
   validateQuery,
 } from "@/middleware/joiValidation";
-import { upload, handleMulterError } from "@/middleware/upload";
+import {
+  teamMemberImageUpload,
+  handleTeamMemberImageUploadError,
+} from "@/middleware/teamMemberImageUpload";
 import { adminTeamMemberController } from "@/controllers/adminTeamMemberController";
 import {
   createTeamMemberSchema,
@@ -30,7 +33,7 @@ router.use(authorize("Admin"));
  */
 router.post(
   "/",
-  handleMulterError(upload.single("image"), "image"),
+  handleTeamMemberImageUploadError(teamMemberImageUpload.single("image"), "image"),
   autoTranslateMiddleware("teamMembers"), // Converts plain strings to I18n objects for supported fields
   validateJoi(createTeamMemberSchema),
   adminTeamMemberController.createTeamMember
@@ -79,7 +82,7 @@ router.get(
  */
 router.put(
   "/:id",
-  handleMulterError(upload.single("image"), "image"),
+  handleTeamMemberImageUploadError(teamMemberImageUpload.single("image"), "image"),
   validateParams(teamMemberIdParamsSchema),
   autoTranslateMiddleware("teamMembers"), // Converts plain strings to I18n objects for supported fields
   validateJoi(updateTeamMemberSchema),
