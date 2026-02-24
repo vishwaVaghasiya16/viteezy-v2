@@ -155,7 +155,9 @@ export const PAGINATION = {
  */
 export const FILE_UPLOAD = {
   /** Maximum file size in bytes (5MB) */
-  MAX_SIZE: 5 * 1024 * 1024,
+  MAX_SIZE: 10 * 1024 * 1024,
+  /** Team member image max size (10MB) - for admin team member avatar/photo */
+  TEAM_MEMBER_IMAGE_MAX_SIZE: 10 * 1024 * 1024,
   /** Allowed MIME types for image uploads */
   ALLOWED_TYPES: ["image/jpeg", "image/png", "image/gif", "image/webp"],
   /** Default upload directory path */
