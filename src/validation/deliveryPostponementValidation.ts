@@ -53,3 +53,48 @@ export const getPostponementHistoryQuerySchema = Joi.object(
 )
   .default({})
   .label("PostponementHistoryQuery");
+
+/**
+ * Admin: list all postponement requests query
+ */
+export const adminListPostponementsQuerySchema = Joi.object(
+  withFieldLabels({
+    status: Joi.string()
+      .valid(...POSTPONEMENT_STATUS_VALUES)
+      .optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  })
+)
+  .default({})
+  .label("AdminListPostponementsQuery");
+
+/**
+ * Admin: approve postponement (optional modified date)
+ */
+export const adminApprovePostponementSchema = Joi.object(
+  withFieldLabels({
+    approvedDeliveryDate: Joi.date().iso().optional(),
+  })
+).label("AdminApprovePostponementPayload");
+
+/**
+ * Admin: reject postponement (mandatory reason)
+ */
+export const adminRejectPostponementSchema = Joi.object(
+  withFieldLabels({
+    reason: Joi.string().trim().min(1).max(1000).required().messages({
+      "string.empty": "Rejection reason is required",
+      "any.required": "Rejection reason is required",
+    }),
+  })
+).label("AdminRejectPostponementPayload");
+
+/**
+ * Admin: postponement ID param
+ */
+export const adminPostponementIdParamsSchema = Joi.object(
+  withFieldLabels({
+    id: objectIdSchema.required(),
+  })
+).label("AdminPostponementIdParams");

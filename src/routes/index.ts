@@ -61,6 +61,7 @@ import notificationRoutes from "./notificationRoutes";
 import staticPageRoutes from "./staticPageRoutes";
 import contactRoutes from "./contactRoutes";
 import adminContactRoutes from "./adminContactRoutes";
+import adminDeliveryPostponementRoutes from "./adminDeliveryPostponementRoutes";
 
 const router = Router();
 
@@ -129,5 +130,6 @@ router.use("/membership-cms", membershipCmsRoutes);
 router.use("/static-pages", staticPageRoutes);
 router.use("/contact", contactRoutes);
 router.use("/admin/contacts", adminContactRoutes);
+router.use("/admin/postponements", adminDeliveryPostponementRoutes);
 
 export default router;

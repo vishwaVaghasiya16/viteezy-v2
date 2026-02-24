@@ -2192,6 +2192,78 @@ This is an automated message, please do not reply to this email.
       throw error;
     }
   }
+
+  /**
+   * Send delivery postponement approved email (and optional date update)
+   */
+  async sendPostponementApprovedEmail(options: {
+    to: string;
+    userName: string;
+    orderNumber: string;
+    approvedDeliveryDate: Date;
+    wasDateModified: boolean;
+    requestedDeliveryDate: Date;
+  }): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Postponement approved email for ${options.to}`);
+        return true;
+      }
+      const d = (x: Date) => new Date(x).toLocaleDateString(undefined, { dateStyle: "medium" });
+      const subject = options.wasDateModified
+        ? "Your Delivery Date Has Been Updated - Viteezy"
+        : "Your Delivery Postponement Has Been Approved - Viteezy";
+      const html = `
+        <p>Hello ${options.userName},</p>
+        <p>Your delivery postponement request for order <strong>${options.orderNumber}</strong> has been approved.</p>
+        ${options.wasDateModified ? `<p>We have updated your requested date to <strong>${d(options.approvedDeliveryDate)}</strong>.</p>` : ""}
+        <p><strong>New delivery date:</strong> ${d(options.approvedDeliveryDate)}</p>
+        <p>Thank you,<br>Viteezy Team</p>
+      `;
+      const text = `Hello ${options.userName}, Your delivery postponement for order ${options.orderNumber} has been approved. New delivery date: ${d(options.approvedDeliveryDate)}. Thank you, Viteezy Team.`;
+      await this.sendEmail({ to: options.to, subject, html, text });
+      logger.info(`Postponement approved email sent to ${options.to}`);
+      return true;
+    } catch (error: any) {
+      logger.error(`Failed to send postponement approved email: ${error?.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Send delivery postponement rejected email
+   */
+  async sendPostponementRejectedEmail(options: {
+    to: string;
+    userName: string;
+    orderNumber: string;
+    reason: string;
+    requestedDeliveryDate: Date;
+  }): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Postponement rejected email for ${options.to}`);
+        return true;
+      }
+      const d = (x: Date) => new Date(x).toLocaleDateString(undefined, { dateStyle: "medium" });
+      const subject = "Your Delivery Postponement Request - Viteezy";
+      const html = `
+        <p>Hello ${options.userName},</p>
+        <p>Unfortunately, your delivery postponement request for order <strong>${options.orderNumber}</strong> could not be approved.</p>
+        <p><strong>Requested date:</strong> ${d(options.requestedDeliveryDate)}</p>
+        <p><strong>Reason:</strong> ${options.reason}</p>
+        <p>If you have questions, please contact our support team.</p>
+        <p>Thank you,<br>Viteezy Team</p>
+      `;
+      const text = `Hello ${options.userName}, Your delivery postponement for order ${options.orderNumber} was not approved. Reason: ${options.reason}. Thank you, Viteezy Team.`;
+      await this.sendEmail({ to: options.to, subject, html, text });
+      logger.info(`Postponement rejected email sent to ${options.to}`);
+      return true;
+    } catch (error: any) {
+      logger.error(`Failed to send postponement rejected email: ${error?.message}`);
+      return false;
+    }
+  }
 }
 
 export const emailService = new EmailService();
