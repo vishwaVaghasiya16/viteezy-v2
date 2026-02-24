@@ -11,7 +11,7 @@ import { AboutUs } from "@/models/cms";
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
 /**
- * Get language from query parameter, default to "en"
+ * Get language from query parameter, default to 
  */
 const getLanguageFromQuery = (lang?: string): SupportedLanguage => {
   const supportedLanguages: SupportedLanguage[] = [

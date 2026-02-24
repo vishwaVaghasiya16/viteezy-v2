@@ -7,6 +7,8 @@ export interface IDeliveryPostponement extends Document {
   userId: mongoose.Types.ObjectId;
   originalDeliveryDate: Date;
   requestedDeliveryDate: Date;
+  /** Set when admin approves; if admin modifies date, this is the final approved date */
+  approvedDeliveryDate?: Date;
   reason?: string;
   status: PostponementStatus;
   adminNotes?: string;
@@ -38,6 +40,10 @@ const DeliveryPostponementSchema = new Schema<IDeliveryPostponement>(
     requestedDeliveryDate: {
       type: Date,
       required: true,
+    },
+    approvedDeliveryDate: {
+      type: Date,
+      default: null,
     },
     reason: {
       type: String,
