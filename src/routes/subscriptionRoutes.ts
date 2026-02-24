@@ -131,4 +131,16 @@ router.post(
   subscriptionController.removeProductsFromSubscription
 );
 
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/addresses
+ * @desc    Get all shipping addresses for a subscription
+ * @access  Private
+ * @params  subscriptionId
+ */
+router.get(
+  "/:subscriptionId/addresses",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.getSubscriptionAddresses
+);
+
 export default router;

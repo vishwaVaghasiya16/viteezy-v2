@@ -1256,6 +1256,87 @@ class SubscriptionController {
       });
     }
   );
+
+  /**
+   * Get all shipping addresses for a subscription
+   * @route GET /api/subscriptions/:subscriptionId/addresses
+   * @access Private
+   */
+  getSubscriptionAddresses = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Validate subscription ID
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      // Find subscription and verify it belongs to user
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      }).lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Get all unique shipping address IDs from:
+      // 1. Initial order (subscription.orderId)
+      // 2. All renewal orders (metadata.subscriptionId)
+      const addressIds = new Set<string>();
+
+      // Get initial order's shipping address
+      const initialOrder = await Orders.findOne({
+        _id: subscription.orderId,
+        isDeleted: false,
+      })
+        .select("shippingAddressId")
+        .lean();
+
+      if (initialOrder?.shippingAddressId) {
+        addressIds.add(initialOrder.shippingAddressId.toString());
+      }
+
+      // Get all renewal orders' shipping addresses
+      const renewalOrders = await Orders.find({
+        "metadata.subscriptionId": subscriptionId,
+        isDeleted: false,
+      })
+        .select("shippingAddressId")
+        .lean();
+
+      renewalOrders.forEach((order: any) => {
+        if (order.shippingAddressId) {
+          addressIds.add(order.shippingAddressId.toString());
+        }
+      });
+
+      // Fetch all unique addresses
+      const addressObjectIds = Array.from(addressIds).map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+
+      const addresses = await Addresses.find({
+        _id: { $in: addressObjectIds },
+        userId,
+        isDeleted: false,
+      })
+        .sort({ isDefault: -1, createdAt: -1 })
+        .lean();
+
+      res.apiSuccess(
+        { addresses },
+        "Shipping addresses retrieved successfully"
+      );
+    }
+  );
 }
 
 export const subscriptionController = new SubscriptionController();
