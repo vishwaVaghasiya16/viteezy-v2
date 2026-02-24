@@ -14,6 +14,8 @@ export interface ICart extends Document {
     productId: mongoose.Types.ObjectId;
     variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
     quantity?: number; // Quantity for STAND_UP_POUCH items (default: 1, always 1 for SACHETS)
+    isOneTime?: boolean; // Whether this is a one-time purchase (for SACHETS: true = one-time, false = subscription)
+    planDays?: number; // Plan days: 30 or 60 for one-time, 30/60/90/180 for subscription (SACHETS only)
     price: PriceType;
     totalAmount?: number; // Total amount (unit price * quantity) for STAND_UP_POUCH items
     addedAt: Date;
@@ -56,6 +58,14 @@ const CartSchema = new Schema<ICart>(
           type: Number,
           default: 1,
           min: 1,
+        },
+        isOneTime: {
+          type: Boolean,
+          default: false,
+        },
+        planDays: {
+          type: Number,
+          default: null,
         },
         price: {
           type: PriceSchema,

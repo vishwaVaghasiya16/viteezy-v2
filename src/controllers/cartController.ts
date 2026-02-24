@@ -114,8 +114,10 @@ export class CartController {
         productId: string;
         variantType: ProductVariant;
         quantity?: number;
+        isOneTime?: boolean;
+        planDays?: number;
       }> = [];
-      const { productId, variantType, quantity } = req.body;
+      const { productId, variantType, quantity, isOneTime, planDays } = req.body;
 
       if (productId || variantType) {
         if (!productId || !variantType) {
@@ -125,6 +127,8 @@ export class CartController {
           productId,
           variantType: variantType as ProductVariant,
           quantity: quantity ? Number(quantity) : undefined,
+          isOneTime: isOneTime !== undefined ? Boolean(isOneTime) : undefined,
+          planDays: planDays !== undefined ? Number(planDays) : undefined,
         });
       }
 
@@ -143,6 +147,8 @@ export class CartController {
         const indexedProductId = req.body[`productId_${index}`];
         const indexedVariantType = req.body[`variantType_${index}`];
         const indexedQuantity = req.body[`quantity_${index}`];
+        const indexedIsOneTime = req.body[`isOneTime_${index}`];
+        const indexedPlanDays = req.body[`planDays_${index}`];
         if (!indexedProductId || !indexedVariantType) {
           throw new AppError(
             `productId_${index} and variantType_${index} are required`,
@@ -153,6 +159,8 @@ export class CartController {
           productId: indexedProductId,
           variantType: indexedVariantType as ProductVariant,
           quantity: indexedQuantity ? Number(indexedQuantity) : undefined,
+          isOneTime: indexedIsOneTime !== undefined ? Boolean(indexedIsOneTime) : undefined,
+          planDays: indexedPlanDays !== undefined ? Number(indexedPlanDays) : undefined,
         });
       });
 
@@ -183,6 +191,8 @@ export class CartController {
         productId: string;
         variantType: ProductVariant;
         quantity?: number;
+        isOneTime?: boolean;
+        planDays?: number;
       };
       let result = await cartService.addItem(userId, firstItem);
       for (let i = 1; i < items.length; i += 1) {
@@ -190,6 +200,8 @@ export class CartController {
           productId: string;
           variantType: ProductVariant;
           quantity?: number;
+          isOneTime?: boolean;
+          planDays?: number;
         };
         result = await cartService.addItem(userId, nextItem);
       }
@@ -220,7 +232,7 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, variantType, quantity } = req.body;
+      const { productId, variantType, quantity, isOneTime, planDays } = req.body;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
@@ -251,6 +263,8 @@ export class CartController {
         productId,
         variantType: variantType as ProductVariant,
         quantity: quantity ? Number(quantity) : undefined,
+        isOneTime: isOneTime !== undefined ? Boolean(isOneTime) : undefined,
+        planDays: planDays !== undefined ? Number(planDays) : undefined,
       });
 
       res.status(200).json({

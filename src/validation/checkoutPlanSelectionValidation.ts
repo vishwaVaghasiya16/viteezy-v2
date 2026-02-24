@@ -135,6 +135,7 @@ export const checkoutPageSummarySchema = Joi.object({
 export const checkoutPageSummaryBodySchema = Joi.object(
   withFieldLabels({
     // SACHETS variant configuration - OPTIONAL (required if cart has SACHETS items)
+    // Note: isOneTime is NOT allowed for SACHETS (only subscription plans: 30, 60, 90, or 180 days)
     sachets: Joi.object({
       planDurationDays: Joi.number()
         .integer()
@@ -146,12 +147,10 @@ export const checkoutPageSummaryBodySchema = Joi.object(
           "any.only": "Plan duration must be 30, 60, 90, or 180 days",
           "any.required": "planDurationDays is required for SACHETS variant",
         }),
-      isOneTime: Joi.boolean()
-        .optional()
-        .default(false)
-        .messages({
-          "boolean.base": "isOneTime must be a boolean",
-        }),
+      // isOneTime is NOT allowed for SACHETS - only subscription plans are supported
+      isOneTime: Joi.forbidden().messages({
+        "any.unknown": "isOneTime is not allowed for SACHETS variant (only subscription plans are supported)",
+      }),
     })
       .optional()
       .messages({
@@ -164,13 +163,21 @@ export const checkoutPageSummaryBodySchema = Joi.object(
         .integer()
         .valid(30, 60)
         .default(30)
-        .required()
+        .optional()
         .messages({
           "number.base": "Capsule count must be a number",
           "any.only": "Capsule count must be 30 or 60",
-          "any.required": "capsuleCount is required for STAND_UP_POUCH variant",
         }),
-      // Quantity updates for STAND_UP_POUCH items (optional, updates cart item quantity)
+      planDays: Joi.number()
+        .integer()
+        .valid(30, 60)
+        .optional()
+        .messages({
+          "number.base": "Plan days must be a number",
+          "any.only": "Plan days must be 30 or 60 for STAND_UP_POUCH",
+        }),
+      // Quantity updates for STAND_UP_POUCH items (required if cart has STAND_UP_POUCH items)
+      // Each item can have its own capsuleCount/planDays
       itemQuantities: Joi.array()
         .items(
           Joi.object({
@@ -191,11 +198,29 @@ export const checkoutPageSummaryBodySchema = Joi.object(
                 "number.min": "Quantity must be at least 1",
                 "any.required": "quantity is required",
               }),
+            capsuleCount: Joi.number()
+              .integer()
+              .valid(30, 60)
+              .optional()
+              .messages({
+                "number.base": "Capsule count must be a number",
+                "any.only": "Capsule count must be 30 or 60",
+              }),
+            planDays: Joi.number()
+              .integer()
+              .valid(30, 60)
+              .optional()
+              .messages({
+                "number.base": "Plan days must be a number",
+                "any.only": "Plan days must be 30 or 60",
+              }),
           })
         )
+        .min(1)
         .optional()
         .messages({
           "array.base": "itemQuantities must be an array",
+          "array.min": "itemQuantities must contain at least one item",
         }),
     })
       .optional()

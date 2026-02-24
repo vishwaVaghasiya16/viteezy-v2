@@ -954,16 +954,18 @@ class CheckoutController {
       } = req.body;
 
       // Service handles both variantTypes together with separate configurations
+      // Note: isOneTime is NOT allowed for SACHETS (only subscription plans)
       const result = await checkoutService.getCheckoutPageSummary(userId, {
         sachets: sachets
           ? {
               planDurationDays: sachets.planDurationDays as 30 | 60 | 90 | 180,
-              isOneTime: sachets.isOneTime || false,
+              // isOneTime is NOT allowed for SACHETS
             }
           : undefined,
         standUpPouch: standUpPouch
           ? {
               capsuleCount: standUpPouch.capsuleCount as 30 | 60,
+              planDays: standUpPouch.planDays as 30 | 60 | undefined,
               itemQuantities: standUpPouch.itemQuantities || undefined,
             }
           : undefined,

@@ -20,12 +20,16 @@ interface AddCartItemData {
   productId: string;
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
+  isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
+  planDays?: number; // Plan days: 30/60/90/180 for SACHETS (subscription), 30/60 for STAND_UP_POUCH (one-time)
 }
 
 interface UpdateCartItemData {
   productId: string;
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
+  isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
+  planDays?: number; // Plan days: 30/60/90/180 for SACHETS (subscription), 30/60 for STAND_UP_POUCH (one-time)
 }
 
 interface RemoveCartItemData {
@@ -102,31 +106,40 @@ class CartService {
       let taxRate = 0;
 
       if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
-        // Use 30 days plan price for SACHETS
+        // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
-          originalAmount =
-            thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
+          originalAmount = thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
           discountedPrice =
             thirtyDaysPlan.discountedPrice ||
             thirtyDaysPlan.amount ||
             thirtyDaysPlan.totalAmount ||
             0;
           taxRate = thirtyDaysPlan.taxRate || 0;
+        } else {
+          // Fallback to item price if plan not found
+          originalAmount = item.price?.amount || 0;
+          discountedPrice = item.price?.amount || 0;
+          taxRate = item.price?.taxRate || 0;
         }
       } else if (
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        // Use count30 price for STAND_UP_POUCH
+        // Use planDays to select count30 or count60, default to count30
         const standupPrice = product.standupPouchPrice as any;
-        if (standupPrice.count30) {
-          originalAmount = standupPrice.count30.amount || 0;
+        const itemPlanDays = item.planDays;
+        const selectedCount = itemPlanDays === 60 && standupPrice.count60 
+          ? standupPrice.count60 
+          : standupPrice.count30 || standupPrice;
+        
+        if (selectedCount) {
+          originalAmount = selectedCount.amount || 0;
           discountedPrice =
-            standupPrice.count30.discountedPrice ||
-            standupPrice.count30.amount ||
+            selectedCount.discountedPrice ||
+            selectedCount.amount ||
             0;
-          taxRate = standupPrice.count30.taxRate || 0;
+          taxRate = selectedCount.taxRate || 0;
         } else if (standupPrice.amount) {
           originalAmount = standupPrice.amount || 0;
           discountedPrice =
@@ -401,17 +414,22 @@ class CartService {
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        // Use count30 price for STAND_UP_POUCH
+        // Use planDays to select count30 or count60, default to count30
         const standupPrice = product.standupPouchPrice as any;
-        if (standupPrice.count30) {
-          currency = standupPrice.count30.currency || "EUR";
-          taxRate = standupPrice.count30.taxRate || 0;
+        const itemPlanDays = item.planDays;
+        const selectedCount = itemPlanDays === 60 && standupPrice.count60 
+          ? standupPrice.count60 
+          : standupPrice.count30 || standupPrice;
+        
+        if (selectedCount) {
+          currency = selectedCount.currency || "EUR";
+          taxRate = selectedCount.taxRate || 0;
           // Original amount (for subtotal) - use amount field
-          originalAmount = standupPrice.count30.amount || 0;
+          originalAmount = selectedCount.amount || 0;
           // Discounted price (for discount field) - use discountedPrice field
           discountedPrice =
-            standupPrice.count30.discountedPrice ||
-            standupPrice.count30.amount ||
+            selectedCount.discountedPrice ||
+            selectedCount.amount ||
             0;
         } else if (standupPrice.amount) {
           // Fallback to simple price structure
@@ -468,6 +486,8 @@ class CartService {
         quantity: itemQuantity, // Include quantity in response
         totalAmount: item.totalAmount || totalPrice, // Include totalAmount from cart or calculated
         addedAt: item.addedAt,
+        planDays: item.planDays || null,
+        isOneTime: item.isOneTime || false,
         variantType: item.variantType,
         _id: item._id,
         product: productWithCartFlag, // Already enriched with full details from common service
@@ -547,14 +567,28 @@ class CartService {
     userId: string,
     data: AddCartItemData
   ): Promise<{ cart: any; message: string }> {
-    const { productId, variantType, quantity } = data;
+    const { productId, variantType, quantity, isOneTime, planDays } = data;
 
     // Validate variant-specific rules
     if (variantType === ProductVariant.SACHETS) {
-      // SACHETS: Always subscription, quantity must NOT be provided by client
+      // SACHETS: quantity must NOT be provided by client
       if (quantity !== undefined) {
         throw new AppError(
-          "quantity is not allowed for SACHETS products (subscription-based)",
+          "quantity is not allowed for SACHETS products",
+          400
+        );
+      }
+      // SACHETS: isOneTime is NOT allowed (only subscription plans)
+      if (isOneTime !== undefined) {
+        throw new AppError(
+          "isOneTime is not allowed for SACHETS products (only subscription plans are supported)",
+          400
+        );
+      }
+      // SACHETS: planDays is NOT allowed (planDays is only for STAND_UP_POUCH)
+      if (planDays !== undefined) {
+        throw new AppError(
+          "planDays is not allowed for SACHETS products (planDays is only for STAND_UP_POUCH)",
           400
         );
       }
@@ -564,6 +598,20 @@ class CartService {
       if (qty < 1) {
         throw new AppError(
           "STAND_UP_POUCH products require a quantity of at least 1",
+          400
+        );
+      }
+      // STAND_UP_POUCH is always one-time, isOneTime is optional (but must be true if provided)
+      if (isOneTime !== undefined && isOneTime !== true) {
+        throw new AppError(
+          "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
+          400
+        );
+      }
+      // planDays is optional for STAND_UP_POUCH (30 or 60)
+      if (planDays !== undefined && planDays !== 30 && planDays !== 60) {
+        throw new AppError(
+          "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
           400
         );
       }
@@ -594,6 +642,8 @@ class CartService {
     const productObjectId = new mongoose.Types.ObjectId(productId);
 
     // Check if item already exists in cart with same variantType
+    // For both STAND_UP_POUCH and SACHETS: productId + variantType must match
+    // planDays is NOT part of uniqueness - same product with different planDays will update existing item
     const existingItemIndex = cart.items.findIndex(
       (item: any) =>
         item.productId.toString() === productId &&
@@ -604,13 +654,13 @@ class CartService {
     const finalQuantity =
       variantType === ProductVariant.SACHETS ? 1 : quantity || 1;
 
-    // Calculate price based on variantType (same as getCart)
+    // Calculate price based on variantType, isOneTime, and planDays
     let calculatedPrice = price; // Default to validated price
     let currency = "EUR";
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
-      // Use 30 days plan price for SACHETS
+      // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
         currency = thirtyDaysPlan.currency || "EUR";
@@ -629,16 +679,20 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      // Use count30 price for STAND_UP_POUCH
+      // Use planDays to select count30 or count60, default to count30
       const standupPrice = product.standupPouchPrice as any;
-      if (standupPrice.count30) {
-        currency = standupPrice.count30.currency || "EUR";
-        taxRate = standupPrice.count30.taxRate || 0;
+      const selectedCount = planDays === 60 && standupPrice.count60 
+        ? standupPrice.count60 
+        : standupPrice.count30 || standupPrice;
+      
+      if (selectedCount) {
+        currency = selectedCount.currency || "EUR";
+        taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
           amount:
-            standupPrice.count30.discountedPrice ||
-            standupPrice.count30.amount ||
+            selectedCount.discountedPrice ||
+            selectedCount.amount ||
             0,
           taxRate,
         };
@@ -660,28 +714,39 @@ class CartService {
         : calculatedPrice.amount || 0; // For SACHETS, totalAmount = unit price (quantity always 1)
 
     if (existingItemIndex >= 0) {
-      // Item already exists with same variantType, update quantity for STAND_UP_POUCH
+      // Item already exists with same variantType, isOneTime, and planDays
       if (variantType === ProductVariant.STAND_UP_POUCH) {
+        // Preserve existing planDays if new planDays is not provided, otherwise use new planDays (default to 30)
+        const finalPlanDays = planDays !== undefined ? planDays : (updatedItems[existingItemIndex].planDays ?? 30);
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
           quantity: finalQuantity,
+          isOneTime: true, // STAND_UP_POUCH is always one-time
+          planDays: finalPlanDays, // Explicitly set planDays (number or null)
           price: calculatedPrice, // Update with calculated price
           totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
         };
       } else {
-        // SACHETS: Update price only (quantity always 1)
+        // SACHETS: Update price and planDays (quantity always 1, no isOneTime)
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
+          isOneTime: undefined, // SACHETS don't have isOneTime
+          planDays: undefined, // SACHETS don't use planDays
           price: calculatedPrice, // Update with calculated price
           totalAmount: totalAmount, // Store totalAmount (same as unit price for SACHETS)
         };
       }
     } else {
-      // Add new item with calculated price, variantType, quantity, and totalAmount
+      // Add new item with calculated price, variantType, quantity, isOneTime (only for STAND_UP_POUCH), planDays (only for STAND_UP_POUCH), and totalAmount
+      const itemPlanDays = variantType === ProductVariant.STAND_UP_POUCH 
+        ? (planDays !== undefined ? planDays : 30) // Default to 30 if not provided
+        : undefined;
       updatedItems.push({
         productId: productObjectId,
         variantType: variantType, // Store variantType in item
         quantity: finalQuantity, // Store quantity (1 for SACHETS, user-provided for STAND_UP_POUCH)
+        isOneTime: variantType === ProductVariant.STAND_UP_POUCH ? (isOneTime ?? true) : undefined,
+        planDays: itemPlanDays, // Explicitly set planDays for STAND_UP_POUCH (number or null)
         price: calculatedPrice,
         totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
         addedAt: new Date(),
@@ -789,14 +854,28 @@ class CartService {
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantType, quantity } = data;
+    const { productId, variantType, quantity, isOneTime, planDays } = data;
 
     // Validate variant-specific rules
     if (variantType === ProductVariant.SACHETS) {
-      // SACHETS: Always subscription, quantity must NOT be provided by client
+      // SACHETS: quantity must NOT be provided by client
       if (quantity !== undefined) {
         throw new AppError(
-          "quantity is not allowed for SACHETS products (subscription-based)",
+          "quantity is not allowed for SACHETS products",
+          400
+        );
+      }
+      // SACHETS: isOneTime is NOT allowed (only subscription plans)
+      if (isOneTime !== undefined) {
+        throw new AppError(
+          "isOneTime is not allowed for SACHETS products (only subscription plans are supported)",
+          400
+        );
+      }
+      // SACHETS: planDays is NOT allowed (planDays is only for STAND_UP_POUCH)
+      if (planDays !== undefined) {
+        throw new AppError(
+          "planDays is not allowed for SACHETS products (planDays is only for STAND_UP_POUCH)",
           400
         );
       }
@@ -806,6 +885,20 @@ class CartService {
       if (qty < 1) {
         throw new AppError(
           "STAND_UP_POUCH products require a quantity of at least 1",
+          400
+        );
+      }
+      // STAND_UP_POUCH is always one-time, isOneTime is optional (but must be true if provided)
+      if (isOneTime !== undefined && isOneTime !== true) {
+        throw new AppError(
+          "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
+          400
+        );
+      }
+      // planDays is optional for STAND_UP_POUCH (30 or 60)
+      if (planDays !== undefined && planDays !== 30 && planDays !== 60) {
+        throw new AppError(
+          "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
           400
         );
       }
@@ -825,17 +918,25 @@ class CartService {
     const item = cart.items[itemIndex];
     const finalQuantity =
       variantType === ProductVariant.SACHETS ? 1 : quantity || item.quantity || 1;
+    
+    // Use existing or new values for isOneTime (only for STAND_UP_POUCH) and planDays (only for STAND_UP_POUCH)
+    const finalIsOneTime = variantType === ProductVariant.STAND_UP_POUCH 
+      ? (isOneTime !== undefined ? isOneTime : (item.isOneTime ?? true))
+      : undefined;
+    const finalPlanDays = variantType === ProductVariant.STAND_UP_POUCH
+      ? (planDays !== undefined ? planDays : (item.planDays ?? 30)) // Default to 30 if not provided
+      : undefined;
 
     // Validate and get updated pricing
     const { product, price } = await this.validateAndGetPricing(productId);
 
-    // Calculate price based on variantType
+    // Calculate price based on variantType, isOneTime (for STAND_UP_POUCH), and planDays (for STAND_UP_POUCH)
     let calculatedPrice = price; // Default to validated price
     let currency = "EUR";
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
-      // Use 30 days plan price for SACHETS
+      // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
         currency = thirtyDaysPlan.currency || "EUR";
@@ -854,16 +955,20 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      // Use count30 price for STAND_UP_POUCH
+      // Use planDays to select count30 or count60, default to count30
       const standupPrice = product.standupPouchPrice as any;
-      if (standupPrice.count30) {
-        currency = standupPrice.count30.currency || "EUR";
-        taxRate = standupPrice.count30.taxRate || 0;
+      const selectedCount = finalPlanDays === 60 && standupPrice.count60 
+        ? standupPrice.count60 
+        : standupPrice.count30 || standupPrice;
+      
+      if (selectedCount) {
+        currency = selectedCount.currency || "EUR";
+        taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
           amount:
-            standupPrice.count30.discountedPrice ||
-            standupPrice.count30.amount ||
+            selectedCount.discountedPrice ||
+            selectedCount.amount ||
             0,
           taxRate,
         };
@@ -878,13 +983,25 @@ class CartService {
       }
     }
 
-    // Update item price, variantType, and quantity
+    // Calculate totalAmount
+    const totalAmount =
+      variantType === ProductVariant.STAND_UP_POUCH
+        ? (calculatedPrice.amount || 0) * finalQuantity
+        : calculatedPrice.amount || 0;
+
+    // Update item price, variantType, quantity, isOneTime (only for STAND_UP_POUCH), and planDays (only for STAND_UP_POUCH)
     const updatedItems = [...(cart.items || [])];
+    const itemPlanDays = variantType === ProductVariant.STAND_UP_POUCH 
+      ? (finalPlanDays !== undefined ? finalPlanDays : (item.planDays ?? 30)) // Default to 30 if not provided
+      : undefined;
     updatedItems[itemIndex] = {
       ...item,
       variantType: variantType, // Update variantType
       quantity: finalQuantity, // Update quantity
-      price: calculatedPrice, // Update with calculated price based on variantType
+      isOneTime: variantType === ProductVariant.STAND_UP_POUCH ? (finalIsOneTime ?? true) : undefined,
+      planDays: itemPlanDays, // Explicitly set planDays for STAND_UP_POUCH (number or null)
+      price: calculatedPrice, // Update with calculated price based on variantType and planDays (for STAND_UP_POUCH)
+      totalAmount: totalAmount,
     };
 
     // Calculate totals first without coupon to get order amount

@@ -28,15 +28,32 @@ const quantitySchema = Joi.number().integer().min(1).messages({
   "number.min": "Quantity must be at least 1",
 });
 
+const isOneTimeSchema = Joi.boolean().messages({
+  "boolean.base": "isOneTime must be a boolean",
+});
+
+const planDaysSchema = Joi.number()
+  .integer()
+  .valid(30, 60, 90, 180)
+  .messages({
+    "number.base": "Plan days must be a number",
+    "number.integer": "Plan days must be an integer",
+    "any.only": "Plan days must be 30, 60, 90, or 180",
+  });
+
 // Add item to cart schema (supports single and multiple items)
 export const addCartItemSchema = Joi.object({
   productId: productIdSchema.optional(),
   variantType: variantTypeSchema.optional(),
   quantity: quantitySchema.optional(),
+  isOneTime: isOneTimeSchema.optional(),
+  planDays: planDaysSchema.optional(),
 })
   .pattern(/^productId_\d+$/, productIdSchema)
   .pattern(/^variantType_\d+$/, variantTypeSchema)
   .pattern(/^quantity_\d+$/, quantitySchema)
+  .pattern(/^isOneTime_\d+$/, isOneTimeSchema)
+  .pattern(/^planDays_\d+$/, planDaysSchema)
   .custom((value, helpers) => {
     const hasBaseProduct = !!value.productId;
     const hasBaseVariant = !!value.variantType;
@@ -101,6 +118,35 @@ export const addCartItemSchema = Joi.object({
       }
     }
 
+    // Validate isOneTime and planDays
+    if (value.variantType === ProductVariant.SACHETS) {
+      // For SACHETS, isOneTime is NOT allowed (only subscription plans)
+      if (value.isOneTime !== undefined) {
+        return helpers.error("any.custom", {
+          message: "isOneTime is not allowed for SACHETS variantType (only subscription plans are supported)",
+        });
+      }
+      // For SACHETS, planDays is NOT allowed (planDays is only for STAND_UP_POUCH)
+      if (value.planDays !== undefined) {
+        return helpers.error("any.custom", {
+          message: "planDays is not allowed for SACHETS variantType (planDays is only for STAND_UP_POUCH)",
+        });
+      }
+    } else if (value.variantType === ProductVariant.STAND_UP_POUCH) {
+      // STAND_UP_POUCH is always one-time, isOneTime is optional (but must be true if provided)
+      if (value.isOneTime !== undefined && value.isOneTime !== true) {
+        return helpers.error("any.custom", {
+          message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
+        });
+      }
+      // planDays is optional for STAND_UP_POUCH (30 or 60)
+      if (value.planDays !== undefined && value.planDays !== 30 && value.planDays !== 60) {
+        return helpers.error("any.custom", {
+          message: "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+        });
+      }
+    }
+
     return value;
   })
   .messages({
@@ -138,7 +184,40 @@ export const updateCartItemSchema = Joi.object({
     .messages({
       "any.unknown": "Invalid quantity",
     }),
-});
+  isOneTime: isOneTimeSchema.optional(),
+  planDays: planDaysSchema.optional(),
+})
+  .custom((value, helpers) => {
+    // Validate isOneTime and planDays
+    if (value.variantType === ProductVariant.SACHETS) {
+      // For SACHETS, isOneTime is NOT allowed (only subscription plans)
+      if (value.isOneTime !== undefined) {
+        return helpers.error("any.custom", {
+          message: "isOneTime is not allowed for SACHETS variantType (only subscription plans are supported)",
+        });
+      }
+      // For SACHETS, planDays is NOT allowed (planDays is only for STAND_UP_POUCH)
+      if (value.planDays !== undefined) {
+        return helpers.error("any.custom", {
+          message: "planDays is not allowed for SACHETS variantType (planDays is only for STAND_UP_POUCH)",
+        });
+      }
+    } else if (value.variantType === ProductVariant.STAND_UP_POUCH) {
+      // STAND_UP_POUCH is always one-time, isOneTime is optional (but must be true if provided)
+      if (value.isOneTime !== undefined && value.isOneTime !== true) {
+        return helpers.error("any.custom", {
+          message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
+        });
+      }
+      // planDays is optional for STAND_UP_POUCH (30 or 60)
+      if (value.planDays !== undefined && value.planDays !== 30 && value.planDays !== 60) {
+        return helpers.error("any.custom", {
+          message: "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+        });
+      }
+    }
+    return value;
+  });
 
 // Validation middleware
 export const validateCart = (schema: Joi.ObjectSchema) => {
