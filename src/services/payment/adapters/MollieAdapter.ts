@@ -43,11 +43,26 @@ export class MollieAdapter implements IPaymentGateway {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
+      // Validate amount
+      if (!data.amount || data.amount <= 0) {
+        throw new AppError(
+          `Invalid payment amount: ${data.amount}. Amount must be greater than 0`,
+          400
+        );
+      }
+      
+      // Convert from minor units (cents) to major units (euros)
+      const amountInMajorUnits = data.amount / 100;
+      
+      logger.info(
+        `Mollie: Creating payment for order ${data.orderId}: ${amountInMajorUnits} ${data.currency} (${data.amount} minor units)`
+      );
+      
       // Build payment data object
       const paymentData: any = {
         amount: {
           currency: data.currency,
-          value: (data.amount / 100).toFixed(2), // Mollie expects amount in major currency units
+          value: amountInMajorUnits.toFixed(2), // Mollie expects amount in major currency units
         },
         description: data.description || `Order ${data.orderId}`,
         metadata: {

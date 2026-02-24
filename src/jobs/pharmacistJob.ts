@@ -193,8 +193,11 @@ export class PharmacistJob {
     }
 
     // Get recurring months from order (default to 1 if not available)
-    const recurringMonths = order.selectedPlanDays 
-      ? Math.floor(order.selectedPlanDays / 30) || 1
+    // Get planDays from first SACHETS item
+    const sachetItem = order.items?.find((item: any) => item.variantType === "SACHETS" && item.planDays);
+    const planDays = sachetItem?.planDays;
+    const recurringMonths = planDays 
+      ? Math.floor(planDays / 30) || 1
       : 1;
 
     // Determine sequence type (FIRST or RECURRING)

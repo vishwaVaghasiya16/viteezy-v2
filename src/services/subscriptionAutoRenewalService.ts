@@ -4,7 +4,7 @@ import { Payments } from "@/models/commerce/payments.model";
 import { SubscriptionRenewalHistory } from "@/models/commerce/subscriptionRenewalHistory.model";
 import { Orders } from "@/models/commerce/orders.model";
 import { User } from "@/models/core";
-import { SubscriptionStatus, PaymentStatus, PaymentMethod, OrderStatus } from "@/models/enums";
+import { SubscriptionStatus, PaymentStatus, PaymentMethod, OrderStatus, ProductVariant } from "@/models/enums";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { PaymentService } from "./payment/PaymentService";
@@ -149,12 +149,10 @@ export class SubscriptionAutoRenewalService {
                 orderNumber: renewalOrderNumber,
                 userId: subscription.userId,
                 planType: subscription.planType,
-                isOneTime: false,
-                variantType: originalOrder?.variantType,
-                selectedPlanDays: subscription.cycleDays,
                 items: subscription.items.map((item) => ({
                   productId: item.productId,
                   name: item.name,
+                  variantType: ProductVariant.SACHETS, // Subscriptions are only for SACHETS items
                   planDays: item.planDays,
                   capsuleCount: item.capsuleCount,
                   amount: item.amount,
@@ -165,17 +163,39 @@ export class SubscriptionAutoRenewalService {
                   savingsPercentage: item.savingsPercentage,
                   features: item.features || [],
                 })),
-                subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
-                discountedPrice: subscription.items.reduce(
-                  (sum, item) => sum + item.discountedPrice,
-                  0
-                ),
-                taxAmount: subscription.items.reduce(
-                  (sum, item) => sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
-                  0
-                ),
-                grandTotal: totalAmount,
-                currency: currency,
+                pricing: {
+                  sachets: {
+                    subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
+                    discountedPrice: subscription.items.reduce(
+                      (sum, item) => sum + item.discountedPrice,
+                      0
+                    ),
+                    membershipDiscountAmount: 0,
+                    subscriptionPlanDiscountAmount: 0,
+                    taxAmount: subscription.items.reduce(
+                      (sum, item) => sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
+                      0
+                    ),
+                    total: totalAmount,
+                    currency: currency,
+                  },
+                  overall: {
+                    subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
+                    discountedPrice: subscription.items.reduce(
+                      (sum, item) => sum + item.discountedPrice,
+                      0
+                    ),
+                    couponDiscountAmount: 0,
+                    membershipDiscountAmount: 0,
+                    subscriptionPlanDiscountAmount: 0,
+                    taxAmount: subscription.items.reduce(
+                      (sum, item) => sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
+                      0
+                    ),
+                    grandTotal: totalAmount,
+                    currency: currency,
+                  },
+                },
                 shippingAddressId: originalOrder?.shippingAddressId || new mongoose.Types.ObjectId(),
                 billingAddressId: originalOrder?.billingAddressId || new mongoose.Types.ObjectId(),
                 paymentMethod: paymentMethod,
@@ -312,12 +332,10 @@ export class SubscriptionAutoRenewalService {
                 orderNumber: orderNumber,
                 userId: subscription.userId,
                 planType: subscription.planType,
-                isOneTime: false, // Renewal is still a subscription
-                variantType: originalOrder?.variantType,
-                selectedPlanDays: subscription.cycleDays,
                 items: subscription.items.map((item) => ({
                   productId: item.productId,
                   name: item.name,
+                  variantType: ProductVariant.SACHETS, // Subscriptions are only for SACHETS items
                   planDays: item.planDays,
                   capsuleCount: item.capsuleCount,
                   amount: item.amount,

@@ -25,11 +25,12 @@ router.use(authenticate);
  * @access  Private
  * @body    cartId - Cart ID (required)
  * @body    sachets - { planDurationDays: 30|60|90|180, isOneTime: boolean } (required if cart has SACHETS items)
- * @body    standUpPouch - { capsuleCount: 30|60 } (required if cart has STAND_UP_POUCH items)
+ * @body    standUpPouch - { capsuleCount?: 30|60 (optional, fallback), itemQuantities: [{ productId: string, quantity: number, capsuleCount?: 30|60, planDays?: 30|60 }] } (required if cart has STAND_UP_POUCH items)
  * @body    shippingAddressId - Shipping address ID (required)
  * @body    billingAddressId - Billing address ID (optional)
- * @body    pricing fields - subTotal, discountedPrice, grandTotal, etc. (required)
+ * @body    pricing - { sachets?: {...}, standUpPouch?: {...}, overall: {...} } (required; stored in DB)
  * @note    Plan selection works similar to checkout page summary API
+ * @note    STAND_UP_POUCH: Each product in itemQuantities can have its own capsuleCount/planDays. If not provided per product, falls back to top-level capsuleCount/planDays or defaults to 30.
  * @note    Legacy fields (variantType, planDurationDays, isOneTime, capsuleCount) are still supported for backward compatibility
  */
 router.post("/", validateJoi(createOrderSchema), orderController.createOrder);

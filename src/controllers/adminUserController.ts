@@ -394,7 +394,7 @@ class AdminUserController {
               discountedPrice: item.discountedPrice || 0,
               taxRate: item.taxRate || 0,
               totalAmount: item.totalAmount || 0,
-              currency: order.currency || "EUR",
+              currency: order.pricing?.overall?.currency || "EUR",
             },
           };
         });
@@ -404,7 +404,7 @@ class AdminUserController {
           orderNumber: order.orderNumber,
           paymentMethod: paymentMethod, // Mollie, Stripe, etc.
           orderCreatedDate: order.createdAt,
-          orderTotalAmount: order.grandTotal || null,
+          orderTotalAmount: order.pricing?.overall?.grandTotal || null,
           items: orderItems,
           paymentStatus: order.paymentStatus,
         };

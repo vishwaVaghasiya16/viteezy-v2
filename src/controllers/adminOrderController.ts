@@ -463,8 +463,6 @@ class AdminOrderController {
               }
             : null,
           planType: order.planType,
-          isOneTime: order.isOneTime,
-          variantType: order.variantType,
           status: order.status,
           paymentStatus: order.paymentStatus,
           items: order.items.map((item: any) => ({
@@ -490,17 +488,7 @@ class AdminOrderController {
                 )
               : item.features,
           })),
-          pricing: {
-            subTotal: order.subTotal,
-            discountedPrice: order.discountedPrice,
-            couponDiscountAmount: order.couponDiscountAmount,
-            membershipDiscountAmount: order.membershipDiscountAmount,
-            subscriptionPlanDiscountAmount:
-              order.subscriptionPlanDiscountAmount,
-            taxAmount: order.taxAmount,
-            grandTotal: order.grandTotal,
-            currency: order.currency,
-          },
+          pricing: order.pricing,
           paymentMethod: order.paymentMethod,
           couponCode: order.couponCode,
           couponMetadata: order.couponMetadata,
@@ -623,8 +611,6 @@ class AdminOrderController {
             }
           : null,
         planType: order.planType || null,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType || null,
         status: order.status || null,
         paymentStatus: order.paymentStatus || null,
         items: Array.isArray(order.items)
@@ -659,16 +645,7 @@ class AdminOrderController {
                 : item.features,
             }))
           : [],
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         paymentMethod: order.paymentMethod,
         payment: payment
           ? {
@@ -1176,18 +1153,7 @@ class AdminOrderController {
         userId: new mongoose.Types.ObjectId(userId),
         status: OrderStatus.PENDING,
         planType: planType,
-        isOneTime: isOneTime,
-        variantType: variantType || null,
-        selectedPlanDays: selectedPlanDays || null,
         items: orderItems,
-        subTotal: subTotal,
-        discountedPrice: discountedPrice,
-        couponDiscountAmount: couponDiscountAmount || 0,
-        membershipDiscountAmount: membershipDiscountAmount || 0,
-        subscriptionPlanDiscountAmount: subscriptionPlanDiscountAmount || 0,
-        taxAmount: taxAmount || 0,
-        grandTotal: grandTotal,
-        currency: currency || "EUR",
         pricing: pricingBreakdown,
         shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
         billingAddressId: billingAddressId
@@ -1298,8 +1264,8 @@ class AdminOrderController {
             orderNumber: order.orderNumber,
             status: order.status,
             paymentStatus: order.paymentStatus,
-            grandTotal: order.grandTotal,
-            currency: order.currency,
+            grandTotal: order.pricing?.overall?.grandTotal || 0,
+            currency: order.pricing?.overall?.currency || "EUR",
             orderType: orderType,
             paymentLink: paymentLink,
             cartId: cartId,
@@ -1342,7 +1308,9 @@ class AdminOrderController {
     const userName =
       `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
     const orderNumber = order.orderNumber;
-    const orderTotal = `${order.currency || "EUR"} ${order.grandTotal.toFixed(2)}`;
+    const orderTotal = `${order.pricing?.overall?.currency || "EUR"} ${(
+      order.pricing?.overall?.grandTotal || 0
+    ).toFixed(2)}`;
 
     // Ensure paymentLink is always provided for pending payment orders
     if (!paymentLink) {

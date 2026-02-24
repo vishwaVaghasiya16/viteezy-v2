@@ -99,8 +99,19 @@ class OrderService {
       calculatedRefundAmount = this.roundAmount(calculatedRefundAmount);
     }
 
+    const overallPricing = (order as any).pricing?.overall || {
+      subTotal: 0,
+      discountedPrice: 0,
+      couponDiscountAmount: 0,
+      membershipDiscountAmount: 0,
+      subscriptionPlanDiscountAmount: 0,
+      taxAmount: 0,
+      grandTotal: 0,
+      currency: "EUR",
+    };
+
     // Validate refund amount doesn't exceed order total
-    if (calculatedRefundAmount > order.grandTotal) {
+    if (calculatedRefundAmount > overallPricing.grandTotal) {
       throw new AppError(
         "Refund amount cannot exceed order grand total",
         400
@@ -141,19 +152,25 @@ class OrderService {
       Math.max(
         0,
         newDiscountedPrice -
-          (order.membershipDiscountAmount || 0) -
-          (order.subscriptionPlanDiscountAmount || 0) -
-          (order.couponDiscountAmount || 0)
+          (overallPricing.membershipDiscountAmount || 0) -
+          (overallPricing.subscriptionPlanDiscountAmount || 0) -
+          (overallPricing.couponDiscountAmount || 0)
       )
     );
     const newGrandTotal = this.roundAmount(subtotalAfterAllDiscounts + newTaxAmount);
 
     // Update order
     order.items = remainingItems;
-    order.subTotal = newSubTotal;
-    order.discountedPrice = newDiscountedPrice;
-    order.taxAmount = newTaxAmount;
-    order.grandTotal = Math.max(0, newGrandTotal); // Ensure non-negative
+    (order as any).pricing = {
+      ...((order as any).pricing || {}),
+      overall: {
+        ...overallPricing,
+        subTotal: newSubTotal,
+        discountedPrice: newDiscountedPrice,
+        taxAmount: newTaxAmount,
+        grandTotal: Math.max(0, newGrandTotal), // Ensure non-negative
+      },
+    };
 
     // Track refunded items in metadata
     if (!order.metadata) {
@@ -273,7 +290,7 @@ class OrderService {
     }
 
     logger.info(
-      `Partial refund processed for order ${order.orderNumber}: ${calculatedRefundAmount} ${order.currency}`
+      `Partial refund processed for order ${order.orderNumber}: ${calculatedRefundAmount} ${overallPricing.currency}`
     );
 
     return {

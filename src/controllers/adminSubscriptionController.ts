@@ -766,9 +766,6 @@ class AdminSubscriptionController {
         orderNumber: `TEST-${Date.now()}`,
         userId: new mongoose.Types.ObjectId(userId),
         planType: OrderPlanType.SUBSCRIPTION,
-        isOneTime: false,
-        variantType: "SACHETS",
-        selectedPlanDays: cycleDays,
         items: [
           {
             productId: new mongoose.Types.ObjectId(), // Dummy product ID
@@ -856,14 +853,14 @@ class AdminSubscriptionController {
 
       // Create gateway subscription (Stripe/Mollie) for auto-renewal
       const { subscriptionGatewayService } = await import("@/services/subscriptionGatewayService");
-      const totalAmount = testOrder.grandTotal * 100; // Convert to cents
+      const totalAmount = (testOrder.pricing?.overall?.grandTotal || 0) * 100; // Convert to cents
       
       const gatewayResult = await subscriptionGatewayService.createSubscription({
         userId: userId,
         orderId: (testOrder._id as mongoose.Types.ObjectId).toString(),
         paymentMethod: PaymentMethod.STRIPE, // Use Stripe for test
         amount: totalAmount,
-        currency: testOrder.currency,
+        currency: testOrder.pricing?.overall?.currency || "EUR",
         cycleDays: cycleDays,
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
@@ -952,8 +949,8 @@ class AdminSubscriptionController {
           paymentId: testPayment._id as mongoose.Types.ObjectId,
           orderId: testOrder._id as mongoose.Types.ObjectId,
           amount: {
-            amount: testOrder.grandTotal,
-            currency: testOrder.currency,
+            amount: testOrder.pricing?.overall?.grandTotal || 0,
+            currency: testOrder.pricing?.overall?.currency || "EUR",
             taxRate: testOrder.items[0]?.taxRate || 0.21,
           },
           status: PaymentStatus.COMPLETED,

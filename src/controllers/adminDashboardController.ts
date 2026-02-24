@@ -957,7 +957,8 @@ class AdminDashboardController {
       orders.forEach((order) => {
         const orderId = order._id.toString();
         // Use actual payment amount if available, otherwise fallback to order grandTotal
-        const orderRevenue = paymentMap.get(orderId) || order.grandTotal || 0;
+        const orderRevenue =
+          paymentMap.get(orderId) || order.pricing?.overall?.grandTotal || 0;
 
         if (!order.items || order.items.length === 0) return;
 

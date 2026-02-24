@@ -87,8 +87,8 @@ class PaymentController {
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
             total: {
-              amount: result.order.grandTotal,
-              currency: result.order.currency,
+              amount: result.order.pricing?.overall?.grandTotal || 0,
+              currency: result.order.pricing?.overall?.currency || "EUR",
             },
           },
           gateway: {
@@ -166,8 +166,8 @@ class PaymentController {
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
             total: {
-              amount: result.order.grandTotal,
-              currency: result.order.currency,
+              amount: result.order.pricing?.overall?.grandTotal || 0,
+              currency: result.order.pricing?.overall?.currency || "EUR",
             },
           },
           gateway: {
@@ -225,8 +225,8 @@ class PaymentController {
             status: result.order.status,
             paymentStatus: result.order.paymentStatus,
             total: {
-              amount: result.order.grandTotal,
-              currency: result.order.currency,
+              amount: result.order.pricing?.overall?.grandTotal || 0,
+              currency: result.order.pricing?.overall?.currency || "EUR",
             },
           },
           updated: result.updated,
@@ -1019,13 +1019,10 @@ class PaymentController {
           orderId: order._id,
           orderStatus: order.status,
           paymentStatus: order.paymentStatus,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
+          grandTotal: order.pricing?.overall?.grandTotal || 0,
+          currency: order.pricing?.overall?.currency || "EUR",
           items: order.items?.length || 0,
-          isOneTime: order.isOneTime,
           planType: order.planType,
-          variantType: order.variantType,
-          selectedPlanDays: order.selectedPlanDays,
         };
       } else if (payment.membershipId) {
         const membership = payment.membershipId as any;

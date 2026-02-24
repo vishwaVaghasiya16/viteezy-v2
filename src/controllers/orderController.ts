@@ -344,14 +344,7 @@ class OrderController {
         capsuleCount,
         shippingAddressId,
         billingAddressId,
-        subTotal,
-        discountedPrice,
-        couponDiscountAmount = 0,
-        membershipDiscountAmount = 0,
-        subscriptionPlanDiscountAmount = 0,
-        taxAmount = 0,
-        grandTotal,
-        currency = "EUR",
+        pricing,
         couponCode,
         membership,
         metadata,
@@ -469,6 +462,26 @@ class OrderController {
       const selectedPlanDays = sachets?.planDurationDays || planDurationDays;
       const selectedIsOneTime = sachets?.isOneTime !== undefined ? sachets.isOneTime : isOneTime;
       const selectedCapsuleCount = standUpPouch?.capsuleCount || capsuleCount || 30;
+      const selectedStandUpPouchPlanDays = standUpPouch?.planDays || selectedCapsuleCount;
+
+      // Create a map of productId -> capsuleCount/planDays from itemQuantities for per-product selection
+      const productPlanDaysMap = new Map<string, number>();
+      if (
+        standUpPouch?.itemQuantities &&
+        standUpPouch.itemQuantities.length > 0
+      ) {
+        for (const itemQty of standUpPouch.itemQuantities) {
+          let planDays: number;
+          if (itemQty.planDays !== undefined) {
+            planDays = itemQty.planDays;
+          } else if (itemQty.capsuleCount !== undefined) {
+            planDays = itemQty.capsuleCount; // capsuleCount maps to planDays
+          } else {
+            planDays = selectedStandUpPouchPlanDays;
+          }
+          productPlanDaysMap.set(itemQty.productId, planDays);
+        }
+      }
 
       // Validate variant-specific rules
       // SACHETS: Can be subscription or one-time (based on isOneTime)
@@ -562,9 +575,6 @@ class OrderController {
       // Use planDurationDays from new structure or legacy field (already validated above)
       const planDays = selectedPlanDays;
 
-      // STAND_UP_POUCH items use capsuleCount from new structure or legacy field
-      const effectiveCapsuleCount = selectedCapsuleCount;
-
       // Fetch products with pricing information for both variantTypes
       const selectFields =
         "title slug skuRoot categories price variant sachetPrices standupPouchPrice hasStandupPouch";
@@ -585,8 +595,12 @@ class OrderController {
         products.map((product: any) => [product._id.toString(), product])
       );
 
-      // Use currency from body (already normalized)
-      const normalizedCurrency = currency.toUpperCase();
+      // Pricing is passed in body; store it in DB
+      if (!pricing || !pricing.overall) {
+        throw new AppError("pricing.overall is required", 400);
+      }
+      const normalizedCurrency =
+        (pricing.overall.currency || "EUR").toString().toUpperCase();
 
       const categoryIds = new Set<string>();
 
@@ -729,10 +743,17 @@ class OrderController {
             );
           }
 
-          itemCapsuleCount = effectiveCapsuleCount;
+          // Get planDays for this specific product from itemQuantities, cart item, or fallback
+          const productIdStr = cartItem.productId.toString();
+          const itemPlanDays = productPlanDaysMap.get(productIdStr) ||
+            cartItem.planDays ||
+            selectedStandUpPouchPlanDays ||
+            30;
+          
+          itemCapsuleCount = itemPlanDays; // capsuleCount is same as planDays for STAND_UP_POUCH
           const standupPrice = product.standupPouchPrice as any;
 
-          if (itemCapsuleCount === 60) {
+          if (itemPlanDays === 60) {
             if (!standupPrice.count60) {
               throw new AppError(
                 `Product ${
@@ -812,13 +833,15 @@ class OrderController {
         }
 
         // Multiply by quantity for total amounts
-        return {
+          return {
           productId: new mongoose.Types.ObjectId(cartItem.productId),
           name:
             product.title?.en || product.title?.nl || product.slug || "Product",
           variantType: itemVariantType, // Include variantType in order item
           quantity: itemQuantity, // Include quantity in order item
-          planDays: itemPlanDays,
+          planDays: itemVariantType === ProductVariant.STAND_UP_POUCH 
+            ? (productPlanDaysMap.get(cartItem.productId.toString()) || cartItem.planDays || selectedStandUpPouchPlanDays || 30)
+            : itemPlanDays,
           capsuleCount: itemCapsuleCount,
           // Additional pricing and plan details (per unit)
           amount: roundAmount(itemAmount),
@@ -831,15 +854,24 @@ class OrderController {
         };
       });
 
-      // Validate pricing values from body
-      if (typeof subTotal !== "number" || subTotal < 0) {
-        throw new AppError("Invalid subTotal value", 400);
+      // Validate pricing values from body (minimum sanity check)
+      if (
+        typeof pricing.overall.subTotal !== "number" ||
+        pricing.overall.subTotal < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.subTotal value", 400);
       }
-      if (typeof discountedPrice !== "number" || discountedPrice < 0) {
-        throw new AppError("Invalid discountedPrice value", 400);
+      if (
+        typeof pricing.overall.discountedPrice !== "number" ||
+        pricing.overall.discountedPrice < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.discountedPrice value", 400);
       }
-      if (typeof grandTotal !== "number" || grandTotal < 0) {
-        throw new AppError("Invalid grandTotal value", 400);
+      if (
+        typeof pricing.overall.grandTotal !== "number" ||
+        pricing.overall.grandTotal < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.grandTotal value", 400);
       }
 
       // Normalize coupon code
@@ -854,7 +886,7 @@ class OrderController {
           const couponResult = await validateCouponForOrder({
             couponCode: normalizedCouponCode,
             userId: req.user._id,
-            orderAmount: discountedPrice,
+            orderAmount: pricing.overall.discountedPrice,
             shippingAmount: 0,
             productIds: productObjectIds.map((id: mongoose.Types.ObjectId) =>
               id.toString()
@@ -891,10 +923,30 @@ class OrderController {
       }
 
       // Add STAND_UP_POUCH plan details if present
+      // Store per-product capsuleCount/planDays from itemQuantities
       if (standupPouchItems.length > 0) {
-        planDetails.standUpPouch = {
-          capsuleCount: effectiveCapsuleCount,
-        };
+        const standUpPouchPlanDetails: any = {};
+        
+        // If itemQuantities provided, store per-product details
+        if (
+          standUpPouch?.itemQuantities &&
+          standUpPouch.itemQuantities.length > 0
+        ) {
+          standUpPouchPlanDetails.itemQuantities = standUpPouch.itemQuantities.map((itemQty: any) => ({
+            productId: itemQty.productId,
+            quantity: itemQty.quantity,
+            capsuleCount: itemQty.capsuleCount || itemQty.planDays || selectedCapsuleCount,
+            planDays: itemQty.planDays || itemQty.capsuleCount || selectedStandUpPouchPlanDays,
+          }));
+        } else {
+          // Fallback to single capsuleCount for backward compatibility
+          standUpPouchPlanDetails.capsuleCount = selectedCapsuleCount;
+          if (selectedStandUpPouchPlanDays) {
+            standUpPouchPlanDetails.planDays = selectedStandUpPouchPlanDays;
+          }
+        }
+        
+        planDetails.standUpPouch = standUpPouchPlanDetails;
       }
 
       const sanitizedPlanDetails = Object.entries(planDetails).reduce(
@@ -914,126 +966,40 @@ class OrderController {
       // Store membership metadata if provided
       const membershipMetadata = membership?.metadata || {};
 
-      // Calculate pricing breakdown by variant type
-      const calculatePricingBreakdown = () => {
-        // Calculate SACHETS pricing
-        const sachetOrderItems = orderItems.filter(
-          (item: any) => item.variantType === ProductVariant.SACHETS
-        );
-        const sachetSubTotal = sachetOrderItems.reduce(
-          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
-          0
-        );
-        const sachetDiscountedPrice = sachetOrderItems.reduce(
-          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
-          0
-        );
-        const sachetTaxAmount = sachetOrderItems.reduce(
-          (sum: number, item: any) => {
-            const itemTotal = item.discountedPrice * (item.quantity || 1);
-            return sum + (itemTotal * (item.taxRate || 0));
-          },
-          0
-        );
-        // Calculate membership discount for sachets (proportional to sachets subtotal)
-        const sachetMembershipDiscountAmount = sachetSubTotal > 0
-          ? roundAmount((membershipDiscountAmount * sachetSubTotal) / subTotal)
-          : 0;
-        // Subscription plan discount only applies to sachets
-        const sachetSubscriptionPlanDiscountAmount = subscriptionPlanDiscountAmount;
-        const sachetTotal = roundAmount(
-          sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount
-        );
-
-        // Calculate STAND_UP_POUCH pricing
-        const standUpPouchOrderItems = orderItems.filter(
-          (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
-        );
-        const standUpPouchSubTotal = standUpPouchOrderItems.reduce(
-          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
-          0
-        );
-        const standUpPouchDiscountedPrice = standUpPouchOrderItems.reduce(
-          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
-          0
-        );
-        const standUpPouchTaxAmount = standUpPouchOrderItems.reduce(
-          (sum: number, item: any) => {
-            const itemTotal = item.discountedPrice * (item.quantity || 1);
-            return sum + (itemTotal * (item.taxRate || 0));
-          },
-          0
-        );
-        // Calculate membership discount for standUpPouch (proportional to standUpPouch subtotal)
-        const standUpPouchMembershipDiscountAmount = standUpPouchSubTotal > 0
-          ? roundAmount((membershipDiscountAmount * standUpPouchSubTotal) / subTotal)
-          : 0;
-        const standUpPouchTotal = roundAmount(
-          standUpPouchDiscountedPrice - standUpPouchMembershipDiscountAmount + standUpPouchTaxAmount
-        );
-
-        // Build pricing breakdown
-        const pricingBreakdown: any = {
-          overall: {
-            subTotal: roundAmount(subTotal),
-            discountedPrice: roundAmount(discountedPrice),
-            couponDiscountAmount: roundAmount(couponDiscountAmount),
-            membershipDiscountAmount: roundAmount(membershipDiscountAmount),
-            subscriptionPlanDiscountAmount: roundAmount(subscriptionPlanDiscountAmount),
-            taxAmount: roundAmount(taxAmount),
-            grandTotal: roundAmount(grandTotal),
-            currency: normalizedCurrency,
-          },
-        };
-
-        // Add sachets pricing if there are sachet items
-        if (sachetOrderItems.length > 0) {
-          pricingBreakdown.sachets = {
-            subTotal: roundAmount(sachetSubTotal),
-            discountedPrice: roundAmount(sachetDiscountedPrice),
-            membershipDiscountAmount: roundAmount(sachetMembershipDiscountAmount),
-            subscriptionPlanDiscountAmount: roundAmount(sachetSubscriptionPlanDiscountAmount),
-            taxAmount: roundAmount(sachetTaxAmount),
-            total: sachetTotal,
-            currency: normalizedCurrency,
-          };
-        }
-
-        // Add standUpPouch pricing if there are standUpPouch items
-        if (standUpPouchOrderItems.length > 0) {
-          pricingBreakdown.standUpPouch = {
-            subTotal: roundAmount(standUpPouchSubTotal),
-            discountedPrice: roundAmount(standUpPouchDiscountedPrice),
-            membershipDiscountAmount: roundAmount(standUpPouchMembershipDiscountAmount),
-            taxAmount: roundAmount(standUpPouchTaxAmount),
-            total: standUpPouchTotal,
-            currency: normalizedCurrency,
-          };
-        }
-
-        return pricingBreakdown;
+      // Pricing breakdown is provided by client; store it as-is (normalize currency casing)
+      const pricingBreakdown: any = {
+        ...pricing,
+        overall: {
+          ...pricing.overall,
+          currency: normalizedCurrency,
+        },
+        ...(pricing.sachets
+          ? {
+              sachets: {
+                ...pricing.sachets,
+                currency: (pricing.sachets.currency || normalizedCurrency)
+                  .toString()
+                  .toUpperCase(),
+              },
+            }
+          : {}),
+        ...(pricing.standUpPouch
+          ? {
+              standUpPouch: {
+                ...pricing.standUpPouch,
+                currency: (pricing.standUpPouch.currency || normalizedCurrency)
+                  .toString()
+                  .toUpperCase(),
+              },
+            }
+          : {}),
       };
-
-      const pricingBreakdown = calculatePricingBreakdown();
 
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
         planType: planType,
-        isOneTime: orderIsOneTime,
-        variantType: sachetItems.length > 0 ? ProductVariant.SACHETS : ProductVariant.STAND_UP_POUCH, // Primary variantType
-        selectedPlanDays: sachetItems.length > 0 ? selectedPlanDays : undefined,
         items: orderItems,
-        subTotal: roundAmount(subTotal),
-        discountedPrice: roundAmount(discountedPrice),
-        couponDiscountAmount: roundAmount(couponDiscountAmount),
-        membershipDiscountAmount: roundAmount(membershipDiscountAmount),
-        subscriptionPlanDiscountAmount: roundAmount(
-          subscriptionPlanDiscountAmount
-        ),
-        taxAmount: roundAmount(taxAmount),
-        grandTotal: roundAmount(grandTotal),
-        currency: normalizedCurrency,
         pricing: pricingBreakdown,
         shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
         billingAddressId: billingAddressId
@@ -1080,7 +1046,7 @@ class OrderController {
               userId.toString(),
               normalizedCouponCode,
               (order._id as mongoose.Types.ObjectId).toString(),
-              roundAmount(discountedPrice)
+              roundAmount(pricing.overall.discountedPrice)
             );
             logger.info(
               `Referral record created for order ${order.orderNumber} with referral code ${normalizedCouponCode}`
@@ -1159,7 +1125,7 @@ class OrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
+          "orderNumber planType isOneTime variantType status items pricing paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
         )
         .populate(
           "items.productId",
@@ -1177,8 +1143,6 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: order.items.map((item: any) => ({
@@ -1199,16 +1163,7 @@ class OrderController {
               )
             : item.features,
         })),
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         couponCode: order.couponCode,
         couponMetadata: order.couponMetadata,
         membershipMetadata: order.membershipMetadata,
@@ -1326,21 +1281,10 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: itemsWithProducts,
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         shippingAddressId: order.shippingAddressId,
         billingAddressId: order.billingAddressId,
         paymentMethod: order.paymentMethod,

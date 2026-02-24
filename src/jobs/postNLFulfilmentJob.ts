@@ -231,8 +231,11 @@ export class PostNLFulfilmentJob {
     const lines: Array<{ itemNo: string; itemDescription: string; quantity: number }> = [];
 
     // Get recurring months (default to 1)
-    const recurringMonths = order.selectedPlanDays 
-      ? Math.floor(order.selectedPlanDays / 30) || 1
+    // Get planDays from first SACHETS item
+    const sachetItem = order.items?.find((item: any) => item.variantType === "SACHETS" && item.planDays);
+    const planDays = sachetItem?.planDays;
+    const recurringMonths = planDays 
+      ? Math.floor(planDays / 30) || 1
       : 1;
 
     const packs = recurringMonths * 30;

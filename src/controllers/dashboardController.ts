@@ -163,17 +163,17 @@ class DashboardController {
             paymentStatus: lastOrder.paymentStatus,
             createdAt: lastOrder.createdAt,
             items: orderItems,
-            totals: {
-              subTotal: lastOrder.subTotal,
-              discountedPrice: lastOrder.discountedPrice,
-              couponDiscountAmount: lastOrder.couponDiscountAmount,
-              membershipDiscountAmount: lastOrder.membershipDiscountAmount,
+            totals: lastOrder.pricing?.overall ? {
+              subTotal: lastOrder.pricing.overall.subTotal,
+              discountedPrice: lastOrder.pricing.overall.discountedPrice,
+              couponDiscountAmount: lastOrder.pricing.overall.couponDiscountAmount,
+              membershipDiscountAmount: lastOrder.pricing.overall.membershipDiscountAmount,
               subscriptionPlanDiscountAmount:
-                lastOrder.subscriptionPlanDiscountAmount,
-              taxAmount: lastOrder.taxAmount,
-              grandTotal: lastOrder.grandTotal,
-              currency: lastOrder.currency,
-            },
+                lastOrder.pricing.overall.subscriptionPlanDiscountAmount,
+              taxAmount: lastOrder.pricing.overall.taxAmount,
+              grandTotal: lastOrder.pricing.overall.grandTotal,
+              currency: lastOrder.pricing.overall.currency,
+            } : null,
             tracking: {
               trackingNumber: lastOrder.trackingNumber || null,
               shippedAt: lastOrder.shippedAt || null,

@@ -175,9 +175,39 @@ export class PaymentService {
 
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
+      const overallPricing = order?.pricing?.overall;
+      
+      if (!overallPricing || !overallPricing.grandTotal || overallPricing.grandTotal <= 0) {
+        throw new AppError(
+          `Order ${order.orderNumber} does not have valid pricing. Please ensure the order has a valid grandTotal in pricing.overall`,
+          400
+        );
+      }
+      
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(
-        data.amount?.value || order.grandTotal
+      
+      // Use provided amount if available, otherwise use order's grandTotal
+      // Validate that provided amount matches order total (allow small rounding differences)
+      const finalAmount = data.amount?.value || overallPricing.grandTotal;
+      const amountDifference = Math.abs(finalAmount - overallPricing.grandTotal);
+      
+      if (data.amount?.value && amountDifference > 0.01) {
+        logger.warn(
+          `Amount mismatch: Provided ${data.amount.value} but order total is ${overallPricing.grandTotal} for order ${order.orderNumber}`
+        );
+      }
+      
+      if (finalAmount <= 0) {
+        throw new AppError(
+          `Invalid payment amount: ${finalAmount}. Order total is ${overallPricing.grandTotal}`,
+          400
+        );
+      }
+      
+      const amountInMinorUnits = this.toMinorUnits(finalAmount);
+      
+      logger.info(
+        `Creating payment for order ${order.orderNumber}: Amount=${finalAmount} ${overallPricing.currency}, MinorUnits=${amountInMinorUnits}`
       );
 
       // Convert populated addresses to AddressSnapshotType format
@@ -191,7 +221,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: data.amount?.currency || order.currency,
+        currency: data.amount?.currency || overallPricing.currency,
         orderId: orderId,
         userId: data.userId,
         description: data.description || `Order ${order.orderNumber}`,
@@ -250,11 +280,14 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: data.amount?.value || order.grandTotal,
-          currency: data.amount?.currency || order.currency,
-          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
+          amount: data.amount?.value || overallPricing.grandTotal,
+          currency: data.amount?.currency || overallPricing.currency,
+          taxRate:
+            overallPricing.subTotal > 0
+              ? overallPricing.taxAmount / overallPricing.subTotal
+              : 0,
         },
-        currency: data.amount?.currency || order.currency,
+        currency: data.amount?.currency || overallPricing.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -299,8 +332,7 @@ export class PaymentService {
       // Check if order is eligible for subscription creation
       // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
       const isEligibleForSubscription = 
-        (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED) &&
-        order.isOneTime === false;
+        (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
 
       if (isPaymentCompleted && isEligibleForSubscription) {
         console.log(
@@ -769,7 +801,10 @@ export class PaymentService {
           }
 
           // Track coupon usage if a coupon was applied
-          if (order.couponCode && order.couponDiscountAmount > 0) {
+          if (
+            order.couponCode &&
+            (order.pricing?.overall?.couponDiscountAmount || 0) > 0
+          ) {
             console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
             try {
               // Check if it's a referral code first
@@ -803,8 +838,8 @@ export class PaymentService {
                     userId: order.userId as mongoose.Types.ObjectId,
                     orderId: order._id as mongoose.Types.ObjectId,
                     discountAmount: {
-                      amount: order.couponDiscountAmount,
-                      currency: order.currency,
+                      amount: order.pricing?.overall?.couponDiscountAmount || 0,
+                      currency: order.pricing?.overall?.currency || "EUR",
                       taxRate: 0,
                     },
                     couponCode: order.couponCode,
@@ -869,8 +904,7 @@ export class PaymentService {
           // Check if order is eligible for subscription creation
           // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
           const isEligibleForSubscription = 
-            (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED) &&
-            order.isOneTime === false;
+            (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
 
           if (isEligibleForSubscription) {
             // Refresh order from database to ensure we have latest data with all fields
@@ -930,7 +964,7 @@ export class PaymentService {
             }
           } else {
             console.log(
-              `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType}, isOneTime is ${order.isOneTime} (needs SUBSCRIPTION or MIXED with isOneTime=false)`
+              `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
             );
           }
         } else {
@@ -1268,8 +1302,14 @@ export class PaymentService {
 
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
+      const overallPricing = order?.pricing?.overall || {
+        subTotal: 0,
+        taxAmount: 0,
+        grandTotal: 0,
+        currency: "EUR",
+      };
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(order.grandTotal);
+      const amountInMinorUnits = this.toMinorUnits(overallPricing.grandTotal);
 
       // Convert populated addresses to AddressSnapshotType format
       const shippingAddress = order.shippingAddressId
@@ -1282,7 +1322,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: order.currency,
+        currency: overallPricing.currency,
         orderId: orderId,
         userId: data.userId,
         description: `Order ${order.orderNumber}`,
@@ -1320,11 +1360,14 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: order.grandTotal,
-          currency: order.currency,
-          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
+          amount: overallPricing.grandTotal,
+          currency: overallPricing.currency,
+          taxRate:
+            overallPricing.subTotal > 0
+              ? overallPricing.taxAmount / overallPricing.subTotal
+              : 0,
         },
-        currency: order.currency,
+        currency: overallPricing.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -1512,7 +1555,9 @@ export class PaymentService {
                   String(order._id),
                   order.orderNumber,
                   typeof payment.amount === 'object' ? payment.amount.amount : payment.amount,
-                  typeof payment.amount === 'object' ? payment.amount.currency : (payment.currency || order.currency),
+                  typeof payment.amount === 'object'
+                    ? payment.amount.currency
+                    : (payment.currency || order.pricing?.overall?.currency || "EUR"),
                   order.userId
                 ),
                 orderNotifications.orderConfirmed(
@@ -1534,7 +1579,7 @@ export class PaymentService {
               "🟢 [PAYMENT SERVICE] Payment status is COMPLETED. Checking for subscription creation..."
             );
             console.log(
-              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}, isOneTime: ${order.isOneTime}`
+              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
             );
 
             // Check if order is eligible for subscription creation
@@ -1584,7 +1629,7 @@ export class PaymentService {
               }
             } else {
               console.log(
-                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType}, isOneTime is ${order.isOneTime} (needs SUBSCRIPTION or MIXED with isOneTime=false)`
+                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
               );
             }
           } else if (previousOrderPaymentStatus !== PaymentStatus.COMPLETED) {
@@ -1601,7 +1646,7 @@ export class PaymentService {
               "🟢 [PAYMENT SERVICE] Payment status updated to COMPLETED. Checking for subscription creation..."
             );
             console.log(
-              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}, isOneTime: ${order.isOneTime}`
+              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
             );
 
             // Check if order is eligible for subscription creation
@@ -1650,7 +1695,7 @@ export class PaymentService {
               }
             } else {
               console.log(
-                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType}, isOneTime is ${order.isOneTime} (needs SUBSCRIPTION or MIXED with isOneTime=false)`
+                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
               );
             }
           }
@@ -1893,11 +1938,21 @@ export class PaymentService {
   }
 
   private buildOrderCheckoutLineItems(order: any): PaymentLineItem[] {
-    const currency = order?.currency || "EUR";
+    const overallPricing = order?.pricing?.overall;
+
+    if (!overallPricing || !overallPricing.grandTotal || overallPricing.grandTotal <= 0) {
+      throw new AppError(
+        `Order ${order?.orderNumber || ""} does not have valid pricing for line items.`,
+        400
+      );
+    }
+
+    const currency = overallPricing.currency || "EUR";
+
     return [
       {
         name: `Order ${order?.orderNumber || ""}`.trim(),
-        amount: this.toMinorUnits(order?.grandTotal || 0),
+        amount: this.toMinorUnits(overallPricing.grandTotal),
         currency,
         quantity: 1,
         description: `${order?.items?.length || 0} item(s)`,
@@ -1941,17 +1996,24 @@ export class PaymentService {
       console.log("✅ [EMAIL] - User found:", user.email);
 
       console.log("📧 [EMAIL] Step 2: Preparing email data");
+      const overallPricing = order?.pricing?.overall || {
+        subTotal: 0,
+        discountedPrice: 0,
+        taxAmount: 0,
+        grandTotal: 0,
+        currency: "EUR",
+      };
       const items = Array.isArray(order.items)
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
             quantity: 1, // Quantity removed from order items
             unitAmount: item.amount || item.totalAmount || 0,
-            currency: order.currency || "EUR",
+            currency: overallPricing.currency || "EUR",
           }))
         : [];
 
       console.log("📧 [EMAIL] - Items count:", items.length);
-      console.log("📧 [EMAIL] - Total amount:", order.grandTotal);
+      console.log("📧 [EMAIL] - Total amount:", overallPricing.grandTotal);
 
       console.log("📧 [EMAIL] Step 3: Sending order confirmation email");
 
@@ -1968,24 +2030,24 @@ export class PaymentService {
         orderDate: order.createdAt,
         paymentMethod: payment?.paymentMethod,
         subtotal: {
-          amount: order.subTotal,
-          currency: order.currency,
+          amount: overallPricing.subTotal,
+          currency: overallPricing.currency,
         },
         tax: {
-          amount: order.taxAmount,
-          currency: order.currency,
+          amount: overallPricing.taxAmount,
+          currency: overallPricing.currency,
         },
         shipping: {
           amount: 0, // Shipping not stored separately in new model
-          currency: order.currency,
+          currency: overallPricing.currency,
         },
         discount: {
-          amount: order.subTotal - order.discountedPrice,
-          currency: order.currency,
+          amount: overallPricing.subTotal - overallPricing.discountedPrice,
+          currency: overallPricing.currency,
         },
         total: {
-          amount: order.grandTotal,
-          currency: order.currency,
+          amount: overallPricing.grandTotal,
+          currency: overallPricing.currency,
         },
         items,
         shippingAddress: shippingAddressSnapshot,
@@ -2055,7 +2117,7 @@ export class PaymentService {
       console.log("🟢 [SUBSCRIPTION] - Total order items:", allItems.length);
       console.log("🟢 [SUBSCRIPTION] - SACHETS items found:", sachetItems.length);
       console.log("🟢 [SUBSCRIPTION] - STAND_UP_POUCH items found:", standUpPouchItems.length);
-      console.log("🟢 [SUBSCRIPTION] - isOneTime:", order?.isOneTime);
+      console.log("🟢 [SUBSCRIPTION] - PlanType:", order?.planType);
       console.log("🟢 [SUBSCRIPTION] - planType:", order?.planType);
       console.log(
         "🟢 [SUBSCRIPTION] - selectedPlanDays:",
@@ -2114,8 +2176,10 @@ export class PaymentService {
       // ========== STEP 2: Validate Plan Duration ==========
       console.log("🟢 [SUBSCRIPTION] Step 2: Validating plan duration...");
 
-      const cycleDays = order.selectedPlanDays;
-      console.log("🟢 [SUBSCRIPTION] - cycleDays from order:", cycleDays);
+      // Get cycleDays from first SACHETS item's planDays
+      const sachetItem = sachetItems.find((item: any) => item.planDays);
+      const cycleDays = sachetItem?.planDays;
+      console.log("🟢 [SUBSCRIPTION] - cycleDays from order items:", cycleDays);
 
       if (!cycleDays || ![30, 60, 90, 180].includes(cycleDays)) {
         console.log(
@@ -2277,7 +2341,10 @@ export class PaymentService {
           subscriptionPlanDiscountAmount: order.pricing.sachets.subscriptionPlanDiscountAmount || 0,
           taxAmount: order.pricing.sachets.taxAmount || 0,
           total: order.pricing.sachets.total || 0,
-          currency: order.pricing.sachets.currency || order.currency || "EUR",
+          currency:
+            order.pricing.sachets.currency ||
+            order.pricing?.overall?.currency ||
+            "EUR",
         };
         console.log("✅ [SUBSCRIPTION] - Using pricing from order.pricing.sachets");
       } else {
@@ -2301,7 +2368,7 @@ export class PaymentService {
         // Get membership and subscription plan discounts from order if available
         const sachetMembershipDiscountAmount = order.pricing?.sachets?.membershipDiscountAmount || 0;
         const sachetSubscriptionPlanDiscountAmount = order.pricing?.sachets?.subscriptionPlanDiscountAmount || 
-          (order.subscriptionPlanDiscountAmount || 0);
+          (order.pricing?.overall?.subscriptionPlanDiscountAmount || 0);
         
         const sachetTotal = sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount;
         
@@ -2312,7 +2379,7 @@ export class PaymentService {
           subscriptionPlanDiscountAmount: Math.round(sachetSubscriptionPlanDiscountAmount * 100) / 100,
           taxAmount: Math.round(sachetTaxAmount * 100) / 100,
           total: Math.round(sachetTotal * 100) / 100,
-          currency: order.currency || "EUR",
+          currency: order.pricing?.overall?.currency || "EUR",
         };
         console.log("✅ [SUBSCRIPTION] - Calculated pricing from subscription items");
       }

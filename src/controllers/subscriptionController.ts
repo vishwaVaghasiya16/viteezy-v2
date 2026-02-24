@@ -934,9 +934,6 @@ class SubscriptionController {
         userId,
         status: OrderStatus.PENDING,
         planType: OrderPlanType.SUBSCRIPTION,
-        isOneTime: false,
-        variantType: ProductVariant.SACHETS,
-        selectedPlanDays: cycleDays,
         items: newItems,
         subTotal: Math.round(newItemsSubTotal * 100) / 100,
         discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
@@ -1090,8 +1087,8 @@ class SubscriptionController {
           order: {
             id: order._id,
             orderNumber: order.orderNumber,
-            grandTotal: order.grandTotal,
-            currency: order.currency,
+            grandTotal: order.pricing?.overall?.grandTotal || 0,
+            currency: order.pricing?.overall?.currency || "EUR",
             paymentStatus: order.paymentStatus,
           },
           payment: {

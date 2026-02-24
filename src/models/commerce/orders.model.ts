@@ -20,9 +20,6 @@ export interface IOrder extends Document {
   userId: mongoose.Types.ObjectId;
   status: OrderStatus;
   planType: OrderPlanType;
-  isOneTime: boolean; // Whether this is a one-time purchase or subscription
-  variantType?: ProductVariant; // Variant type selected by user (SACHETS or STAND_UP_POUCH)
-  selectedPlanDays?: number; // Selected plan days (30, 60, 90, 180 for subscription)
   items: Array<{
     productId: mongoose.Types.ObjectId;
     name: string;
@@ -39,15 +36,6 @@ export interface IOrder extends Document {
     savingsPercentage?: number; // Savings percentage
     features?: string[]; // Plan features
   }>;
-  // Pricing stored as numbers with separate currency field
-  subTotal: number; // Sum of all product amounts
-  discountedPrice: number; // Discounted price after plan discounts
-  couponDiscountAmount: number; // Coupon discount amount
-  membershipDiscountAmount: number; // Membership discount amount
-  subscriptionPlanDiscountAmount: number; // Subscription plan discount (e.g., 90-day 15% discount)
-  taxAmount: number; // Tax amount
-  grandTotal: number; // Final total after all discounts and tax
-  currency: string; // Currency code (e.g., "EUR")
   // Pricing breakdown by variant type
   pricing?: {
     sachets?: {
@@ -116,19 +104,6 @@ const OrderSchema = new Schema<IOrder>(
       enum: ORDER_PLAN_TYPE_VALUES,
       default: OrderPlanType.ONE_TIME,
     },
-    isOneTime: {
-      type: Boolean,
-      required: true,
-    },
-    variantType: {
-      type: String,
-      enum: Object.values(ProductVariant),
-      default: null,
-    },
-    selectedPlanDays: {
-      type: Number,
-      default: null,
-    },
     items: [
       {
         productId: {
@@ -189,40 +164,6 @@ const OrderSchema = new Schema<IOrder>(
         },
       },
     ],
-    // Pricing stored as numbers with separate currency field
-    subTotal: {
-      type: Number,
-      default: 0,
-    },
-    discountedPrice: {
-      type: Number,
-      default: 0,
-    },
-    couponDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    membershipDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    subscriptionPlanDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    taxAmount: {
-      type: Number,
-      default: 0,
-    },
-    grandTotal: {
-      type: Number,
-      default: 0,
-    },
-    currency: {
-      type: String,
-      default: "EUR",
-      trim: true,
-    },
     pricing: {
       type: {
         sachets: {

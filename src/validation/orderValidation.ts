@@ -169,11 +169,64 @@ export const createOrderSchema = Joi.object(
         .integer()
         .valid(30, 60)
         .default(30)
-        .required()
+        .optional()
         .messages({
           "number.base": "Capsule count must be a number",
           "any.only": "Capsule count must be 30 or 60",
-          "any.required": "capsuleCount is required for STAND_UP_POUCH variant",
+        }),
+      planDays: Joi.number()
+        .integer()
+        .valid(30, 60)
+        .optional()
+        .messages({
+          "number.base": "Plan days must be a number",
+          "any.only": "Plan days must be 30 or 60 for STAND_UP_POUCH",
+        }),
+      // Quantity updates for STAND_UP_POUCH items (required if cart has STAND_UP_POUCH items)
+      // Each item can have its own capsuleCount/planDays
+      itemQuantities: Joi.array()
+        .items(
+          Joi.object({
+            productId: Joi.string()
+              .pattern(/^[0-9a-fA-F]{24}$/)
+              .required()
+              .messages({
+                "string.pattern.base": "Product ID must be a valid MongoDB ObjectId",
+                "any.required": "productId is required",
+              }),
+            quantity: Joi.number()
+              .integer()
+              .min(1)
+              .required()
+              .messages({
+                "number.base": "Quantity must be a number",
+                "number.integer": "Quantity must be an integer",
+                "number.min": "Quantity must be at least 1",
+                "any.required": "quantity is required",
+              }),
+            capsuleCount: Joi.number()
+              .integer()
+              .valid(30, 60)
+              .optional()
+              .messages({
+                "number.base": "Capsule count must be a number",
+                "any.only": "Capsule count must be 30 or 60",
+              }),
+            planDays: Joi.number()
+              .integer()
+              .valid(30, 60)
+              .optional()
+              .messages({
+                "number.base": "Plan days must be a number",
+                "any.only": "Plan days must be 30 or 60",
+              }),
+          })
+        )
+        .min(1)
+        .optional()
+        .messages({
+          "array.base": "itemQuantities must be an array",
+          "array.min": "itemQuantities must contain at least one item",
         }),
     })
       .optional()
@@ -201,30 +254,41 @@ export const createOrderSchema = Joi.object(
       .label("Capsule Count"), // Deprecated - use standUpPouch.capsuleCount
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
-    // Pricing fields as numbers with separate currency
-    subTotal: Joi.number().min(0).required().label("Sub Total"),
-    discountedPrice: Joi.number().min(0).required().label("Discounted Price"),
-    couponDiscountAmount: Joi.number()
-      .min(0)
-      .default(0)
-      .label("Coupon Discount Amount"),
-    membershipDiscountAmount: Joi.number()
-      .min(0)
-      .default(0)
-      .label("Membership Discount Amount"),
-    subscriptionPlanDiscountAmount: Joi.number()
-      .min(0)
-      .default(0)
-      .label("Subscription Plan Discount Amount"),
-    taxAmount: Joi.number().min(0).default(0).label("Tax Amount"),
-    grandTotal: Joi.number().min(0).required().label("Grand Total"),
-    currency: Joi.string()
-      .trim()
-      .uppercase()
-      .min(3)
-      .max(5)
-      .default("EUR")
-      .label("Currency"),
+    // Pricing breakdown (this is what we store in DB)
+    pricing: Joi.object({
+      sachets: Joi.object({
+        subTotal: Joi.number().min(0).required(),
+        discountedPrice: Joi.number().min(0).required(),
+        membershipDiscountAmount: Joi.number().min(0).default(0),
+        subscriptionPlanDiscountAmount: Joi.number().min(0).default(0),
+        taxAmount: Joi.number().min(0).default(0),
+        total: Joi.number().min(0).required(),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+      }).optional(),
+      standUpPouch: Joi.object({
+        subTotal: Joi.number().min(0).required(),
+        discountedPrice: Joi.number().min(0).required(),
+        membershipDiscountAmount: Joi.number().min(0).default(0),
+        taxAmount: Joi.number().min(0).default(0),
+        total: Joi.number().min(0).required(),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+      }).optional(),
+      overall: Joi.object({
+        subTotal: Joi.number().min(0).required(),
+        discountedPrice: Joi.number().min(0).required(),
+        couponDiscountAmount: Joi.number().min(0).default(0),
+        membershipDiscountAmount: Joi.number().min(0).default(0),
+        subscriptionPlanDiscountAmount: Joi.number().min(0).default(0),
+        taxAmount: Joi.number().min(0).default(0),
+        grandTotal: Joi.number().min(0).required(),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+      }).required(),
+    })
+      .required()
+      .messages({
+        "any.required": "pricing is required",
+        "object.base": "pricing must be an object",
+      }),
     couponCode: Joi.string().trim().uppercase().optional(),
     membership: membershipSchema,
     metadata: Joi.object().unknown(true).default({}),
