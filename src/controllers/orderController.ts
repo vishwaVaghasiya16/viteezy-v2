@@ -640,8 +640,9 @@ class OrderController {
 
           // Use plan selection from request (subscription only for SACHETS)
           // Note: SACHETS don't store planDays in cart - plan is selected at checkout/order time
-          if (planDays) {
-            itemPlanDays = planDays;
+          // Use planDays from request if provided, otherwise use selectedPlanDays from top-level config
+          itemPlanDays = planDays || selectedPlanDays;
+          if (itemPlanDays) {
             let selectedPlan: any = null;
             let planKey = "";
 
