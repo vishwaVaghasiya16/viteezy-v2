@@ -15,13 +15,17 @@ import { ProductVariant, ReviewStatus } from "../models/enums";
 import { CouponType } from "../models/enums";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "../models/common.model";
 import { fetchAndEnrichProducts } from "./productEnrichmentService";
+import {
+  getStandUpPouchPlanKey,
+  DEFAULT_STAND_UP_POUCH_PLAN,
+} from "../config/planConfig";
 
 interface AddCartItemData {
   productId: string;
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
   isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
-  planDays?: number; // Plan days: 30/60/90/180 for SACHETS (subscription), 30/60 for STAND_UP_POUCH (one-time)
+  planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (60 or 120). NOT used for SACHETS.
 }
 
 interface UpdateCartItemData {
@@ -29,7 +33,7 @@ interface UpdateCartItemData {
   variantType: ProductVariant; // Required: SACHETS or STAND_UP_POUCH
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
   isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
-  planDays?: number; // Plan days: 30/60/90/180 for SACHETS (subscription), 30/60 for STAND_UP_POUCH (one-time)
+  planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (60 or 120). NOT used for SACHETS.
 }
 
 interface RemoveCartItemData {
@@ -126,12 +130,18 @@ class CartService {
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        // Use planDays to select count30 or count60, default to count30
+        // Use planDays to select 60-count or 120-count, default to 60-count
         const standupPrice = product.standupPouchPrice as any;
-        const itemPlanDays = item.planDays;
-        const selectedCount = itemPlanDays === 60 && standupPrice.count60 
-          ? standupPrice.count60 
-          : standupPrice.count30 || standupPrice;
+        const itemPlanDays = item.planDays || DEFAULT_STAND_UP_POUCH_PLAN;
+        // Get the correct price key from planDays (60 -> count60, 120 -> count120)
+        const countKey = getStandUpPouchPlanKey(itemPlanDays);
+        const selectedCount =
+          (countKey && standupPrice[countKey]) ||
+          (itemPlanDays === 60 ? standupPrice.count60 : null) ||
+          (itemPlanDays === 120 ? standupPrice.count120 : null) ||
+          standupPrice.count60 ||
+          standupPrice.count120 ||
+          standupPrice;
         
         if (selectedCount) {
           originalAmount = selectedCount.amount || 0;
@@ -414,12 +424,18 @@ class CartService {
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        // Use planDays to select count30 or count60, default to count30
+        // Use planDays to select 60-count or 120-count, default to 60-count
         const standupPrice = product.standupPouchPrice as any;
-        const itemPlanDays = item.planDays;
-        const selectedCount = itemPlanDays === 60 && standupPrice.count60 
-          ? standupPrice.count60 
-          : standupPrice.count30 || standupPrice;
+        const itemPlanDays = item.planDays || DEFAULT_STAND_UP_POUCH_PLAN;
+        // Get the correct price key from planDays (60 -> count60, 120 -> count120)
+        const countKey = getStandUpPouchPlanKey(itemPlanDays);
+        const selectedCount =
+          (countKey && standupPrice[countKey]) ||
+          (itemPlanDays === 60 ? standupPrice.count60 : null) ||
+          (itemPlanDays === 120 ? standupPrice.count120 : null) ||
+          standupPrice.count60 ||
+          standupPrice.count120 ||
+          standupPrice;
         
         if (selectedCount) {
           currency = selectedCount.currency || "EUR";
@@ -608,10 +624,10 @@ class CartService {
           400
         );
       }
-      // planDays is optional for STAND_UP_POUCH (30 or 60)
-      if (planDays !== undefined && planDays !== 30 && planDays !== 60) {
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
+      if (planDays !== undefined && planDays !== 60 && planDays !== 120) {
         throw new AppError(
-          "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+          "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
           400
         );
       }
@@ -679,11 +695,18 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      // Use planDays to select count30 or count60, default to count30
+      // Use planDays to select 60-count or 120-count, default to 60-count
       const standupPrice = product.standupPouchPrice as any;
-      const selectedCount = planDays === 60 && standupPrice.count60 
-        ? standupPrice.count60 
-        : standupPrice.count30 || standupPrice;
+      // Get the correct price key from planDays (60 -> count60, 120 -> count120)
+      const countKey = getStandUpPouchPlanKey(planDays || DEFAULT_STAND_UP_POUCH_PLAN);
+      // Support both formats: count60/count120
+      const selectedCount =
+        (countKey && standupPrice[countKey]) ||
+        (planDays === 60 ? standupPrice.count60 : null) ||
+        (planDays === 120 ? standupPrice.count120 : null) ||
+        standupPrice.count60 ||
+        standupPrice.count120 ||
+        standupPrice;
       
       if (selectedCount) {
         currency = selectedCount.currency || "EUR";
@@ -737,16 +760,16 @@ class CartService {
         };
       }
     } else {
-      // Add new item with calculated price, variantType, quantity, isOneTime (only for STAND_UP_POUCH), planDays (only for STAND_UP_POUCH), and totalAmount
+      // Add new item with calculated price, variantType, quantity, isOneTime (only for STAND_UP_POUCH), planDays (only for STAND_UP_POUCH, treated as capsuleCount), and totalAmount
       const itemPlanDays = variantType === ProductVariant.STAND_UP_POUCH 
-        ? (planDays !== undefined ? planDays : 30) // Default to 30 if not provided
-        : undefined;
+        ? (planDays !== undefined ? planDays : DEFAULT_STAND_UP_POUCH_PLAN) // Default to 60 if not provided (treated as capsuleCount)
+        : undefined; // SACHETS don't use planDays
       updatedItems.push({
         productId: productObjectId,
         variantType: variantType, // Store variantType in item
         quantity: finalQuantity, // Store quantity (1 for SACHETS, user-provided for STAND_UP_POUCH)
         isOneTime: variantType === ProductVariant.STAND_UP_POUCH ? (isOneTime ?? true) : undefined,
-        planDays: itemPlanDays, // Explicitly set planDays for STAND_UP_POUCH (number or null)
+        planDays: itemPlanDays, // For STAND_UP_POUCH: planDays is treated as capsuleCount (60 or 120). For SACHETS: undefined.
         price: calculatedPrice,
         totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
         addedAt: new Date(),
@@ -895,10 +918,10 @@ class CartService {
           400
         );
       }
-      // planDays is optional for STAND_UP_POUCH (30 or 60)
-      if (planDays !== undefined && planDays !== 30 && planDays !== 60) {
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
+      if (planDays !== undefined && planDays !== 60 && planDays !== 120) {
         throw new AppError(
-          "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+          "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
           400
         );
       }
@@ -955,11 +978,13 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      // Use planDays to select count30 or count60, default to count30
+      // Use planDays to select 60-count or 120-count, default to 60-count
       const standupPrice = product.standupPouchPrice as any;
-      const selectedCount = finalPlanDays === 60 && standupPrice.count60 
-        ? standupPrice.count60 
-        : standupPrice.count30 || standupPrice;
+      const planDays = finalPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
+      // Get the correct price key from planDays (60 -> count60, 120 -> count120)
+      const countKey = getStandUpPouchPlanKey(planDays);
+      // Support both formats: count60/count120
+      const selectedCount = (countKey && standupPrice[countKey]) || standupPrice.count60 || standupPrice.count120 || standupPrice;
       
       if (selectedCount) {
         currency = selectedCount.currency || "EUR";
@@ -1789,8 +1814,8 @@ class CartService {
           | "sixtyDays"
           | "ninetyDays"
           | "oneEightyDays"
-          | "count30"
-          | "count60";
+          | "count60"
+          | "count120";
         price?: any;
       } = { type: "default" };
 
@@ -1822,66 +1847,43 @@ class CartService {
           }
         }
 
-        // If not found in subscription, check oneTime options
-        if (selectedPlan.type === "default" && sachetPrices.oneTime) {
-          if (sachetPrices.oneTime.count30) {
-            const count30Price =
-              sachetPrices.oneTime.count30.discountedPrice ||
-              sachetPrices.oneTime.count30.amount;
-            if (Math.abs(cartAmount - count30Price) < 0.01) {
-              selectedPlan = {
-                type: "oneTime",
-                plan: "count30",
-                price: sachetPrices.oneTime.count30,
-              };
-            }
-          }
-          if (selectedPlan.type === "default" && sachetPrices.oneTime.count60) {
-            const count60Price =
-              sachetPrices.oneTime.count60.discountedPrice ||
-              sachetPrices.oneTime.count60.amount;
-            if (Math.abs(cartAmount - count60Price) < 0.01) {
-              selectedPlan = {
-                type: "oneTime",
-                plan: "count60",
-                price: sachetPrices.oneTime.count60,
-              };
-            }
-          }
-        }
+        // Note: One-time plans are NOT supported for SACHETS (only subscription plans)
+        // Removed oneTime plan checking logic
       }
 
-      // Check standupPouchPrice if hasStandupPouch
+      // Check standupPouchPrice if hasStandupPouch - support both formats
       if (
         selectedPlan.type === "default" &&
         product.hasStandupPouch &&
         product.standupPouchPrice
       ) {
-        if (product.standupPouchPrice.count30) {
-          const count30Price =
-            product.standupPouchPrice.count30.discountedPrice ||
-            product.standupPouchPrice.count30.amount;
-          if (Math.abs(cartPrice.amount - count30Price) < 0.01) {
-            selectedPlan = {
-              type: "oneTime",
-              plan: "count30",
-              price: product.standupPouchPrice.count30,
-            };
-          }
-        }
-        if (
-          selectedPlan.type === "default" &&
-          product.standupPouchPrice.count60
-        ) {
-          const count60Price =
-            product.standupPouchPrice.count60.discountedPrice ||
-            product.standupPouchPrice.count60.amount;
-          if (Math.abs(cartPrice.amount - count60Price) < 0.01) {
+        const standupPrice = product.standupPouchPrice as any;
+        
+        // Check 60-count: uses count60
+        const count60Price = standupPrice.count60;
+        if (count60Price) {
+          const price = count60Price.discountedPrice || count60Price.amount;
+          if (Math.abs(cartPrice.amount - price) < 0.01) {
             selectedPlan = {
               type: "oneTime",
               plan: "count60",
-              price: product.standupPouchPrice.count60,
+              price: count60Price,
             };
+          }
+        }
+        
+        // Check 120-count: uses count120
+        if (selectedPlan.type === "default") {
+          const count120Price = standupPrice.count120;
+          if (count120Price && count120Price !== count60Price) {
+            const price = count120Price.discountedPrice || count120Price.amount;
+            if (Math.abs(cartPrice.amount - price) < 0.01) {
+              selectedPlan = {
+                type: "oneTime",
+                plan: "count120",
+                price: count120Price,
+              };
+            }
           }
         }
       }

@@ -338,11 +338,11 @@ class ProductService {
       return standupPouchPrice;
     }
 
-    // If it has count30 and count60 structure
-    if (standupPouchPrice.count30 || standupPouchPrice.count60) {
+    // If it has count60 and count120 structure
+    if (standupPouchPrice.count60 || standupPouchPrice.count120) {
       return {
-        count30: this.processPriceObject(standupPouchPrice.count30),
-        count60: this.processPriceObject(standupPouchPrice.count60),
+        count60: standupPouchPrice.count60 ? this.processPriceObject(standupPouchPrice.count60) : undefined,
+        count120: standupPouchPrice.count120 ? this.processPriceObject(standupPouchPrice.count120) : undefined,
       };
     }
 
@@ -2177,12 +2177,12 @@ class ProductService {
     // Preserve standupPouchPrice with discountedPrice
     if (product.standupPouchPrice) {
       if (
-        product.standupPouchPrice.count30 ||
-        product.standupPouchPrice.count60
+        product.standupPouchPrice.count60 ||
+        product.standupPouchPrice.count120
       ) {
         result.standupPouchPrice = {
-          count30: { ...product.standupPouchPrice.count30 }, // Preserve discountedPrice
-          count60: { ...product.standupPouchPrice.count60 }, // Preserve discountedPrice
+          count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
+          count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
         };
       } else {
         result.standupPouchPrice = { ...product.standupPouchPrice }; // Preserve discountedPrice

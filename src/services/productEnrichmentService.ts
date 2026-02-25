@@ -176,14 +176,14 @@ export const transformProductForLanguage = (
   // Transform standupPouchPrice features
   let transformedStandupPouchPrice = product.standupPouchPrice;
   if (product.standupPouchPrice) {
-    // Check if it's the count30/count60 structure
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+    // Check if it's the count60/count120 structure
+    if (product.standupPouchPrice.count60 || product.standupPouchPrice.count120) {
       transformedStandupPouchPrice = { ...product.standupPouchPrice };
 
-      if (transformedStandupPouchPrice.count30?.features) {
-        transformedStandupPouchPrice.count30 = {
-          ...transformedStandupPouchPrice.count30,
-          features: transformedStandupPouchPrice.count30.features.map(
+      if (transformedStandupPouchPrice.count60?.features) {
+        transformedStandupPouchPrice.count60 = {
+          ...transformedStandupPouchPrice.count60,
+          features: transformedStandupPouchPrice.count60.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
@@ -334,10 +334,10 @@ const calculateMonthlyAmounts = (product: any): any => {
   }
 
   if (product.standupPouchPrice) {
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+    if (product.standupPouchPrice.count60 || product.standupPouchPrice.count120) {
       result.standupPouchPrice = {
-        count30: { ...product.standupPouchPrice.count30 },
-        count60: { ...product.standupPouchPrice.count60 },
+        count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
+        count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
       };
     } else {
       result.standupPouchPrice = { ...product.standupPouchPrice };

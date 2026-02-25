@@ -113,7 +113,7 @@ export const checkoutPageSummarySchema = Joi.object({
   // Capsule count - REQUIRED for STAND_UP_POUCH, NOT ALLOWED for SACHETS
   capsuleCount: Joi.number()
     .integer()
-    .valid(30, 60)
+    .valid(60, 120)
     .when("variantType", {
       is: "STAND_UP_POUCH",
       then: Joi.required(),
@@ -121,7 +121,7 @@ export const checkoutPageSummarySchema = Joi.object({
     })
     .messages({
       "number.base": "Capsule count must be a number",
-      "any.only": "Capsule count must be 30 or 60",
+      "any.only": "Capsule count must be 60 or 120",
       "any.required": "Capsule count is required for STAND_UP_POUCH variant",
       "any.unknown": "Capsule count is not allowed for SACHETS variant",
     }),
@@ -161,20 +161,20 @@ export const checkoutPageSummaryBodySchema = Joi.object(
     standUpPouch: Joi.object({
       capsuleCount: Joi.number()
         .integer()
-        .valid(30, 60)
-        .default(30)
+        .valid(60, 120)
+        .default(60)
         .optional()
         .messages({
           "number.base": "Capsule count must be a number",
-          "any.only": "Capsule count must be 30 or 60",
+          "any.only": "Capsule count must be 60 or 120",
         }),
       planDays: Joi.number()
         .integer()
-        .valid(30, 60)
+        .valid(60, 120)
         .optional()
         .messages({
           "number.base": "Plan days must be a number",
-          "any.only": "Plan days must be 30 or 60 for STAND_UP_POUCH",
+          "any.only": "Plan days must be 60 or 120 for STAND_UP_POUCH",
         }),
       // Quantity updates for STAND_UP_POUCH items (required if cart has STAND_UP_POUCH items)
       // Each item can have its own capsuleCount/planDays
@@ -200,19 +200,19 @@ export const checkoutPageSummaryBodySchema = Joi.object(
               }),
             capsuleCount: Joi.number()
               .integer()
-              .valid(30, 60)
+              .valid(60, 120)
               .optional()
               .messages({
                 "number.base": "Capsule count must be a number",
-                "any.only": "Capsule count must be 30 or 60",
+                "any.only": "Capsule count must be 60 or 120",
               }),
             planDays: Joi.number()
               .integer()
-              .valid(30, 60)
+              .valid(60, 120)
               .optional()
               .messages({
                 "number.base": "Plan days must be a number",
-                "any.only": "Plan days must be 30 or 60",
+                "any.only": "Plan days must be 60 or 120",
               }),
           })
         )

@@ -71,26 +71,21 @@ const calculateMonthlyAmounts = (product: any): any => {
       }
     });
 
-    // Process oneTime if exists
-    if (sachetPrices.oneTime) {
-      sachetPrices.oneTime = {
-        count30: { ...sachetPrices.oneTime.count30 },
-        count60: { ...sachetPrices.oneTime.count60 },
-      };
-    }
+    // Note: One-time plans are NOT supported for SACHETS (only subscription plans)
+    // Removed oneTime processing logic
 
     result.sachetPrices = sachetPrices;
   }
 
-  // Preserve standupPouchPrice
+  // Preserve standupPouchPrice (uses count60 and count120)
   if (product.standupPouchPrice) {
     if (
-      product.standupPouchPrice.count30 ||
-      product.standupPouchPrice.count60
+      product.standupPouchPrice.count60 ||
+      product.standupPouchPrice.count120
     ) {
       result.standupPouchPrice = {
-        count30: { ...product.standupPouchPrice.count30 },
-        count60: { ...product.standupPouchPrice.count60 },
+        count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
+        count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
       };
     } else {
       result.standupPouchPrice = { ...product.standupPouchPrice };
@@ -856,7 +851,7 @@ class CheckoutController {
    * Request body:
    *  - planDurationDays: 30 | 60 | 90 | 180
    *  - planType: "SACHET" | "STANDUP_POUCH"
-   *  - capsuleCount: 30 | 60 (optional, for one-time purchases)
+   *  - capsuleCount: 60 | 120 (optional, for one-time purchases)
    *  - couponCode: string (optional)
    *
    * Response: Complete pricing breakdown with all discounts
@@ -887,8 +882,8 @@ class CheckoutController {
         throw new AppError("planType must be SACHET or STANDUP_POUCH", 400);
       }
 
-      if (capsuleCount !== undefined && ![30, 60].includes(capsuleCount)) {
-        throw new AppError("capsuleCount must be 30 or 60", 400);
+      if (capsuleCount !== undefined && ![60, 120].includes(capsuleCount)) {
+        throw new AppError("capsuleCount must be 60 or 120", 400);
       }
 
       const result = await checkoutService.getEnhancedPlanPricing(userId, {
@@ -993,8 +988,8 @@ class CheckoutController {
           : undefined,
         standUpPouch: standUpPouch
           ? {
-              capsuleCount: standUpPouch.capsuleCount as 30 | 60,
-              planDays: standUpPouch.planDays as 30 | 60 | undefined,
+              capsuleCount: standUpPouch.capsuleCount as 60 | 120,
+              planDays: standUpPouch.planDays as 60 | 120 | undefined,
               itemQuantities: standUpPouch.itemQuantities || undefined,
             }
           : undefined,

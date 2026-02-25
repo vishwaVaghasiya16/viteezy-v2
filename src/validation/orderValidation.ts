@@ -10,6 +10,10 @@ import {
   PRODUCT_VARIANT_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
+import {
+  STAND_UP_POUCH_PLANS,
+  DEFAULT_STAND_UP_POUCH_PLAN,
+} from "../config/planConfig";
 
 // Joi Schemas
 const objectIdSchema = Joi.string()
@@ -167,20 +171,20 @@ export const createOrderSchema = Joi.object(
     standUpPouch: Joi.object({
       capsuleCount: Joi.number()
         .integer()
-        .valid(30, 60)
-        .default(30)
+        .valid(...STAND_UP_POUCH_PLANS)
+        .default(DEFAULT_STAND_UP_POUCH_PLAN)
         .optional()
         .messages({
           "number.base": "Capsule count must be a number",
-          "any.only": "Capsule count must be 30 or 60",
+          "any.only": `Capsule count must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
         }),
       planDays: Joi.number()
         .integer()
-        .valid(30, 60)
+        .valid(...STAND_UP_POUCH_PLANS)
         .optional()
         .messages({
           "number.base": "Plan days must be a number",
-          "any.only": "Plan days must be 30 or 60 for STAND_UP_POUCH",
+          "any.only": `Plan days must be one of: ${STAND_UP_POUCH_PLANS.join(", ")} for STAND_UP_POUCH`,
         }),
       // Quantity updates for STAND_UP_POUCH items (required if cart has STAND_UP_POUCH items)
       // Each item can have its own capsuleCount/planDays
@@ -206,19 +210,19 @@ export const createOrderSchema = Joi.object(
               }),
             capsuleCount: Joi.number()
               .integer()
-              .valid(30, 60)
+              .valid(...STAND_UP_POUCH_PLANS)
               .optional()
               .messages({
                 "number.base": "Capsule count must be a number",
-                "any.only": "Capsule count must be 30 or 60",
+                "any.only": `Capsule count must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
               }),
             planDays: Joi.number()
               .integer()
-              .valid(30, 60)
+              .valid(...STAND_UP_POUCH_PLANS)
               .optional()
               .messages({
                 "number.base": "Plan days must be a number",
-                "any.only": "Plan days must be 30 or 60",
+                "any.only": `Plan days must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
               }),
           })
         )

@@ -23,6 +23,7 @@ import { orderService } from "@/services/orderService";
 import { getTranslatedString } from "@/utils/translationUtils";
 import { getUserLanguageCode } from "@/utils/translationUtils";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
+import { getStandUpPouchPlanKey } from "../config/planConfig";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -995,8 +996,9 @@ class AdminOrderController {
           product.standupPouchPrice
         ) {
           const standupPrice = product.standupPouchPrice as any;
-          const countKey = item.capsuleCount === 60 ? "count60" : "count30";
-          const countData = standupPrice[countKey];
+          // Get the correct count key from capsuleCount (60 -> count60, 120 -> count120)
+          const countKey = getStandUpPouchPlanKey(item.capsuleCount || 60);
+          const countData = countKey ? standupPrice[countKey] : null;
           if (countData) {
             amount = countData.amount || 0;
             discountedPricePerUnit =

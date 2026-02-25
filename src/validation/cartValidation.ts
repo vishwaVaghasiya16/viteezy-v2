@@ -34,11 +34,10 @@ const isOneTimeSchema = Joi.boolean().messages({
 
 const planDaysSchema = Joi.number()
   .integer()
-  .valid(30, 60, 90, 180)
   .messages({
     "number.base": "Plan days must be a number",
     "number.integer": "Plan days must be an integer",
-    "any.only": "Plan days must be 30, 60, 90, or 180",
+    // Note: Variant-specific validation (60/120 for STAND_UP_POUCH, not allowed for SACHETS) is handled in custom validation
   });
 
 // Add item to cart schema (supports single and multiple items)
@@ -139,10 +138,10 @@ export const addCartItemSchema = Joi.object({
           message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
         });
       }
-      // planDays is optional for STAND_UP_POUCH (30 or 60)
-      if (value.planDays !== undefined && value.planDays !== 30 && value.planDays !== 60) {
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
+      if (value.planDays !== undefined && value.planDays !== 60 && value.planDays !== 120) {
         return helpers.error("any.custom", {
-          message: "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+          message: "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
         });
       }
     }
@@ -209,10 +208,10 @@ export const updateCartItemSchema = Joi.object({
           message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
         });
       }
-      // planDays is optional for STAND_UP_POUCH (30 or 60)
-      if (value.planDays !== undefined && value.planDays !== 30 && value.planDays !== 60) {
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
+      if (value.planDays !== undefined && value.planDays !== 60 && value.planDays !== 120) {
         return helpers.error("any.custom", {
-          message: "For STAND_UP_POUCH, planDays must be 30 or 60 if provided",
+          message: "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
         });
       }
     }
