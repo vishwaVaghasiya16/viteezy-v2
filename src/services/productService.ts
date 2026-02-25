@@ -1646,7 +1646,7 @@ class ProductService {
       }
     });
 
-    // Merge specification with existing so partial update (e.g. only bg_image) does not wipe items
+    // Merge specification with existing so partial update (e.g. only bg_image or new item images) does not wipe data
     if ((data as any).specification !== undefined) {
       const existingSpec: Record<string, any> =
         existingProduct.specification && typeof existingProduct.specification === "object"
@@ -1664,6 +1664,17 @@ class ProductService {
           Array.isArray(existingSpec.items) &&
           existingSpec.items.length > 0
         ) {
+          return;
+        }
+        // Item-by-item merge so new uploaded images (e.g. specificationItemImage1) merge into existing items without wiping title/descr/other
+        if (k === "items" && Array.isArray(incoming[k]) && Array.isArray(existingSpec.items)) {
+          const existingItems = existingSpec.items as Record<string, any>[];
+          const incomingItems = incoming[k] as Record<string, any>[];
+          const maxLen = Math.max(existingItems.length, incomingItems.length);
+          mergedSpec.items = Array.from({ length: maxLen }, (_, i) => ({
+            ...(existingItems[i] || {}),
+            ...(incomingItems[i] || {}),
+          }));
           return;
         }
         mergedSpec[k] = incoming[k];
