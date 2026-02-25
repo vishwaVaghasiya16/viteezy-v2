@@ -18,6 +18,7 @@ import {
 import { Products } from "../models/commerce/products.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { transformProductForLanguage } from "../services/productEnrichmentService";
+import { ProductVariant } from "../models/enums";
 
 /**
  * Calculate monthly amount from totalAmount and durationDays
@@ -945,13 +946,41 @@ class CheckoutController {
       }
 
       // Extract body parameters
-      const {
+      let {
         sachets,
         standUpPouch,
         couponCode,
         shippingAddressId,
         billingAddressId,
       } = req.body;
+
+      // Default detection logic: If body doesn't have values, detect from cart
+      // Separate items by variantType
+      const sachetItems = findCart.items.filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS,
+      );
+      const standupPouchItems = findCart.items.filter(
+        (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH,
+      );
+
+      // If sachets not provided in body but cart has SACHETS items, set default to 180 days
+      if (!sachets && sachetItems.length > 0) {
+        sachets = {
+          planDurationDays: 180,
+        };
+      }
+
+      // If standUpPouch not provided in body but cart has STAND_UP_POUCH items,
+      // get quantity and planDays from cart items
+      if (!standUpPouch && standupPouchItems.length > 0) {
+        standUpPouch = {
+          itemQuantities: standupPouchItems.map((item: any) => ({
+            productId: item.productId.toString(),
+            quantity: item.quantity || 1,
+            planDays: item.planDays || 30, // Default to 30 if not set in cart
+          })),
+        };
+      }
 
       // Service handles both variantTypes together with separate configurations
       // Note: isOneTime is NOT allowed for SACHETS (only subscription plans)
