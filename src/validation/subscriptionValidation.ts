@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 import {
   PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUS_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
   SUBSCRIPTION_STATUS_VALUES,
 } from "@/models/enums";
@@ -110,3 +111,18 @@ export const getSubscriptionsQuerySchema = Joi.object(
 export const pauseSubscriptionSchema = Joi.object(withFieldLabels({})).label(
   "PauseSubscriptionPayload"
 );
+
+/**
+ * Joi schema for subscription transaction history query
+ */
+export const getSubscriptionTransactionHistoryQuerySchema = Joi.object(
+  withFieldLabels({
+    status: Joi.string()
+      .valid(...PAYMENT_STATUS_VALUES)
+      .optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  })
+)
+  .default({})
+  .label("SubscriptionTransactionHistoryQuery");

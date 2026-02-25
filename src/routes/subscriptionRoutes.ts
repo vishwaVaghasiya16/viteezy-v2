@@ -10,6 +10,7 @@ import {
   updateSubscriptionSchema,
   getSubscriptionDetailsParamsSchema,
   getSubscriptionsQuerySchema,
+  getSubscriptionTransactionHistoryQuerySchema,
   pauseSubscriptionSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
@@ -54,6 +55,19 @@ router.get(
   "/:subscriptionId",
   validateParams(getSubscriptionDetailsParamsSchema),
   subscriptionController.getSubscriptionDetails
+);
+
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/transactions
+ * @desc    Get transaction history for this subscription (Payments: initial + renewals)
+ * @access  Private
+ * @query   status (Pending|Processing|Completed|Failed|Cancelled|Refunded), page, limit
+ */
+router.get(
+  "/:subscriptionId/transactions",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionTransactionHistoryQuerySchema),
+  subscriptionController.getSubscriptionTransactionHistory
 );
 
 /**

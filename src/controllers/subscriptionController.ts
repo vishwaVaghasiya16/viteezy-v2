@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { Subscriptions, Orders } from "@/models/commerce";
+import { Subscriptions, Orders, Payments } from "@/models/commerce";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
@@ -370,6 +370,93 @@ class SubscriptionController {
             updatedAt: subscription.updatedAt,
           },
         },
+      });
+    }
+  );
+
+  /**
+   * Get subscription transaction history (membership payments for this subscription)
+   * @route GET /api/subscriptions/:subscriptionId/transactions
+   * @access Private
+   * @query status (PaymentStatus), page, limit
+   */
+  getSubscriptionTransactionHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { status: statusFilter } = req.query as { status?: string };
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+      const subId = new mongoose.Types.ObjectId(subscriptionId);
+
+      const subscription = await Subscriptions.findOne({
+        _id: subId,
+        userId,
+        isDeleted: false,
+      })
+        .select("orderId")
+        .lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      const paginationOptions = getPaginationOptions(req);
+      const skip = (paginationOptions.page - 1) * paginationOptions.limit;
+
+      // Payments: either linked to this subscription (renewals) or initial order payment
+      const paymentQuery: Record<string, unknown> = {
+        userId,
+        isDeleted: false,
+        $or: [
+          { subscriptionId: subId },
+          { orderId: subscription.orderId },
+        ],
+      };
+
+      if (statusFilter) {
+        paymentQuery.status = statusFilter;
+      }
+
+      const [payments, total] = await Promise.all([
+        Payments.find(paymentQuery)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(paginationOptions.limit)
+          .lean(),
+        Payments.countDocuments(paymentQuery),
+      ]);
+
+      const paginationMeta = getPaginationMeta(
+        paginationOptions.page,
+        paginationOptions.limit,
+        total
+      );
+
+      const data = payments.map((p: any) => {
+        const amount = p.amount;
+        const value = amount?.amount ?? amount?.discountedPrice ?? 0;
+        const currency = amount?.currency ?? "USD";
+        const formattedAmount = `${currency === "USD" ? "$" : currency + " "}${Number(value).toFixed(2)}`;
+        return {
+          id: p._id,
+          transactionId: p.transactionId || p.gatewayTransactionId || `TRN-${String(p._id).slice(-8).toUpperCase()}`,
+          date: p.processedAt || p.createdAt,
+          amount: formattedAmount,
+          amountValue: value,
+          currency,
+          status: p.status,
+          isRenewalPayment: p.isRenewalPayment ?? false,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Transaction history retrieved successfully",
+        data,
+        pagination: paginationMeta,
       });
     }
   );
