@@ -531,7 +531,7 @@ const specificationItemSchemaForUpdate = Joi.object({
     .optional(),
   image: Joi.string().trim().optional(),
   imageMobile: Joi.string().trim().optional(),
-}).unknown(true); // preserve any extra keys on items (e.g. image URLs)
+});
 
 const specificationSchemaForUpdate = Joi.object({
   main_title: Joi.alternatives()
@@ -546,7 +546,7 @@ const specificationSchemaForUpdate = Joi.object({
       })
     )
     .optional(),
-  bg_image: Joi.string().trim().optional(),
+  bg_image: Joi.string().trim().uri().optional(),
   items: Joi.array().items(specificationItemSchemaForUpdate).min(0).max(4).optional(),
   title1: Joi.string().trim().optional(),
   descr1: Joi.string().trim().optional(),
@@ -558,7 +558,6 @@ const specificationSchemaForUpdate = Joi.object({
   descr4: Joi.string().trim().optional(),
 })
   .optional()
-  .unknown(true) // preserve any extra keys so partial update does not strip specification fields
   .messages({
     "object.base": "Specification must be an object",
   });

@@ -1646,38 +1646,18 @@ class ProductService {
       }
     });
 
-    // Merge specification with existing so partial update (e.g. only bg_image or new item images) does not wipe data
+    // Merge specification with existing so partial update does not wipe other fields
     if ((data as any).specification !== undefined) {
       const existingSpec: Record<string, any> =
         existingProduct.specification && typeof existingProduct.specification === "object"
           ? { ...(existingProduct.specification as Record<string, any>) }
           : {};
       const incoming = (data as any).specification as Record<string, any>;
-      const mergedSpec: Record<string, any> = { ...existingSpec };
+      const mergedSpec = { ...existingSpec };
       Object.keys(incoming).forEach((k) => {
-        if (incoming[k] === undefined) return;
-        // Do not overwrite existing items with empty array when only bg_image (or other fields) are sent
-        if (
-          k === "items" &&
-          Array.isArray(incoming[k]) &&
-          incoming[k].length === 0 &&
-          Array.isArray(existingSpec.items) &&
-          existingSpec.items.length > 0
-        ) {
-          return;
+        if (incoming[k] !== undefined) {
+          (mergedSpec as Record<string, any>)[k] = incoming[k];
         }
-        // Item-by-item merge so new uploaded images (e.g. specificationItemImage1) merge into existing items without wiping title/descr/other
-        if (k === "items" && Array.isArray(incoming[k]) && Array.isArray(existingSpec.items)) {
-          const existingItems = existingSpec.items as Record<string, any>[];
-          const incomingItems = incoming[k] as Record<string, any>[];
-          const maxLen = Math.max(existingItems.length, incomingItems.length);
-          mergedSpec.items = Array.from({ length: maxLen }, (_, i) => ({
-            ...(existingItems[i] || {}),
-            ...(incomingItems[i] || {}),
-          }));
-          return;
-        }
-        mergedSpec[k] = incoming[k];
       });
       updateData.specification = mergedSpec;
     }
