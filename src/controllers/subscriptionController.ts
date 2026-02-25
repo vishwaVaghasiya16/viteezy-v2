@@ -4,6 +4,7 @@ import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Subscriptions, Orders, Products } from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
+import { Payments } from "@/models/commerce";
 import {
   SubscriptionStatus,
   SubscriptionCycle,
@@ -68,7 +69,7 @@ class SubscriptionController {
       if (order.planType !== OrderPlanType.SUBSCRIPTION) {
         throw new AppError(
           "Subscription can only be created for subscription orders",
-          400
+          400,
         );
       }
 
@@ -76,7 +77,7 @@ class SubscriptionController {
       if (order.paymentStatus !== PaymentStatus.COMPLETED) {
         throw new AppError(
           "Subscription can only be created after payment is successful",
-          400
+          400,
         );
       }
 
@@ -167,23 +168,26 @@ class SubscriptionController {
       // Send subscription activated notification (only after payment success)
       // Payment status is COMPLETED (validated above), so subscription is activated
       try {
-        const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
+        const { subscriptionNotifications } =
+          await import("@/utils/notificationHelpers");
         await subscriptionNotifications.subscriptionActivated(
           userId,
           String(subscription._id),
           subscription.subscriptionNumber,
-          userId
+          userId,
         );
         logger.info(
-          `Subscription activated notification sent for subscription: ${subscription.subscriptionNumber} (payment successful)`
+          `Subscription activated notification sent for subscription: ${subscription.subscriptionNumber} (payment successful)`,
         );
       } catch (error: any) {
-        logger.error(`Failed to send subscription activated notification: ${error.message}`);
+        logger.error(
+          `Failed to send subscription activated notification: ${error.message}`,
+        );
         // Don't fail subscription creation if notification fails
       }
 
       logger.info(
-        `Subscription created: ${subscription.subscriptionNumber} for order: ${orderId}`
+        `Subscription created: ${subscription.subscriptionNumber} for order: ${orderId}`,
       );
 
       const derivedMetrics = computeSubscriptionMetrics(subscription);
@@ -212,7 +216,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -245,7 +249,10 @@ class SubscriptionController {
       // Get subscriptions
       const [subscriptions, total] = await Promise.all([
         Subscriptions.find(query)
-          .populate("orderId", "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency")
+          .populate(
+            "orderId",
+            "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency",
+          )
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(paginationOptions.limit)
@@ -256,7 +263,7 @@ class SubscriptionController {
       const paginationMeta = getPaginationMeta(
         paginationOptions.page,
         paginationOptions.limit,
-        total
+        total,
       );
 
       // Format response
@@ -265,13 +272,13 @@ class SubscriptionController {
         const daysUntilDelivery = sub.nextDeliveryDate
           ? Math.ceil(
               (sub.nextDeliveryDate.getTime() - now.getTime()) /
-                (1000 * 60 * 60 * 24)
+                (1000 * 60 * 60 * 24),
             )
           : null;
         const daysUntilBilling = sub.nextBillingDate
           ? Math.ceil(
               (sub.nextBillingDate.getTime() - now.getTime()) /
-                (1000 * 60 * 60 * 24)
+                (1000 * 60 * 60 * 24),
             )
           : null;
 
@@ -305,7 +312,7 @@ class SubscriptionController {
         data: formattedSubscriptions,
         pagination: paginationMeta,
       });
-    }
+    },
   );
 
   /**
@@ -327,7 +334,10 @@ class SubscriptionController {
         userId,
         isDeleted: false,
       })
-        .populate("orderId", "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency")
+        .populate(
+          "orderId",
+          "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency",
+        )
         .lean();
 
       if (!subscription) {
@@ -338,13 +348,13 @@ class SubscriptionController {
       const daysUntilDelivery = subscription.nextDeliveryDate
         ? Math.ceil(
             (subscription.nextDeliveryDate.getTime() - now.getTime()) /
-              (1000 * 60 * 60 * 24)
+              (1000 * 60 * 60 * 24),
           )
         : null;
       const daysUntilBilling = subscription.nextBillingDate
         ? Math.ceil(
             (subscription.nextBillingDate.getTime() - now.getTime()) /
-              (1000 * 60 * 60 * 24)
+              (1000 * 60 * 60 * 24),
           )
         : null;
 
@@ -379,7 +389,94 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
+  );
+
+  /**
+   * Get subscription transaction history (membership payments for this subscription)
+   * @route GET /api/subscriptions/:subscriptionId/transactions
+   * @access Private
+   * @query status (PaymentStatus), page, limit
+   */
+  getSubscriptionTransactionHistory = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { status: statusFilter } = req.query as { status?: string };
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+      const subId = new mongoose.Types.ObjectId(subscriptionId);
+
+      const subscription = await Subscriptions.findOne({
+        _id: subId,
+        userId,
+        isDeleted: false,
+      })
+        .select("orderId")
+        .lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      const paginationOptions = getPaginationOptions(req);
+      const skip = (paginationOptions.page - 1) * paginationOptions.limit;
+
+      // Payments: either linked to this subscription (renewals) or initial order payment
+      const paymentQuery: Record<string, unknown> = {
+        userId,
+        isDeleted: false,
+        $or: [{ subscriptionId: subId }, { orderId: subscription.orderId }],
+      };
+
+      if (statusFilter) {
+        paymentQuery.status = statusFilter;
+      }
+
+      const [payments, total] = await Promise.all([
+        Payments.find(paymentQuery)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(paginationOptions.limit)
+          .lean(),
+        Payments.countDocuments(paymentQuery),
+      ]);
+
+      const paginationMeta = getPaginationMeta(
+        paginationOptions.page,
+        paginationOptions.limit,
+        total,
+      );
+
+      const data = payments.map((p: any) => {
+        const amount = p.amount;
+        const value = amount?.amount ?? amount?.discountedPrice ?? 0;
+        const currency = amount?.currency ?? "USD";
+        const formattedAmount = `${currency === "USD" ? "$" : currency + " "}${Number(value).toFixed(2)}`;
+        return {
+          id: p._id,
+          transactionId:
+            p.transactionId ||
+            p.gatewayTransactionId ||
+            `TRN-${String(p._id).slice(-8).toUpperCase()}`,
+          date: p.processedAt || p.createdAt,
+          amount: formattedAmount,
+          amountValue: value,
+          currency,
+          status: p.status,
+          isRenewalPayment: p.isRenewalPayment ?? false,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Transaction history retrieved successfully",
+        data,
+        pagination: paginationMeta,
+      });
+    },
   );
 
   /**
@@ -471,7 +568,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -537,7 +634,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -581,7 +678,7 @@ class SubscriptionController {
       await subscription.save();
 
       logger.info(
-        `Subscription cancelled: ${subscriptionId} by user: ${userId}`
+        `Subscription cancelled: ${subscriptionId} by user: ${userId}`,
       );
 
       res.status(200).json({
@@ -597,7 +694,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -681,7 +778,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -696,12 +793,16 @@ class SubscriptionController {
       }
 
       const { subscriptionId } = req.params;
-      const { productIds, paymentMethod, shippingAddressId, billingAddressId } = req.body;
+      const { productIds, paymentMethod, shippingAddressId, billingAddressId } =
+        req.body;
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
 
       // Validate payment method
-      if (!paymentMethod || !Object.values(PaymentMethod).includes(paymentMethod)) {
+      if (
+        !paymentMethod ||
+        !Object.values(PaymentMethod).includes(paymentMethod)
+      ) {
         throw new AppError("Valid payment method is required", 400);
       }
 
@@ -718,7 +819,10 @@ class SubscriptionController {
       });
 
       if (!shippingAddress) {
-        throw new AppError("Shipping address not found or does not belong to user", 404);
+        throw new AppError(
+          "Shipping address not found or does not belong to user",
+          404,
+        );
       }
 
       // Verify billing address if provided
@@ -731,7 +835,10 @@ class SubscriptionController {
         });
 
         if (!billingAddress) {
-          throw new AppError("Billing address not found or does not belong to user", 404);
+          throw new AppError(
+            "Billing address not found or does not belong to user",
+            404,
+          );
         }
       }
 
@@ -750,7 +857,7 @@ class SubscriptionController {
       if (subscription.status !== SubscriptionStatus.ACTIVE) {
         throw new AppError(
           "Products can only be added to active subscriptions",
-          400
+          400,
         );
       }
 
@@ -761,7 +868,7 @@ class SubscriptionController {
 
       // Fetch products
       const productObjectIds = productIds.map(
-        (id: string) => new mongoose.Types.ObjectId(id)
+        (id: string) => new mongoose.Types.ObjectId(id),
       );
       const products = await Products.find({
         _id: { $in: productObjectIds },
@@ -774,27 +881,24 @@ class SubscriptionController {
 
       // Check if products already exist in subscription
       const existingProductIds = subscription.items.map((item: any) =>
-        item.productId.toString()
+        item.productId.toString(),
       );
       const newProductIds = productIds.filter(
-        (id: string) => !existingProductIds.includes(id)
+        (id: string) => !existingProductIds.includes(id),
       );
 
       if (newProductIds.length === 0) {
-        throw new AppError(
-          "All products are already in the subscription",
-          400
-        );
+        throw new AppError("All products are already in the subscription", 400);
       }
 
       // Validate products support SACHETS variant (subscriptions only support SACHETS)
       const invalidProducts = products.filter(
-        (product: any) => !product.sachetPrices
+        (product: any) => !product.sachetPrices,
       );
       if (invalidProducts.length > 0) {
         throw new AppError(
           "One or more products do not support subscription (SACHETS variant)",
-          400
+          400,
         );
       }
 
@@ -811,7 +915,7 @@ class SubscriptionController {
         // Get subscription price based on cycleDays
         const subscriptionPrice = getSubscriptionPriceFromProduct(
           product,
-          cycleDays as SubscriptionCycle
+          cycleDays as SubscriptionCycle,
         );
 
         // Calculate member price if user is a member
@@ -819,7 +923,10 @@ class SubscriptionController {
         let membershipDiscountAmount = 0;
         if (user) {
           const memberPriceResult = await calculateMemberPrice(product, user);
-          if (memberPriceResult.isMember && memberPriceResult.discountAmount > 0) {
+          if (
+            memberPriceResult.isMember &&
+            memberPriceResult.discountAmount > 0
+          ) {
             finalPrice = memberPriceResult.memberPrice.amount;
             membershipDiscountAmount = memberPriceResult.discountAmount;
           }
@@ -852,12 +959,14 @@ class SubscriptionController {
         }
 
         if (!selectedPlan) {
-          const productTitle = typeof product.title === "string" 
-            ? product.title 
-            : getTranslatedString(product.title, "en") || product._id?.toString();
+          const productTitle =
+            typeof product.title === "string"
+              ? product.title
+              : getTranslatedString(product.title, "en") ||
+                product._id?.toString();
           throw new AppError(
             `Product ${productTitle} does not support ${cycleDays}-day subscription plan`,
-            400
+            400,
           );
         }
 
@@ -868,14 +977,21 @@ class SubscriptionController {
         }
 
         // Total = discounted price (after membership discount) - subscription plan discount + tax
-        const totalAmount = finalPrice - subscriptionPlanDiscountAmount + taxAmount;
+        const totalAmount =
+          finalPrice - subscriptionPlanDiscountAmount + taxAmount;
 
-        const productName = typeof product.title === "string"
-          ? product.title
-          : getTranslatedString(product.title, "en") || getTranslatedString(product.title, "nl") || product.slug || "Product";
-        
-        const productIdString = product._id?.toString ? product._id.toString() : String(product._id || "");
-        
+        const productName =
+          typeof product.title === "string"
+            ? product.title
+            : getTranslatedString(product.title, "en") ||
+              getTranslatedString(product.title, "nl") ||
+              product.slug ||
+              "Product";
+
+        const productIdString = product._id?.toString
+          ? product._id.toString()
+          : String(product._id || "");
+
         newItems.push({
           productId: new mongoose.Types.ObjectId(productIdString),
           name: productName,
@@ -889,37 +1005,38 @@ class SubscriptionController {
           totalAmount: Math.round(totalAmount * 100) / 100,
           durationDays: selectedPlan.durationDays || planDays,
           savingsPercentage: selectedPlan.savingsPercentage,
-          features: Array.isArray(selectedPlan.features) ? selectedPlan.features : [],
+          features: Array.isArray(selectedPlan.features)
+            ? selectedPlan.features
+            : [],
         });
       }
 
       // Calculate pricing for NEW items only (for order)
       const newItemsSubTotal = newItems.reduce(
         (sum: number, item: any) => sum + (item.amount || 0),
-        0
+        0,
       );
       const newItemsDiscountedPrice = newItems.reduce(
         (sum: number, item: any) => sum + (item.discountedPrice || 0),
-        0
+        0,
       );
       const newItemsMembershipDiscount = newItems.reduce(
         (sum: number, item: any) => {
           const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
           return sum + Math.max(0, itemDiscount);
         },
-        0
+        0,
       );
-      const newItemsSubscriptionPlanDiscount = cycleDays === 90
-        ? newItemsDiscountedPrice * 0.15
-        : 0;
-      const newItemsTaxAmount = newItems.reduce(
-        (sum: number, item: any) => {
-          const itemTotal = item.discountedPrice || 0;
-          return sum + (itemTotal * (item.taxRate || 0));
-        },
-        0
-      );
-      const newItemsGrandTotal = newItemsDiscountedPrice - newItemsSubscriptionPlanDiscount + newItemsTaxAmount;
+      const newItemsSubscriptionPlanDiscount =
+        cycleDays === 90 ? newItemsDiscountedPrice * 0.15 : 0;
+      const newItemsTaxAmount = newItems.reduce((sum: number, item: any) => {
+        const itemTotal = item.discountedPrice || 0;
+        return sum + itemTotal * (item.taxRate || 0);
+      }, 0);
+      const newItemsGrandTotal =
+        newItemsDiscountedPrice -
+        newItemsSubscriptionPlanDiscount +
+        newItemsTaxAmount;
 
       // Generate order number
       const generateOrderNumber = (): string => {
@@ -938,8 +1055,10 @@ class SubscriptionController {
         subTotal: Math.round(newItemsSubTotal * 100) / 100,
         discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
         couponDiscountAmount: 0,
-        membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
-        subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+        membershipDiscountAmount:
+          Math.round(newItemsMembershipDiscount * 100) / 100,
+        subscriptionPlanDiscountAmount:
+          Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
         taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
         grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
         currency: subscription.pricing?.currency || "EUR",
@@ -947,8 +1066,10 @@ class SubscriptionController {
           sachets: {
             subTotal: Math.round(newItemsSubTotal * 100) / 100,
             discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
-            membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
-            subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+            membershipDiscountAmount:
+              Math.round(newItemsMembershipDiscount * 100) / 100,
+            subscriptionPlanDiscountAmount:
+              Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
             taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
             total: Math.round(newItemsGrandTotal * 100) / 100,
             currency: subscription.pricing?.currency || "EUR",
@@ -957,8 +1078,10 @@ class SubscriptionController {
             subTotal: Math.round(newItemsSubTotal * 100) / 100,
             discountedPrice: Math.round(newItemsDiscountedPrice * 100) / 100,
             couponDiscountAmount: 0,
-            membershipDiscountAmount: Math.round(newItemsMembershipDiscount * 100) / 100,
-            subscriptionPlanDiscountAmount: Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
+            membershipDiscountAmount:
+              Math.round(newItemsMembershipDiscount * 100) / 100,
+            subscriptionPlanDiscountAmount:
+              Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
             taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
             grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
             currency: subscription.pricing?.currency || "EUR",
@@ -971,7 +1094,9 @@ class SubscriptionController {
         paymentMethod,
         paymentStatus: PaymentStatus.PENDING,
         metadata: {
-          subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+          subscriptionId: (
+            subscription._id as mongoose.Types.ObjectId
+          ).toString(),
           subscriptionNumber: subscription.subscriptionNumber,
           isSubscriptionAddItems: true,
         },
@@ -992,7 +1117,9 @@ class SubscriptionController {
         },
         description: `Payment for adding products to subscription ${subscription.subscriptionNumber}`,
         metadata: {
-          subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+          subscriptionId: (
+            subscription._id as mongoose.Types.ObjectId
+          ).toString(),
           subscriptionNumber: subscription.subscriptionNumber,
           isSubscriptionAddItems: "true",
         },
@@ -1006,45 +1133,44 @@ class SubscriptionController {
       // Recalculate subscription pricing (for all items)
       const subTotal = subscription.items.reduce(
         (sum: number, item: any) => sum + (item.amount || 0),
-        0
+        0,
       );
       const discountedPrice = subscription.items.reduce(
         (sum: number, item: any) => sum + (item.discountedPrice || 0),
-        0
+        0,
       );
-      
+
       // Calculate membership discount (difference between original and discounted price)
       const membershipDiscountAmount = subscription.items.reduce(
         (sum: number, item: any) => {
           const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
           return sum + Math.max(0, itemDiscount);
         },
-        0
+        0,
       );
-      
+
       // Calculate subscription plan discount (15% for 90-day plan, applied to discounted price)
-      const subscriptionPlanDiscountAmount = cycleDays === 90
-        ? discountedPrice * 0.15
-        : 0;
-      
+      const subscriptionPlanDiscountAmount =
+        cycleDays === 90 ? discountedPrice * 0.15 : 0;
+
       // Calculate tax on discounted price (after membership discount, before subscription plan discount)
-      const taxAmount = subscription.items.reduce(
-        (sum: number, item: any) => {
-          const itemTotal = item.discountedPrice || 0;
-          return sum + (itemTotal * (item.taxRate || 0));
-        },
-        0
-      );
-      
+      const taxAmount = subscription.items.reduce((sum: number, item: any) => {
+        const itemTotal = item.discountedPrice || 0;
+        return sum + itemTotal * (item.taxRate || 0);
+      }, 0);
+
       // Total = discounted price - subscription plan discount + tax
-      const total = discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
+      const total =
+        discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
 
       // Update subscription pricing
       subscription.pricing = {
         subTotal: Math.round(subTotal * 100) / 100,
         discountedPrice: Math.round(discountedPrice * 100) / 100,
-        membershipDiscountAmount: Math.round(membershipDiscountAmount * 100) / 100,
-        subscriptionPlanDiscountAmount: Math.round(subscriptionPlanDiscountAmount * 100) / 100,
+        membershipDiscountAmount:
+          Math.round(membershipDiscountAmount * 100) / 100,
+        subscriptionPlanDiscountAmount:
+          Math.round(subscriptionPlanDiscountAmount * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
         currency: subscription.pricing?.currency || "EUR",
@@ -1054,7 +1180,7 @@ class SubscriptionController {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       subscription.subscriptionStartDate = today;
-      
+
       const endDate = new Date(today);
       endDate.setDate(endDate.getDate() + cycleDays);
       subscription.subscriptionEndDate = endDate;
@@ -1067,12 +1193,13 @@ class SubscriptionController {
       await subscription.save();
 
       logger.info(
-        `Products added to subscription ${subscription.subscriptionNumber} by user ${userId}. Order ${order.orderNumber} created with payment.`
+        `Products added to subscription ${subscription.subscriptionNumber} by user ${userId}. Order ${order.orderNumber} created with payment.`,
       );
 
       res.status(200).json({
         success: true,
-        message: "Products added to subscription successfully. Please complete payment.",
+        message:
+          "Products added to subscription successfully. Please complete payment.",
         data: {
           subscription: {
             id: subscription._id,
@@ -1099,7 +1226,7 @@ class SubscriptionController {
           paymentLink: paymentResult.result.redirectUrl || null,
         },
       });
-    }
+    },
   );
 
   /**
@@ -1133,7 +1260,7 @@ class SubscriptionController {
       if (subscription.status !== SubscriptionStatus.ACTIVE) {
         throw new AppError(
           "Products can only be removed from active subscriptions",
-          400
+          400,
         );
       }
 
@@ -1144,29 +1271,29 @@ class SubscriptionController {
 
       // Check if products exist in subscription
       const existingProductIds = subscription.items.map((item: any) =>
-        item.productId.toString()
+        item.productId.toString(),
       );
       const productsToRemove = productIds.filter((id: string) =>
-        existingProductIds.includes(id)
+        existingProductIds.includes(id),
       );
 
       if (productsToRemove.length === 0) {
         throw new AppError(
           "None of the specified products are in the subscription",
-          400
+          400,
         );
       }
 
       // Remove products from subscription items
       subscription.items = subscription.items.filter(
-        (item: any) => !productIds.includes(item.productId.toString())
+        (item: any) => !productIds.includes(item.productId.toString()),
       );
 
       // Validate at least one item remains
       if (subscription.items.length === 0) {
         throw new AppError(
           "Cannot remove all products from subscription. Cancel the subscription instead.",
-          400
+          400,
         );
       }
 
@@ -1174,45 +1301,44 @@ class SubscriptionController {
       const cycleDays = subscription.cycleDays;
       const subTotal = subscription.items.reduce(
         (sum: number, item: any) => sum + (item.amount || 0),
-        0
+        0,
       );
       const discountedPrice = subscription.items.reduce(
         (sum: number, item: any) => sum + (item.discountedPrice || 0),
-        0
+        0,
       );
-      
+
       // Calculate membership discount (difference between original and discounted price)
       const membershipDiscountAmount = subscription.items.reduce(
         (sum: number, item: any) => {
           const itemDiscount = (item.amount || 0) - (item.discountedPrice || 0);
           return sum + Math.max(0, itemDiscount);
         },
-        0
+        0,
       );
-      
+
       // Calculate subscription plan discount (15% for 90-day plan, applied to discounted price)
-      const subscriptionPlanDiscountAmount = cycleDays === 90
-        ? discountedPrice * 0.15
-        : 0;
-      
+      const subscriptionPlanDiscountAmount =
+        cycleDays === 90 ? discountedPrice * 0.15 : 0;
+
       // Calculate tax on discounted price (after membership discount, before subscription plan discount)
-      const taxAmount = subscription.items.reduce(
-        (sum: number, item: any) => {
-          const itemTotal = item.discountedPrice || 0;
-          return sum + (itemTotal * (item.taxRate || 0));
-        },
-        0
-      );
-      
+      const taxAmount = subscription.items.reduce((sum: number, item: any) => {
+        const itemTotal = item.discountedPrice || 0;
+        return sum + itemTotal * (item.taxRate || 0);
+      }, 0);
+
       // Total = discounted price - subscription plan discount + tax
-      const total = discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
+      const total =
+        discountedPrice - subscriptionPlanDiscountAmount + taxAmount;
 
       // Update subscription pricing
       subscription.pricing = {
         subTotal: Math.round(subTotal * 100) / 100,
         discountedPrice: Math.round(discountedPrice * 100) / 100,
-        membershipDiscountAmount: Math.round(membershipDiscountAmount * 100) / 100,
-        subscriptionPlanDiscountAmount: Math.round(subscriptionPlanDiscountAmount * 100) / 100,
+        membershipDiscountAmount:
+          Math.round(membershipDiscountAmount * 100) / 100,
+        subscriptionPlanDiscountAmount:
+          Math.round(subscriptionPlanDiscountAmount * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
         currency: subscription.pricing?.currency || "EUR",
@@ -1222,7 +1348,7 @@ class SubscriptionController {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       subscription.subscriptionStartDate = today;
-      
+
       const endDate = new Date(today);
       endDate.setDate(endDate.getDate() + cycleDays);
       subscription.subscriptionEndDate = endDate;
@@ -1235,7 +1361,7 @@ class SubscriptionController {
       await subscription.save();
 
       logger.info(
-        `Products removed from subscription ${subscription.subscriptionNumber} by user ${userId}`
+        `Products removed from subscription ${subscription.subscriptionNumber} by user ${userId}`,
       );
 
       res.status(200).json({
@@ -1254,7 +1380,7 @@ class SubscriptionController {
           },
         },
       });
-    }
+    },
   );
 
   /**
@@ -1320,7 +1446,7 @@ class SubscriptionController {
 
       // Fetch all unique addresses
       const addressObjectIds = Array.from(addressIds).map(
-        (id) => new mongoose.Types.ObjectId(id)
+        (id) => new mongoose.Types.ObjectId(id),
       );
 
       const addresses = await Addresses.find({
@@ -1333,9 +1459,9 @@ class SubscriptionController {
 
       res.apiSuccess(
         { addresses },
-        "Shipping addresses retrieved successfully"
+        "Shipping addresses retrieved successfully",
       );
-    }
+    },
   );
 }
 

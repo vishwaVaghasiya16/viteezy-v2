@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { withFieldLabels } from "./helpers";
 import {
   PAYMENT_METHOD_VALUES,
+  PAYMENT_STATUS_VALUES,
   SUBSCRIPTION_CYCLE_VALUES,
   SUBSCRIPTION_STATUS_VALUES,
 } from "@/models/enums";
@@ -25,7 +26,7 @@ const priceSchema = Joi.object(
     currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
     amount: Joi.number().precision(2).min(0).required(),
     taxRate: Joi.number().precision(4).min(0).max(1).default(0),
-  })
+  }),
 );
 
 const subscriptionItemSchema = Joi.object(
@@ -36,7 +37,7 @@ const subscriptionItemSchema = Joi.object(
     price: priceSchema.required(),
     name: Joi.string().trim().optional(),
     sku: Joi.string().trim().optional(),
-  })
+  }),
 );
 
 /**
@@ -61,7 +62,7 @@ export const createSubscriptionSchema = Joi.object(
     nextDeliveryDate: Joi.date().iso().required(),
     nextBillingDate: Joi.date().iso().required(),
     metadata: Joi.object().unknown(true).default({}).optional(),
-  })
+  }),
 ).label("CreateSubscriptionPayload");
 
 /**
@@ -77,7 +78,7 @@ export const updateSubscriptionSchema = Joi.object(
     pausedUntil: Joi.date().iso().optional(),
     cancellationReason: Joi.string().trim().max(500).optional(),
     metadata: Joi.object().unknown(true).optional(),
-  })
+  }),
 ).label("UpdateSubscriptionPayload");
 
 /**
@@ -86,7 +87,7 @@ export const updateSubscriptionSchema = Joi.object(
 export const getSubscriptionDetailsParamsSchema = Joi.object(
   withFieldLabels({
     subscriptionId: objectIdSchema.required(),
-  })
+  }),
 ).label("SubscriptionDetailsParams");
 
 /**
@@ -99,7 +100,7 @@ export const getSubscriptionsQuerySchema = Joi.object(
       .optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
-  })
+  }),
 )
   .default({})
   .label("SubscriptionsQuery");
@@ -108,7 +109,7 @@ export const getSubscriptionsQuerySchema = Joi.object(
  * Joi schema for pausing subscription
  */
 export const pauseSubscriptionSchema = Joi.object(withFieldLabels({})).label(
-  "PauseSubscriptionPayload"
+  "PauseSubscriptionPayload",
 );
 
 /**
@@ -127,7 +128,7 @@ export const addProductsToSubscriptionSchema = Joi.object(
       .label("Payment Method"),
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
-  })
+  }),
 ).label("AddProductsToSubscriptionPayload");
 
 /**
@@ -140,5 +141,20 @@ export const removeProductsFromSubscriptionSchema = Joi.object(
       .min(1)
       .required()
       .label("Product IDs"),
-  })
+  }),
 ).label("RemoveProductsFromSubscriptionPayload");
+
+/**
+ * Joi schema for subscription transaction history query
+ */
+export const getSubscriptionTransactionHistoryQuerySchema = Joi.object(
+  withFieldLabels({
+    status: Joi.string()
+      .valid(...PAYMENT_STATUS_VALUES)
+      .optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  }),
+)
+  .default({})
+  .label("SubscriptionTransactionHistoryQuery");
