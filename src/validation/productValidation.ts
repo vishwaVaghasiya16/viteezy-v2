@@ -486,7 +486,7 @@ const specificationSchema = Joi.object({
       })
     )
     .required(),
-  bg_image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
+  bg_image: Joi.string().trim().optional(), // Optional - URL string or from uploaded file (any string accepted)
   items: Joi.array().items(specificationItemSchema).min(1).max(4).optional(),
   // Individual item fields (title1, descr1, etc.) - will be converted to items array
   title1: Joi.string().trim().optional(),
