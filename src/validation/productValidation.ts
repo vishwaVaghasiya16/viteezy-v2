@@ -486,9 +486,68 @@ const specificationSchema = Joi.object({
       })
     )
     .required(),
-  bg_image: Joi.string().trim().uri().optional(), // Optional - will be set from uploaded file
+  bg_image: Joi.string().trim().optional(), // Optional - URL string or from uploaded file (any string accepted)
   items: Joi.array().items(specificationItemSchema).min(1).max(4).optional(),
   // Individual item fields (title1, descr1, etc.) - will be converted to items array
+  title1: Joi.string().trim().optional(),
+  descr1: Joi.string().trim().optional(),
+  title2: Joi.string().trim().optional(),
+  descr2: Joi.string().trim().optional(),
+  title3: Joi.string().trim().optional(),
+  descr3: Joi.string().trim().optional(),
+  title4: Joi.string().trim().optional(),
+  descr4: Joi.string().trim().optional(),
+})
+  .optional()
+  .messages({
+    "object.base": "Specification must be an object",
+  });
+
+// Update: all specification fields optional; item image strings accepted (no strict .uri()) so nothing is stripped
+const specificationItemSchemaForUpdate = Joi.object({
+  title: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().optional(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .optional(),
+  descr: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().optional(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .optional(),
+  image: Joi.string().trim().optional(),
+  imageMobile: Joi.string().trim().optional(),
+});
+
+const specificationSchemaForUpdate = Joi.object({
+  main_title: Joi.alternatives()
+    .try(
+      Joi.string().trim(),
+      Joi.object({
+        en: Joi.string().trim().optional(),
+        nl: Joi.string().trim().optional(),
+        de: Joi.string().trim().optional(),
+        fr: Joi.string().trim().optional(),
+        es: Joi.string().trim().optional(),
+      })
+    )
+    .optional(),
+  bg_image: Joi.string().trim().uri().optional(),
+  items: Joi.array().items(specificationItemSchemaForUpdate).min(0).max(4).optional(),
   title1: Joi.string().trim().optional(),
   descr1: Joi.string().trim().optional(),
   title2: Joi.string().trim().optional(),
@@ -612,7 +671,7 @@ export const updateProductSchema = Joi.object({
   standupPouchImages: standupPouchImagesSchema.optional(),
   isFeatured: isFeaturedSchema.optional(),
   comparisonSection: comparisonSectionSchema.optional(),
-  specification: specificationSchema.optional(),
+  specification: specificationSchemaForUpdate,
   // Optional FAQs: empty array [] = delete all FAQs; or 1–15 items to replace. Each item must have question and answer.
   // Do not use .required() on the item object so that empty array [] is valid (Joi treats items().required() as "at least one item").
   faqs: Joi.array()

@@ -1635,12 +1635,32 @@ class ProductService {
       updatedAt: new Date(),
     };
 
-    // Only include fields that are explicitly provided (not undefined), excluding faqs
+    // Only include fields that are explicitly provided (not undefined), excluding faqs and specification (specification is merged below)
     Object.keys(data).forEach((key) => {
-      if (key !== "faqs" && data[key as keyof UpdateProductData] !== undefined) {
+      if (
+        key !== "faqs" &&
+        key !== "specification" &&
+        data[key as keyof UpdateProductData] !== undefined
+      ) {
         updateData[key] = data[key as keyof UpdateProductData];
       }
     });
+
+    // Merge specification with existing so partial update does not wipe other fields
+    if ((data as any).specification !== undefined) {
+      const existingSpec: Record<string, any> =
+        existingProduct.specification && typeof existingProduct.specification === "object"
+          ? { ...(existingProduct.specification as Record<string, any>) }
+          : {};
+      const incoming = (data as any).specification as Record<string, any>;
+      const mergedSpec = { ...existingSpec };
+      Object.keys(incoming).forEach((k) => {
+        if (incoming[k] !== undefined) {
+          (mergedSpec as Record<string, any>)[k] = incoming[k];
+        }
+      });
+      updateData.specification = mergedSpec;
+    }
 
     // Handle processed sachetPrices if provided
     if (sachetPrices !== undefined) {
