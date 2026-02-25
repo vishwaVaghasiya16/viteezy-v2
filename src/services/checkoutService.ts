@@ -1963,8 +1963,69 @@ class CheckoutService {
       }
     >();
 
+    // Default duration days by plan key (fallback when not in DB)
+    const subscriptionPlanKeyDefaults: Record<string, number> = {
+      thirtyDays: 30,
+      sixtyDays: 60,
+      ninetyDays: 90,
+      oneEightyDays: 180,
+    };
+
     // Only build plans for SACHETS variant
     if (selectedVariant === "SACHETS") {
+      // Build plans array from first product's sachetPrices (durationDays & label from DB)
+      const firstProductWithSachet = products.find((p) => p.sachetPrices);
+      const subscriptionPlanKeys = [
+        "thirtyDays",
+        "sixtyDays",
+        "ninetyDays",
+        "oneEightyDays",
+      ] as const;
+
+      let basePlans: Array<{
+        key: string;
+        label: string;
+        days: number;
+        isSubscription: boolean;
+      }> = [];
+
+      if (firstProductWithSachet) {
+        const sp = firstProductWithSachet.sachetPrices as any;
+        for (const key of subscriptionPlanKeys) {
+          const planData = sp?.[key];
+          if (planData) {
+            const durationDays =
+              planData.durationDays ?? subscriptionPlanKeyDefaults[key];
+            basePlans.push({
+              key,
+              label: `${durationDays} Days Plan`,
+              days: durationDays,
+              isSubscription: true,
+            });
+          }
+        }
+        if (sp?.oneTime) {
+          if (sp.oneTime.count30) {
+            const capsuleCount = sp.oneTime.count30.capsuleCount ?? 30;
+            basePlans.push({
+              key: "oneTime30",
+              label: `One-Time (${capsuleCount} count)`,
+              days: capsuleCount,
+              isSubscription: false,
+            });
+          }
+          if (sp.oneTime.count60) {
+            const capsuleCount = sp.oneTime.count60.capsuleCount ?? 60;
+            basePlans.push({
+              key: "oneTime60",
+              label: `One-Time (${capsuleCount} count)`,
+              days: capsuleCount,
+              isSubscription: false,
+            });
+          }
+        }
+      }
+
       for (const product of products) {
         if (product.sachetPrices) {
           const sachetPrices = product.sachetPrices as any;
@@ -1973,53 +2034,7 @@ class CheckoutService {
           );
           const quantity = 1; // Quantity removed from cart, each item is 1
 
-          const plans = [
-            {
-              key: "thirtyDays",
-              label: "30 Day Plan",
-              days: 30,
-              isSubscription: true,
-            },
-            {
-              key: "sixtyDays",
-              label: "60 Day Plan",
-              days: 60,
-              isSubscription: true,
-            },
-            {
-              key: "ninetyDays",
-              label: "90 Day Plan",
-              days: 90,
-              isSubscription: true,
-            },
-            {
-              key: "oneEightyDays",
-              label: "180 Day Plan",
-              days: 180,
-              isSubscription: true,
-            },
-          ];
-
-          // Add oneTime plans if available
-          if (sachetPrices.oneTime) {
-            const oneTimeData = sachetPrices.oneTime;
-            if (oneTimeData.count30) {
-              plans.push({
-                key: "oneTime30",
-                label: "One-Time (30 count)",
-                days: 30,
-                isSubscription: false,
-              });
-            }
-            if (oneTimeData.count60) {
-              plans.push({
-                key: "oneTime60",
-                label: "One-Time (60 count)",
-                days: 60,
-                isSubscription: false,
-              });
-            }
-          }
+          const plans = [...basePlans];
 
           for (const planInfo of plans) {
             let planData: any = null;
