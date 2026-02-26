@@ -37,10 +37,10 @@ export const SACHETS_PLAN_KEYS: Record<SachetsSubscriptionPlanDays, string> = {
   180: "oneEightyDays",
 } as const;
 
-// Product pricing uses keys plan_0 (e.g. 30 count) and plan_1 (e.g. 60 count)
+// Product pricing uses keys count_0 (e.g. 30 count) and count_1 (e.g. 60 count)
 export const STAND_UP_POUCH_PLAN_KEYS: Record<StandUpPouchPlanDays, string> = {
-  30: "plan_0",
-  60: "plan_1",
+  30: "count_0",
+  60: "count_1",
 } as const;
 
 /**
@@ -69,17 +69,17 @@ export function getSachetsPlanKey(days: number): string | null {
 export function getStandUpPouchPlanKey(count: number): string | null {
   const key = STAND_UP_POUCH_PLAN_KEYS[count as StandUpPouchPlanDays];
   if (key) return key;
-  // Backward compat: old carts/orders may have planDays 120 (was count120) → treat as plan_1
-  if (count === 120) return "plan_1";
+  // Backward compat: old carts/orders may have planDays 120 (was count120) → treat as count_1
+  if (count === 120) return "count_1";
   return null;
 }
 
-/** Normalize standupPouchPrice so it always has plan_0/plan_1 (maps old count30/count60 from DB). */
+/** Normalize standupPouchPrice so it always has count_0/count_1 (maps old count30/count60 from DB). */
 export function getNormalizedStandupPouchPrice(sp: any): any {
   if (!sp || typeof sp !== "object") return sp;
-  if (sp.plan_0 || sp.plan_1) return sp;
+  if (sp.count_0 || sp.count_1) return sp;
   if (sp.count30 || sp.count60)
-    return { plan_0: sp.count30, plan_1: sp.count60 };
+    return { count_0: sp.count30, count_1: sp.count60 };
   return sp;
 }
 

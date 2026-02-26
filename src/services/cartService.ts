@@ -136,10 +136,10 @@ class CartService {
         const countKey = getStandUpPouchPlanKey(itemPlanDays);
         const selectedCount =
           (countKey && standupPrice[countKey]) ||
-          (itemPlanDays === 30 ? standupPrice.plan_0 : null) ||
-          (itemPlanDays === 60 ? standupPrice.plan_1 : null) ||
-          standupPrice.plan_0 ||
-          standupPrice.plan_1 ||
+          (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
+          (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
+          standupPrice.count_0 ||
+          standupPrice.count_1 ||
           standupPrice;
         
         if (selectedCount) {
@@ -428,10 +428,10 @@ class CartService {
         const countKey = getStandUpPouchPlanKey(itemPlanDays);
         const selectedCount =
           (countKey && standupPrice[countKey]) ||
-          (itemPlanDays === 30 ? standupPrice.plan_0 : null) ||
-          (itemPlanDays === 60 ? standupPrice.plan_1 : null) ||
-          standupPrice.plan_0 ||
-          standupPrice.plan_1 ||
+          (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
+          (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
+          standupPrice.count_0 ||
+          standupPrice.count_1 ||
           standupPrice;
         
         if (selectedCount) {
@@ -696,10 +696,10 @@ class CartService {
       const countKey = getStandUpPouchPlanKey(planDays || DEFAULT_STAND_UP_POUCH_PLAN);
       const selectedCount =
         (countKey && standupPrice[countKey]) ||
-        (planDays === 30 ? standupPrice.plan_0 : null) ||
-        (planDays === 60 ? standupPrice.plan_1 : null) ||
-        standupPrice.plan_0 ||
-        standupPrice.plan_1 ||
+        (planDays === 30 ? standupPrice.count_0 : null) ||
+        (planDays === 60 ? standupPrice.count_1 : null) ||
+        standupPrice.count_0 ||
+        standupPrice.count_1 ||
         standupPrice;
       
       if (selectedCount) {
@@ -975,7 +975,7 @@ class CartService {
       const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
       const planDays = finalPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
       const countKey = getStandUpPouchPlanKey(planDays);
-      const selectedCount = (countKey && standupPrice[countKey]) || standupPrice.plan_0 || standupPrice.plan_1 || standupPrice;
+      const selectedCount = (countKey && standupPrice[countKey]) || standupPrice.count_0 || standupPrice.count_1 || standupPrice;
       
       if (selectedCount) {
         currency = selectedCount.currency || "EUR";
@@ -1805,8 +1805,8 @@ class CartService {
           | "sixtyDays"
           | "ninetyDays"
           | "oneEightyDays"
-          | "plan_0"
-          | "plan_1";
+          | "count_0"
+          | "count_1";
         price?: any;
       } = { type: "default" };
 
@@ -1850,25 +1850,25 @@ class CartService {
       ) {
         const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
         
-        const plan0Price = standupPrice.plan_0;
+        const plan0Price = standupPrice.count_0;
         if (plan0Price) {
           const price = plan0Price.discountedPrice || plan0Price.amount;
           if (Math.abs(cartPrice.amount - price) < 0.01) {
             selectedPlan = {
               type: "oneTime",
-              plan: "plan_0",
+              plan: "count_0",
               price: plan0Price,
             };
           }
         }
         if (selectedPlan.type === "default") {
-          const plan1Price = standupPrice.plan_1;
+          const plan1Price = standupPrice.count_1;
           if (plan1Price && plan1Price !== plan0Price) {
             const price = plan1Price.discountedPrice || plan1Price.amount;
             if (Math.abs(cartPrice.amount - price) < 0.01) {
               selectedPlan = {
                 type: "oneTime",
-                plan: "plan_1",
+                plan: "count_1",
                 price: plan1Price,
               };
             }

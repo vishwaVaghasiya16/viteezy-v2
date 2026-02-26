@@ -151,24 +151,24 @@ export const transformProductForLanguage = (
 
   }
 
-  // Transform standupPouchPrice features (plan_0 / plan_1)
+  // Transform standupPouchPrice features (count_0 / count_1)
   let transformedStandupPouchPrice = product.standupPouchPrice;
   if (product.standupPouchPrice) {
     const sp = product.standupPouchPrice as any;
-    if (sp.plan_0 || sp.plan_1) {
+    if (sp.count_0 || sp.count_1) {
       transformedStandupPouchPrice = { ...sp };
-      if ((transformedStandupPouchPrice as any).plan_0?.features) {
-        (transformedStandupPouchPrice as any).plan_0 = {
-          ...(transformedStandupPouchPrice as any).plan_0,
-          features: (transformedStandupPouchPrice as any).plan_0.features.map(
+      if ((transformedStandupPouchPrice as any).count_0?.features) {
+        (transformedStandupPouchPrice as any).count_0 = {
+          ...(transformedStandupPouchPrice as any).count_0,
+          features: (transformedStandupPouchPrice as any).count_0.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
       }
-      if ((transformedStandupPouchPrice as any).plan_1?.features) {
-        (transformedStandupPouchPrice as any).plan_1 = {
-          ...(transformedStandupPouchPrice as any).plan_1,
-          features: (transformedStandupPouchPrice as any).plan_1.features.map(
+      if ((transformedStandupPouchPrice as any).count_1?.features) {
+        (transformedStandupPouchPrice as any).count_1 = {
+          ...(transformedStandupPouchPrice as any).count_1,
+          features: (transformedStandupPouchPrice as any).count_1.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
@@ -304,15 +304,15 @@ const calculateMonthlyAmounts = (product: any): any => {
 
   if (product.standupPouchPrice) {
     const sp = product.standupPouchPrice as any;
-    if (sp.plan_0 || sp.plan_1) {
+    if (sp.count_0 || sp.count_1) {
       result.standupPouchPrice = {
-        plan_0: sp.plan_0 ? { ...sp.plan_0 } : undefined,
-        plan_1: sp.plan_1 ? { ...sp.plan_1 } : undefined,
+        count_0: sp.count_0 ? { ...sp.count_0 } : undefined,
+        count_1: sp.count_1 ? { ...sp.count_1 } : undefined,
       };
     } else if (sp.count30 || sp.count60) {
       result.standupPouchPrice = {
-        plan_0: sp.count30 ? { ...sp.count30 } : undefined,
-        plan_1: sp.count60 ? { ...sp.count60 } : undefined,
+        count_0: sp.count30 ? { ...sp.count30 } : undefined,
+        count_1: sp.count60 ? { ...sp.count60 } : undefined,
       };
     } else {
       result.standupPouchPrice = { ...sp };

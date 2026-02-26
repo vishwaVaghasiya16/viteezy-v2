@@ -46,15 +46,15 @@ const SubscriptionPriceWithMetadataSchema =
     { _id: false }
   );
 
-// Stand-up pouch plan options: plan_0 (e.g. 30 count), plan_1 (e.g. 60 count)
+// Stand-up pouch plan options: count_0 (e.g. 30 count), count_1 (e.g. 60 count)
 export interface StandupPouchPlanOptions {
-  plan_0: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
-  plan_1: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
+  count_0: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
+  count_1: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
 }
 
 const StandupPouchPlanOptionsSchema = new Schema<StandupPouchPlanOptions>(
   {
-    plan_0: {
+    count_0: {
       type: new Schema(
         {
           currency: { type: String, default: "EUR" },
@@ -67,7 +67,7 @@ const StandupPouchPlanOptionsSchema = new Schema<StandupPouchPlanOptions>(
         { _id: false }
       ),
     },
-    plan_1: {
+    count_1: {
       type: new Schema(
         {
           currency: { type: String, default: "EUR" },
@@ -163,7 +163,7 @@ export interface IProduct extends Document {
   // Sachet prices (subscription + one-time with capsule options)
   sachetPrices?: SachetPricesType;
   // Stand-up pouch: only one-time purchase (no subscription)
-  standupPouchPrice?: PriceType | StandupPouchPlanOptions; // Single one-time price or plan_0 / plan_1 structure
+  standupPouchPrice?: PriceType | StandupPouchPlanOptions; // Single one-time price or count_0 / count_1 structure
   standupPouchImages?: string[]; // Separate images for stand-up pouch variant
   // New fields for admin Add Product screen
   shortDescription?: I18nStringType | string; // Support both I18n and plain string
@@ -262,7 +262,7 @@ const ProductSchema = new Schema<IProduct>(
       default: null,
     },
     standupPouchPrice: {
-      type: Schema.Types.Mixed, // Can be PriceSchema or StandupPouchPlanOptionsSchema (plan_0 / plan_1)
+      type: Schema.Types.Mixed, // Can be PriceSchema or StandupPouchPlanOptionsSchema (count_0 / count_1)
       default: null,
     },
     standupPouchImages: {

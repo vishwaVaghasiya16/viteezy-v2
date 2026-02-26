@@ -172,14 +172,14 @@ export async function prepareProductDataForTranslation(
       result.sachetPrices = sachetPrices;
     }
 
-    // 9. Translate standupPouchPrice features (plan_0 / plan_1)
+    // 9. Translate standupPouchPrice features (count_0 / count_1)
     if (result.standupPouchPrice && typeof result.standupPouchPrice === "object") {
       const standupPouch = { ...result.standupPouchPrice } as any;
-      if (standupPouch.plan_0?.features && Array.isArray(standupPouch.plan_0.features) && standupPouch.plan_0.features.length > 0) {
-        standupPouch.plan_0 = { ...standupPouch.plan_0, features: await translateStringArray(standupPouch.plan_0.features) };
+      if (standupPouch.count_0?.features && Array.isArray(standupPouch.count_0.features) && standupPouch.count_0.features.length > 0) {
+        standupPouch.count_0 = { ...standupPouch.count_0, features: await translateStringArray(standupPouch.count_0.features) };
       }
-      if (standupPouch.plan_1?.features && Array.isArray(standupPouch.plan_1.features) && standupPouch.plan_1.features.length > 0) {
-        standupPouch.plan_1 = { ...standupPouch.plan_1, features: await translateStringArray(standupPouch.plan_1.features) };
+      if (standupPouch.count_1?.features && Array.isArray(standupPouch.count_1.features) && standupPouch.count_1.features.length > 0) {
+        standupPouch.count_1 = { ...standupPouch.count_1, features: await translateStringArray(standupPouch.count_1.features) };
       }
       result.standupPouchPrice = standupPouch;
     }

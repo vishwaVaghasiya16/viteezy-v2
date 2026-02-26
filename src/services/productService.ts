@@ -106,8 +106,8 @@ interface CreateProductData {
     currency?: string;
     amount?: number;
     taxRate?: number;
-    plan_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
-    plan_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Add Product screen
@@ -205,8 +205,8 @@ interface UpdateProductData {
     currency?: string;
     amount?: number;
     taxRate?: number;
-    plan_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
-    plan_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Edit Product screen
@@ -306,11 +306,11 @@ class ProductService {
       return standupPouchPrice;
     }
 
-    // If it has plan_0 / plan_1 structure
-    if (standupPouchPrice.plan_0 || standupPouchPrice.plan_1) {
+    // If it has count_0 / count_1 structure
+    if (standupPouchPrice.count_0 || standupPouchPrice.count_1) {
       return {
-        plan_0: standupPouchPrice.plan_0 ? this.processPriceObject(standupPouchPrice.plan_0) : undefined,
-        plan_1: standupPouchPrice.plan_1 ? this.processPriceObject(standupPouchPrice.plan_1) : undefined,
+        count_0: standupPouchPrice.count_0 ? this.processPriceObject(standupPouchPrice.count_0) : undefined,
+        count_1: standupPouchPrice.count_1 ? this.processPriceObject(standupPouchPrice.count_1) : undefined,
       };
     }
 
@@ -428,7 +428,7 @@ class ProductService {
       logger.warn(`[Create Product] No price provided and cannot derive from sachetPrices`);
     }
 
-    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (plan_0 / plan_1)
+    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (count_0 / count_1)
     let processedStandupPouchPrice = standupPouchPrice;
     if (standupPouchPrice) {
       logger.info(`[Create Product] Processing standupPouchPrice`);
@@ -1499,7 +1499,7 @@ class ProductService {
         ? this.processSachetPrices(sachetPrices)
         : sachetPrices;
 
-    // Process standupPouchPrice: plan_0 / plan_1 (if being updated)
+    // Process standupPouchPrice: count_0 / count_1 (if being updated)
     const processedStandupPouchPrice =
       standupPouchPrice !== undefined
         ? this.processStandupPouchPrice(standupPouchPrice)
@@ -2131,20 +2131,20 @@ class ProductService {
       result.sachetPrices = sachetPrices;
     }
 
-    // Preserve standupPouchPrice with discountedPrice (plan_0 / plan_1). Backward compat: map count30/count60 to plan_0/plan_1.
+    // Preserve standupPouchPrice with discountedPrice (count_0 / count_1). Backward compat: map count30/count60 to count_0/count_1.
     if (product.standupPouchPrice) {
       const sp = product.standupPouchPrice as any;
-      const hasNew = sp.plan_0 || sp.plan_1;
+      const hasNew = sp.count_0 || sp.count_1;
       const hasOld = sp.count30 || sp.count60;
       if (hasNew) {
         result.standupPouchPrice = {
-          plan_0: sp.plan_0 ? { ...sp.plan_0 } : undefined,
-          plan_1: sp.plan_1 ? { ...sp.plan_1 } : undefined,
+          count_0: sp.count_0 ? { ...sp.count_0 } : undefined,
+          count_1: sp.count_1 ? { ...sp.count_1 } : undefined,
         };
       } else if (hasOld) {
         result.standupPouchPrice = {
-          plan_0: sp.count30 ? { ...sp.count30 } : undefined,
-          plan_1: sp.count60 ? { ...sp.count60 } : undefined,
+          count_0: sp.count30 ? { ...sp.count30 } : undefined,
+          count_1: sp.count60 ? { ...sp.count60 } : undefined,
         };
       } else {
         result.standupPouchPrice = { ...sp };

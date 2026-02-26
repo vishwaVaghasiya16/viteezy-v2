@@ -277,9 +277,9 @@ const variantSchema = Joi.string()
 
 const hasStandupPouchSchema = Joi.boolean().optional().default(false);
 
-// Stand-up pouch plan options: plan_0, plan_1 (replaces count30/count60)
+// Stand-up pouch plan options: count_0, count_1 (replaces count30/count60)
 const standupPouchPlanOptionsSchema = Joi.object({
-  plan_0: priceSchema
+  count_0: priceSchema
     .keys({
       discountedPrice: Joi.number().min(0).optional(),
       capsuleCount: Joi.number().min(0).optional(),
@@ -299,7 +299,7 @@ const standupPouchPlanOptionsSchema = Joi.object({
         .optional(),
     })
     .optional(),
-  plan_1: priceSchema
+  count_1: priceSchema
     .keys({
       discountedPrice: Joi.number().min(0).optional(),
       capsuleCount: Joi.number().min(0).optional(),
@@ -329,7 +329,7 @@ const sachetPricesSchema = Joi.object({
   oneEightyDays: subscriptionPriceSchema.required(),
 }).optional();
 
-// Stand-up pouch: simple price or plan_0 / plan_1 structure
+// Stand-up pouch: simple price or count_0 / count_1 structure
 const standupPouchPriceSchema = Joi.alternatives()
   .try(priceSchema, standupPouchPlanOptionsSchema)
   .when("hasStandupPouch", {
