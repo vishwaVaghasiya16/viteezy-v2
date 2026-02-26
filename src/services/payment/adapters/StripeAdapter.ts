@@ -1,4 +1,6 @@
 import Stripe from "stripe";
+import jwt, { SignOptions } from "jsonwebtoken";
+import mongoose from "mongoose";
 import {
   IPaymentGateway,
   PaymentIntentData,
@@ -10,6 +12,7 @@ import {
 import { PaymentMethod, PaymentStatus } from "../../../models/enums";
 import { logger } from "../../../utils/logger";
 import { AppError } from "../../../utils/AppError";
+import { AuthSessions } from "../../../models/index.model";
 
 export class StripeAdapter implements IPaymentGateway {
   private stripe: Stripe;
@@ -50,9 +53,10 @@ export class StripeAdapter implements IPaymentGateway {
         billing_address_collection: "required",
         customer_email: data.customerEmail,
         line_items: this.buildLineItems(data),
-        success_url: this.buildSuccessUrl(
+        success_url: await this.buildSuccessUrl(
           data.returnUrl,
           data.orderId,
+          data.userId,
           isMembershipPayment
         ),
         cancel_url: this.buildCancelUrl(
@@ -585,20 +589,40 @@ export class StripeAdapter implements IPaymentGateway {
     }));
   }
 
-  private buildSuccessUrl(
+  private async buildSuccessUrl(
     returnUrl: string | undefined,
     orderId: string,
+    userId: string,
     skipQueryParams: boolean = false
-  ): string {
+  ): Promise<string> {
     const base = returnUrl || this.defaultSuccessUrl;
     // For membership payments, return clean URL without query params
     if (skipQueryParams) {
       return base;
     }
-    return this.appendQueryParams(base, {
+
+    // Build base query params
+    const queryParams: Record<string, string> = {
       orderId,
       session_id: "{CHECKOUT_SESSION_ID}",
-    });
+    };
+
+    // Generate and add user token for order payments
+    if (userId) {
+      try {
+        const userToken = await this.generateUserToken(userId);
+        if (userToken) {
+          queryParams.token = userToken;
+        }
+      } catch (error: any) {
+        logger.warn(
+          `Failed to generate token for user ${userId} in success URL: ${error.message}`
+        );
+        // Continue without token if generation fails
+      }
+    }
+
+    return this.appendQueryParams(base, queryParams);
   }
 
   private buildCancelUrl(
@@ -615,6 +639,51 @@ export class StripeAdapter implements IPaymentGateway {
       orderId,
       reason: "cancelled",
     });
+  }
+
+  /**
+   * Generate JWT access token for user
+   * @private
+   */
+  private async generateUserToken(userId: string): Promise<string | null> {
+    try {
+      // Get user's most recent active session
+      const activeSession = await AuthSessions.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        isRevoked: false,
+        expiresAt: { $gt: new Date() },
+      })
+        .sort({ lastUsedAt: -1 }) // Get the most recent active session
+        .lean();
+
+      if (!activeSession) {
+        logger.warn(
+          `No active session found for user ${userId} to generate token for redirect`
+        );
+        return null;
+      }
+
+      // Generate JWT token
+      const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+      const JWT_EXPIRES_IN = process.env.JWT_EXPIRE || "15m";
+
+      const payload = {
+        userId: userId,
+        sessionId: activeSession.sessionId,
+        type: "access",
+      };
+
+      const options: SignOptions = {
+        expiresIn: JWT_EXPIRES_IN as any,
+      };
+
+      const token = jwt.sign(payload, JWT_SECRET, options);
+      logger.info(`Generated token for user ${userId} for payment redirect`);
+      return token;
+    } catch (error: any) {
+      logger.error(`Failed to generate token for user ${userId}: ${error.message}`);
+      return null;
+    }
   }
 
   private appendQueryParams(

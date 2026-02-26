@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import jwt, { SignOptions } from "jsonwebtoken";
 import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
@@ -7,6 +8,7 @@ import { membershipService } from "@/services/membershipService";
 import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import mongoose from "mongoose";
 import { Payments } from "@/models/commerce/payments.model";
+import { AuthSessions } from "@/models/core";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -787,12 +789,70 @@ class PaymentController {
           if (resolvedMembershipId || payment.membershipId) {
             // Redirect membership payments to clean /products URL (no query params)
             redirectUrl = `${frontendUrl}/products`;
-          } else if (orderId || payment.orderId) {
-            redirectUrl = `${frontendUrl}/order/success?paymentId=${
-              payment._id
-            }&orderId=${orderId || payment.orderId}`;
-          } else {
-            redirectUrl = `${frontendUrl}/orderConfirmed/success?paymentId=${payment._id}`;
+          } else { // This is an order payment
+            try {
+              // Get user's most recent active session
+              const paymentUserId = payment.userId?.toString();
+              let userToken: string | null = null;
+
+              if (paymentUserId) {
+                const activeSession = await AuthSessions.findOne({
+                  userId: new mongoose.Types.ObjectId(paymentUserId),
+                  isRevoked: false,
+                  expiresAt: { $gt: new Date() },
+                })
+                  .sort({ lastUsedAt: -1 }) // Get the most recent active session
+                  .lean();
+
+                if (activeSession) {
+                  // Generate a new JWT token for the user
+                  const payload = {
+                    userId: paymentUserId,
+                    sessionId: activeSession.sessionId,
+                    type: "access",
+                  };
+                  const options: SignOptions = {
+                    expiresIn: (process.env.JWT_EXPIRE || "15m") as any, // Use configured expiry
+                  };
+                  userToken = jwt.sign(
+                    payload,
+                    process.env.JWT_SECRET || "your-secret-key",
+                    options
+                  );
+                  logger.info(
+                    `Generated new token for user ${paymentUserId} on payment success.`
+                  );
+                } else {
+                  logger.warn(
+                    `No active session found for user ${paymentUserId} to generate token for redirect.`
+                  );
+                }
+              }
+
+              if (orderId || payment.orderId) {
+                redirectUrl = `${frontendUrl}/order/success?paymentId=${
+                  payment._id
+                }&orderId=${orderId || payment.orderId}`;
+              } else {
+                redirectUrl = `${frontendUrl}/orderConfirmed/success?paymentId=${payment._id}`;
+              }
+
+              if (userToken) {
+                redirectUrl = this.addTokenToUrl(redirectUrl, userToken);
+              }
+            } catch (tokenError) {
+              logger.error(
+                `Failed to generate token for redirect: ${tokenError}`
+              );
+              // Continue without token if generation fails
+              if (orderId || payment.orderId) {
+                redirectUrl = `${frontendUrl}/order/success?paymentId=${
+                  payment._id
+                }&orderId=${orderId || payment.orderId}`;
+              } else {
+                redirectUrl = `${frontendUrl}/orderConfirmed/success?paymentId=${payment._id}`;
+              }
+            }
           }
         } else if (verifiedPayment.status === PaymentStatus.FAILED) {
           if (resolvedMembershipId || payment.membershipId) {
@@ -828,6 +888,15 @@ class PaymentController {
       }
     }
   );
+
+  /**
+   * Helper method to add token to URL
+   */
+  private addTokenToUrl(url: string, token: string): string {
+    const urlObj = new URL(url);
+    urlObj.searchParams.append("token", token);
+    return urlObj.toString();
+  }
 
   /**
    * Refund payment
