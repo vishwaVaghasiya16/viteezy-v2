@@ -137,15 +137,17 @@ class AdminDeliveryPostponementController {
     postponement.processedBy = new mongoose.Types.ObjectId(adminId);
     await postponement.save();
 
+    const orderId = (postponement.orderId as any)?._id ?? postponement.orderId;
     const subscription = await Subscriptions.findOne({
-      orderId: postponement.orderId,
+      orderId,
       isDeleted: { $ne: true },
     });
     if (subscription) {
+      subscription.initialDeliveryDate = finalDate;
       subscription.nextDeliveryDate = finalDate;
       await subscription.save();
       logger.info(
-        `Subscription ${subscription.subscriptionNumber} nextDeliveryDate updated to ${finalDate.toISOString()} (postponement ${id})`
+        `Subscription ${subscription.subscriptionNumber} initialDeliveryDate & nextDeliveryDate updated to ${finalDate.toISOString()} (postponement ${id})`
       );
     }
 
@@ -178,6 +180,76 @@ class AdminDeliveryPostponementController {
           status: postponement.status,
           approvedDeliveryDate: postponement.approvedDeliveryDate,
           processedAt: postponement.processedAt,
+        },
+      },
+    });
+  });
+
+  /**
+   * Update approved delivery date (only when postponement is already approved)
+   * PATCH /api/v1/admin/postponements/:id/approved-date
+   */
+  updateApprovedDate = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const { approvedDeliveryDate } = req.body || {};
+    const adminId = req.user?._id;
+    if (!adminId) throw new AppError("Unauthorized", 401);
+
+    const postponement = await DeliveryPostponements.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      isDeleted: false,
+    })
+      .populate("userId", "firstName lastName email")
+      .populate("orderId", "orderNumber planType");
+
+    if (!postponement) throw new AppError("Postponement request not found", 404);
+    if (postponement.status !== PostponementStatus.APPROVED) {
+      throw new AppError("Can only update approved date when postponement is already approved", 400);
+    }
+
+    const finalDate = new Date(approvedDeliveryDate);
+    postponement.approvedDeliveryDate = finalDate;
+    await postponement.save();
+
+    const orderId = (postponement.orderId as any)?._id ?? postponement.orderId;
+    const subscription = await Subscriptions.findOne({
+      orderId,
+      isDeleted: { $ne: true },
+    });
+    if (subscription) {
+      subscription.initialDeliveryDate = finalDate;
+      subscription.nextDeliveryDate = finalDate;
+      await subscription.save();
+      logger.info(
+        `Subscription ${subscription.subscriptionNumber} initialDeliveryDate & nextDeliveryDate updated to ${finalDate.toISOString()} (postponement ${id})`
+      );
+    }
+
+    const user = postponement.userId as any;
+    const email = user?.email;
+    try {
+      if (email) {
+        await emailService.sendPostponementApprovedEmail({
+          to: email,
+          userName: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Customer",
+          orderNumber: (postponement.orderId as any)?.orderNumber || "",
+          approvedDeliveryDate: finalDate,
+          wasDateModified: true,
+          requestedDeliveryDate: postponement.requestedDeliveryDate,
+        });
+      }
+    } catch (e: any) {
+      logger.error(`Failed to send postponement date-updated email: ${e?.message}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Approved delivery date updated successfully",
+      data: {
+        postponement: {
+          id: postponement._id,
+          status: postponement.status,
+          approvedDeliveryDate: postponement.approvedDeliveryDate,
         },
       },
     });

@@ -98,3 +98,15 @@ export const adminPostponementIdParamsSchema = Joi.object(
     id: objectIdSchema.required(),
   })
 ).label("AdminPostponementIdParams");
+
+/**
+ * Admin: update approved delivery date (only when postponement is already approved)
+ */
+export const adminUpdateApprovedDateSchema = Joi.object(
+  withFieldLabels({
+    approvedDeliveryDate: Joi.date().iso().required().messages({
+      "date.format": "approvedDeliveryDate must be a valid ISO date",
+      "any.required": "approvedDeliveryDate is required",
+    }),
+  })
+).label("AdminUpdateApprovedDatePayload");
