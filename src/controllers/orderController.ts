@@ -27,6 +27,7 @@ import {
 import { getTranslatedString } from "@/utils/translationUtils";
 import {
   getStandUpPouchPlanKey,
+  getNormalizedStandupPouchPrice,
   DEFAULT_STAND_UP_POUCH_PLAN,
 } from "../config/planConfig";
 
@@ -728,14 +729,12 @@ class OrderController {
           
           // For STAND_UP_POUCH: planDays from cart is treated as capsuleCount (60 or 120)
           itemCapsuleCount = itemPlanDays;
-          const standupPrice = product.standupPouchPrice as any;
+          const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
 
-          // Get the correct count key from planDays (60 -> count60, 120 -> count120)
           const countKey = getStandUpPouchPlanKey(itemPlanDays);
           const countData = countKey ? standupPrice[countKey] : null;
 
           if (countData) {
-            // Extract all pricing details for the selected count (count60 or count120)
             itemAmount = countData.amount || 0;
             itemDiscountedPrice =
               countData.discountedPrice || itemAmount;

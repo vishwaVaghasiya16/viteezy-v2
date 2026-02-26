@@ -23,7 +23,7 @@ import { orderService } from "@/services/orderService";
 import { getTranslatedString } from "@/utils/translationUtils";
 import { getUserLanguageCode } from "@/utils/translationUtils";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
-import { getStandUpPouchPlanKey } from "../config/planConfig";
+import { getStandUpPouchPlanKey, getNormalizedStandupPouchPrice } from "../config/planConfig";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -995,8 +995,7 @@ class AdminOrderController {
           item.variantType === ProductVariant.STAND_UP_POUCH &&
           product.standupPouchPrice
         ) {
-          const standupPrice = product.standupPouchPrice as any;
-          // Get the correct count key from capsuleCount (60 -> count60, 120 -> count120)
+          const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
           const countKey = getStandUpPouchPlanKey(item.capsuleCount || 60);
           const countData = countKey ? standupPrice[countKey] : null;
           if (countData) {

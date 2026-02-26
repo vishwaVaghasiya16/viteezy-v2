@@ -23,7 +23,7 @@ export type SachetsSubscriptionPlanDays = typeof SACHETS_SUBSCRIPTION_PLANS[numb
  * Note: STAND_UP_POUCH only supports one-time plans (no subscription)
  * Note: capsuleCount and planDays are the same for STAND_UP_POUCH
  */
-export const STAND_UP_POUCH_PLANS = [60, 120] as const;
+export const STAND_UP_POUCH_PLANS = [30, 60] as const;
 export type StandUpPouchPlanDays = typeof STAND_UP_POUCH_PLANS[number];
 
 /**
@@ -37,13 +37,10 @@ export const SACHETS_PLAN_KEYS: Record<SachetsSubscriptionPlanDays, string> = {
   180: "oneEightyDays",
 } as const;
 
-// NOTE:
-// - Product pricing uses keys `count60` and `count120` directly
-// - Business plans for STAND_UP_POUCH are 60-count and 120-count
-// - Direct mapping: 60 -> count60, 120 -> count120
+// Product pricing uses keys plan_0 (e.g. 30 count) and plan_1 (e.g. 60 count)
 export const STAND_UP_POUCH_PLAN_KEYS: Record<StandUpPouchPlanDays, string> = {
-  60: "count60",
-  120: "count120",
+  30: "plan_0",
+  60: "plan_1",
 } as const;
 
 /**
@@ -58,8 +55,8 @@ export const SACHETS_PLAN_LABELS: Record<SachetsSubscriptionPlanDays, string> = 
 } as const;
 
 export const STAND_UP_POUCH_PLAN_LABELS: Record<StandUpPouchPlanDays, string> = {
+  30: "30 Count",
   60: "60 Count",
-  120: "120 Count",
 } as const;
 
 /**
@@ -70,7 +67,20 @@ export function getSachetsPlanKey(days: number): string | null {
 }
 
 export function getStandUpPouchPlanKey(count: number): string | null {
-  return STAND_UP_POUCH_PLAN_KEYS[count as StandUpPouchPlanDays] || null;
+  const key = STAND_UP_POUCH_PLAN_KEYS[count as StandUpPouchPlanDays];
+  if (key) return key;
+  // Backward compat: old carts/orders may have planDays 120 (was count120) → treat as plan_1
+  if (count === 120) return "plan_1";
+  return null;
+}
+
+/** Normalize standupPouchPrice so it always has plan_0/plan_1 (maps old count30/count60 from DB). */
+export function getNormalizedStandupPouchPrice(sp: any): any {
+  if (!sp || typeof sp !== "object") return sp;
+  if (sp.plan_0 || sp.plan_1) return sp;
+  if (sp.count30 || sp.count60)
+    return { plan_0: sp.count30, plan_1: sp.count60 };
+  return sp;
 }
 
 export function getSachetsPlanLabel(days: number): string {

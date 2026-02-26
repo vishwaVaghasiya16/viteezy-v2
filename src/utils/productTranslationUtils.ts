@@ -169,70 +169,18 @@ export async function prepareProductDataForTranslation(
         }
       }
 
-      // Translate features in oneTime options
-      if (sachetPrices.oneTime) {
-        const oneTime = { ...sachetPrices.oneTime };
-
-        if (
-          oneTime.count30 &&
-          oneTime.count30.features &&
-          Array.isArray(oneTime.count30.features) &&
-          oneTime.count30.features.length > 0
-        ) {
-          oneTime.count30 = {
-            ...oneTime.count30,
-            features: await translateStringArray(oneTime.count30.features),
-          };
-        }
-
-        if (
-          oneTime.count60 &&
-          oneTime.count60.features &&
-          Array.isArray(oneTime.count60.features) &&
-          oneTime.count60.features.length > 0
-        ) {
-          oneTime.count60 = {
-            ...oneTime.count60,
-            features: await translateStringArray(oneTime.count60.features),
-          };
-        }
-
-        sachetPrices.oneTime = oneTime;
-      }
-
       result.sachetPrices = sachetPrices;
     }
 
-    // 9. Translate standupPouchPrice features (if it has features)
+    // 9. Translate standupPouchPrice features (plan_0 / plan_1)
     if (result.standupPouchPrice && typeof result.standupPouchPrice === "object") {
-      const standupPouch = { ...result.standupPouchPrice };
-
-      if (standupPouch.count30) {
-        if (
-          standupPouch.count30.features &&
-          Array.isArray(standupPouch.count30.features) &&
-          standupPouch.count30.features.length > 0
-        ) {
-          standupPouch.count30 = {
-            ...standupPouch.count30,
-            features: await translateStringArray(standupPouch.count30.features),
-          };
-        }
+      const standupPouch = { ...result.standupPouchPrice } as any;
+      if (standupPouch.plan_0?.features && Array.isArray(standupPouch.plan_0.features) && standupPouch.plan_0.features.length > 0) {
+        standupPouch.plan_0 = { ...standupPouch.plan_0, features: await translateStringArray(standupPouch.plan_0.features) };
       }
-
-      if (standupPouch.count60) {
-        if (
-          standupPouch.count60.features &&
-          Array.isArray(standupPouch.count60.features) &&
-          standupPouch.count60.features.length > 0
-        ) {
-          standupPouch.count60 = {
-            ...standupPouch.count60,
-            features: await translateStringArray(standupPouch.count60.features),
-          };
-        }
+      if (standupPouch.plan_1?.features && Array.isArray(standupPouch.plan_1.features) && standupPouch.plan_1.features.length > 0) {
+        standupPouch.plan_1 = { ...standupPouch.plan_1, features: await translateStringArray(standupPouch.plan_1.features) };
       }
-
       result.standupPouchPrice = standupPouch;
     }
 

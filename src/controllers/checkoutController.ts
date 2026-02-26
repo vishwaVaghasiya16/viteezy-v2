@@ -77,18 +77,21 @@ const calculateMonthlyAmounts = (product: any): any => {
     result.sachetPrices = sachetPrices;
   }
 
-  // Preserve standupPouchPrice (uses count60 and count120)
+  // Preserve standupPouchPrice (plan_0 / plan_1). Backward compat: count30/count60 → plan_0/plan_1
   if (product.standupPouchPrice) {
-    if (
-      product.standupPouchPrice.count60 ||
-      product.standupPouchPrice.count120
-    ) {
+    const sp = product.standupPouchPrice as any;
+    if (sp.plan_0 || sp.plan_1) {
       result.standupPouchPrice = {
-        count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
-        count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
+        plan_0: sp.plan_0 ? { ...sp.plan_0 } : undefined,
+        plan_1: sp.plan_1 ? { ...sp.plan_1 } : undefined,
+      };
+    } else if (sp.count30 || sp.count60) {
+      result.standupPouchPrice = {
+        plan_0: sp.count30 ? { ...sp.count30 } : undefined,
+        plan_1: sp.count60 ? { ...sp.count60 } : undefined,
       };
     } else {
-      result.standupPouchPrice = { ...product.standupPouchPrice };
+      result.standupPouchPrice = { ...sp };
     }
   }
 

@@ -46,51 +46,49 @@ const SubscriptionPriceWithMetadataSchema =
     { _id: false }
   );
 
-// Price structure for subscription periods (for Sachets)
-export interface SachetOneTimeCapsuleOptions {
-  count30: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] }; // 30 count price
-  count60: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] }; // 60 count price
+// Stand-up pouch plan options: plan_0 (e.g. 30 count), plan_1 (e.g. 60 count)
+export interface StandupPouchPlanOptions {
+  plan_0: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
+  plan_1: PriceType & { capsuleCount?: number; features?: (I18nStringType | string)[] };
 }
 
-const SachetOneTimeCapsuleOptionsSchema =
-  new Schema<SachetOneTimeCapsuleOptions>(
-    {
-      count30: {
-        type: new Schema(
-          {
-            currency: { type: String, default: "EUR" },
-            amount: { type: Number, required: true },
-            discountedPrice: { type: Number, min: 0, optional: true },
-            taxRate: { type: Number, default: 0 },
-            capsuleCount: { type: Number, optional: true },
-            features: [{ type: Schema.Types.Mixed }], // Support both I18nString array and String array
-          },
-          { _id: false }
-        ),
-      },
-      count60: {
-        type: new Schema(
-          {
-            currency: { type: String, default: "EUR" },
-            amount: { type: Number, required: true },
-            discountedPrice: { type: Number, min: 0, optional: true },
-            taxRate: { type: Number, default: 0 },
-            capsuleCount: { type: Number, optional: true },
-            features: [{ type: Schema.Types.Mixed }], // Support both I18nString array and String array
-          },
-          { _id: false }
-        ),
-      },
+const StandupPouchPlanOptionsSchema = new Schema<StandupPouchPlanOptions>(
+  {
+    plan_0: {
+      type: new Schema(
+        {
+          currency: { type: String, default: "EUR" },
+          amount: { type: Number, required: true },
+          discountedPrice: { type: Number, min: 0, optional: true },
+          taxRate: { type: Number, default: 0 },
+          capsuleCount: { type: Number, optional: true },
+          features: [{ type: Schema.Types.Mixed }],
+        },
+        { _id: false }
+      ),
     },
-    { _id: false }
-  );
+    plan_1: {
+      type: new Schema(
+        {
+          currency: { type: String, default: "EUR" },
+          amount: { type: Number, required: true },
+          discountedPrice: { type: Number, min: 0, optional: true },
+          taxRate: { type: Number, default: 0 },
+          capsuleCount: { type: Number, optional: true },
+          features: [{ type: Schema.Types.Mixed }],
+        },
+        { _id: false }
+      ),
+    },
+  },
+  { _id: false }
+);
 
 export interface SachetPricesType {
   thirtyDays: SubscriptionPriceWithMetadata;
   sixtyDays: SubscriptionPriceWithMetadata;
   ninetyDays: SubscriptionPriceWithMetadata;
   oneEightyDays: SubscriptionPriceWithMetadata;
-  oneTime: SachetOneTimeCapsuleOptions; // One-time purchase with capsule options (30/60 count)
 }
 
 const SachetPricesSchema = new Schema<SachetPricesType>(
@@ -99,7 +97,6 @@ const SachetPricesSchema = new Schema<SachetPricesType>(
     sixtyDays: { type: SubscriptionPriceWithMetadataSchema },
     ninetyDays: { type: SubscriptionPriceWithMetadataSchema },
     oneEightyDays: { type: SubscriptionPriceWithMetadataSchema },
-    oneTime: { type: SachetOneTimeCapsuleOptionsSchema },
   },
   { _id: false }
 );
@@ -166,7 +163,7 @@ export interface IProduct extends Document {
   // Sachet prices (subscription + one-time with capsule options)
   sachetPrices?: SachetPricesType;
   // Stand-up pouch: only one-time purchase (no subscription)
-  standupPouchPrice?: PriceType | SachetOneTimeCapsuleOptions; // Single one-time price or oneTime structure with count30/count60
+  standupPouchPrice?: PriceType | StandupPouchPlanOptions; // Single one-time price or plan_0 / plan_1 structure
   standupPouchImages?: string[]; // Separate images for stand-up pouch variant
   // New fields for admin Add Product screen
   shortDescription?: I18nStringType | string; // Support both I18n and plain string
@@ -265,7 +262,7 @@ const ProductSchema = new Schema<IProduct>(
       default: null,
     },
     standupPouchPrice: {
-      type: Schema.Types.Mixed, // Can be PriceSchema or SachetOneTimeCapsuleOptionsSchema
+      type: Schema.Types.Mixed, // Can be PriceSchema or StandupPouchPlanOptionsSchema (plan_0 / plan_1)
       default: null,
     },
     standupPouchImages: {

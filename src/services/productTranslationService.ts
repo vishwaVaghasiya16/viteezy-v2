@@ -433,7 +433,7 @@ export async function translateProduct(
 
     let translatedStandupPouchPrice = product.standupPouchPrice;
     if (translatedStandupPouchPrice) {
-      const pouchFields = ["count30", "count60"];
+      const pouchFields = ["plan_0", "plan_1"];
       for (const field of pouchFields) {
         if (translatedStandupPouchPrice[field] && Array.isArray(translatedStandupPouchPrice[field].features)) {
           const features = translatedStandupPouchPrice[field].features;

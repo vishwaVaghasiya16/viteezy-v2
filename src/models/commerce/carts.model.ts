@@ -15,7 +15,7 @@ export interface ICart extends Document {
     variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
     quantity?: number; // Quantity for STAND_UP_POUCH items (default: 1, always 1 for SACHETS)
     isOneTime?: boolean; // Whether this is a one-time purchase (for SACHETS: true = one-time, false = subscription)
-    planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (60 or 120). NOT used for SACHETS.
+    planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (30 or 60). NOT used for SACHETS.
     price: PriceType;
     totalAmount?: number; // Total amount (unit price * quantity) for STAND_UP_POUCH items
     addedAt: Date;

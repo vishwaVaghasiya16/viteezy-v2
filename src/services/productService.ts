@@ -101,25 +101,13 @@ interface CreateProductData {
       features?: string[];
       icon?: string;
     };
-    oneTime: {
-      count30: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-      count60: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-    };
   };
   standupPouchPrice?: {
-    currency: string;
-    amount: number;
-    taxRate: number;
+    currency?: string;
+    amount?: number;
+    taxRate?: number;
+    plan_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    plan_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Add Product screen
@@ -212,25 +200,13 @@ interface UpdateProductData {
       features?: string[];
       icon?: string;
     };
-    oneTime: {
-      count30: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-      count60: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-    };
   };
   standupPouchPrice?: {
-    currency: string;
-    amount: number;
-    taxRate: number;
+    currency?: string;
+    amount?: number;
+    taxRate?: number;
+    plan_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    plan_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Edit Product screen
@@ -319,14 +295,6 @@ class ProductService {
       }
     }
 
-    // Process oneTime
-    if (sachetPrices.oneTime) {
-      processed.oneTime = {
-        count30: this.processPriceObject(sachetPrices.oneTime.count30),
-        count60: this.processPriceObject(sachetPrices.oneTime.count60),
-      };
-    }
-
     return processed;
   }
 
@@ -338,11 +306,11 @@ class ProductService {
       return standupPouchPrice;
     }
 
-    // If it has count60 and count120 structure
-    if (standupPouchPrice.count60 || standupPouchPrice.count120) {
+    // If it has plan_0 / plan_1 structure
+    if (standupPouchPrice.plan_0 || standupPouchPrice.plan_1) {
       return {
-        count60: standupPouchPrice.count60 ? this.processPriceObject(standupPouchPrice.count60) : undefined,
-        count120: standupPouchPrice.count120 ? this.processPriceObject(standupPouchPrice.count120) : undefined,
+        plan_0: standupPouchPrice.plan_0 ? this.processPriceObject(standupPouchPrice.plan_0) : undefined,
+        plan_1: standupPouchPrice.plan_1 ? this.processPriceObject(standupPouchPrice.plan_1) : undefined,
       };
     }
 
@@ -460,23 +428,11 @@ class ProductService {
       logger.warn(`[Create Product] No price provided and cannot derive from sachetPrices`);
     }
 
-    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
-    let normalizedStandupPouchPrice = standupPouchPrice;
-    if (
-      standupPouchPrice &&
-      typeof standupPouchPrice === "object" &&
-      "oneTime" in standupPouchPrice
-    ) {
-      logger.info(`[Create Product] Normalizing standupPouchPrice (unwrapping oneTime wrapper)`);
-      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
-      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
-    }
-
-    // Process standupPouchPrice: calculate savingsPercentage and totalAmount
-    let processedStandupPouchPrice = normalizedStandupPouchPrice;
-    if (normalizedStandupPouchPrice) {
+    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (plan_0 / plan_1)
+    let processedStandupPouchPrice = standupPouchPrice;
+    if (standupPouchPrice) {
       logger.info(`[Create Product] Processing standupPouchPrice`);
-      processedStandupPouchPrice = this.processStandupPouchPrice(normalizedStandupPouchPrice);
+      processedStandupPouchPrice = this.processStandupPouchPrice(standupPouchPrice);
       logger.debug(`[Create Product] Standup pouch price processed successfully`);
     }
 
@@ -1543,22 +1499,11 @@ class ProductService {
         ? this.processSachetPrices(sachetPrices)
         : sachetPrices;
 
-    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
-    let normalizedStandupPouchPrice = standupPouchPrice;
-    if (
-      standupPouchPrice &&
-      typeof standupPouchPrice === "object" &&
-      "oneTime" in standupPouchPrice
-    ) {
-      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
-      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
-    }
-
-    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (if being updated)
+    // Process standupPouchPrice: plan_0 / plan_1 (if being updated)
     const processedStandupPouchPrice =
-      normalizedStandupPouchPrice !== undefined
-        ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
-        : normalizedStandupPouchPrice;
+      standupPouchPrice !== undefined
+        ? this.processStandupPouchPrice(standupPouchPrice)
+        : standupPouchPrice;
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
@@ -2183,29 +2128,26 @@ class ProductService {
         }
       });
 
-      // Process oneTime if exists
-      if (sachetPrices.oneTime) {
-        sachetPrices.oneTime = {
-          count30: { ...sachetPrices.oneTime.count30 }, // Preserve discountedPrice
-          count60: { ...sachetPrices.oneTime.count60 }, // Preserve discountedPrice
-        };
-      }
-
       result.sachetPrices = sachetPrices;
     }
 
-    // Preserve standupPouchPrice with discountedPrice
+    // Preserve standupPouchPrice with discountedPrice (plan_0 / plan_1). Backward compat: map count30/count60 to plan_0/plan_1.
     if (product.standupPouchPrice) {
-      if (
-        product.standupPouchPrice.count60 ||
-        product.standupPouchPrice.count120
-      ) {
+      const sp = product.standupPouchPrice as any;
+      const hasNew = sp.plan_0 || sp.plan_1;
+      const hasOld = sp.count30 || sp.count60;
+      if (hasNew) {
         result.standupPouchPrice = {
-          count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
-          count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
+          plan_0: sp.plan_0 ? { ...sp.plan_0 } : undefined,
+          plan_1: sp.plan_1 ? { ...sp.plan_1 } : undefined,
+        };
+      } else if (hasOld) {
+        result.standupPouchPrice = {
+          plan_0: sp.count30 ? { ...sp.count30 } : undefined,
+          plan_1: sp.count60 ? { ...sp.count60 } : undefined,
         };
       } else {
-        result.standupPouchPrice = { ...product.standupPouchPrice }; // Preserve discountedPrice
+        result.standupPouchPrice = { ...sp };
       }
     }
 

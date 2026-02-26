@@ -149,50 +149,26 @@ export const transformProductForLanguage = (
       }
     });
 
-    // Transform features in oneTime options
-    if (transformedSachetPrices.oneTime) {
-      transformedSachetPrices.oneTime = { ...transformedSachetPrices.oneTime };
-
-      if (transformedSachetPrices.oneTime.count30?.features) {
-        transformedSachetPrices.oneTime.count30 = {
-          ...transformedSachetPrices.oneTime.count30,
-          features: transformedSachetPrices.oneTime.count30.features.map(
-            (feature: any) => getTranslatedString(feature, lang)
-          ),
-        };
-      }
-
-      if (transformedSachetPrices.oneTime.count60?.features) {
-        transformedSachetPrices.oneTime.count60 = {
-          ...transformedSachetPrices.oneTime.count60,
-          features: transformedSachetPrices.oneTime.count60.features.map(
-            (feature: any) => getTranslatedString(feature, lang)
-          ),
-        };
-      }
-    }
   }
 
-  // Transform standupPouchPrice features
+  // Transform standupPouchPrice features (plan_0 / plan_1)
   let transformedStandupPouchPrice = product.standupPouchPrice;
   if (product.standupPouchPrice) {
-    // Check if it's the count60/count120 structure
-    if (product.standupPouchPrice.count60 || product.standupPouchPrice.count120) {
-      transformedStandupPouchPrice = { ...product.standupPouchPrice };
-
-      if (transformedStandupPouchPrice.count60?.features) {
-        transformedStandupPouchPrice.count60 = {
-          ...transformedStandupPouchPrice.count60,
-          features: transformedStandupPouchPrice.count60.features.map(
+    const sp = product.standupPouchPrice as any;
+    if (sp.plan_0 || sp.plan_1) {
+      transformedStandupPouchPrice = { ...sp };
+      if ((transformedStandupPouchPrice as any).plan_0?.features) {
+        (transformedStandupPouchPrice as any).plan_0 = {
+          ...(transformedStandupPouchPrice as any).plan_0,
+          features: (transformedStandupPouchPrice as any).plan_0.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
       }
-
-      if (transformedStandupPouchPrice.count60?.features) {
-        transformedStandupPouchPrice.count60 = {
-          ...transformedStandupPouchPrice.count60,
-          features: transformedStandupPouchPrice.count60.features.map(
+      if ((transformedStandupPouchPrice as any).plan_1?.features) {
+        (transformedStandupPouchPrice as any).plan_1 = {
+          ...(transformedStandupPouchPrice as any).plan_1,
+          features: (transformedStandupPouchPrice as any).plan_1.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
@@ -323,24 +299,23 @@ const calculateMonthlyAmounts = (product: any): any => {
       }
     });
 
-    if (sachetPrices.oneTime) {
-      sachetPrices.oneTime = {
-        count30: { ...sachetPrices.oneTime.count30 },
-        count60: { ...sachetPrices.oneTime.count60 },
-      };
-    }
-
     result.sachetPrices = sachetPrices;
   }
 
   if (product.standupPouchPrice) {
-    if (product.standupPouchPrice.count60 || product.standupPouchPrice.count120) {
+    const sp = product.standupPouchPrice as any;
+    if (sp.plan_0 || sp.plan_1) {
       result.standupPouchPrice = {
-        count60: product.standupPouchPrice.count60 ? { ...product.standupPouchPrice.count60 } : undefined,
-        count120: product.standupPouchPrice.count120 ? { ...product.standupPouchPrice.count120 } : undefined,
+        plan_0: sp.plan_0 ? { ...sp.plan_0 } : undefined,
+        plan_1: sp.plan_1 ? { ...sp.plan_1 } : undefined,
+      };
+    } else if (sp.count30 || sp.count60) {
+      result.standupPouchPrice = {
+        plan_0: sp.count30 ? { ...sp.count30 } : undefined,
+        plan_1: sp.count60 ? { ...sp.count60 } : undefined,
       };
     } else {
-      result.standupPouchPrice = { ...product.standupPouchPrice };
+      result.standupPouchPrice = { ...sp };
     }
   }
 
