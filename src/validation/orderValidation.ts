@@ -171,12 +171,11 @@ export const createOrderSchema = Joi.object(
     standUpPouch: Joi.object({
       capsuleCount: Joi.number()
         .integer()
-        .valid(...STAND_UP_POUCH_PLANS)
         .default(DEFAULT_STAND_UP_POUCH_PLAN)
         .optional()
         .messages({
           "number.base": "Capsule count must be a number",
-          "any.only": `Capsule count must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
+          "number.integer": "Capsule count must be an integer",
         }),
       planDays: Joi.number()
         .integer()
@@ -210,11 +209,10 @@ export const createOrderSchema = Joi.object(
               }),
             capsuleCount: Joi.number()
               .integer()
-              .valid(...STAND_UP_POUCH_PLANS)
               .optional()
               .messages({
                 "number.base": "Capsule count must be a number",
-                "any.only": `Capsule count must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
+                "number.integer": "Capsule count must be an integer",
               }),
             planDays: Joi.number()
               .integer()
