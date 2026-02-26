@@ -50,11 +50,13 @@ const SYSTEM_PAGES: Array<{
     slug: "our-team",
     route: "/admin/our-team",
   },
-  {
-    systemPageType: SystemPageType.LANDING_PAGE,
-    slug: "landing-page",
-    route: "/admin/dashboard",
-  },
+  // NOTE: Landing page is managed separately and should not appear in the static pages list.
+  // If needed in future, uncomment and adjust as required.
+  // {
+  //   systemPageType: SystemPageType.LANDING_PAGE,
+  //   slug: "landing-page",
+  //   route: "/admin/dashboard",
+  // },
   {
     systemPageType: SystemPageType.MEMBERSHIP,
     slug: "membership",
@@ -63,7 +65,7 @@ const SYSTEM_PAGES: Array<{
   {
     systemPageType: SystemPageType.BLOG,
     slug: "blog",
-    route: "/admin/blog-managment/blog",
+    route: "/admin/blog-cms",
   },
 ];
 
