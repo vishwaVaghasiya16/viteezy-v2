@@ -2058,6 +2058,10 @@ class CheckoutService {
       throw new AppError("No valid products found in cart", 404);
     }
 
+    // Determine user's language for translating any I18n fields
+    const userDoc = await User.findById(userId).select("language").lean();
+    const userLang = getUserLanguageCode(userDoc?.language);
+
     // For SACHETS with subscription: Check if user already has an active subscription with same cycleDays
     // Show warning if user tries to create a subscription plan that already exists
     let existingSubscription = null;
@@ -2385,14 +2389,18 @@ class CheckoutService {
                 existing.capsuleCount += capsuleCount;
                 existing.supplementsCount += capsuleCount;
                 if (planData.features && Array.isArray(planData.features)) {
-                  planData.features.forEach((f: string) =>
-                    existing.features.add(f),
+                  planData.features.forEach((f: I18nStringType | string) =>
+                    existing.features.add(
+                      getTranslatedString(f as any, userLang),
+                    ),
                   );
                 }
               } else {
                 const featuresSet = new Set<string>();
                 if (planData.features && Array.isArray(planData.features)) {
-                  planData.features.forEach((f: string) => featuresSet.add(f));
+                  planData.features.forEach((f: I18nStringType | string) =>
+                    featuresSet.add(getTranslatedString(f as any, userLang)),
+                  );
                 }
 
                 sachetsPlansMap.set(planInfo.key, {
@@ -2465,7 +2473,8 @@ class CheckoutService {
             if (planData) {
               const planPrice = planData.amount || 0;
               const discountedPrice = planData.discountedPrice || planPrice;
-              const capsuleCount = planInfo.count * quantity;
+              const baseCapsuleCount =
+                (planData.capsuleCount as number | undefined) ?? planInfo.count;
               const totalAmount = planPrice * quantity;
               const totalDiscountedPrice = discountedPrice * quantity;
 
@@ -2478,8 +2487,10 @@ class CheckoutService {
                 durationDays: 0, // Not applicable for stand-up pouch
                 totalAmount,
                 discountedPrice: totalDiscountedPrice,
-                capsuleCount,
-                supplementsCount: capsuleCount,
+                // capsuleCount should reflect per-pack value from DB (not multiplied by quantity)
+                capsuleCount: baseCapsuleCount,
+                // supplementsCount represents total capsules across quantity
+                supplementsCount: baseCapsuleCount * quantity,
                 features: new Set<string>(),
                 isSubscription: false, // Stand-up pouch is one-time purchase
                 isSelected, // Set based on product's selected planDays
@@ -2540,7 +2551,8 @@ class CheckoutService {
 
           return {
             planKey: plan.planKey,
-            label: plan.label,
+            // Ensure label always matches durationDays (e.g. "30 Day Plan", "60 Day Plan")
+            label: getSachetsPlanLabel(plan.durationDays),
             durationDays: plan.durationDays,
             capsuleCount: plan.capsuleCount,
             totalAmount: this.roundAmount(plan.totalAmount),
@@ -2590,7 +2602,8 @@ class CheckoutService {
 
             return {
               planKey: plan.planKey,
-              label: plan.label,
+              // Label should reflect actual capsuleCount from DB (e.g. "60 Count", "120 Count")
+              label: getStandUpPouchPlanLabel(plan.capsuleCount),
               durationDays: plan.durationDays,
               capsuleCount: plan.capsuleCount,
               totalAmount: this.roundAmount(plan.totalAmount),
