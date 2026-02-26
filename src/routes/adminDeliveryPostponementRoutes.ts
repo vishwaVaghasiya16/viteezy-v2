@@ -19,7 +19,7 @@ router.use(authorize("Admin"));
  * @route   GET /api/v1/admin/postponements
  * @desc    List all delivery postponement requests (user, plan, dates, status)
  * @access  Admin
- * @query   status, page, limit
+ * @query   status (Pending|Approved|Rejected), plan (30|60|90|180 cycle days), currentDate (ISO), requestedDate (ISO), search (user/order), page, limit
  */
 router.get(
   "/",

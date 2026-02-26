@@ -7,6 +7,7 @@ import {
   Orders,
   Subscriptions,
 } from "@/models/commerce";
+import { User } from "@/models/core";
 import { PostponementStatus } from "@/models/enums";
 import { emailService } from "@/services/emailService";
 import { logger } from "@/utils/logger";
@@ -25,16 +26,90 @@ class AdminDeliveryPostponementController {
    * GET /api/v1/admin/postponements
    */
   listAll = asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const { status, page, limit } = req.query as {
+    const { status, plan, currentDate, requestedDate, search } = req.query as {
       status?: string;
+      plan?: string;
+      currentDate?: string;
+      requestedDate?: string;
+      search?: string;
       page?: string;
       limit?: string;
     };
     const pagination = getPaginationOptions(req);
     const skip = (pagination.page - 1) * pagination.limit;
 
-    const query: Record<string, unknown> = { isDeleted: false };
+    const query: Record<string, any> = { isDeleted: false };
     if (status) query.status = status;
+
+    // Plan filter: cycleDays (30, 60, 90, 180) — restrict to orders that have subscription with this cycle
+    if (plan) {
+      const cycleDays = parseInt(plan, 10);
+      if ([30, 60, 90, 180].includes(cycleDays)) {
+        const subs = await Subscriptions.find({
+          cycleDays,
+          isDeleted: { $ne: true },
+        })
+          .select("orderId")
+          .lean();
+        const orderIdsWithPlan = subs.map((s: any) => s.orderId).filter(Boolean);
+        if (orderIdsWithPlan.length > 0) {
+          query.orderId = { $in: orderIdsWithPlan };
+        } else {
+          query.orderId = { $in: [] };
+        }
+      }
+    }
+
+    // Current date filter: originalDeliveryDate on the given day
+    if (currentDate) {
+      const d = new Date(currentDate);
+      const startOfDay = new Date(d);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(d);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      query.originalDeliveryDate = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    // Requested date filter: requestedDeliveryDate on the given day
+    if (requestedDate) {
+      const d = new Date(requestedDate);
+      const startOfDay = new Date(d);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(d);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      query.requestedDeliveryDate = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    // Search: user name/email or order number
+    if (search && search.trim()) {
+      const term = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(term, "i");
+      const [userIds, orderIdsByNumber] = await Promise.all([
+        User.find({
+          $or: [
+            { firstName: re },
+            { lastName: re },
+            { email: re },
+          ],
+        })
+          .select("_id")
+          .lean(),
+        Orders.find({ orderNumber: re }).select("_id").lean(),
+      ]);
+      const userIdList = (userIds as any[]).map((u) => u._id);
+      const orderIdList = (orderIdsByNumber as any[]).map((o) => o._id);
+      if (userIdList.length > 0 || orderIdList.length > 0) {
+        query.$and = query.$and || [];
+        query.$and.push({
+          $or: [
+            ...(userIdList.length > 0 ? [{ userId: { $in: userIdList } }] : []),
+            ...(orderIdList.length > 0 ? [{ orderId: { $in: orderIdList } }] : []),
+          ],
+        });
+      } else {
+        query.userId = { $in: [] };
+      }
+    }
 
     const [postponements, total] = await Promise.all([
       DeliveryPostponements.find(query)
