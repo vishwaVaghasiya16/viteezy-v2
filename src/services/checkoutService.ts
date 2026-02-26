@@ -2423,7 +2423,8 @@ class CheckoutService {
 
     // Build plans for STAND_UP_POUCH variant - per product
     if (standupPouchItems.length > 0) {
-      // Create a map of productId -> selected planDays from itemQuantities
+      // Create a map of productId -> selected planDays from itemQuantities (body)
+      // Priority: body itemQuantities > cart planDays > default
       const productPlanDaysMap = new Map<string, number>();
       if (
         standUpPouchConfig?.itemQuantities &&
@@ -2431,10 +2432,11 @@ class CheckoutService {
       ) {
         for (const itemQty of standUpPouchConfig.itemQuantities) {
           let planDays: number;
+          // Priority: planDays > capsuleCount > default
           if (itemQty.planDays !== undefined) {
             planDays = itemQty.planDays;
           } else if (itemQty.capsuleCount !== undefined) {
-            planDays = itemQty.capsuleCount; // capsuleCount maps to planDays
+            planDays = itemQty.capsuleCount; // capsuleCount maps to planDays for STAND_UP_POUCH
           } else {
             planDays = selectedStandUpPouchPlanDays;
           }
@@ -2456,11 +2458,12 @@ class CheckoutService {
           const productId = product._id.toString();
 
           // Get selected planDays for this product
+          // Priority: body itemQuantities > cart planDays > top-level config > default (60)
           const selectedPlanDaysForProduct =
             productPlanDaysMap.get(productId) ||
             cartItem.planDays ||
             selectedStandUpPouchPlanDays ||
-            30;
+            DEFAULT_STAND_UP_POUCH_PLAN;
 
           // Initialize product plans map if not exists
           if (!standUpPouchPlansByProductMap.has(productId)) {
@@ -2620,11 +2623,8 @@ class CheckoutService {
           })
           .sort((a, b) => {
             // Sort by capsuleCount (60 before 120)
-            const aCount =
-              a.planKey === "count_0" ? 30 : a.planKey === "count_1" ? 60 : 0;
-            const bCount =
-              b.planKey === "count_0" ? 30 : b.planKey === "count_1" ? 60 : 0;
-            return aCount - bCount;
+            // Use actual capsuleCount from plan data
+            return a.capsuleCount - b.capsuleCount;
           });
         standUpPouchPlans[productId] = plansArray;
       }
