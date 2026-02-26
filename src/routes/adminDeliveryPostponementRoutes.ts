@@ -7,6 +7,7 @@ import {
   adminApprovePostponementSchema,
   adminRejectPostponementSchema,
   adminPostponementIdParamsSchema,
+  adminUpdateApprovedDateSchema,
 } from "@/validation/deliveryPostponementValidation";
 
 const router = Router();
@@ -37,6 +38,19 @@ router.post(
   validateParams(adminPostponementIdParamsSchema),
   validateJoi(adminApprovePostponementSchema),
   adminDeliveryPostponementController.approve
+);
+
+/**
+ * @route   PATCH /api/v1/admin/postponements/:id/approved-date
+ * @desc    Update approved delivery date (only when postponement is already approved); syncs to subscription
+ * @access  Admin
+ * @body    { approvedDeliveryDate: string (ISO) }
+ */
+router.patch(
+  "/:id/approved-date",
+  validateParams(adminPostponementIdParamsSchema),
+  validateJoi(adminUpdateApprovedDateSchema),
+  adminDeliveryPostponementController.updateApprovedDate
 );
 
 /**
