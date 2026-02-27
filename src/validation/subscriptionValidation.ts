@@ -145,6 +145,15 @@ export const removeProductsFromSubscriptionSchema = Joi.object(
 ).label("RemoveProductsFromSubscriptionPayload");
 
 /**
+ * Joi schema for changing subscription shipping address
+ */
+export const changeSubscriptionShippingAddressSchema = Joi.object(
+  withFieldLabels({
+    shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
+  }),
+).label("ChangeSubscriptionShippingAddressPayload");
+
+/**
  * Joi schema for subscription transaction history query
  */
 export const getSubscriptionTransactionHistoryQuerySchema = Joi.object(

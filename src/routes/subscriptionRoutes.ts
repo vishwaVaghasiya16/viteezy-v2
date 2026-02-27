@@ -14,6 +14,7 @@ import {
   pauseSubscriptionSchema,
   addProductsToSubscriptionSchema,
   removeProductsFromSubscriptionSchema,
+  changeSubscriptionShippingAddressSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
 
@@ -155,6 +156,20 @@ router.get(
   "/:subscriptionId/addresses",
   validateParams(getSubscriptionDetailsParamsSchema),
   subscriptionController.getSubscriptionAddresses
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/change-shipping-address
+ * @desc    Change shipping address for a subscription (used for future renewals)
+ * @access  Private
+ * @params  subscriptionId
+ * @body    shippingAddressId - New shipping address ID belonging to the user
+ */
+router.post(
+  "/:subscriptionId/change-shipping-address",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(changeSubscriptionShippingAddressSchema),
+  subscriptionController.changeSubscriptionShippingAddress
 );
 
 export default router;

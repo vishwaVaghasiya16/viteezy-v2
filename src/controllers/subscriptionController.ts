@@ -1463,6 +1463,99 @@ class SubscriptionController {
       );
     },
   );
+
+  /**
+   * Change shipping address for a subscription (affects future renewals)
+   * @route POST /api/subscriptions/:subscriptionId/change-shipping-address
+   * @access Private
+   */
+  changeSubscriptionShippingAddress = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { shippingAddressId } = req.body;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Validate subscription ID
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      // Validate shipping address ID
+      if (!mongoose.Types.ObjectId.isValid(shippingAddressId)) {
+        throw new AppError("Invalid shipping address ID format", 400);
+      }
+
+      // Find subscription and verify it belongs to user
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Ensure subscription is active (optional: allow also PAUSED)
+      if (
+        subscription.status !== SubscriptionStatus.ACTIVE &&
+        subscription.status !== (SubscriptionStatus.PAUSED as SubscriptionStatus)
+      ) {
+        throw new AppError(
+          "Shipping address can only be changed for active or paused subscriptions",
+          400,
+        );
+      }
+
+      // Validate that the new shipping address belongs to the user and is not deleted
+      const address = await Addresses.findOne({
+        _id: new mongoose.Types.ObjectId(shippingAddressId),
+        userId,
+        isDeleted: false,
+      }).lean();
+
+      if (!address) {
+        throw new AppError(
+          "Shipping address not found for this user",
+          404,
+        );
+      }
+
+      // Update subscription metadata with preferred shipping address ID
+      const currentMetadata = (subscription.metadata || {}) as Record<string, any>;
+      subscription.metadata = {
+        ...currentMetadata,
+        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+      };
+
+      await subscription.save();
+
+       // Also update the base order's shipping address so future queries use the new address
+       await Orders.updateOne(
+         {
+           _id: subscription.orderId,
+           isDeleted: false,
+         },
+         {
+           $set: {
+             shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+           },
+         },
+       );
+
+      res.apiSuccess(
+        {
+          subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+          shippingAddressId: shippingAddressId,
+        },
+        "Subscription shipping address updated successfully",
+      );
+    },
+  );
 }
 
 export const subscriptionController = new SubscriptionController();

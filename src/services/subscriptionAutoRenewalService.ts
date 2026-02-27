@@ -66,7 +66,7 @@ export class SubscriptionAutoRenewalService {
         ? "EUR" // Default currency, adjust based on your needs
         : "EUR";
 
-      // Get user's payment method from original order or subscription metadata
+      // Get user's payment method and original order details
       const originalOrder = await Orders.findById(subscription.orderId).lean();
       const paymentMethod =
         (originalOrder?.paymentMethod as PaymentMethod) || PaymentMethod.STRIPE;
@@ -325,6 +325,15 @@ export class SubscriptionAutoRenewalService {
       // Create renewal order if it wasn't created during payment processing
       if (!renewalOrder) {
         try {
+          // Determine shipping and billing addresses for renewal:
+          // 1. If subscription.metadata.shippingAddressId is set, use that as preferred shipping address
+          // 2. Otherwise, fall back to original order's shippingAddressId
+          const preferredShippingAddressId =
+            (subscription as any).metadata?.shippingAddressId;
+          const shippingAddressId =
+            preferredShippingAddressId || originalOrder?.shippingAddressId;
+          const billingAddressId = originalOrder?.billingAddressId;
+
           const orderNumber = `REN-${subscription.subscriptionNumber}-${subscription.renewalCount + 1}`;
           renewalOrder = await Orders.create(
             [
@@ -357,8 +366,8 @@ export class SubscriptionAutoRenewalService {
                 ),
                 grandTotal: totalAmount,
                 currency: currency,
-                shippingAddressId: originalOrder?.shippingAddressId,
-                billingAddressId: originalOrder?.billingAddressId,
+                shippingAddressId: shippingAddressId,
+                billingAddressId: billingAddressId,
                 paymentMethod: paymentMethod,
                 paymentStatus: PaymentStatus.COMPLETED,
                 paymentId: (payment._id as mongoose.Types.ObjectId).toString(),

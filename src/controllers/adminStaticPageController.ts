@@ -50,13 +50,11 @@ const SYSTEM_PAGES: Array<{
     slug: "our-team",
     route: "/admin/our-team",
   },
-  // NOTE: Landing page is managed separately and should not appear in the static pages list.
-  // If needed in future, uncomment and adjust as required.
-  // {
-  //   systemPageType: SystemPageType.LANDING_PAGE,
-  //   slug: "landing-page",
-  //   route: "/admin/dashboard",
-  // },
+  {
+    systemPageType: SystemPageType.LANDING_PAGE,
+    slug: "landing-page",
+    route: "/admin/landing-page",
+  },
   {
     systemPageType: SystemPageType.MEMBERSHIP,
     slug: "membership",
