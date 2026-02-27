@@ -1468,6 +1468,17 @@ class ProductService {
       throw new AppError("Product not found", 404);
     }
 
+    logger.info("[Update Product] Incoming update payload (high level)", {
+      productId,
+      hasSpecification: (data as any).specification !== undefined,
+      specificationFromRequest: (data as any).specification,
+    });
+
+    logger.info("[Update Product] Existing product specification before merge", {
+      productId,
+      existingSpecification: (existingProduct as any).specification,
+    });
+
     // Check if slug is being changed and if new slug already exists
     if (slug && slug !== existingProduct.slug) {
       const slugExists = await Products.findOne({
@@ -1593,18 +1604,75 @@ class ProductService {
 
     // Merge specification with existing so partial update does not wipe other fields
     if ((data as any).specification !== undefined) {
+      // Ensure we always work with plain JS objects (no Mongoose subdocument metadata)
+      const rawExistingSpec: any = (existingProduct as any).specification;
       const existingSpec: Record<string, any> =
-        existingProduct.specification && typeof existingProduct.specification === "object"
-          ? { ...(existingProduct.specification as Record<string, any>) }
+        rawExistingSpec && typeof rawExistingSpec === "object"
+          ? typeof rawExistingSpec.toObject === "function"
+            ? rawExistingSpec.toObject()
+            : JSON.parse(JSON.stringify(rawExistingSpec))
           : {};
-      const incoming = (data as any).specification as Record<string, any>;
-      const mergedSpec = { ...existingSpec };
-      Object.keys(incoming).forEach((k) => {
-        if (incoming[k] !== undefined) {
-          (mergedSpec as Record<string, any>)[k] = incoming[k];
+
+      const incomingSpec = (data as any).specification as Record<string, any>;
+      const mergedSpec: Record<string, any> = { ...existingSpec };
+
+      Object.keys(incomingSpec).forEach((key) => {
+        const value = incomingSpec[key];
+
+        // Deep-merge specification.items so that:
+        // - Titles/descriptions can be updated
+        // - Image fields (image, imageMobile) are only replaced when a new value is provided
+        if (key === "items" && Array.isArray(value)) {
+          const existingItems = Array.isArray(existingSpec.items)
+            ? existingSpec.items
+            : [];
+          const incomingItems = value;
+          const mergedItems: any[] = [];
+          const maxLen = Math.max(existingItems.length, incomingItems.length);
+
+          for (let i = 0; i < maxLen; i++) {
+            const existingItem = existingItems[i] || {};
+            const incomingItem = incomingItems[i];
+
+            if (incomingItem === undefined || incomingItem === null) {
+              if (Object.keys(existingItem).length > 0) {
+                mergedItems[i] = existingItem;
+              }
+              continue;
+            }
+
+            const mergedItem: Record<string, any> = { ...existingItem };
+
+            Object.keys(incomingItem).forEach((itemKey) => {
+              const itemVal = (incomingItem as Record<string, any>)[itemKey];
+              // Ignore undefined/null/empty-string so existing values (including images) are preserved
+              if (itemVal !== undefined && itemVal !== null && itemVal !== "") {
+                mergedItem[itemKey] = itemVal;
+              }
+            });
+
+            mergedItems[i] = mergedItem;
+          }
+
+          mergedSpec.items = mergedItems.filter(
+            (item) => item && Object.keys(item).length > 0
+          );
+        } else {
+          // For other top-level specification fields:
+          // - Only overwrite when a non-empty value is provided
+          //   (prevents accidental clearing of bg_image or main_title with null/empty)
+          if (value !== undefined && value !== null && value !== "") {
+            mergedSpec[key] = value;
+          }
         }
       });
+
       updateData.specification = mergedSpec;
+
+      logger.info("[Update Product] Merged specification to be saved", {
+        productId,
+        mergedSpecification: mergedSpec,
+      });
     }
 
     // Handle processed sachetPrices if provided
@@ -1670,6 +1738,13 @@ class ProductService {
       }
     }
 
+    if (updateData.specification) {
+      logger.info("[Update Product] updateData.specification before save", {
+        productId,
+        specification: updateData.specification,
+      });
+    }
+
     // Update product with only provided fields
     await Products.findByIdAndUpdate(productId, updateData, {
       new: true,
@@ -1727,6 +1802,11 @@ class ProductService {
     if (!updatedProduct) {
       throw new AppError("Product not found", 404);
     }
+
+    logger.info("[Update Product] Updated product specification from DB", {
+      productId,
+      updatedSpecification: (updatedProduct as any).specification,
+    });
 
     // Get ingredient details and replace ingredients array with populated data
     const ingredientDetails = await ProductIngredients.find({
