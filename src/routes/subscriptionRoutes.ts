@@ -187,4 +187,29 @@ router.post(
   subscriptionController.testSubscriptionRenewal
 );
 
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/products
+ * @desc    Get products that are part of a subscription
+ * @access  Private
+ * @params  subscriptionId
+ */
+router.get(
+  "/:subscriptionId/products",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.getSubscriptionProducts
+);
+
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/products/status
+ * @desc    Get products with flags: in subscription plan & in user's cart (with filters)
+ * @access  Private
+ * @params  subscriptionId
+ * @query   inSubscription (optional, true|false), inCart (optional, true|false)
+ */
+router.get(
+  "/:subscriptionId/products/status",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.getSubscriptionProductsWithStatus
+);
+
 export default router;

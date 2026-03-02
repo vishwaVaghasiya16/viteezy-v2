@@ -21,6 +21,9 @@ import { calculateMemberPrice } from "@/utils/membershipPrice";
 import { getTranslatedString } from "@/utils/translationUtils";
 import { paymentService } from "@/services/payment/PaymentService";
 import { subscriptionAutoRenewalService } from "@/services/subscriptionAutoRenewalService";
+import { cartService } from "@/services/cartService";
+import { translateProductsForUser } from "@/services/productTranslationCommonService";
+import { getSachetsPlanKey } from "@/config/planConfig";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -1648,6 +1651,206 @@ class SubscriptionController {
         },
         "Subscription shipping address updated successfully",
       );
+    },
+  );
+
+  /**
+   * Get products that are part of a subscription
+   * @route GET /api/subscriptions/:subscriptionId/products
+   * @access Private
+   */
+  getSubscriptionProducts = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      }).lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      const productIds = (subscription.items || []).map(
+        (item: any) => item.productId,
+      );
+
+      const rawProducts = productIds.length
+        ? await Products.find({
+            _id: { $in: productIds },
+            isDeleted: false,
+            status: true,
+          }).lean()
+        : [];
+
+      // Translate products using common multi-language service
+      const translatedProducts = await translateProductsForUser(rawProducts, req);
+
+      const productMap = new Map(
+        translatedProducts.map((p: any) => [p._id.toString(), p]),
+      );
+
+      const items = (subscription.items || []).map((item: any) => {
+        const key = item.productId?.toString?.() || String(item.productId);
+        const product = productMap.get(key) || null;
+
+        return {
+          productId: item.productId,
+          name: item.name,
+          variantType: item.variantType,
+          planDays: item.planDays,
+          capsuleCount: item.capsuleCount,
+          amount: item.amount,
+          discountedPrice: item.discountedPrice,
+          taxRate: item.taxRate,
+          totalAmount: item.totalAmount,
+          durationDays: item.durationDays,
+          savingsPercentage: item.savingsPercentage,
+          features: item.features || [],
+          product,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Subscription products retrieved successfully",
+        data: {
+          subscriptionId: subscription._id,
+          items,
+        },
+      });
+    },
+  );
+
+  /**
+   * Get products with status flags relative to a subscription and the user's cart
+   * @route GET /api/subscriptions/:subscriptionId/products/status
+   * @access Private
+   * @query inSubscription (optional, "true" | "false")
+   * @query inCart (optional, "true" | "false")
+   */
+  getSubscriptionProductsWithStatus = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { inSubscription, inCart } = req.query as {
+        inSubscription?: string;
+        inCart?: string;
+      };
+
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      })
+        .select("items")
+        .lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      const subscriptionProductIds = new Set(
+        (subscription.items || []).map((item: any) =>
+          item.productId?.toString?.() || String(item.productId),
+        ),
+      );
+
+      const cartProductIds = await cartService.getCartProductIds(userId.toString());
+
+      const filterInSubscription =
+        inSubscription === "true"
+          ? true
+          : inSubscription === "false"
+            ? false
+            : undefined;
+      const filterInCart =
+        inCart === "true" ? true : inCart === "false" ? false : undefined;
+
+      const rawProducts = await Products.find({
+        isDeleted: false,
+        status: true,
+      }).lean();
+
+      // Translate products using common multi-language service
+      const translatedProducts = await translateProductsForUser(rawProducts, req);
+
+      const cycleDaysNumber = Number((subscription as any).cycleDays) || 0;
+      const planKey = getSachetsPlanKey(cycleDaysNumber);
+
+      const items = translatedProducts
+        .map((product: any) => {
+          const id = product._id?.toString?.() || String(product._id);
+          const isInSubscription = subscriptionProductIds.has(id);
+          const isInCart = cartProductIds.has(id);
+
+          // Derive subscription plan price for this product based on subscription cycleDays
+          let subscriptionPrice: any = null;
+          if (planKey && product.sachetPrices && product.sachetPrices[planKey]) {
+            const plan = product.sachetPrices[planKey];
+            const amount =
+              plan.discountedPrice ||
+              plan.amount ||
+              plan.totalAmount ||
+              0;
+            subscriptionPrice = {
+              currency: plan.currency || "EUR",
+              amount,
+              taxRate: plan.taxRate || 0,
+              totalAmount: amount + (plan.taxRate || 0),
+              planDays: cycleDaysNumber,
+            };
+          }
+
+          return {
+            ...product,
+            isInSubscription,
+            isInCart,
+            subscriptionPrice,
+          };
+        })
+        .filter((item: any) => {
+          if (
+            filterInSubscription !== undefined &&
+            item.isInSubscription !== filterInSubscription
+          ) {
+            return false;
+          }
+          if (filterInCart !== undefined && item.isInCart !== filterInCart) {
+            return false;
+          }
+          return true;
+        });
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Products with subscription/cart status retrieved successfully",
+        data: {
+          subscriptionId,
+          items,
+        },
+      });
     },
   );
 }
