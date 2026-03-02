@@ -20,6 +20,7 @@ import { getSubscriptionPriceFromProduct } from "@/utils/productSubscriptionPric
 import { calculateMemberPrice } from "@/utils/membershipPrice";
 import { getTranslatedString } from "@/utils/translationUtils";
 import { paymentService } from "@/services/payment/PaymentService";
+import { subscriptionAutoRenewalService } from "@/services/subscriptionAutoRenewalService";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -1460,6 +1461,99 @@ class SubscriptionController {
       res.apiSuccess(
         { addresses },
         "Shipping addresses retrieved successfully",
+      );
+    },
+  );
+
+  /**
+   * Test fast renewal for a subscription using existing auto-renewal flow
+   * @route POST /api/subscriptions/:subscriptionId/test-renew
+   * @access Private
+   *
+   * Flow:
+   * - If delayMinutes > 0: only set subscription.nextBillingDate = now + delayMinutes
+   *   (cron job will pick it up later).
+   * - If delayMinutes === 0 (default): set nextBillingDate = now and call
+   *   subscriptionAutoRenewalService.processRenewal(subscription) immediately.
+   *
+   * This uses the same renewal service that the cron job uses, so Stripe/Mollie
+   * behavior is identical to real auto-renew.
+   */
+  testSubscriptionRenewal = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { delayMinutes = 0 } = req.body as { delayMinutes?: number };
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Validate subscription ID
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      // Find subscription and verify it belongs to user
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      });
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Only allow ACTIVE (or PAUSED) subscriptions
+      if (
+        subscription.status !== SubscriptionStatus.ACTIVE &&
+        subscription.status !== (SubscriptionStatus.PAUSED as SubscriptionStatus)
+      ) {
+        throw new AppError(
+          "Test renewal is only allowed for active or paused subscriptions",
+          400,
+        );
+      }
+
+      // Set nextBillingDate based on delayMinutes
+      const now = new Date();
+      const nextBillingDate =
+        delayMinutes && delayMinutes > 0
+          ? new Date(now.getTime() + delayMinutes * 60 * 1000)
+          : now;
+
+      subscription.nextBillingDate = nextBillingDate;
+
+      // For testing we keep nextDeliveryDate as-is; it will be recalculated
+      // during renewal based on cycleDays.
+      await subscription.save();
+
+      // If delayMinutes > 0, we only prepare the subscription and let cron run later
+      if (delayMinutes > 0) {
+        res.apiSuccess(
+          {
+            subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+            nextBillingDate: subscription.nextBillingDate,
+            message:
+              "Subscription nextBillingDate updated; cron job will process renewal when due.",
+          },
+          "Test subscription renewal scheduled",
+        );
+        return;
+      }
+
+      // delayMinutes === 0 → trigger renewal immediately using the same service as cron
+      const result = await subscriptionAutoRenewalService.processRenewal(subscription);
+
+      res.apiSuccess(
+        {
+          subscriptionId: result.subscriptionId,
+          renewalNumber: result.renewalNumber,
+          paymentId: result.paymentId,
+          orderId: result.orderId,
+        },
+        "Test subscription renewal processed successfully",
       );
     },
   );

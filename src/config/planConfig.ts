@@ -23,7 +23,7 @@ export type SachetsSubscriptionPlanDays = typeof SACHETS_SUBSCRIPTION_PLANS[numb
  * Note: STAND_UP_POUCH only supports one-time plans (no subscription)
  * Note: capsuleCount and planDays are the same for STAND_UP_POUCH
  */
-export const STAND_UP_POUCH_PLANS = [30, 60] as const;
+export const STAND_UP_POUCH_PLANS = [60, 120] as const;
 export type StandUpPouchPlanDays = typeof STAND_UP_POUCH_PLANS[number];
 
 /**
@@ -37,10 +37,10 @@ export const SACHETS_PLAN_KEYS: Record<SachetsSubscriptionPlanDays, string> = {
   180: "oneEightyDays",
 } as const;
 
-// Product pricing uses keys count_0 (e.g. 30 count) and count_1 (e.g. 60 count)
+// Product pricing uses keys count_0 (e.g. 60 count) and count_1 (e.g. 120 count)
 export const STAND_UP_POUCH_PLAN_KEYS: Record<StandUpPouchPlanDays, string> = {
-  30: "count_0",
-  60: "count_1",
+  60: "count_0",
+  120: "count_1",
 } as const;
 
 /**
@@ -55,8 +55,8 @@ export const SACHETS_PLAN_LABELS: Record<SachetsSubscriptionPlanDays, string> = 
 } as const;
 
 export const STAND_UP_POUCH_PLAN_LABELS: Record<StandUpPouchPlanDays, string> = {
-  30: "30 Count",
   60: "60 Count",
+  120: "120 Count",
 } as const;
 
 /**
@@ -69,17 +69,16 @@ export function getSachetsPlanKey(days: number): string | null {
 export function getStandUpPouchPlanKey(count: number): string | null {
   const key = STAND_UP_POUCH_PLAN_KEYS[count as StandUpPouchPlanDays];
   if (key) return key;
-  // Backward compat: old carts/orders may have planDays 120 (was count120) → treat as count_1
-  if (count === 120) return "count_1";
   return null;
 }
 
-/** Normalize standupPouchPrice so it always has count_0/count_1 (maps old count30/count60 from DB). */
+/** Normalize standupPouchPrice so it always has count_0/count_1 (maps old count60/count120 from DB). */
 export function getNormalizedStandupPouchPrice(sp: any): any {
   if (!sp || typeof sp !== "object") return sp;
   if (sp.count_0 || sp.count_1) return sp;
-  if (sp.count30 || sp.count60)
-    return { count_0: sp.count30, count_1: sp.count60 };
+  // Backward compat: map old count60/count120 to count_0/count_1
+  if (sp.count60 || sp.count120)
+    return { count_0: sp.count60, count_1: sp.count120 };
   return sp;
 }
 

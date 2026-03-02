@@ -15,6 +15,7 @@ import {
   addProductsToSubscriptionSchema,
   removeProductsFromSubscriptionSchema,
   changeSubscriptionShippingAddressSchema,
+  testSubscriptionRenewalSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
 
@@ -170,6 +171,20 @@ router.post(
   validateParams(getSubscriptionDetailsParamsSchema),
   validateJoi(changeSubscriptionShippingAddressSchema),
   subscriptionController.changeSubscriptionShippingAddress
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/test-renew
+ * @desc    Trigger a fast test renewal for a subscription using existing renewal flow
+ * @access  Private
+ * @params  subscriptionId
+ * @body    delayMinutes (optional) - if > 0, only sets nextBillingDate in future
+ */
+router.post(
+  "/:subscriptionId/test-renew",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(testSubscriptionRenewalSchema),
+  subscriptionController.testSubscriptionRenewal
 );
 
 export default router;

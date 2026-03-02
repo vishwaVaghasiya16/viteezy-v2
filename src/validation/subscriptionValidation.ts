@@ -167,3 +167,16 @@ export const getSubscriptionTransactionHistoryQuerySchema = Joi.object(
 )
   .default({})
   .label("SubscriptionTransactionHistoryQuery");
+
+/**
+ * Joi schema for testing fast subscription renewal
+ */
+export const testSubscriptionRenewalSchema = Joi.object(
+  withFieldLabels({
+    delayMinutes: Joi.number()
+      .integer()
+      .min(0)
+      .default(0)
+      .label("Delay Minutes (for setting nextBillingDate)"),
+  }),
+).label("TestSubscriptionRenewalPayload");

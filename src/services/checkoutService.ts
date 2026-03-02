@@ -1256,7 +1256,7 @@ class CheckoutService {
     options: {
       planDurationDays: 30 | 60 | 90 | 180;
       planType: "SACHET" | "STANDUP_POUCH";
-      capsuleCount?: 30 | 60 | 120; // For one-time purchases (STAND_UP_POUCH: 60 or 120)
+      capsuleCount?: 60 | 120; // For one-time purchases (STAND_UP_POUCH: 60 or 120)
       couponCode?: string;
     },
   ): Promise<{
@@ -1390,8 +1390,8 @@ class CheckoutService {
           const countKey = capsuleCount ? getStandUpPouchPlanKey(capsuleCount) : null;
           const selectedPrice =
             (countKey && standupPrice[countKey]) ||
-            (capsuleCount === 30 ? standupPrice.count_0 : null) ||
-            (capsuleCount === 60 ? standupPrice.count_1 : null) ||
+            (capsuleCount === 60 ? standupPrice.count_0 : null) ||
+            (capsuleCount === 120 ? standupPrice.count_1 : null) ||
             standupPrice.count_0 ||
             standupPrice.count_1;
           if (selectedPrice) {
@@ -1749,6 +1749,42 @@ class CheckoutService {
     // SACHETS are always subscription (isOneTime is NOT allowed)
     const isOneTimePurchase = false;
 
+    /**
+     * Resolve the correct STAND_UP_POUCH price entry for a given capsuleCount.
+     *
+     * Why: DB can store `standupPouchPrice` under `count_0` / `count_1` (or older keys),
+     * and those keys are not always reliably tied to 60/120. The most reliable signal is
+     * `priceEntry.capsuleCount` inside each entry.
+     *
+     * Priority:
+     * 1) Find any entry where `entry.capsuleCount === capsuleCount`
+     * 2) Fallback to config mapping (`getStandUpPouchPlanKey`)
+     * 3) Otherwise null
+     */
+    const resolveStandUpPouchPriceEntry = (
+      standupPrice: any,
+      capsuleCount: number,
+    ): { key: string; price: any } | null => {
+      if (!standupPrice || typeof standupPrice !== "object") return null;
+
+      // Try capsuleCount matching first (handles swapped count_0/count_1 scenarios)
+      for (const [key, value] of Object.entries(standupPrice)) {
+        if (!value || typeof value !== "object") continue;
+        const entryCapsuleCount = Number((value as any).capsuleCount);
+        if (Number.isFinite(entryCapsuleCount) && entryCapsuleCount === capsuleCount) {
+          return { key, price: value };
+        }
+      }
+
+      // Fallback to configured key mapping
+      const mappedKey = getStandUpPouchPlanKey(capsuleCount);
+      if (mappedKey && (standupPrice as any)[mappedKey]) {
+        return { key: mappedKey, price: (standupPrice as any)[mappedKey] };
+      }
+
+      return null;
+    };
+
     // Update cart items for STAND_UP_POUCH: planDays and quantities (if provided)
     if (standupPouchItems.length > 0 && standUpPouchConfig) {
       const updatedItems = [...cart.items];
@@ -1761,7 +1797,9 @@ class CheckoutService {
         standUpPouchConfig.itemQuantities.length > 0
       ) {
         for (const itemQty of standUpPouchConfig.itemQuantities) {
-          itemQuantitiesMap.set(itemQty.productId, itemQty);
+          // Normalize productId to string for consistent comparison
+          const normalizedProductId = String(itemQty.productId).trim();
+          itemQuantitiesMap.set(normalizedProductId, itemQty);
         }
       }
 
@@ -1781,13 +1819,15 @@ class CheckoutService {
       for (let i = 0; i < updatedItems.length; i++) {
         const item = updatedItems[i];
         if (item.variantType === ProductVariant.STAND_UP_POUCH) {
-          const itemQty = itemQuantitiesMap.get(item.productId.toString());
+          // Normalize productId for consistent lookup
+          const normalizedItemProductId = String(item.productId).trim();
+          const itemQty = itemQuantitiesMap.get(normalizedItemProductId);
 
           // Determine planDays for this specific product:
           // 1. Use planDays from itemQuantities if provided
           // 2. Use capsuleCount from itemQuantities if provided (convert to planDays)
           // 3. Fall back to top-level planDays or capsuleCount
-          // 4. Default to 30
+          // 4. Default to 60
           let itemPlanDays: number;
           if (itemQty) {
             if (itemQty.planDays !== undefined) {
@@ -1812,14 +1852,12 @@ class CheckoutService {
           }
 
           // Calculate price based on the determined planDays
-          // Match planDays (30 or 60) with count_0 / count_1 in standupPouchPrice
+          // Match planDays (60 or 120) with count_0 / count_1 in standupPouchPrice
           if (product && product.standupPouchPrice) {
             const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
-            const countKey = getStandUpPouchPlanKey(itemPlanDays);
+            const resolved = resolveStandUpPouchPriceEntry(standupPrice, itemPlanDays);
             const selectedCountPrice =
-              (countKey && standupPrice[countKey]) ||
-              (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
-              (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
+              resolved?.price ||
               standupPrice.count_0 ||
               standupPrice.count_1 ||
               standupPrice;
@@ -1925,11 +1963,9 @@ class CheckoutService {
               item.planDays ||
               selectedStandUpPouchPlanDays ||
               selectedCapsuleCount;
-            const countKey = getStandUpPouchPlanKey(itemPlanDays);
+            const resolved = resolveStandUpPouchPriceEntry(standupPrice, itemPlanDays);
             const selectedCountPrice =
-              (countKey && standupPrice[countKey]) ||
-              (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
-              (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
+              resolved?.price ||
               standupPrice.count_0 ||
               standupPrice.count_1 ||
               standupPrice;
@@ -2198,12 +2234,10 @@ class CheckoutService {
           taxRate: 0,
         };
 
-        const countKey = getStandUpPouchPlanKey(itemCapsuleCount);
-        if (countKey && (standupPrice.count_0 || standupPrice.count_1)) {
+        const resolved = resolveStandUpPouchPriceEntry(standupPrice, itemCapsuleCount);
+        if ((resolved?.price || standupPrice.count_0 || standupPrice.count_1) && (standupPrice.count_0 || standupPrice.count_1 || resolved?.price)) {
           const selectedCountPrice =
-            standupPrice[countKey] ||
-            (itemCapsuleCount === 30 ? standupPrice.count_0 : null) ||
-            (itemCapsuleCount === 60 ? standupPrice.count_1 : null) ||
+            resolved?.price ||
             standupPrice.count_0 ||
             standupPrice.count_1 ||
             standupPrice;
@@ -2438,9 +2472,21 @@ class CheckoutService {
           } else if (itemQty.capsuleCount !== undefined) {
             planDays = itemQty.capsuleCount; // capsuleCount maps to planDays for STAND_UP_POUCH
           } else {
-            planDays = selectedStandUpPouchPlanDays;
+            planDays = selectedStandUpPouchPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
           }
-          productPlanDaysMap.set(itemQty.productId, planDays);
+          // Normalize productId to string for consistent comparison
+          // Handle both string and ObjectId formats
+          const normalizedProductId = String(itemQty.productId).trim();
+          productPlanDaysMap.set(normalizedProductId, planDays);
+        }
+      }
+      
+      // If no itemQuantities provided, populate map with cart items' planDays or default
+      if (productPlanDaysMap.size === 0) {
+        for (const cartItem of standupPouchItems) {
+          const productId = String(cartItem.productId).trim();
+          const planDays = (cartItem as any).planDays || selectedStandUpPouchPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
+          productPlanDaysMap.set(productId, planDays);
         }
       }
 
@@ -2456,14 +2502,16 @@ class CheckoutService {
           if (!cartItem) continue;
           const quantity = (cartItem as any).quantity || 1; // Quantity from cart for stand-up pouch
           const productId = product._id.toString();
+          const normalizedProductId = String(productId).trim();
 
           // Get selected planDays for this product
           // Priority: body itemQuantities > cart planDays > top-level config > default (60)
-          const selectedPlanDaysForProduct =
-            productPlanDaysMap.get(productId) ||
-            cartItem.planDays ||
-            selectedStandUpPouchPlanDays ||
-            DEFAULT_STAND_UP_POUCH_PLAN;
+          // IMPORTANT: Always prioritize productPlanDaysMap (from request body) over cart values
+          const selectedPlanDaysForProduct = productPlanDaysMap.has(normalizedProductId)
+            ? productPlanDaysMap.get(normalizedProductId)!
+            : (cartItem as any).planDays ||
+              selectedStandUpPouchPlanDays ||
+              DEFAULT_STAND_UP_POUCH_PLAN;
 
           // Initialize product plans map if not exists
           if (!standUpPouchPlansByProductMap.has(productId)) {
@@ -2472,25 +2520,31 @@ class CheckoutService {
           const productPlansMap = standUpPouchPlansByProductMap.get(productId)!;
 
           for (const planInfo of standupPouchPlans) {
-            const planData = standupPrice[planInfo.key];
+            // Resolve planData by matching capsuleCount first (DB may have swapped keys)
+            const desiredCapsuleCount = planInfo.count;
+            const resolved = resolveStandUpPouchPriceEntry(
+              standupPrice,
+              desiredCapsuleCount,
+            );
+            const planKeyForResponse = resolved?.key || planInfo.key;
+            const planData = resolved?.price || standupPrice[planInfo.key];
             if (planData) {
               const planPrice = planData.amount || 0;
               const discountedPrice = planData.discountedPrice || planPrice;
-              const baseCapsuleCount =
-                (planData.capsuleCount as number | undefined) ?? planInfo.count;
+              const baseCapsuleCount = desiredCapsuleCount;
               const totalAmount = planPrice * quantity;
               const totalDiscountedPrice = discountedPrice * quantity;
 
               // Check if this plan is selected for this product
-              const isSelected = selectedPlanDaysForProduct === planInfo.count;
+              const isSelected = selectedPlanDaysForProduct === desiredCapsuleCount;
 
-              productPlansMap.set(planInfo.key, {
-                planKey: planInfo.key,
-                label: planInfo.label,
+              productPlansMap.set(planKeyForResponse, {
+                planKey: planKeyForResponse,
+                label: planInfo.label, // Label from config (60/120)
                 durationDays: 0, // Not applicable for stand-up pouch
                 totalAmount,
                 discountedPrice: totalDiscountedPrice,
-                // capsuleCount should reflect per-pack value from DB (not multiplied by quantity)
+                // capsuleCount should reflect the configured value (60 or 120), not from DB
                 capsuleCount: baseCapsuleCount,
                 // supplementsCount represents total capsules across quantity
                 supplementsCount: baseCapsuleCount * quantity,
@@ -2605,8 +2659,9 @@ class CheckoutService {
 
             return {
               planKey: plan.planKey,
-              // Label should reflect actual capsuleCount from DB (e.g. "60 Count", "120 Count")
-              label: getStandUpPouchPlanLabel(plan.capsuleCount),
+              // Label should reflect the configured plan label (e.g. "60 Count", "120 Count")
+              // Use the label that was set from planInfo.label (from config)
+              label: plan.label || getStandUpPouchPlanLabel(plan.capsuleCount),
               durationDays: plan.durationDays,
               capsuleCount: plan.capsuleCount,
               totalAmount: this.roundAmount(plan.totalAmount),
@@ -2699,18 +2754,16 @@ class CheckoutService {
       // Sum up all STAND_UP_POUCH items' prices
       for (const item of standupPouchItems) {
         const itemPlanDays =
-          item.planDays || selectedStandUpPouchPlanDays || 30;
+          (item as any).planDays || selectedStandUpPouchPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
         const product = products.find(
           (p) => p._id.toString() === item.productId.toString(),
         );
 
         if (product && product.standupPouchPrice) {
           const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
-          const countKey = getStandUpPouchPlanKey(itemPlanDays);
+          const resolved = resolveStandUpPouchPriceEntry(standupPrice, itemPlanDays);
           const selectedCountPrice =
-            (countKey && standupPrice[countKey]) ||
-            (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
-            (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
+            resolved?.price ||
             standupPrice.count_0 ||
             standupPrice.count_1 ||
             standupPrice;

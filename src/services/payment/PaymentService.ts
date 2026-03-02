@@ -20,7 +20,7 @@ import {
 } from "../../models/enums";
 import { Payments } from "../../models/commerce/payments.model";
 import { Orders } from "../../models/commerce/orders.model";
-import { Subscriptions } from "../../models/commerce/subscriptions.model";
+import { Subscriptions, ISubscription } from "../../models/commerce/subscriptions.model";
 import { Memberships } from "../../models/commerce/memberships.model";
 import { Coupons } from "../../models/commerce/coupons.model";
 import { User } from "../../models/index.model";
@@ -32,6 +32,7 @@ import { emailService } from "../emailService";
 import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
+import { SubscriptionGatewayService } from "../subscriptionGatewayService";
 
 /**
  * Unified Payment Service
@@ -39,9 +40,11 @@ import { AddressSnapshotType } from "../../models/common.model";
  */
 export class PaymentService {
   private gateways: Map<PaymentMethod, IPaymentGateway>;
+  private subscriptionGatewayService: SubscriptionGatewayService;
 
   constructor() {
     this.gateways = new Map();
+    this.subscriptionGatewayService = new SubscriptionGatewayService();
 
     // Initialize available gateways
     try {
@@ -2422,27 +2425,25 @@ export class PaymentService {
         // Only set gatewaySubscriptionId when subscription is created via gateway (Stripe/Mollie)
       };
 
-      const subscription = await Subscriptions.create([subscriptionData], {
+      const subscriptionArray = await Subscriptions.create([subscriptionData], {
         session,
       });
 
       // Refresh the subscription document to get the updated version without gatewaySubscriptionId
       const updatedSubscription = await Subscriptions.findById(
-        subscription[0]._id
+        subscriptionArray[0]._id
       ).session(session);
       
-      // Replace the subscription object with the updated one
-      if (updatedSubscription) {
-        subscription[0] = updatedSubscription;
-      }
+      // Get the subscription document (use updated if available, otherwise use created)
+      const subscription: ISubscription = (updatedSubscription || subscriptionArray[0]) as ISubscription;
 
       console.log("✅ [SUBSCRIPTION] - Subscription created successfully!");
       console.log(
         "✅ [SUBSCRIPTION] - Subscription Number:",
-        subscription[0].subscriptionNumber
+        subscription.subscriptionNumber
       );
-      console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription[0]._id);
-      console.log("✅ [SUBSCRIPTION] - Status:", subscription[0].status);
+      console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription._id);
+      console.log("✅ [SUBSCRIPTION] - Status:", subscription.status);
 
       // ========== STEP 7: Update Payment with Subscription ID ==========
       console.log("🟢 [SUBSCRIPTION] Step 7: Updating payment with subscriptionId...");
@@ -2458,13 +2459,13 @@ export class PaymentService {
           await Payments.findByIdAndUpdate(
             paymentId,
             { 
-              subscriptionId: subscription[0]._id 
+              subscriptionId: subscription._id 
             },
             { session }
           );
-          console.log("✅ [SUBSCRIPTION] - Payment updated with subscriptionId:", subscription[0]._id);
+          console.log("✅ [SUBSCRIPTION] - Payment updated with subscriptionId:", subscription._id);
           logger.info(
-            `Payment ${paymentId} updated with subscriptionId ${subscription[0]._id} for subscription ${subscription[0].subscriptionNumber}`
+            `Payment ${paymentId} updated with subscriptionId ${subscription._id} for subscription ${subscription.subscriptionNumber}`
           );
         } catch (updateError: any) {
           console.error("⚠️ [SUBSCRIPTION] - Failed to update payment with subscriptionId:", updateError.message);
@@ -2476,7 +2477,187 @@ export class PaymentService {
       } else {
         console.warn("⚠️ [SUBSCRIPTION] - Payment ID not found, cannot update payment with subscriptionId");
         logger.warn(
-          `Payment ID not found in payment object, cannot update payment with subscriptionId for subscription ${subscription[0].subscriptionNumber}`
+          `Payment ID not found in payment object, cannot update payment with subscriptionId for subscription ${subscription.subscriptionNumber}`
+        );
+      }
+
+      // ========== STEP 7.5: Create Stripe Subscription ==========
+      console.log("🟢 [STRIPE SUBSCRIPTION] ========== Creating Stripe Subscription ==========");
+      console.log("🟢 [STRIPE SUBSCRIPTION] Step 7.5: Starting Stripe subscription creation process...");
+      
+      // Get payment method from payment object
+      const paymentMethod = payment.paymentMethod || order.paymentMethod;
+      console.log("🟢 [STRIPE SUBSCRIPTION] - Payment Method:", paymentMethod);
+      
+      // Only create Stripe subscription if payment method is STRIPE
+      if (paymentMethod === PaymentMethod.STRIPE) {
+        console.log("✅ [STRIPE SUBSCRIPTION] - Payment method is STRIPE, proceeding with Stripe subscription creation");
+        try {
+          // Get user details for Stripe customer
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Fetching user details...");
+          const user = await User.findById(order.userId).select("email firstName lastName").lean();
+          if (!user) {
+            throw new AppError("User not found for Stripe subscription creation", 404);
+          }
+          console.log("✅ [STRIPE SUBSCRIPTION] - User found:", user.email);
+
+          // Calculate amount in minor units (cents) from sachetsPricing.total
+          // sachetsPricing.total is in major units (e.g., EUR), convert to cents
+          const amountInCents = Math.round(sachetsPricing.total * 100);
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Subscription Details:");
+          console.log("   📋 User ID:", order.userId.toString());
+          console.log("   📋 User Email:", user.email);
+          console.log("   📋 User Name:", `${user.firstName || ""} ${user.lastName || ""}`.trim() || "N/A");
+          console.log("   📋 Order ID:", order._id.toString());
+          console.log("   📋 Order Number:", order.orderNumber);
+          console.log("   📋 Database Subscription ID:", String(subscription._id));
+          console.log("   📋 Database Subscription Number:", subscription.subscriptionNumber);
+          console.log("   📋 Cycle Days:", cycleDays, "days");
+          console.log("   💰 Amount:", amountInCents, "cents (", sachetsPricing.total, sachetsPricing.currency, ")");
+          console.log("   💰 Currency:", sachetsPricing.currency || "EUR");
+          console.log("   🔄 Auto-Renew: Enabled (true)");
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Retrieving payment intent ID from payment...");
+          
+          // Get payment intent ID from payment to retrieve payment method
+          let paymentIntentId: string | undefined;
+          if (payment.gatewayTransactionId) {
+            paymentIntentId = payment.gatewayTransactionId;
+            console.log("   - Payment Intent ID from gatewayTransactionId:", paymentIntentId);
+          } else if (payment.gatewayResponse) {
+            // Try to extract from gatewayResponse
+            const gatewayResponse = payment.gatewayResponse as any;
+            if (gatewayResponse.payment_intent) {
+              paymentIntentId = typeof gatewayResponse.payment_intent === 'string' 
+                ? gatewayResponse.payment_intent 
+                : gatewayResponse.payment_intent.id;
+              console.log("   - Payment Intent ID from gatewayResponse:", paymentIntentId);
+            } else if (gatewayResponse.id && gatewayResponse.object === 'payment_intent') {
+              paymentIntentId = gatewayResponse.id;
+              console.log("   - Payment Intent ID from gatewayResponse.id:", paymentIntentId);
+            }
+          }
+          
+          if (!paymentIntentId) {
+            console.warn("⚠️ [STRIPE SUBSCRIPTION] - Payment Intent ID not found, subscription may be incomplete");
+          }
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Preparing order items for Stripe product creation...");
+          
+          // Map sachets items to format expected by Stripe subscription service
+          const orderItemsForStripe = sachetItems.map((item: any) => ({
+            productId: item.productId?.toString() || "",
+            name: item.name || "Product",
+            planDays: item.planDays || cycleDays,
+            capsuleCount: item.capsuleCount,
+            amount: item.amount || 0,
+            discountedPrice: item.discountedPrice || 0,
+            taxRate: item.taxRate || 0,
+            totalAmount: item.totalAmount || 0,
+            durationDays: item.durationDays,
+            savingsPercentage: item.savingsPercentage,
+            features: item.features || [],
+          }));
+          
+          console.log("   - Number of sachets items:", orderItemsForStripe.length);
+          orderItemsForStripe.forEach((item: any, index: number) => {
+            console.log(`   - Item ${index + 1}: ${item.name} (${item.discountedPrice} ${sachetsPricing.currency || "EUR"})`);
+          });
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Calling SubscriptionGatewayService.createSubscription()...");
+          
+          // Create Stripe subscription via SubscriptionGatewayService
+          const stripeSubscriptionResult = await this.subscriptionGatewayService.createSubscription({
+            userId: order.userId.toString(),
+            orderId: order._id.toString(),
+            paymentMethod: PaymentMethod.STRIPE,
+            amount: amountInCents,
+            currency: sachetsPricing.currency || "EUR",
+            cycleDays: cycleDays,
+            customerEmail: user.email,
+            customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+            paymentIntentId: paymentIntentId,
+            orderItems: orderItemsForStripe, // Pass sachets items for individual product creation
+            metadata: {
+              subscriptionId: String(subscription._id),
+              subscriptionNumber: subscription.subscriptionNumber,
+              orderNumber: order.orderNumber,
+            },
+          });
+
+          console.log("🟢 [STRIPE SUBSCRIPTION] - SubscriptionGatewayService response received");
+          console.log("   - Success:", stripeSubscriptionResult.success);
+          console.log("   - Gateway Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId || "N/A");
+          console.log("   - Gateway Customer ID:", stripeSubscriptionResult.gatewayCustomerId || "N/A");
+          console.log("   - Gateway Payment Method ID:", stripeSubscriptionResult.gatewayPaymentMethodId || "N/A");
+          if (stripeSubscriptionResult.error) {
+            console.log("   - Error:", stripeSubscriptionResult.error);
+          }
+
+          if (stripeSubscriptionResult.success && stripeSubscriptionResult.gatewaySubscriptionId) {
+            console.log("✅ [STRIPE SUBSCRIPTION] - Stripe subscription created successfully!");
+            console.log("   🎯 Stripe Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId);
+            console.log("   🎯 Stripe Customer ID:", stripeSubscriptionResult.gatewayCustomerId);
+            console.log("   🎯 Stripe Payment Method ID:", stripeSubscriptionResult.gatewayPaymentMethodId || "N/A");
+            
+            console.log("🟢 [STRIPE SUBSCRIPTION] - Updating database subscription with Stripe IDs...");
+            
+            // Update database subscription with Stripe subscription ID and customer ID
+            await Subscriptions.findByIdAndUpdate(
+              subscription._id,
+              {
+                gatewaySubscriptionId: stripeSubscriptionResult.gatewaySubscriptionId,
+                gatewayCustomerId: stripeSubscriptionResult.gatewayCustomerId || undefined,
+                gatewayPaymentMethodId: stripeSubscriptionResult.gatewayPaymentMethodId || undefined,
+              },
+              { session }
+            );
+            
+            console.log("✅ [STRIPE SUBSCRIPTION] - Database subscription updated successfully!");
+            console.log("   - Database Subscription ID:", String(subscription._id));
+            console.log("   - Database Subscription Number:", subscription.subscriptionNumber);
+            console.log("   - Linked Stripe Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId);
+            console.log("   - Linked Stripe Customer ID:", stripeSubscriptionResult.gatewayCustomerId);
+            console.log("✅ [STRIPE SUBSCRIPTION] ============================================");
+            
+            logger.info(
+              `Stripe subscription ${stripeSubscriptionResult.gatewaySubscriptionId} created and linked to database subscription ${subscription.subscriptionNumber}`
+            );
+          } else {
+            console.error("❌ [STRIPE SUBSCRIPTION] - Failed to create Stripe subscription");
+            console.error("   - Error:", stripeSubscriptionResult.error);
+            console.error("   - Database Subscription Number:", subscription.subscriptionNumber);
+            console.error("❌ [STRIPE SUBSCRIPTION] ============================================");
+            
+            logger.warn(
+              `Failed to create Stripe subscription for database subscription ${subscription.subscriptionNumber}: ${stripeSubscriptionResult.error}`
+            );
+            // Don't fail database subscription creation if Stripe subscription fails
+            // The database subscription will still be created without gatewaySubscriptionId
+          }
+        } catch (stripeError: any) {
+          console.error("❌ [STRIPE SUBSCRIPTION] - Exception occurred while creating Stripe subscription");
+          console.error("   - Error Message:", stripeError.message);
+          console.error("   - Error Stack:", stripeError.stack);
+          console.error("   - Database Subscription Number:", subscription.subscriptionNumber);
+          console.error("❌ [STRIPE SUBSCRIPTION] ============================================");
+          
+          logger.error(
+            `Error creating Stripe subscription for database subscription ${subscription.subscriptionNumber}:`,
+            stripeError
+          );
+          // Don't fail database subscription creation if Stripe subscription fails
+          // The database subscription will still be created without gatewaySubscriptionId
+        }
+      } else {
+        console.log("ℹ️ [STRIPE SUBSCRIPTION] - Payment method is not STRIPE, skipping Stripe subscription creation");
+        console.log("   - Payment Method:", paymentMethod);
+        console.log("   - Database Subscription Number:", subscription.subscriptionNumber);
+        console.log("ℹ️ [STRIPE SUBSCRIPTION] ============================================");
+        
+        logger.info(
+          `Payment method is ${paymentMethod}, skipping Stripe subscription creation for subscription ${subscription.subscriptionNumber}`
         );
       }
 
@@ -2491,12 +2672,12 @@ export class PaymentService {
         const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
         await subscriptionNotifications.subscriptionActivated(
           order.userId,
-          String(subscription[0]._id),
-          subscription[0].subscriptionNumber,
+          String(subscription._id),
+          subscription.subscriptionNumber,
           order.userId
         );
         logger.info(
-          `Subscription activated notification sent for subscription: ${subscription[0].subscriptionNumber} (payment successful)`
+          `Subscription activated notification sent for subscription: ${subscription.subscriptionNumber} (payment successful)`
         );
       } catch (error: any) {
         logger.error(`Failed to send subscription activated notification: ${error.message}`);
@@ -2504,14 +2685,14 @@ export class PaymentService {
       }
 
       logger.info(
-        `✅ Subscription ${subscription[0].subscriptionNumber} created for order ${order.orderNumber}`
+        `✅ Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber}`
       );
 
       console.log(
         "✅ [SUBSCRIPTION] ============================================"
       );
 
-      return subscription[0];
+      return subscription;
     } catch (error: any) {
       // Rollback transaction on error
       await session.abortTransaction();
