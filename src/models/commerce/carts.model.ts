@@ -18,6 +18,7 @@ export interface ICart extends Document {
     planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (30 or 60). NOT used for SACHETS.
     price: PriceType;
     totalAmount?: number; // Total amount (unit price * quantity) for STAND_UP_POUCH items
+    isSubscriptionChange?: boolean; // Flag to indicate this item was added from subscription-change flow
     addedAt: Date;
   }>;
   subtotal: number; // Sum of all product amounts
@@ -73,6 +74,10 @@ const CartSchema = new Schema<ICart>(
         totalAmount: {
           type: Number,
           default: null,
+        },
+        isSubscriptionChange: {
+          type: Boolean,
+          default: false,
         },
         addedAt: {
           type: Date,

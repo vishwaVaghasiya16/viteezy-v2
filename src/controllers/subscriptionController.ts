@@ -1853,6 +1853,102 @@ class SubscriptionController {
       });
     },
   );
+
+  /**
+   * Prepare cart for subscription change:
+   * - Only allowed if subscription is ACTIVE
+   * - Only allowed within 10 days before subscriptionEndDate
+   * - Adds given products to user's cart as SACHETS variant
+   *
+   * @route POST /api/subscriptions/:subscriptionId/plan-change/cart
+   * @access Private
+   * @body productIds: string[]
+   */
+  prepareSubscriptionChangeCart = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subscriptionId } = req.params;
+      const { productIds } = req.body as { productIds?: string[] };
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      if (!mongoose.Types.ObjectId.isValid(subscriptionId)) {
+        throw new AppError("Invalid subscription ID format", 400);
+      }
+
+      // Basic body validation
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        throw new AppError("productIds array is required", 400);
+      }
+
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      }).lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      if (subscription.status !== SubscriptionStatus.ACTIVE) {
+        throw new AppError(
+          "Subscription must be active to prepare cart for plan change",
+          400,
+        );
+      }
+
+      if (!subscription.subscriptionEndDate) {
+        throw new AppError(
+          "Subscription end date is not configured for this subscription",
+          400,
+        );
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endDate = new Date(subscription.subscriptionEndDate);
+      endDate.setHours(0, 0, 0, 0);
+
+      const diffMs = endDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      // Allow only if subscription ends in 0–10 days (inclusive)
+      if (diffDays > 10 || diffDays < 0) {
+        throw new AppError(
+          "Subscription plan change cart can only be prepared within 10 days before the end date",
+          400,
+        );
+      }
+
+      // Add each product to cart as SACHETS, marked as subscription-change items
+      let lastCart: any = null;
+      for (const pid of productIds) {
+        if (!mongoose.Types.ObjectId.isValid(pid)) {
+          throw new AppError(`Invalid product ID: ${pid}`, 400);
+        }
+
+        const result = await cartService.addItem(userId.toString(), {
+          productId: pid,
+          variantType: ProductVariant.SACHETS,
+          isSubscriptionChange: true,
+        });
+
+        lastCart = result.cart;
+      }
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Subscription change cart prepared successfully. Products added as SACHETS.",
+        data: {
+          cart: lastCart,
+        },
+      });
+    },
+  );
 }
 
 export const subscriptionController = new SubscriptionController();

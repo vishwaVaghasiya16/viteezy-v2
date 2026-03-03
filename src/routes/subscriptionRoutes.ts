@@ -212,4 +212,20 @@ router.get(
   subscriptionController.getSubscriptionProductsWithStatus
 );
 
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/plan-change/cart
+ * @desc    Prepare user's cart for subscription change:
+ *          - Only if subscription is ACTIVE
+ *          - Only within 10 days before subscriptionEndDate
+ *          - Adds given products to cart as SACHETS with subscription-change flag
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to add
+ */
+router.post(
+  "/:subscriptionId/plan-change/cart",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.prepareSubscriptionChangeCart
+);
+
 export default router;

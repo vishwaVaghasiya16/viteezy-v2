@@ -27,6 +27,7 @@ interface AddCartItemData {
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
   isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
   planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (60 or 120). NOT used for SACHETS.
+  isSubscriptionChange?: boolean; // Optional flag: item added as part of subscription-change flow
 }
 
 interface UpdateCartItemData {
@@ -35,6 +36,7 @@ interface UpdateCartItemData {
   quantity?: number; // Quantity for STAND_UP_POUCH (default: 1, always 1 for SACHETS)
   isOneTime?: boolean; // Whether this is a one-time purchase (only for STAND_UP_POUCH, must be true)
   planDays?: number; // For STAND_UP_POUCH only: treated as capsuleCount (60 or 120). NOT used for SACHETS.
+  isSubscriptionChange?: boolean; // Optional flag: item updated as part of subscription-change flow
 }
 
 interface RemoveCartItemData {
@@ -502,6 +504,7 @@ class CartService {
         planDays: item.planDays || null,
         isOneTime: item.isOneTime || false,
         variantType: item.variantType,
+        isSubscriptionChange: item.isSubscriptionChange || false,
         _id: item._id,
         product: productWithCartFlag, // Already enriched with full details from common service
       };
@@ -580,7 +583,14 @@ class CartService {
     userId: string,
     data: AddCartItemData
   ): Promise<{ cart: any; message: string }> {
-    const { productId, variantType, quantity, isOneTime, planDays } = data;
+    const {
+      productId,
+      variantType,
+      quantity,
+      isOneTime,
+      planDays,
+      isSubscriptionChange,
+    } = data;
 
     // Validate variant-specific rules
     if (variantType === ProductVariant.SACHETS) {
@@ -742,6 +752,10 @@ class CartService {
           planDays: finalPlanDays, // Explicitly set planDays (number or null)
           price: calculatedPrice, // Update with calculated price
           totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
+          isSubscriptionChange:
+            isSubscriptionChange ??
+            updatedItems[existingItemIndex].isSubscriptionChange ??
+            false,
         };
       } else {
         // SACHETS: Update price and planDays (quantity always 1, no isOneTime)
@@ -751,6 +765,10 @@ class CartService {
           planDays: undefined, // SACHETS don't use planDays
           price: calculatedPrice, // Update with calculated price
           totalAmount: totalAmount, // Store totalAmount (same as unit price for SACHETS)
+          isSubscriptionChange:
+            isSubscriptionChange ??
+            updatedItems[existingItemIndex].isSubscriptionChange ??
+            false,
         };
       }
     } else {
@@ -766,6 +784,7 @@ class CartService {
         planDays: itemPlanDays, // For STAND_UP_POUCH: planDays is treated as capsuleCount (60 or 120). For SACHETS: undefined.
         price: calculatedPrice,
         totalAmount: totalAmount, // Store totalAmount (unit price * quantity)
+        isSubscriptionChange: !!isSubscriptionChange,
         addedAt: new Date(),
       });
     }
@@ -871,7 +890,14 @@ class CartService {
     data: UpdateCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId, variantType, quantity, isOneTime, planDays } = data;
+    const {
+      productId,
+      variantType,
+      quantity,
+      isOneTime,
+      planDays,
+      isSubscriptionChange,
+    } = data;
 
     // Validate variant-specific rules
     if (variantType === ProductVariant.SACHETS) {
@@ -1018,6 +1044,8 @@ class CartService {
       planDays: itemPlanDays, // Explicitly set planDays for STAND_UP_POUCH (number or null)
       price: calculatedPrice, // Update with calculated price based on variantType and planDays (for STAND_UP_POUCH)
       totalAmount: totalAmount,
+      isSubscriptionChange:
+        isSubscriptionChange ?? item.isSubscriptionChange ?? false,
     };
 
     // Calculate totals first without coupon to get order amount

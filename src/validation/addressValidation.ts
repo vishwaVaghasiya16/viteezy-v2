@@ -113,11 +113,7 @@ export const addAddressSchema = Joi.object(
     houseNumberAddition: Joi.string()
       .trim()
       .optional()
-      .allow(null, "")
-      .max(10)
-      .messages({
-        "string.max": "House number addition must not exceed 10 characters",
-      }),
+      .allow(null, ""),
     postalCode: Joi.string().trim().required().min(3).max(20).messages({
       "string.empty": "Postal code is required",
       "string.min": "Postal code must be at least 3 characters",
@@ -198,11 +194,7 @@ export const updateAddressSchema = Joi.object(
     houseNumberAddition: Joi.string()
       .trim()
       .optional()
-      .allow(null, "")
-      .max(10)
-      .messages({
-        "string.max": "House number addition must not exceed 10 characters",
-      }),
+      .allow(null, ""),
     postalCode: Joi.string().trim().optional().min(3).max(20).messages({
       "string.min": "Postal code must be at least 3 characters",
       "string.max": "Postal code must not exceed 20 characters",
