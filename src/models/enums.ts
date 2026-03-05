@@ -356,6 +356,7 @@ export enum NotificationCategory {
   FAMILY = "Family",
   SUPPORT = "Support",
   GENERAL = "General",
+  REMINDER = "Reminder",
 }
 
 // Notification Types

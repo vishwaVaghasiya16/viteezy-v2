@@ -1280,6 +1280,33 @@ export const systemNotifications = {
   },
 };
 
+export const reminderNotificationService = {
+  
+  async sendReminderNotification(
+    userId: string | mongoose.Types.ObjectId,
+    note: string,
+    createdBy?: string | mongoose.Types.ObjectId
+  ): Promise<void> {
+
+    const title = "Reminder";
+    const message = note || "You have a reminder";
+
+    const { appRoute, query } = buildMobileAppRoute("dashboard");
+
+    await notificationService.createNotification({
+      userId,
+      category: NotificationCategory.REMINDER,
+      type: NotificationType.NORMAL,
+      title,
+      message,
+      appRoute,
+      query,
+      createdBy,
+    });
+  }
+
+};
+
 /**
  * Export all notification helpers
  */
@@ -1293,5 +1320,6 @@ export const notificationHelpers = {
   family: familyNotifications,
   support: supportNotifications,
   system: systemNotifications,
+  reminder: reminderNotificationService,
 };
 

@@ -128,6 +128,7 @@ if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
  */
 import { paymentController } from "@/controllers/paymentController";
 import { PaymentMethod } from "@/models/enums";
+import moment from "moment";
 
 // Register webhook routes with raw body parser (BEFORE JSON parser)
 // Add logging middleware to track incoming requests
@@ -610,6 +611,22 @@ const startServer = async (): Promise<void> => {
       logger.info("✅ PostNL Status Sync job cron job initialized");
     } catch (jobError: any) {
       logger.warn(`⚠️ Failed to initialize PostNL Status Sync job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize Reminder Notification cron job
+    try {
+      const currentTime = moment().format("hh:mm A");
+      console.log({ currentTime });
+      const { startReminderScheduler } = await import(
+        "@/services/reminderScheduler.service"
+      );
+      await startReminderScheduler();
+      logger.info("✅ Reminder Notification cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(
+        `⚠️ Failed to initialize Reminder Notification cron job: ${jobError.message}`
+      );
       // Don't fail server startup if job initialization fails
     }
 
