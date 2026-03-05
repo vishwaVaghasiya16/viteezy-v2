@@ -62,6 +62,7 @@ import staticPageRoutes from "./staticPageRoutes";
 import contactRoutes from "./contactRoutes";
 import adminContactRoutes from "./adminContactRoutes";
 import adminDeliveryPostponementRoutes from "./adminDeliveryPostponementRoutes";
+import reminderRoutes from "./reminder.route";
 
 const router = Router();
 
@@ -131,5 +132,6 @@ router.use("/static-pages", staticPageRoutes);
 router.use("/contact", contactRoutes);
 router.use("/admin/contacts", adminContactRoutes);
 router.use("/admin/postponements", adminDeliveryPostponementRoutes);
+router.use("/reminders", reminderRoutes);
 
 export default router;
