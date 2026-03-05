@@ -105,14 +105,6 @@ class DeliveryPostponementController {
         throw new AppError("Order not found", 404);
       }
 
-      // Validate that it's a subscription order
-      if (order.planType !== OrderPlanType.SUBSCRIPTION) {
-        throw new AppError(
-          "Delivery postponement is only available for subscription orders",
-          400
-        );
-      }
-
       // Get subscription details from order metadata
       const planMetadata = order.metadata?.plan || {};
       const interval = planMetadata.interval || "monthly";

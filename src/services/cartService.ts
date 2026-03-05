@@ -113,15 +113,13 @@ class CartService {
       let taxRate = 0;
 
       if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
-        // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
+        // SACHETS: Always use 30 days plan TOTAL amount as base for all calculations
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
-          originalAmount = thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
-          discountedPrice =
-            thirtyDaysPlan.discountedPrice ||
-            thirtyDaysPlan.amount ||
-            thirtyDaysPlan.totalAmount ||
-            0;
+          const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
+          originalAmount = baseTotalAmount;
+          // All discount calculations should also be based on totalAmount
+          discountedPrice = baseTotalAmount;
           taxRate = thirtyDaysPlan.taxRate || 0;
         } else {
           // Fallback to item price if plan not found
@@ -133,28 +131,42 @@ class CartService {
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
+        const standupPrice = getNormalizedStandupPouchPrice(
+          product.standupPouchPrice
+        );
         const itemPlanDays = item.planDays || DEFAULT_STAND_UP_POUCH_PLAN;
-        const countKey = getStandUpPouchPlanKey(itemPlanDays);
-        const selectedCount =
-          (countKey && standupPrice[countKey]) ||
-          (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
-          (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
-          standupPrice.count_0 ||
-          standupPrice.count_1 ||
-          standupPrice;
-        
+
+        // Prefer matching by capsuleCount === planDays inside count_0 / count_1
+        const allCounts = [
+          standupPrice.count_0,
+          standupPrice.count_1,
+        ].filter(Boolean);
+
+        let selectedCount =
+          allCounts.find(
+            (c: any) => typeof c?.capsuleCount === "number" && c.capsuleCount === itemPlanDays
+          ) || null;
+
+        if (!selectedCount) {
+          const countKey = getStandUpPouchPlanKey(itemPlanDays);
+          selectedCount =
+            (countKey && standupPrice[countKey]) ||
+            standupPrice.count_0 ||
+            standupPrice.count_1 ||
+            standupPrice;
+        }
+
         if (selectedCount) {
-          originalAmount = selectedCount.amount || 0;
-          discountedPrice =
-            selectedCount.discountedPrice ||
-            selectedCount.amount ||
-            0;
+          const baseTotalAmount =
+            selectedCount.totalAmount ?? selectedCount.amount ?? 0;
+          originalAmount = baseTotalAmount;
+          // All discount calculations should also be based on totalAmount
+          discountedPrice = baseTotalAmount;
           taxRate = selectedCount.taxRate || 0;
-        } else if (standupPrice.amount) {
-          originalAmount = standupPrice.amount || 0;
-          discountedPrice =
-            standupPrice.discountedPrice || standupPrice.amount || 0;
+        } else if (standupPrice.amount || standupPrice.totalAmount) {
+          const baseTotalAmount = standupPrice.totalAmount ?? standupPrice.amount ?? 0;
+          originalAmount = baseTotalAmount;
+          discountedPrice = baseTotalAmount;
           taxRate = standupPrice.taxRate || 0;
         }
       } else {
@@ -406,53 +418,57 @@ class CartService {
       let taxRate = 0;
 
       if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
-        // Use 30 days plan price for SACHETS
+        // SACHETS: Always use 30 days plan TOTAL amount as base for all calculations
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
+          const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
           currency = thirtyDaysPlan.currency || "EUR";
           taxRate = thirtyDaysPlan.taxRate || 0;
-          // Original amount (for subtotal) - use amount field
-          originalAmount =
-            thirtyDaysPlan.amount || thirtyDaysPlan.totalAmount || 0;
-          // Discounted price (for discount field) - use discountedPrice field
-          discountedPrice =
-            thirtyDaysPlan.discountedPrice ||
-            thirtyDaysPlan.amount ||
-            thirtyDaysPlan.totalAmount ||
-            0;
+          originalAmount = baseTotalAmount;
+          discountedPrice = baseTotalAmount;
         }
       } else if (
         itemVariantType === ProductVariant.STAND_UP_POUCH &&
         product.standupPouchPrice
       ) {
-        const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
+        const standupPrice = getNormalizedStandupPouchPrice(
+          product.standupPouchPrice
+        );
         const itemPlanDays = item.planDays || DEFAULT_STAND_UP_POUCH_PLAN;
-        const countKey = getStandUpPouchPlanKey(itemPlanDays);
-        const selectedCount =
-          (countKey && standupPrice[countKey]) ||
-          (itemPlanDays === 30 ? standupPrice.count_0 : null) ||
-          (itemPlanDays === 60 ? standupPrice.count_1 : null) ||
-          standupPrice.count_0 ||
-          standupPrice.count_1 ||
-          standupPrice;
-        
+
+        // Prefer matching by capsuleCount === planDays inside count_0 / count_1
+        const allCounts = [
+          standupPrice.count_0,
+          standupPrice.count_1,
+        ].filter(Boolean);
+
+        let selectedCount =
+          allCounts.find(
+            (c: any) => typeof c?.capsuleCount === "number" && c.capsuleCount === itemPlanDays
+          ) || null;
+
+        if (!selectedCount) {
+          const countKey = getStandUpPouchPlanKey(itemPlanDays);
+          selectedCount =
+            (countKey && standupPrice[countKey]) ||
+            standupPrice.count_0 ||
+            standupPrice.count_1 ||
+            standupPrice;
+        }
+
         if (selectedCount) {
+          const baseTotalAmount =
+            selectedCount.totalAmount ?? selectedCount.amount ?? 0;
           currency = selectedCount.currency || "EUR";
           taxRate = selectedCount.taxRate || 0;
-          // Original amount (for subtotal) - use amount field
-          originalAmount = selectedCount.amount || 0;
-          // Discounted price (for discount field) - use discountedPrice field
-          discountedPrice =
-            selectedCount.discountedPrice ||
-            selectedCount.amount ||
-            0;
-        } else if (standupPrice.amount) {
-          // Fallback to simple price structure
+          originalAmount = baseTotalAmount;
+          discountedPrice = baseTotalAmount;
+        } else if (standupPrice.amount || standupPrice.totalAmount) {
+          const baseTotalAmount = standupPrice.totalAmount ?? standupPrice.amount ?? 0;
           currency = standupPrice.currency || "EUR";
           taxRate = standupPrice.taxRate || 0;
-          originalAmount = standupPrice.amount || 0;
-          discountedPrice =
-            standupPrice.discountedPrice || standupPrice.amount || 0;
+          originalAmount = baseTotalAmount;
+          discountedPrice = baseTotalAmount;
         }
       } else {
         // Fallback to item price if no variantType match
@@ -683,18 +699,15 @@ class CartService {
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
-      // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
+      // SACHETS: Always use 30 days plan TOTAL amount as unit price
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
+        const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
         currency = thirtyDaysPlan.currency || "EUR";
         taxRate = thirtyDaysPlan.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount:
-            thirtyDaysPlan.discountedPrice ||
-            thirtyDaysPlan.totalAmount ||
-            thirtyDaysPlan.amount ||
-            0,
+          amount: baseTotalAmount,
           taxRate,
         };
       }
@@ -702,33 +715,51 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
-      const countKey = getStandUpPouchPlanKey(planDays || DEFAULT_STAND_UP_POUCH_PLAN);
-      const selectedCount =
-        (countKey && standupPrice[countKey]) ||
-        (planDays === 30 ? standupPrice.count_0 : null) ||
-        (planDays === 60 ? standupPrice.count_1 : null) ||
-        standupPrice.count_0 ||
-        standupPrice.count_1 ||
-        standupPrice;
-      
+      const standupPrice = getNormalizedStandupPouchPrice(
+        product.standupPouchPrice
+      );
+      const effectivePlanDays = planDays || DEFAULT_STAND_UP_POUCH_PLAN;
+
+      // Prefer matching by capsuleCount === planDays inside count_0 / count_1
+      const allCounts = [
+        standupPrice.count_0,
+        standupPrice.count_1,
+      ].filter(Boolean);
+
+      let selectedCount =
+        allCounts.find(
+          (c: any) =>
+            typeof c?.capsuleCount === "number" &&
+            c.capsuleCount === effectivePlanDays
+        ) || null;
+
+      if (!selectedCount) {
+        const countKey = getStandUpPouchPlanKey(effectivePlanDays);
+        selectedCount =
+          (countKey && standupPrice[countKey]) ||
+          standupPrice.count_0 ||
+          standupPrice.count_1 ||
+          standupPrice;
+      }
+
       if (selectedCount) {
+        const baseTotalAmount =
+          selectedCount.totalAmount ?? selectedCount.amount ?? 0;
         currency = selectedCount.currency || "EUR";
         taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount:
-            selectedCount.discountedPrice ||
-            selectedCount.amount ||
-            0,
+          amount: baseTotalAmount,
           taxRate,
         };
-      } else if (standupPrice.amount) {
+      } else if (standupPrice.amount || standupPrice.totalAmount) {
+        const baseTotalAmount =
+          standupPrice.totalAmount ?? standupPrice.amount ?? 0;
         currency = standupPrice.currency || "EUR";
         taxRate = standupPrice.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount: standupPrice.discountedPrice || standupPrice.amount || 0,
+          amount: baseTotalAmount,
           taxRate,
         };
       }
@@ -979,18 +1010,15 @@ class CartService {
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
-      // SACHETS: Use 30 days plan price by default (planDays is not used for SACHETS)
+      // SACHETS: Always use 30 days plan TOTAL amount as unit price
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
+        const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
         currency = thirtyDaysPlan.currency || "EUR";
         taxRate = thirtyDaysPlan.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount:
-            thirtyDaysPlan.discountedPrice ||
-            thirtyDaysPlan.totalAmount ||
-            thirtyDaysPlan.amount ||
-            0,
+          amount: baseTotalAmount,
           taxRate,
         };
       }
@@ -998,28 +1026,51 @@ class CartService {
       variantType === ProductVariant.STAND_UP_POUCH &&
       product.standupPouchPrice
     ) {
-      const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
-      const planDays = finalPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
-      const countKey = getStandUpPouchPlanKey(planDays);
-      const selectedCount = (countKey && standupPrice[countKey]) || standupPrice.count_0 || standupPrice.count_1 || standupPrice;
-      
+      const standupPrice = getNormalizedStandupPouchPrice(
+        product.standupPouchPrice
+      );
+      const effectivePlanDays = finalPlanDays || DEFAULT_STAND_UP_POUCH_PLAN;
+
+      // Prefer matching by capsuleCount === planDays inside count_0 / count_1
+      const allCounts = [
+        standupPrice.count_0,
+        standupPrice.count_1,
+      ].filter(Boolean);
+
+      let selectedCount =
+        allCounts.find(
+          (c: any) =>
+            typeof c?.capsuleCount === "number" &&
+            c.capsuleCount === effectivePlanDays
+        ) || null;
+
+      if (!selectedCount) {
+        const countKey = getStandUpPouchPlanKey(effectivePlanDays);
+        selectedCount =
+          (countKey && standupPrice[countKey]) ||
+          standupPrice.count_0 ||
+          standupPrice.count_1 ||
+          standupPrice;
+      }
+
       if (selectedCount) {
+        const baseTotalAmount =
+          selectedCount.totalAmount ?? selectedCount.amount ?? 0;
         currency = selectedCount.currency || "EUR";
         taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount:
-            selectedCount.discountedPrice ||
-            selectedCount.amount ||
-            0,
+          amount: baseTotalAmount,
           taxRate,
         };
-      } else if (standupPrice.amount) {
+      } else if (standupPrice.amount || standupPrice.totalAmount) {
+        const baseTotalAmount =
+          standupPrice.totalAmount ?? standupPrice.amount ?? 0;
         currency = standupPrice.currency || "EUR";
         taxRate = standupPrice.taxRate || 0;
         calculatedPrice = {
           currency,
-          amount: standupPrice.discountedPrice || standupPrice.amount || 0,
+          amount: baseTotalAmount,
           taxRate,
         };
       }

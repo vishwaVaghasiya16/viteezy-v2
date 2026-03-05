@@ -14,6 +14,7 @@ import {
   PostNLNormalizedAddress,
 } from "@/services/postNLService";
 import { logger } from "@/utils/logger";
+import { Orders, Subscriptions } from "@/models/commerce";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -179,18 +180,60 @@ class AddressController {
   getAllAddresses = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const userId = req.userId || req.user?.id;
+  
       if (!userId) {
         throw new AppError("User not authenticated", 401);
       }
-
-      const addresses = await Addresses.find({
-        userId: new mongoose.Types.ObjectId(userId),
-        isDeleted: false,
-      })
-        .sort({ isDefault: -1, createdAt: -1 })
-        .lean();
-
-      res.apiSuccess({ addresses }, "Addresses retrieved successfully");
+  
+      const { subscriptionId } = req.query;
+  
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+  
+      let selectedShippingAddressId: string | null = null;
+  
+      // Run queries in parallel
+      const [addresses, subscription] = await Promise.all([
+        Addresses.find({
+          userId: userObjectId,
+          isDeleted: false,
+        })
+          .sort({ isDefault: -1, createdAt: -1 })
+          .lean(),
+  
+        subscriptionId
+          ? Subscriptions.findOne({
+              _id: subscriptionId,
+              userId: userObjectId,
+            })
+              .select("orderId")
+              .lean()
+          : null,
+      ]);
+  
+      if (subscription?.orderId) {
+        const order = await Orders.findOne({
+          _id: subscription.orderId,
+          userId: userObjectId,
+        })
+          .select("shippingAddressId")
+          .lean();
+  
+        if (order?.shippingAddressId) {
+          selectedShippingAddressId = order.shippingAddressId.toString();
+        }
+      }
+  
+      const addressesWithFlag = addresses.map((address) => ({
+        ...address,
+        isSelectedForSubscription:
+          selectedShippingAddressId &&
+          address._id.toString() === selectedShippingAddressId,
+      }));
+  
+      res.apiSuccess(
+        { addresses: addressesWithFlag },
+        "Addresses retrieved successfully"
+      );
     }
   );
 
