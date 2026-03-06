@@ -103,3 +103,24 @@ TRANSLATION_ENABLED="false"
 
 ONESIGNAL_APP_ID="a11aa583-9068-4e97-a000-8a7fdec981b6"
 ONESIGNAL_REST_API_KEY="os_v2_app_uenkla4qnbhjpiaarj755smbwypb5t3dd6au4wmlghlpznmo57co6gv2gu2kn5fcfb7iut3eqzcyg2i2kaahuwoiaj7b3yqqecpnkui"
+
+Implement a backend workflow to allow users to update their active subscription plan for the next billing cycle.
+
+Flow:
+User selects products they want to add/remove for the next subscription cycle.
+Selected products are added to the cart.
+In checkout summary, only the subscription-related plans/products should be shown.
+
+When the user confirms the update:
+Create a new order for the subscription update.
+Update or create the subscription plan for the next billing cycle.
+Payment should not happen immediately. It should be automatically processed on the nextBillingDate.
+
+Payment gateway logic:
+If the user selected Mollie, process the auto payment through Mollie.
+Otherwise use the existing Stripe subscription.
+
+Save all related records in the database (order, subscription update, selected products, billing cycle, etc.) so the system can manage the next billing automatically.
+
+Goal:
+Allow users to modify their active subscription products for the next billing cycle, while keeping the billing automated via the selected payment provider.
