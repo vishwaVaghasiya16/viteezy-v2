@@ -49,6 +49,7 @@ export interface ISubscription extends Document {
   isAutoRenew: boolean; // Auto-renew subscription until cancelled or paused
   renewalCount: number; // Number of times subscription has been renewed
   // Gateway Integration
+  gateway?: "stripe" | "mollie";
   gatewaySubscriptionId?: string; // Stripe/Mollie subscription ID
   gatewayCustomerId?: string; // Stripe/Mollie customer ID
   gatewayPaymentMethodId?: string; // Saved payment method ID
@@ -67,6 +68,7 @@ export interface ISubscription extends Document {
     currency: string;
   };
   // Metadata
+  activePlanSnapshot?: any;
   metadata?: Record<string, any>;
   createdAt: Date;
   updatedAt: Date;
@@ -231,6 +233,11 @@ const SubscriptionSchema = new Schema<ISubscription>(
       min: 0,
     },
     // Gateway Integration
+    gateway: {
+      type: String,
+      enum: ["stripe", "mollie"],
+      default: null,
+    },
     gatewaySubscriptionId: {
       type: String,
       trim: true,
@@ -277,6 +284,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
         currency: { type: String, default: "EUR" },
       },
       required: false,
+    },
+    activePlanSnapshot: {
+      type: Schema.Types.Mixed,
+      default: null,
     },
     metadata: {
       type: Schema.Types.Mixed,

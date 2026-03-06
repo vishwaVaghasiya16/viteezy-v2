@@ -20,6 +20,8 @@ export interface IOrder extends Document {
   userId: mongoose.Types.ObjectId;
   status: OrderStatus;
   planType: OrderPlanType;
+  orderType?: "NORMAL" | "SUBSCRIPTION_INITIAL" | "SUBSCRIPTION_RENEWAL";
+  subscriptionId?: mongoose.Types.ObjectId | null;
   items: Array<{
     productId: mongoose.Types.ObjectId;
     name: string;
@@ -103,6 +105,16 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       enum: ORDER_PLAN_TYPE_VALUES,
       default: OrderPlanType.ONE_TIME,
+    },
+    orderType: {
+      type: String,
+      enum: ["NORMAL", "SUBSCRIPTION_INITIAL", "SUBSCRIPTION_RENEWAL"],
+      default: "NORMAL",
+    },
+    subscriptionId: {
+      type: Schema.Types.ObjectId,
+      ref: "subscriptions",
+      default: null,
     },
     items: [
       {

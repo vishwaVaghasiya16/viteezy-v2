@@ -21,6 +21,8 @@ export interface ICart extends Document {
     isSubscriptionChange?: boolean; // Flag to indicate this item was added from subscription-change flow
     addedAt: Date;
   }>;
+  cartType?: "NORMAL" | "SUBSCRIPTION_UPDATE";
+  linkedSubscriptionId?: mongoose.Types.ObjectId | null;
   subtotal: number; // Sum of all product amounts
   tax: number; // Sum of all taxRate values converted to amount
   shipping: number;
@@ -85,6 +87,16 @@ const CartSchema = new Schema<ICart>(
         },
       },
     ],
+    cartType: {
+      type: String,
+      enum: ["NORMAL", "SUBSCRIPTION_UPDATE"],
+      default: "NORMAL",
+    },
+    linkedSubscriptionId: {
+      type: Schema.Types.ObjectId,
+      ref: "subscriptions",
+      default: null,
+    },
     subtotal: {
       type: Number,
       default: 0,
