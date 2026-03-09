@@ -1558,6 +1558,8 @@ class CartService {
           total: 0,
           currency: "EUR",
           couponCode: null,
+          linkedSubscriptionId: null,
+          cartType: "NORMAL",
           couponDiscountAmount: 0,
           updatedAt: new Date(),
         },

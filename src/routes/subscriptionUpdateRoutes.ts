@@ -7,34 +7,11 @@ const router = Router();
 // All subscription update routes require authentication
 router.use(authMiddleware);
 
-// 1️⃣ Start subscription update flow
-// POST /subscriptions/:id/update/start
-router.post("/:id/update/start", subscriptionUpdateController.startUpdateFlow);
-
-// 2️⃣ Manage update cart items
-// POST /subscription-update-cart/:cartId/items
-router.post(
-  "/update-cart/:cartId/items",
-  subscriptionUpdateController.addUpdateCartItem
-);
-
-// PATCH /subscription-update-cart/:cartId/items/:itemId
-router.patch(
-  "/subscription-update-cart/:cartId/items/:itemId",
-  subscriptionUpdateController.updateUpdateCartItem
-);
-
-// DELETE /subscription-update-cart/:cartId/items/:itemId
-router.delete(
-  "/subscription-update-cart/:cartId/items/:itemId",
-  subscriptionUpdateController.removeUpdateCartItem
-);
-
 // 3️⃣ Checkout summary
-// GET /subscription-update-cart/:cartId/summary
+// GET /subscription-update-cart/summary
 router.get(
-  "/update-cart/:cartId/summary",
-  subscriptionUpdateController.getUpdateCartSummary
+  "/summary",
+  subscriptionUpdateController.getSubscriptionUpdateSummary
 );
 
 // 4️⃣ Confirm subscription update
@@ -44,6 +21,11 @@ router.post(
   subscriptionUpdateController.confirmUpdate
 );
 
+// 5️⃣ Update subscription products
+// POST /subscriptions/:id/update/products
+router.post(
+  "/:subscriptionId/update/products",
+  subscriptionUpdateController.updateSubscriptionProducts
+);
+
 export default router;
-
-

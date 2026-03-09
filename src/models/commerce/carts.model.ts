@@ -21,7 +21,7 @@ export interface ICart extends Document {
     isSubscriptionChange?: boolean; // Flag to indicate this item was added from subscription-change flow
     addedAt: Date;
   }>;
-  cartType?: "NORMAL" | "SUBSCRIPTION_UPDATE";
+  cartType?: "NORMAL" | "SUBSCRIPTION_UPDATE" ;
   linkedSubscriptionId?: mongoose.Types.ObjectId | null;
   subtotal: number; // Sum of all product amounts
   tax: number; // Sum of all taxRate values converted to amount
