@@ -5,6 +5,8 @@ import { subscriptionUpdateService } from "@/services/subscription/subscriptionU
 import { Carts } from "@/models/commerce/carts.model";
 import { cartService } from "@/services/cartService";
 import { ProductVariant } from "@/models/enums";
+import { Subscriptions } from "@/models/commerce";
+import mongoose from "mongoose";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -334,7 +336,7 @@ class SubscriptionUpdateController {
       for (const item of cart.items) {
         const qty = item.quantity || 1;
   
-        const unitPrice = item.price?.price || 0;
+        const unitPrice = item.price?.amount || 0;
         const taxRate = item.price?.taxRate || 0;
         const discountedPrice = item.price?.discountedPrice || 0;
   
