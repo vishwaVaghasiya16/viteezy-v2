@@ -183,6 +183,17 @@ export const getSubscriptionTransactionHistoryQuerySchema = Joi.object(
   .default({})
   .label("SubscriptionTransactionHistoryQuery");
 
+export const getSubscriptionProductsStatusQuerySchema = Joi.object(
+  withFieldLabels({
+    inSubscription: Joi.boolean().optional(),
+    inCart: Joi.boolean().optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  }),
+)
+  .default({})
+  .label("SubscriptionProductsStatusQuery");
+
 /**
  * Joi schema for testing fast subscription renewal
  */

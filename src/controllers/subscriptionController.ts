@@ -24,6 +24,7 @@ import { subscriptionAutoRenewalService } from "@/services/subscriptionAutoRenew
 import { cartService } from "@/services/cartService";
 import { translateProductsForUser } from "@/services/productTranslationCommonService";
 import { getSachetsPlanKey } from "@/config/planConfig";
+import { SubscriptionChanges } from "@/models/commerce/subscriptionChanges.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -249,19 +250,8 @@ class SubscriptionController {
       res.status(200).json({
         success: true,
         message: "Subscription activity retrieved successfully",
-        data: {
-          subscription: {
-            id: subscription._id,
-            subscriptionNumber: subscription.subscriptionNumber,
-            planType: subscription.planType,
-            cycleDays: subscription.cycleDays,
-            subscriptionStartDate: subscription.subscriptionStartDate,
-            subscriptionEndDate: subscription.subscriptionEndDate,
-            pricing: subscription.pricing,
-          },
-          activity: items,
-        },
-        meta: getPaginationMeta(options.page, options.limit, total),
+        data: items,
+        pagination: getPaginationMeta(options.page, options.limit, total),
       });
     }
   );
@@ -668,6 +658,9 @@ class SubscriptionController {
         performedByRole: "User",
         fromStatus: prevStatus,
         toStatus: SubscriptionStatus.PAUSED,
+        planCycleDays: subscription.cycleDays,
+        planPriceTotal: subscription.pricing?.total ?? undefined,
+        planCurrency: subscription.pricing?.currency ?? undefined,
         createdAt: new Date(),
       });
 
@@ -744,6 +737,9 @@ class SubscriptionController {
         reason: cancellationReason ? cancellationReason.trim() : undefined,
         fromStatus: prevStatus,
         toStatus: SubscriptionStatus.CANCELLED,
+        planCycleDays: subscription.cycleDays,
+        planPriceTotal: subscription.pricing?.total ?? undefined,
+        planCurrency: subscription.pricing?.currency ?? undefined,
         createdAt: new Date(),
       });
 
@@ -1815,10 +1811,7 @@ class SubscriptionController {
       }
 
       const { subscriptionId } = req.params;
-      const { inSubscription, inCart } = req.query as {
-        inSubscription?: string;
-        inCart?: string;
-      };
+      const { inSubscription, inCart } = req.query as any;
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
 
@@ -1826,12 +1819,12 @@ class SubscriptionController {
         throw new AppError("Invalid subscription ID format", 400);
       }
 
-      const subscription = await Subscriptions.findOne({
-        _id: new mongoose.Types.ObjectId(subscriptionId),
+      const subscription = await SubscriptionChanges.findOne({
+        subscriptionId: new mongoose.Types.ObjectId(subscriptionId),
         userId,
-        isDeleted: false,
+        status: "PENDING"
       })
-        .select("items")
+        .select("newPlanSnapshot")
         .lean();
 
       if (!subscription) {
@@ -1839,21 +1832,24 @@ class SubscriptionController {
       }
 
       const subscriptionProductIds = new Set(
-        (subscription.items || []).map((item: any) =>
+        (subscription.newPlanSnapshot || []).map((item: any) =>
           item.productId?.toString?.() || String(item.productId),
         ),
       );
 
       const cartProductIds = await cartService.getCartProductIds(userId.toString());
 
-      const filterInSubscription =
-        inSubscription === "true"
-          ? true
-          : inSubscription === "false"
-            ? false
-            : undefined;
-      const filterInCart =
-        inCart === "true" ? true : inCart === "false" ? false : undefined;
+      const toBool = (val: any): boolean | undefined => {
+        if (val === undefined) return undefined;
+        if (typeof val === "boolean") return val;
+        if (typeof val === "string") {
+          if (val.toLowerCase() === "true") return true;
+          if (val.toLowerCase() === "false") return false;
+        }
+        return undefined;
+      };
+      const filterInSubscription = toBool(inSubscription);
+      const filterInCart = toBool(inCart);
 
       const rawProducts = await Products.find({
         isDeleted: false,
@@ -1866,7 +1862,7 @@ class SubscriptionController {
       const cycleDaysNumber = Number((subscription as any).cycleDays) || 0;
       const planKey = getSachetsPlanKey(cycleDaysNumber);
 
-      const items = translatedProducts
+      const filteredItems = translatedProducts
         .map((product: any) => {
           const id = product._id?.toString?.() || String(product._id);
           const isInSubscription = subscriptionProductIds.has(id);
@@ -1910,14 +1906,15 @@ class SubscriptionController {
           return true;
         });
 
+      const options = getPaginationOptions(req);
+      const total = filteredItems.length;
+      const paged = filteredItems.slice(options.skip, options.skip + options.limit);
+
       res.status(200).json({
         success: true,
-        message:
-          "Products with subscription/cart status retrieved successfully",
-        data: {
-          subscriptionId,
-          items,
-        },
+        message: "Products retrieved successfully",
+        data: paged,
+        pagination: getPaginationMeta(options.page, options.limit, total),
       });
     },
   );

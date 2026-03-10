@@ -16,6 +16,9 @@ export interface ISubscriptionActivity {
   reason?: string;
   fromStatus?: SubscriptionStatus;
   toStatus?: SubscriptionStatus;
+  planCycleDays?: number;
+  planPriceTotal?: number;
+  planCurrency?: string;
   metadata?: Record<string, any>;
   createdAt: Date;
 }
@@ -336,6 +339,19 @@ const SubscriptionSchema = new Schema<ISubscription>(
         toStatus: {
           type: String,
           enum: SUBSCRIPTION_STATUS_VALUES,
+          default: null,
+        },
+        planCycleDays: {
+          type: Number,
+          enum: SUBSCRIPTION_CYCLE_VALUES,
+          default: null,
+        },
+        planPriceTotal: {
+          type: Number,
+          default: null,
+        },
+        planCurrency: {
+          type: String,
           default: null,
         },
         metadata: {

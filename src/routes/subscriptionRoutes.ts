@@ -14,6 +14,7 @@ import {
   pauseSubscriptionSchema,
   cancelSubscriptionSchema,
   getSubscriptionActivityQuerySchema,
+  getSubscriptionProductsStatusQuerySchema,
   addProductsToSubscriptionSchema,
   removeProductsFromSubscriptionSchema,
   changeSubscriptionShippingAddressSchema,
@@ -219,6 +220,7 @@ router.get(
 router.get(
   "/:subscriptionId/products/status",
   validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionProductsStatusQuerySchema),
   subscriptionController.getSubscriptionProductsWithStatus
 );
 
