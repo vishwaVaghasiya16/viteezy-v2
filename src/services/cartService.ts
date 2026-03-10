@@ -66,7 +66,8 @@ class CartService {
   private async calculateCartTotalsWithVariantType(
     items: any[],
     variantType: ProductVariant, // Kept for backward compatibility, but now uses item-level variantType
-    couponDiscountAmount: number = 0
+    couponDiscountAmount: number = 0,
+    cartType: "NORMAL" | "SUBSCRIPTION_UPDATE" = "NORMAL"
   ): Promise<{
     subtotal: number; // Sum of all product amounts
     tax: number; // Sum of all taxRate values (converted to amount)
@@ -284,6 +285,7 @@ class CartService {
     let cart: any = await Carts.findOne({
       userId: new mongoose.Types.ObjectId(userId),
       isDeleted: false,
+      cartType: "NORMAL",
     }).lean();
 
     if (!cart) {
@@ -297,6 +299,8 @@ class CartService {
         total: 0,
         currency: "EUR",
         couponDiscountAmount: 0,
+        cartType: "NORMAL",
+        linkedSubscriptionId: null,
       });
       cart = newCart.toObject();
     }
@@ -891,7 +895,7 @@ class CartService {
     // Update cart with calculated values (all as numbers)
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
-      {
+      cart.cartType === "NORMAL" ? {
         items: updatedItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
@@ -900,6 +904,10 @@ class CartService {
         currency: totals.currency,
         couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date(),
+      } : {
+        items: updatedItems,
+        linkedSubscriptionId: cart.linkedSubscriptionId,
+        updatedAt: new Date()
       },
       { new: true }
     ).lean();
@@ -1097,6 +1105,8 @@ class CartService {
       totalAmount: totalAmount,
       isSubscriptionChange:
         isSubscriptionChange ?? item.isSubscriptionChange ?? false,
+        cartType: cart.cartType || "NORMAL",
+        linkedSubscriptionId: cart.linkedSubscriptionId || null,
     };
 
     // Calculate totals first without coupon to get order amount
@@ -1168,7 +1178,7 @@ class CartService {
     // Update cart with calculated values (all as numbers)
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
-      {
+        cart.cartType === "NORMAL" ? {
         items: updatedItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
@@ -1176,6 +1186,10 @@ class CartService {
         total: totals.total,
         currency: totals.currency,
         couponDiscountAmount: couponDiscountAmount,
+        updatedAt: new Date(),
+      } : {
+        items: updatedItems,
+        linkedSubscriptionId: cart.linkedSubscriptionId,
         updatedAt: new Date(),
       },
       { new: true }
@@ -1290,14 +1304,15 @@ class CartService {
       totals = await this.calculateCartTotalsWithVariantType(
         updatedItems,
         firstItemVariantType,
-        couponDiscountAmount
+        couponDiscountAmount,
+        cart.cartType || "NORMAL"
       );
     }
 
     // Update cart with calculated values (all as numbers)
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
-      {
+      cart.cartType === "NORMAL" ? {
         items: updatedItems,
         subtotal: totals.subtotal,
         tax: totals.tax,
@@ -1305,6 +1320,10 @@ class CartService {
         total: totals.total,
         currency: totals.currency,
         couponDiscountAmount: couponDiscountAmount,
+        updatedAt: new Date(),
+      } : {
+        items: updatedItems,
+        linkedSubscriptionId: cart.linkedSubscriptionId,
         updatedAt: new Date(),
       },
       { new: true }
@@ -1518,7 +1537,7 @@ class CartService {
     // Update cart to remove coupon
     const updatedCart = await Carts.findByIdAndUpdate(
       cart._id,
-      {
+      cart.cartType === "NORMAL" ? {  
         couponCode: null,
         couponDiscountAmount: 0,
         subtotal: totals.subtotal,
@@ -1526,6 +1545,11 @@ class CartService {
         discount: totals.discount,
         total: totals.total,
         currency: totals.currency,
+        updatedAt: new Date(),
+      } :  {
+        couponCode: null,
+        couponDiscountAmount: 0,
+        linkedSubscriptionId: cart.linkedSubscriptionId,
         updatedAt: new Date(),
       },
       { new: true }
@@ -1547,6 +1571,7 @@ class CartService {
     const result = await Carts.findOneAndUpdate(
       {
         userId: new mongoose.Types.ObjectId(userId),
+        cartType: "NORMAL",
         isDeleted: false,
       },
       {

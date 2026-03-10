@@ -222,10 +222,10 @@ router.get(
  * @params  subscriptionId
  * @body    productIds - Array of product IDs to add
  */
-router.post(
-  "/:subscriptionId/plan-change/cart",
-  validateParams(getSubscriptionDetailsParamsSchema),
-  subscriptionController.prepareSubscriptionChangeCart
-);
+// router.post(
+//   "/:subscriptionId/plan-change/cart",
+//   validateParams(getSubscriptionDetailsParamsSchema),
+//   subscriptionController.prepareSubscriptionChangeCart
+// );
 
 export default router;

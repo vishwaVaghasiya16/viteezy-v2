@@ -214,11 +214,12 @@ class CheckoutService {
   ): Promise<PurchasePlansResponse> {
     // Get user's cart
     const cart = await Carts.findOne({
+      cartType: "NORMAL",
       userId: new mongoose.Types.ObjectId(userId),
       isDeleted: false,
     }).lean();
 
-    if (!cart || !cart.items || cart.items.length === 0) {
+    if (!cart || !cart.items || cart.items.length === 0 || cart.cartType !== "NORMAL") {
       throw new AppError("Cart is empty", 400);
     }
 
@@ -706,6 +707,7 @@ class CheckoutService {
 
       // Find cart quantity for this product
       const cart = await Carts.findOne({
+        cartType: "NORMAL",
         userId: new mongoose.Types.ObjectId(userId),
         isDeleted: false,
       }).lean();
@@ -1297,11 +1299,12 @@ class CheckoutService {
 
     // Get user's cart
     const cart = await Carts.findOne({
+      cartType: "NORMAL",
       userId: new mongoose.Types.ObjectId(userId),
       isDeleted: false,
     }).lean();
 
-    if (!cart || !cart.items || cart.items.length === 0) {
+    if (!cart || !cart.items || cart.items.length === 0 || cart.cartType !== "NORMAL") {
       throw new AppError("Cart is empty", 400);
     }
 
@@ -1702,11 +1705,12 @@ class CheckoutService {
   }> {
     // Get user's cart first
     const cart = await Carts.findOne({
+      cartType: "NORMAL",
       userId: new mongoose.Types.ObjectId(userId),
       isDeleted: false,
     }).lean();
 
-    if (!cart || !cart.items || cart.items.length === 0) {
+    if (!cart || !cart.items || cart.items.length === 0 || cart.cartType !== "NORMAL") {
       throw new AppError("Cart is empty", 400);
     }
 
@@ -2014,12 +2018,17 @@ class CheckoutService {
         // Update cart with new quantities and recalculated totals
         await Carts.findByIdAndUpdate(
           cart._id,
-          {
+          cart.cartType === "NORMAL"
+          ? {
             items: updatedItems,
             subtotal: subtotalAmount,
             tax: totalTaxAmount,
             discount: totalDiscount,
             total: Math.max(0, total),
+            updatedAt: new Date(),
+          } : {
+            items: updatedItems,
+            linkedSubscriptionId: cart.linkedSubscriptionId,
             updatedAt: new Date(),
           },
           { new: true },
@@ -2028,9 +2037,13 @@ class CheckoutService {
         // Refresh cart from database
         const updatedCart = await Carts.findOne({
           _id: cart._id,
+          cartType: "NORMAL",
           userId: new mongoose.Types.ObjectId(userId),
           isDeleted: false,
         }).lean();
+        if (!updatedCart || updatedCart.cartType !== "NORMAL") {
+          throw new AppError("Cart is not valid", 400);
+        }
 
         if (updatedCart) {
           // Re-assign cart and re-separate items after update
@@ -2057,8 +2070,13 @@ class CheckoutService {
 
         await Carts.findByIdAndUpdate(
           cart._id,
-          {
+          cart.cartType === "NORMAL"
+          ? {
             items: updatedItems,
+            updatedAt: new Date(),
+          } : {
+            items: updatedItems,
+            linkedSubscriptionId: cart.linkedSubscriptionId,
             updatedAt: new Date(),
           },
           { new: true },
@@ -2067,6 +2085,7 @@ class CheckoutService {
         // Refresh cart from database
         const updatedCart = await Carts.findOne({
           _id: cart._id,
+          cartType: "NORMAL",
           userId: new mongoose.Types.ObjectId(userId),
           isDeleted: false,
         }).lean();
@@ -2924,10 +2943,16 @@ class CheckoutService {
       // Update cart to remove coupon
       await Carts.findByIdAndUpdate(
         cart._id,
-        {
+        cart.cartType === "NORMAL"
+        ? {
           couponCode: null,
           couponDiscountAmount: 0,
           updatedAt: new Date(),
+          } : {
+            couponCode: null,
+            couponDiscountAmount: 0,
+            linkedSubscriptionId: cart.linkedSubscriptionId,
+            updatedAt: new Date(),
         },
         { new: true },
       );
