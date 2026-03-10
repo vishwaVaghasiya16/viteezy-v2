@@ -9,6 +9,17 @@ import {
   ORDER_PLAN_TYPE_VALUES,
 } from "../enums";
 
+export interface ISubscriptionActivity {
+  action: "pause" | "cancel" | "resume" | "status-update";
+  performedBy?: mongoose.Types.ObjectId;
+  performedByRole?: "User" | "Admin" | "System";
+  reason?: string;
+  fromStatus?: SubscriptionStatus;
+  toStatus?: SubscriptionStatus;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+}
+
 export interface ISubscription extends Document {
   subscriptionNumber: string;
   userId: mongoose.Types.ObjectId;
@@ -70,6 +81,7 @@ export interface ISubscription extends Document {
   // Metadata
   activePlanSnapshot?: any;
   metadata?: Record<string, any>;
+  activityLog?: ISubscriptionActivity[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -293,6 +305,49 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: Schema.Types.Mixed,
       default: () => ({}),
     },
+    activityLog: [
+      {
+        action: {
+          type: String,
+          enum: ["pause", "cancel", "resume", "status-update"],
+          required: true,
+        },
+        performedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        performedByRole: {
+          type: String,
+          enum: ["User", "Admin", "System"],
+          default: "User",
+        },
+        reason: {
+          type: String,
+          trim: true,
+          maxlength: 500,
+          default: null,
+        },
+        fromStatus: {
+          type: String,
+          enum: SUBSCRIPTION_STATUS_VALUES,
+          default: null,
+        },
+        toStatus: {
+          type: String,
+          enum: SUBSCRIPTION_STATUS_VALUES,
+          default: null,
+        },
+        metadata: {
+          type: Schema.Types.Mixed,
+          default: () => ({}),
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     ...SoftDelete,
     ...AuditSchema.obj,
   },

@@ -12,6 +12,8 @@ import {
   getSubscriptionsQuerySchema,
   getSubscriptionTransactionHistoryQuerySchema,
   pauseSubscriptionSchema,
+  cancelSubscriptionSchema,
+  getSubscriptionActivityQuerySchema,
   addProductsToSubscriptionSchema,
   removeProductsFromSubscriptionSchema,
   changeSubscriptionShippingAddressSchema,
@@ -109,7 +111,15 @@ router.post(
 router.post(
   "/:subscriptionId/cancel",
   validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(cancelSubscriptionSchema),
   subscriptionController.cancelSubscription
+);
+
+router.get(
+  "/:subscriptionId/activity",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionActivityQuerySchema),
+  subscriptionController.getSubscriptionActivity
 );
 
 /**

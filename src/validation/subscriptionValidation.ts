@@ -112,6 +112,21 @@ export const pauseSubscriptionSchema = Joi.object(withFieldLabels({})).label(
   "PauseSubscriptionPayload",
 );
 
+export const cancelSubscriptionSchema = Joi.object(
+  withFieldLabels({
+    cancellationReason: Joi.string().trim().max(500).optional(),
+  }),
+).label("CancelSubscriptionPayload");
+
+export const getSubscriptionActivityQuerySchema = Joi.object(
+  withFieldLabels({
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+  }),
+)
+  .default({})
+  .label("SubscriptionActivityQuery");
+
 /**
  * Joi schema for adding products to subscription
  */

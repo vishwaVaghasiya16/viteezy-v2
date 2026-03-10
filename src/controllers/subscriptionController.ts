@@ -223,6 +223,49 @@ class SubscriptionController {
     },
   );
 
+  getSubscriptionActivity = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+      const { subscriptionId } = req.params;
+      const userId = new mongoose.Types.ObjectId(req.user._id);
+      const options = getPaginationOptions(req);
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
+        userId,
+        isDeleted: false,
+      }).lean();
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+      const fullLog = (subscription as any).activityLog || [];
+      const sorted = fullLog.sort(
+        (a: any, b: any) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const total = sorted.length;
+      const items = sorted.slice(options.skip, options.skip + options.limit);
+      res.status(200).json({
+        success: true,
+        message: "Subscription activity retrieved successfully",
+        data: {
+          subscription: {
+            id: subscription._id,
+            subscriptionNumber: subscription.subscriptionNumber,
+            planType: subscription.planType,
+            cycleDays: subscription.cycleDays,
+            subscriptionStartDate: subscription.subscriptionStartDate,
+            subscriptionEndDate: subscription.subscriptionEndDate,
+            pricing: subscription.pricing,
+          },
+          activity: items,
+        },
+        meta: getPaginationMeta(options.page, options.limit, total),
+      });
+    }
+  );
+
   /**
    * Get user's subscriptions
    * @route GET /api/subscriptions
@@ -613,8 +656,20 @@ class SubscriptionController {
       }
 
       // Pause subscription
+      const prevStatus = subscription.status;
       subscription.status = SubscriptionStatus.PAUSED;
       subscription.pausedAt = new Date();
+      if (!subscription.activityLog) {
+        (subscription as any).activityLog = [];
+      }
+      (subscription as any).activityLog.push({
+        action: "pause",
+        performedBy: userId,
+        performedByRole: "User",
+        fromStatus: prevStatus,
+        toStatus: SubscriptionStatus.PAUSED,
+        createdAt: new Date(),
+      });
 
       await subscription.save();
 
@@ -672,12 +727,25 @@ class SubscriptionController {
       }
 
       // Cancel subscription
+      const prevStatus = subscription.status;
       subscription.status = SubscriptionStatus.CANCELLED;
       subscription.cancelledAt = new Date();
       subscription.cancelledBy = userId;
       if (cancellationReason) {
         subscription.cancellationReason = cancellationReason.trim();
       }
+      if (!subscription.activityLog) {
+        (subscription as any).activityLog = [];
+      }
+      (subscription as any).activityLog.push({
+        action: "cancel",
+        performedBy: userId,
+        performedByRole: "User",
+        reason: cancellationReason ? cancellationReason.trim() : undefined,
+        fromStatus: prevStatus,
+        toStatus: SubscriptionStatus.CANCELLED,
+        createdAt: new Date(),
+      });
 
       await subscription.save();
 
