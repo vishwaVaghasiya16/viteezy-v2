@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<deliveryOrderMessage>
+  <messageNo>6999493989b57c83662d7f27</messageNo>
+  <messageDate>2026-02-21</messageDate>
+  <messageTime>11:27:13</messageTime>
+  <deliveryOrder>
+    <orderNo>VTZ-1771653433676-3645</orderNo>
+    <webOrderNo>6999493989b57c83662d7f27</webOrderNo>
+    <orderDate>2026-02-21</orderDate>
+    <orderTime>11:27:13</orderTime>
+    <customerNo>6996b297df5e8d9531f4e5a0</customerNo>
+    <onlyHomeAddress>false</onlyHomeAddress>
+    <shipToFirstName>test.fifty12345</shipToFirstName>
+    <shipToLastName>fifty</shipToLastName>
+    <shipToStreet>Damrak</shipToStreet>
+    <shipToHouseNo>1</shipToHouseNo>
+    <shipToAnnex>A</shipToAnnex>
+    <shipToPostalCode>1012LG</shipToPostalCode>
+    <shipToCity>Amsterdams</shipToCity>
+    <shipToCountryCode>IN</shipToCountryCode>
+    <shipToPhone>+31612345678</shipToPhone>
+    <shipToEmail>fifty12345@yopmail.com</shipToEmail>
+    <language>NL</language>
+    <shippingAgentCode></shippingAgentCode>
+    <shipmentType>Commercial Goods</shipmentType>
+    <deliveryOrderLines>
+    <deliveryOrderLine>
+      <itemNo>VIT30</itemNo>
+      <itemDescription>Vitamine packs</itemDescription>
+      <quantity>1</quantity>
+    </deliveryOrderLine>
+    </deliveryOrderLines>
+  </deliveryOrder>
+</deliveryOrderMessage>
