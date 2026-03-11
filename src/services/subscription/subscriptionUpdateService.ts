@@ -3,8 +3,9 @@ import { Subscriptions } from "@/models/commerce/subscriptions.model";
 import { Carts } from "@/models/commerce/carts.model";
 import { SubscriptionChanges } from "@/models/commerce/subscriptionChanges.model";
 import { AppError } from "@/utils/AppError";
-import { ProductVariant, SubscriptionStatus } from "@/models/enums";
+import { CouponType, ProductVariant, SubscriptionStatus } from "@/models/enums";
 import { Products } from "@/models/commerce/products.model";
+import { Coupons, Orders } from "@/models/commerce";
 import { Addresses } from "@/models/core";
 
 function resolveI18nString(value: any, lang: string) {
@@ -53,6 +54,7 @@ export class SubscriptionUpdateService {
     userId: string,
     lang: string,
     shippingAddressId?: string,
+    couponCode?: string,
   ) {
     const round = (num: number) => Number((num || 0).toFixed(2));
 
@@ -261,6 +263,189 @@ export class SubscriptionUpdateService {
       },
     };
 
+    let couponSummary: null | {
+      code: string;
+      isValid: boolean;
+      isApplied: boolean;
+      discountAmount: number;
+      message?: string;
+    } = null;
+
+    if (couponCode) {
+      const code = couponCode.toUpperCase();
+      couponSummary = {
+        code,
+        isValid: false,
+        isApplied: false,
+        discountAmount: 0,
+        message: undefined,
+      };
+      try {
+        const coupon = await Coupons.findOne({
+          code,
+          isDeleted: false,
+        }).lean();
+
+        if (!coupon) {
+          throw new Error("Invalid coupon code");
+        }
+
+        if (!coupon.isActive) {
+          throw new Error("This coupon is not active");
+        }
+
+        const now = new Date();
+        if (coupon.validFrom && now < coupon.validFrom) {
+          throw new Error("This coupon is not yet valid");
+        }
+        if (coupon.validUntil && now > coupon.validUntil) {
+          throw new Error("This coupon has expired");
+        }
+
+        if (
+          coupon.usageLimit !== null &&
+          coupon.usageLimit !== undefined &&
+          coupon.usageLimit > 0 &&
+          coupon.usageCount >= coupon.usageLimit
+        ) {
+          throw new Error("This coupon has reached its usage limit");
+        }
+
+        if (
+          coupon.userUsageLimit !== null &&
+          coupon.userUsageLimit !== undefined &&
+          coupon.userUsageLimit > 0
+        ) {
+          const userUsageCount = await Orders.countDocuments({
+            userId: new mongoose.Types.ObjectId(userId),
+            couponCode: coupon.code,
+            isDeleted: false,
+          });
+          if (userUsageCount >= coupon.userUsageLimit) {
+            throw new Error(
+              "You have reached the maximum usage limit for this coupon",
+            );
+          }
+        }
+
+        const orderAmount = round(discountedPrice - membershipDiscountAmount);
+
+        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+          throw new Error(
+            `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
+          );
+        }
+
+        const categoryIds = new Set<string>();
+        for (const p of products) {
+          if (p.categories && Array.isArray(p.categories)) {
+            for (const c of p.categories) {
+              categoryIds.add(c.toString());
+            }
+          }
+        }
+
+        if (
+          coupon.applicableProducts &&
+          coupon.applicableProducts.length > 0
+        ) {
+          const applicableIds = coupon.applicableProducts.map((id: any) =>
+            id.toString(),
+          );
+          const hasApplicable = productIds
+            .map((id: any) => id.toString())
+            .some((id: string) => applicableIds.includes(id));
+          if (!hasApplicable) {
+            throw new Error(
+              "This coupon is not applicable to the selected products",
+            );
+          }
+        }
+
+        if (
+          coupon.applicableCategories &&
+          coupon.applicableCategories.length > 0
+        ) {
+          const applicableCats = coupon.applicableCategories.map((id: any) =>
+            id.toString(),
+          );
+          const hasApplicableCategory = Array.from(categoryIds).some((id) =>
+            applicableCats.includes(id),
+          );
+          if (!hasApplicableCategory) {
+            throw new Error(
+              "This coupon is not applicable to the selected categories",
+            );
+          }
+        }
+
+        if (
+          coupon.excludedProducts &&
+          coupon.excludedProducts.length > 0
+        ) {
+          const excludedIds = coupon.excludedProducts.map((id: any) =>
+            id.toString(),
+          );
+          const hasExcluded = productIds
+            .map((id: any) => id.toString())
+            .some((id: string) => excludedIds.includes(id));
+          if (hasExcluded) {
+            throw new Error(
+              "This coupon cannot be applied to one or more selected products",
+            );
+          }
+        }
+
+        if (
+          Array.isArray((coupon as any).recurringMonths) &&
+          (coupon as any).recurringMonths.length > 0
+        ) {
+          const map: Record<number, number> = { 1: 30, 2: 60, 3: 90, 6: 180 };
+          const allowed = new Set<number>();
+          for (const m of (coupon as any).recurringMonths) {
+            const d = map[m];
+            if (d) allowed.add(d);
+          }
+          if (!allowed.has(planDays)) {
+            throw new Error(
+              "This coupon is not applicable to the selected subscription plan",
+            );
+          }
+        }
+
+        let discountAmount = 0;
+        if (coupon.type === CouponType.PERCENTAGE) {
+          discountAmount = (orderAmount * (coupon.value || 0)) / 100;
+          if (coupon.maxDiscountAmount) {
+            discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+          }
+        } else if (coupon.type === CouponType.FIXED) {
+          discountAmount = Math.min(coupon.value || 0, orderAmount);
+        }
+
+        const finalDiscount = round(discountAmount);
+        pricing.overall.couponDiscountAmount = finalDiscount;
+        pricing.overall.grandTotal = round(
+          discountedPrice - membershipDiscountAmount - finalDiscount + taxAmount,
+        );
+
+        couponSummary = {
+          code,
+          isValid: true,
+          isApplied: finalDiscount > 0,
+          discountAmount: finalDiscount,
+        };
+      } catch (e: any) {
+        couponSummary = {
+          code,
+          isValid: false,
+          isApplied: false,
+          discountAmount: 0,
+          message: e?.message || "Invalid coupon code",
+        };
+      }
+    }
+
     /**
      * STEP 7
      * Shipping validation
@@ -293,6 +478,7 @@ export class SubscriptionUpdateService {
       pricing,
       shippingAddressId: validShippingAddressId,
       billingAddressId: null,
+      coupon: couponSummary,
     };
   }
 

@@ -22,13 +22,14 @@ class SubscriptionUpdateController {
       if (!userId)
         throw new AppError("User not authenticated", 401);
       const language = req.user?.language || "en";
-      // optional shippingAddressId from body
-      const { shippingAddressId } = req.body;
+      const { shippingAddressId } = req.body || {};
+      const couponCode = (req.body?.couponCode as string | undefined)?.trim();
       const result =
         await subscriptionUpdateService.getSubscriptionUpdateSummary(
           userId,
           language,
-          shippingAddressId
+          shippingAddressId,
+          couponCode
         );
       res.apiSuccess(result, "Subscription cart summary fetched");
     }
@@ -96,5 +97,4 @@ class SubscriptionUpdateController {
 }
 
 export const subscriptionUpdateController = new SubscriptionUpdateController();
-
 
