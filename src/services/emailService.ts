@@ -1,8 +1,8 @@
-import sgMail from "@sendgrid/mail";
 import { logger } from "../utils/logger";
 import { AddressSnapshotType } from "@/models/common.model";
 import * as fs from "fs";
 import * as path from "path";
+import axios from "axios";
 
 interface EmailOptions {
   to: string;
@@ -39,10 +39,10 @@ class EmailService {
   private fromName: string;
 
   constructor() {
-    // Check if SendGrid API key is available
-    const apiKey = process.env.SENDGRID_API_KEY;
-    this.fromEmail = process.env.SENDGRID_FROM_EMAIL || "noreply@viteezy.com";
-    this.fromName = process.env.SENDGRID_FROM_NAME || "Viteezy";
+    // Check if Brevo API key is available
+    const apiKey = process.env.BREVO_API_KEY;
+    this.fromEmail = process.env.BREVO_FROM_EMAIL || "noreply@viteezy.com";
+    this.fromName = process.env.BREVO_FROM_NAME || "Viteezy";
 
     // Warn about Gmail addresses causing DMARC issues
     if (
@@ -55,40 +55,39 @@ class EmailService {
           fromEmail: this.fromEmail,
           recommendation:
             "Use a verified custom domain email (e.g., noreply@yourdomain.com) for better deliverability",
-          sendGridGuide:
-            "Verify sender at: https://app.sendgrid.com/settings/sender_auth/senders/new",
+          brevoGuide:
+            "Verify sender at: https://app.brevo.com/settings/senders",
         }
       );
     }
 
     if (
       apiKey &&
-      apiKey !== "your_sendgrid_api_key_here" &&
+      apiKey !== "your_brevo_api_key_here" &&
       apiKey.trim().length > 0
     ) {
-      // Validate API key format (SendGrid API keys start with "SG.")
-      if (!apiKey.startsWith("SG.")) {
+      // Validate API key format (Brevo API keys start with "xkeysib-")
+      if (!apiKey.startsWith("xkeysib-")) {
         logger.warn(
-          "SendGrid API key format appears invalid. API keys should start with 'SG.'. Using mock email service."
+          "Brevo API key format appears invalid. API keys should start with 'xkeysib-'. Using mock email service."
         );
         this.isConfigured = false;
       } else {
         try {
-          sgMail.setApiKey(apiKey);
           this.isConfigured = true;
-          logger.info("SendGrid email service configured successfully", {
+          logger.info("Brevo email service configured successfully", {
             fromEmail: this.fromEmail,
             fromName: this.fromName,
           });
         } catch (error) {
-          logger.error("Failed to configure SendGrid:", error);
+          logger.error("Failed to configure Brevo:", error);
           this.isConfigured = false;
         }
       }
     } else {
       this.isConfigured = false;
       logger.warn(
-        "SendGrid API key not found or not set. Using mock email service for development."
+        "Brevo API key not found or not set. Using mock email service for development."
       );
     }
   }
@@ -119,10 +118,10 @@ class EmailService {
         text,
       });
 
-      logger.info(`OTP email sent successfully to ${email} via SendGrid`);
+      logger.info(`OTP email sent successfully to ${email} via Brevo`);
       return true;
     } catch (error: any) {
-      logger.error("Failed to send OTP email via SendGrid:", {
+      logger.error("Failed to send OTP email via Brevo:", {
         email,
         type,
         error: error?.message,
@@ -158,10 +157,10 @@ class EmailService {
         text,
       });
 
-      logger.info(`Welcome email sent successfully to ${email} via SendGrid`);
+      logger.info(`Welcome email sent successfully to ${email} via Brevo`);
       return true;
     } catch (error: any) {
-      logger.error("Failed to send welcome email via SendGrid:", {
+      logger.error("Failed to send welcome email via Brevo:", {
         email,
         error: error?.message,
         code: error?.code,
@@ -190,10 +189,10 @@ class EmailService {
       const text = `Hello ${displayName},\n\nThank you for contacting us. We have received your message${subject ? ` regarding "${subject}"` : ""} and will get back to you soon.\n\nBest regards,\nThe Viteezy Team`;
 
       await this.sendEmail({ to: email, subject: emailSubject, html, text });
-      logger.info(`Contact confirmation sent to ${email} via SendGrid`);
+      logger.info(`Contact confirmation sent to ${email} via Brevo`);
       return true;
     } catch (error: any) {
-      logger.error("Failed to send contact confirmation via SendGrid:", {
+      logger.error("Failed to send contact confirmation via Brevo:", {
         email,
         error: error?.message,
       });
@@ -215,10 +214,10 @@ class EmailService {
       const text = `Welcome to Viteezy!\n\nThank you for signing up. You'll receive our latest news, wellness tips, and exclusive offers.\n\nBest regards,\nThe Viteezy Team`;
 
       await this.sendEmail({ to: email, subject, html, text });
-      logger.info(`Footer welcome email sent to ${email} via SendGrid`);
+      logger.info(`Footer welcome email sent to ${email} via Brevo`);
       return true;
     } catch (error: any) {
-      logger.error("Failed to send footer welcome email via SendGrid:", {
+      logger.error("Failed to send footer welcome email via Brevo:", {
         email,
         error: error?.message,
       });
@@ -249,11 +248,11 @@ class EmailService {
       });
 
       logger.info(
-        `Password reset email sent successfully to ${email} via SendGrid`
+        `Password reset email sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send password reset email via SendGrid:", {
+      logger.error("Failed to send password reset email via Brevo:", {
         email,
         error: error?.message,
         code: error?.code,
@@ -293,11 +292,11 @@ class EmailService {
       });
 
       logger.info(
-        `Password reset link sent successfully to ${email} via SendGrid`
+        `Password reset link sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send password reset link via SendGrid:", {
+      logger.error("Failed to send password reset link via Brevo:", {
         email,
         error: error?.message,
         code: error?.code,
@@ -334,10 +333,10 @@ class EmailService {
         text,
       });
 
-      logger.info(`Admin notification sent successfully to ${to} via SendGrid`);
+      logger.info(`Admin notification sent successfully to ${to} via Brevo`);
       return true;
     } catch (error: any) {
-      logger.error("Failed to send admin notification via SendGrid:", {
+      logger.error("Failed to send admin notification via Brevo:", {
         to,
         subject,
         error: error?.message,
@@ -385,11 +384,11 @@ class EmailService {
       });
 
       logger.info(
-        `User status change email sent successfully to ${email} via SendGrid`
+        `User status change email sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send user status change email via SendGrid:", {
+      logger.error("Failed to send user status change email via Brevo:", {
         email,
         isActive,
         error: error?.message,
@@ -433,7 +432,7 @@ class EmailService {
       console.log("📧 [EMAIL SERVICE] - HTML length:", html.length);
       console.log("📧 [EMAIL SERVICE] - Text length:", text.length);
 
-      console.log("📧 [EMAIL SERVICE] Step 2: Sending email via SendGrid");
+      console.log("📧 [EMAIL SERVICE] Step 2: Sending email via Brevo");
       await this.sendEmail({
         to: options.to,
         subject,
@@ -487,7 +486,7 @@ class EmailService {
   }
 
   /**
-   * Generic email sending method using SendGrid
+   * Generic email sending method using Brevo API
    */
   private async sendEmail(options: EmailOptions): Promise<void> {
     try {
@@ -505,81 +504,69 @@ class EmailService {
         );
       }
 
-      const msg: any = {
-        to: options.to,
-        from: {
+      const apiKey = process.env.BREVO_API_KEY;
+      if (!apiKey) {
+        throw new Error("Brevo API key not configured");
+      }
+
+      // Prepare Brevo email payload
+      const emailData = {
+        sender: {
           email: this.fromEmail,
           name: this.fromName,
         },
-        replyTo: this.fromEmail, // Add reply-to header
+        to: [
+          {
+            email: options.to,
+          },
+        ],
         subject: options.subject,
-        text: options.text || options.html.replace(/<[^>]*>/g, ""), // Strip HTML for text version
-        html: options.html,
-        // Add custom headers to improve deliverability and prevent spam
+        htmlContent: options.html,
+        textContent: options.text || options.html.replace(/<[^>]*>/g, ""),
+        replyTo: {
+          email: this.fromEmail,
+        },
         headers: {
-          "X-Entity-Ref-ID": `viteezy-${Date.now()}`, // Unique identifier
+          "X-Entity-Ref-ID": `viteezy-${Date.now()}`,
           "X-Mailer": "Viteezy Email Service",
-          "X-Priority": "1", // Normal priority
+          "X-Priority": "1",
           "X-MSMail-Priority": "Normal",
           Importance: "normal",
-          "List-Unsubscribe": `<mailto:${this.fromEmail}?subject=unsubscribe>`, // Unsubscribe header
+          "List-Unsubscribe": `<mailto:${this.fromEmail}?subject=unsubscribe>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-          Precedence: "bulk", // Mark as transactional
-          "Auto-Submitted": "auto-generated", // Indicate automated email
+          Precedence: "bulk",
+          "Auto-Submitted": "auto-generated",
         },
-        // Add categories for better tracking and deliverability
-        categories: ["viteezy", "transactional", "verification"],
-        // Set mail settings for better deliverability
-        mailSettings: {
-          sandboxMode: {
-            enable: process.env.NODE_ENV === "test", // Disable in production
-          },
-          // Enable footer to improve deliverability
-          footer: {
-            enable: false, // We have custom footer
-          },
-          // Bypass list management for transactional emails
-          bypassListManagement: {
-            enable: true, // Important: Bypass unsubscribe list for transactional emails
-          },
-        },
-        // Add tracking settings
-        trackingSettings: {
-          clickTracking: {
-            enable: true,
-            enableText: true,
-          },
-          openTracking: {
-            enable: true,
-          },
-          subscriptionTracking: {
-            enable: false, // Disable SendGrid's default unsubscribe footer
-          },
-        },
-        // Add ASM (Advanced Suppression Management) for better deliverability
-        asm: {
-          groupId: parseInt(process.env.SENDGRID_UNSUBSCRIBE_GROUP_ID || "0"),
-          groupsToDisplay: [],
-        },
+        tags: ["viteezy", "transactional", "verification"],
       };
 
-      // Remove ASM if groupId is 0 (not configured)
-      if (!msg.asm.groupId || msg.asm.groupId === 0) {
-        delete msg.asm;
-      }
+      // Send email via Brevo API
+      const response = await axios.post(
+        "https://api.brevo.com/v3/smtp/email",
+        emailData,
+        {
+          headers: {
+            "api-key": apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          timeout: 10000, // 10 seconds timeout
+        }
+      );
 
-      await sgMail.send(msg);
-      logger.debug(`Email sent successfully to ${options.to}`);
+      logger.debug(`Email sent successfully to ${options.to}`, {
+        messageId: response.data?.messageId,
+      });
     } catch (error: any) {
       // Log detailed error information
       const errorDetails = {
         message: error?.message,
         code: error?.code,
-        response: error?.response?.body,
-        statusCode: error?.response?.statusCode,
+        response: error?.response?.data,
+        statusCode: error?.response?.status,
       };
 
-      logger.error("SendGrid email sending failed:", {
+      logger.error("Brevo email sending failed:", {
         to: options.to,
         subject: options.subject,
         ...errorDetails,
@@ -587,40 +574,40 @@ class EmailService {
 
       // Provide more helpful error messages based on status code and error details
       let errorMessage = error?.message || "Unknown error";
-      const errorBody = error?.response?.body;
-      const firstError = errorBody?.errors?.[0];
-      const errorText = firstError?.message || errorMessage;
+      const errorBody = error?.response?.data;
+      const errorText = errorBody?.message || errorMessage;
 
-      if (error?.response?.statusCode === 401) {
-        // Check for specific error messages
+      if (error?.response?.status === 401) {
         if (
-          errorText?.toLowerCase().includes("maximum credits exceeded") ||
-          errorText?.toLowerCase().includes("credits exceeded")
+          errorText?.toLowerCase().includes("credits") ||
+          errorText?.toLowerCase().includes("quota")
         ) {
           errorMessage =
-            "SendGrid account has exceeded email credits/quota. Please upgrade your plan or wait for quota reset.";
-          logger.error("SendGrid Credits Exceeded:", {
-            hint: "Check your SendGrid account credits at https://app.sendgrid.com/settings/billing",
+            "Brevo account has exceeded email credits/quota. Please upgrade your plan or wait for quota reset.";
+          logger.error("Brevo Credits Exceeded:", {
+            hint: "Check your Brevo account credits at https://app.brevo.com/credits",
             message:
-              "You may need to upgrade your SendGrid plan or wait for monthly quota reset",
+              "You may need to upgrade your Brevo plan or wait for monthly quota reset",
           });
         } else {
           errorMessage =
-            "SendGrid API key is invalid, expired, or revoked. Please check your SENDGRID_API_KEY in .env file.";
-          logger.error("SendGrid Authentication Error:", {
-            hint: "Verify your API key at https://app.sendgrid.com/settings/api_keys",
+            "Brevo API key is invalid, expired, or revoked. Please check your BREVO_API_KEY in .env file.";
+          logger.error("Brevo Authentication Error:", {
+            hint: "Verify your API key at https://app.brevo.com/settings/api-keys",
             apiKeyPrefix:
-              process.env.SENDGRID_API_KEY?.substring(0, 5) + "..." ||
+              process.env.BREVO_API_KEY?.substring(0, 10) + "..." ||
               "not set",
           });
         }
-      } else if (error?.response?.statusCode === 403) {
+      } else if (error?.response?.status === 403) {
         errorMessage =
-          "SendGrid API key does not have permission to send emails. Please check your API key permissions.";
-      } else if (error?.response?.statusCode === 400) {
-        errorMessage = `SendGrid validation error: ${errorText}`;
-      } else if (error?.response?.statusCode === 429) {
-        errorMessage = "SendGrid rate limit exceeded. Please try again later.";
+          "Brevo API key does not have permission to send emails. Please check your API key permissions.";
+      } else if (error?.response?.status === 400) {
+        errorMessage = `Brevo validation error: ${errorText}`;
+      } else if (error?.response?.status === 429) {
+        errorMessage = "Brevo rate limit exceeded. Please try again later.";
+      } else if (error?.code === "ECONNABORTED") {
+        errorMessage = "Request timeout. Please check your network connection and try again.";
       }
 
       // Re-throw error so calling methods can handle it
@@ -1540,11 +1527,11 @@ This is an automated message, please do not reply to this email.
       });
 
       logger.info(
-        `Subscription cancellation email sent successfully to ${email} via SendGrid`
+        `Subscription cancellation email sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send subscription cancellation email via SendGrid:", {
+      logger.error("Failed to send subscription cancellation email via Brevo:", {
         email,
         subscriptionNumber: data.subscriptionNumber,
         error: error?.message,
@@ -1590,11 +1577,11 @@ This is an automated message, please do not reply to this email.
       });
 
       logger.info(
-        `Subscription pause email sent successfully to ${email} via SendGrid`
+        `Subscription pause email sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send subscription pause email via SendGrid:", {
+      logger.error("Failed to send subscription pause email via Brevo:", {
         email,
         subscriptionNumber: data.subscriptionNumber,
         error: error?.message,
@@ -1644,11 +1631,11 @@ This is an automated message, please do not reply to this email.
       });
 
       logger.info(
-        `Subscription payment failed email sent successfully to ${email} via SendGrid`
+        `Subscription payment failed email sent successfully to ${email} via Brevo`
       );
       return true;
     } catch (error: any) {
-      logger.error("Failed to send subscription payment failed email via SendGrid:", {
+      logger.error("Failed to send subscription payment failed email via Brevo:", {
         email,
         subscriptionNumber: data.subscriptionNumber,
         error: error?.message,
@@ -2095,6 +2082,11 @@ This is an automated message, please do not reply to this email.
         return;
       }
 
+      const apiKey = process.env.BREVO_API_KEY;
+      if (!apiKey) {
+        throw new Error("Brevo API key not configured");
+      }
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -2138,51 +2130,52 @@ This is an automated message, please do not reply to this email.
         const fileContent = fs.readFileSync(filePath);
         return {
           content: fileContent.toString("base64"),
-          filename: fileName,
-          type: "text/csv",
-          disposition: "attachment",
+          name: fileName,
         };
       });
 
-      const msg: any = {
-        to: options.to,
-        from: {
+      // Prepare Brevo email payload with attachments
+      const emailData = {
+        sender: {
           email: this.fromEmail,
           name: this.fromName,
         },
-        replyTo: this.fromEmail,
+        to: [
+          {
+            email: options.to,
+          },
+        ],
         subject: options.subject,
-        html: html,
-        text: html.replace(/<[^>]*>/g, ""),
-        attachments: attachments,
+        htmlContent: html,
+        textContent: html.replace(/<[^>]*>/g, ""),
+        replyTo: {
+          email: this.fromEmail,
+        },
+        attachment: attachments,
         headers: {
           "X-Entity-Ref-ID": `viteezy-pharmacist-${Date.now()}`,
           "X-Mailer": "Viteezy Email Service",
         },
-        categories: ["viteezy", "pharmacist", "csv"],
-        mailSettings: {
-          sandboxMode: {
-            enable: process.env.NODE_ENV === "test",
-          },
-          bypassListManagement: {
-            enable: true,
-          },
-        },
-        trackingSettings: {
-          clickTracking: {
-            enable: false,
-          },
-          openTracking: {
-            enable: true,
-          },
-          subscriptionTracking: {
-            enable: false,
-          },
-        },
+        tags: ["viteezy", "pharmacist", "csv"],
       };
 
-      await sgMail.send(msg);
-      logger.info(`Pharmacist request email sent successfully to ${options.to} with ${options.files.length} attachment(s)`);
+      // Send email via Brevo API
+      const response = await axios.post(
+        "https://api.brevo.com/v3/smtp/email",
+        emailData,
+        {
+          headers: {
+            "api-key": apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          timeout: 10000, // 10 seconds timeout
+        }
+      );
+
+      logger.info(`Pharmacist request email sent successfully to ${options.to} with ${options.files.length} attachment(s)`, {
+        messageId: response.data?.messageId,
+      });
     } catch (error: any) {
       logger.error(`Failed to send pharmacist request email: ${error.message}`, {
         to: options.to,
