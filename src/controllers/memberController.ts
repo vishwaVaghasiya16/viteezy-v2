@@ -99,30 +99,46 @@ class MemberController {
         metadata,
       } = req.body;
 
-      // Validate required fields
-      if (!firstName || !lastName || !email || !password) {
-        throw new AppError(
-          "First name, last name, email, and password are required",
-          400
-        );
-      }
-
-      // Check if user already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        throw new AppError("User with this email already exists", 400);
+      // Validate required fields (email required only when no parentMemberId)
+      if (!firstName || !password) {
+        throw new AppError("First name and password are required", 400);
       }
 
       // Validate and find parent user if parentMemberId is provided
-      let parentUser = null;
+      let parentUser: any = null;
       if (parentMemberId) {
         if (!isValidMemberIdFormat(parentMemberId)) {
           throw new AppError("Invalid parent member ID format", 400);
         }
-
         parentUser = await findUserByMemberId(parentMemberId);
         if (!parentUser) {
           throw new AppError("Parent member ID not found", 404);
+        }
+      }
+
+      // Determine email to use:
+      // - If parentMemberId is provided and email is not, use parent's email
+      // - Otherwise use provided email (if any)
+      const emailToUse =
+        (email && typeof email === "string" ? email.toLowerCase() : null) ||
+        (parentUser?.email ? String(parentUser.email).toLowerCase() : null);
+
+      // If no parentMemberId and no email provided -> error
+      if (!parentUser && !emailToUse) {
+        throw new AppError("Email is required", 400);
+      }
+
+      // Enforce email uniqueness only when not using parent's email for sub-member
+      const usingParentEmail =
+        !!parentUser && emailToUse === String(parentUser?.email || "").toLowerCase();
+      if (!parentUser || (parentUser && !usingParentEmail && emailToUse)) {
+        if (emailToUse) {
+          const existingUser = await User.findOne({
+            email: emailToUse,
+          });
+          if (existingUser) {
+            throw new AppError("User with this email already exists", 400);
+          }
         }
       }
 
@@ -132,11 +148,13 @@ class MemberController {
       // Create new user
       const user = await User.create({
         firstName,
-        lastName,
-        email: email.toLowerCase(),
+        lastName: lastName || "",
+        email: emailToUse,
         password,
         phone,
         memberId,
+        isSubMember: !!parentUser,
+        parentMemberId: parentUser ? new mongoose.Types.ObjectId(parentUser._id) : null,
         isActive: true,
         isEmailVerified: false,
       });
