@@ -1819,10 +1819,9 @@ class SubscriptionController {
         throw new AppError("Invalid subscription ID format", 400);
       }
 
-      const subscription = await SubscriptionChanges.findOne({
-        subscriptionId: new mongoose.Types.ObjectId(subscriptionId),
+      const subscription = await Subscriptions.findOne({
+        _id: new mongoose.Types.ObjectId(subscriptionId),
         userId,
-        status: "PENDING"
       })
         .select("newPlanSnapshot")
         .lean();
@@ -1832,7 +1831,7 @@ class SubscriptionController {
       }
 
       const subscriptionProductIds = new Set(
-        (subscription.newPlanSnapshot || []).map((item: any) =>
+        (subscription.items || []).map((item: any) =>
           item.productId?.toString?.() || String(item.productId),
         ),
       );
