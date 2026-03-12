@@ -308,6 +308,53 @@ class CartService {
     return cart;
   }
 
+  private async getOrCreateCartByType(
+    userId: string,
+    cartType: "NORMAL" | "SUBSCRIPTION_UPDATE",
+    linkedSubscriptionId?: string
+  ): Promise<any> {
+    const query: any = {
+      userId: new mongoose.Types.ObjectId(userId),
+      isDeleted: false,
+      cartType,
+    };
+    if (cartType === "SUBSCRIPTION_UPDATE") {
+      if (!linkedSubscriptionId) {
+        throw new AppError(
+          "linkedSubscriptionId is required for SUBSCRIPTION_UPDATE cart",
+          400
+        );
+      }
+      query.linkedSubscriptionId = new mongoose.Types.ObjectId(
+        linkedSubscriptionId
+      );
+    }
+
+    let cart: any = await Carts.findOne(query).lean();
+
+    if (!cart) {
+      const base: any = {
+        userId: new mongoose.Types.ObjectId(userId),
+        items: [],
+        subtotal: 0,
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: 0,
+        currency: "EUR",
+        couponDiscountAmount: 0,
+        cartType,
+        linkedSubscriptionId: cartType === "SUBSCRIPTION_UPDATE"
+          ? new mongoose.Types.ObjectId(linkedSubscriptionId!)
+          : null,
+      };
+      const newCart = await Carts.create(base);
+      cart = newCart.toObject();
+    }
+
+    return cart;
+  }
+
   /**
    * Validate product and get pricing
    */
@@ -340,9 +387,18 @@ class CartService {
   async getCart(
     userId: string,
     includeSuggested: boolean = true,
-    userLang: SupportedLanguage = DEFAULT_LANGUAGE
+    userLang: SupportedLanguage = DEFAULT_LANGUAGE,
+    options?: { type?: "NORMAL" | "SUBSCRIPTION_UPDATE"; subscriptionId?: string }
   ): Promise<{ cart: any; suggestedProducts?: any[] }> {
-    const cart = await this.getOrCreateCart(userId);
+    const cartType = options?.type || "NORMAL";
+    const cart =
+      cartType === "NORMAL"
+        ? await this.getOrCreateCart(userId)
+        : await this.getOrCreateCartByType(
+            userId,
+            "SUBSCRIPTION_UPDATE",
+            options?.subscriptionId
+          );
 
     if (!cart.items || cart.items.length === 0) {
       const result: {

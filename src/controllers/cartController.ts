@@ -76,11 +76,23 @@ export class CartController {
 
       const userLang = await getUserLanguage(req, userId);
       const includeSuggested = req.query.includeSuggested !== "false"; // Default true
-      const result = await cartService.getCart(
-        userId,
-        includeSuggested,
-        userLang
-      );
+      const typeParam = (req.query.type as string) || "NORMAL";
+      const normalizedType =
+        typeParam === "SUBSCRIPTION_UPDATE" ? "SUBSCRIPTION_UPDATE" : "NORMAL";
+      const subscriptionId =
+        (req.query.subscriptionId as string) || (req.query.sub as string);
+
+      if (normalizedType === "SUBSCRIPTION_UPDATE" && !subscriptionId) {
+        throw new AppError(
+          "subscriptionId is required for SUBSCRIPTION_UPDATE cart",
+          400
+        );
+      }
+
+      const result = await cartService.getCart(userId, includeSuggested, userLang, {
+        type: normalizedType as any,
+        subscriptionId,
+      });
 
       res.status(200).json({
         success: true,
