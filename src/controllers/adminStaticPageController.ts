@@ -63,7 +63,7 @@ const SYSTEM_PAGES: Array<{
   {
     systemPageType: SystemPageType.BLOG,
     slug: "blog",
-    route: "/admin/blog-managment/blog",
+    route: "/admin/blog-cms",
   },
 ];
 

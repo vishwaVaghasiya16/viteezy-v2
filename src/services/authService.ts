@@ -840,13 +840,13 @@ class AuthService {
     deviceInfo: string,
     client?: "user" | "admin"
   ): Promise<{ message: string }> {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email, isEmailVerified: true });
     if (!user) {
-      // Don't reveal if user exists or not for security
-      return {
-        message:
-          "If an account exists with this email, a password reset instruction has been sent.",
-      };
+      throw new AppError("No account exists with the provided email.", 404)
+    }
+
+    if(!user.isActive) {
+      throw new AppError("Account is deactivated. Please contact support.")
     }
 
     // Determine if request is from Web or App based on deviceInfo
