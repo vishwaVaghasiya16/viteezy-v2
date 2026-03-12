@@ -1,5 +1,4 @@
-/// <reference path="../types/sib-api-v3-sdk.d.ts" />
-import SibApiV3Sdk from "sib-api-v3-sdk";
+import sgMail from "@sendgrid/mail";
 import { logger } from "../utils/logger";
 import { AddressSnapshotType } from "@/models/common.model";
 import * as fs from "fs";
@@ -35,15 +34,15 @@ interface OrderConfirmationEmailOptions {
 }
 
 class EmailService {
-  private isConfigured: boolean = false;
+  private isConfigured: boolean;
   private fromEmail: string;
   private fromName: string;
 
   constructor() {
-    // Check if Brevo API key is available
-    const apiKey = process.env.BREVO_API_KEY;
-    this.fromEmail = process.env.BREVO_FROM_EMAIL || "noreply@viteezy.com";
-    this.fromName = process.env.BREVO_FROM_NAME || "Viteezy";
+    // Check if SendGrid API key is available
+    const apiKey = process.env.SENDGRID_API_KEY;
+    this.fromEmail = process.env.SENDGRID_FROM_EMAIL || "noreply@viteezy.com";
+    this.fromName = process.env.SENDGRID_FROM_NAME || "Viteezy";
 
     // Warn about Gmail addresses causing DMARC issues
     if (
@@ -56,36 +55,40 @@ class EmailService {
           fromEmail: this.fromEmail,
           recommendation:
             "Use a verified custom domain email (e.g., noreply@yourdomain.com) for better deliverability",
-          brevoGuide:
-            "Verify sender at: https://app.brevo.com/settings/senders",
+          sendGridGuide:
+            "Verify sender at: https://app.sendgrid.com/settings/sender_auth/senders/new",
         }
       );
     }
 
     if (
       apiKey &&
-      apiKey !== "your_brevo_api_key_here" &&
+      apiKey !== "your_sendgrid_api_key_here" &&
       apiKey.trim().length > 0
     ) {
-      try {
-        // Configure Brevo API
-        const defaultClient = SibApiV3Sdk.ApiClient.instance;
-        const apiKeyAuth = defaultClient.authentications['api-key'];
-        apiKeyAuth.apiKey = apiKey;
-        
-        this.isConfigured = true;
-        logger.info("Brevo email service configured successfully", {
-          fromEmail: this.fromEmail,
-          fromName: this.fromName,
-        });
-      } catch (error) {
-        logger.error("Failed to configure Brevo:", error);
+      // Validate API key format (SendGrid API keys start with "SG.")
+      if (!apiKey.startsWith("SG.")) {
+        logger.warn(
+          "SendGrid API key format appears invalid. API keys should start with 'SG.'. Using mock email service."
+        );
         this.isConfigured = false;
+      } else {
+        try {
+          sgMail.setApiKey(apiKey);
+          this.isConfigured = true;
+          logger.info("SendGrid email service configured successfully", {
+            fromEmail: this.fromEmail,
+            fromName: this.fromName,
+          });
+        } catch (error) {
+          logger.error("Failed to configure SendGrid:", error);
+          this.isConfigured = false;
+        }
       }
     } else {
       this.isConfigured = false;
       logger.warn(
-        "Brevo API key not found or not set. Using mock email service for development."
+        "SendGrid API key not found or not set. Using mock email service for development."
       );
     }
   }
@@ -484,11 +487,12 @@ class EmailService {
   }
 
   /**
-   * Generic email sending method using Brevo
+   * Generic email sending method using SendGrid
    */
   private async sendEmail(options: EmailOptions): Promise<void> {
     try {
       // Warn if using Gmail address (DMARC issues)
+      // Even verified Gmail addresses can have DMARC alignment issues
       if (this.fromEmail.includes("@gmail.com")) {
         logger.warn(
           "⚠️  Gmail addresses may still go to spam due to DMARC alignment issues, even when verified.",
@@ -501,38 +505,70 @@ class EmailService {
         );
       }
 
-      // Create Brevo API instance
-      const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-      
-      // Prepare email data for Brevo
-      const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-      sendSmtpEmail.subject = options.subject;
-      sendSmtpEmail.htmlContent = options.html;
-      sendSmtpEmail.textContent = options.text || options.html.replace(/<[^>]*>/g, "");
-      sendSmtpEmail.sender = {
-        email: this.fromEmail,
-        name: this.fromName,
-      };
-      sendSmtpEmail.to = [{ email: options.to }];
-      sendSmtpEmail.replyTo = { email: this.fromEmail };
-      
-      // Add headers for better deliverability
-      sendSmtpEmail.headers = {
-        "X-Entity-Ref-ID": `viteezy-${Date.now()}`,
-        "X-Mailer": "Viteezy Email Service",
-        "X-Priority": "1",
-        "X-MSMail-Priority": "Normal",
-        Importance: "normal",
-        "List-Unsubscribe": `<mailto:${this.fromEmail}?subject=unsubscribe>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        Precedence: "bulk",
-        "Auto-Submitted": "auto-generated",
+      const msg: any = {
+        to: options.to,
+        from: {
+          email: this.fromEmail,
+          name: this.fromName,
+        },
+        replyTo: this.fromEmail, // Add reply-to header
+        subject: options.subject,
+        text: options.text || options.html.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+        html: options.html,
+        // Add custom headers to improve deliverability and prevent spam
+        headers: {
+          "X-Entity-Ref-ID": `viteezy-${Date.now()}`, // Unique identifier
+          "X-Mailer": "Viteezy Email Service",
+          "X-Priority": "1", // Normal priority
+          "X-MSMail-Priority": "Normal",
+          Importance: "normal",
+          "List-Unsubscribe": `<mailto:${this.fromEmail}?subject=unsubscribe>`, // Unsubscribe header
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          Precedence: "bulk", // Mark as transactional
+          "Auto-Submitted": "auto-generated", // Indicate automated email
+        },
+        // Add categories for better tracking and deliverability
+        categories: ["viteezy", "transactional", "verification"],
+        // Set mail settings for better deliverability
+        mailSettings: {
+          sandboxMode: {
+            enable: process.env.NODE_ENV === "test", // Disable in production
+          },
+          // Enable footer to improve deliverability
+          footer: {
+            enable: false, // We have custom footer
+          },
+          // Bypass list management for transactional emails
+          bypassListManagement: {
+            enable: true, // Important: Bypass unsubscribe list for transactional emails
+          },
+        },
+        // Add tracking settings
+        trackingSettings: {
+          clickTracking: {
+            enable: true,
+            enableText: true,
+          },
+          openTracking: {
+            enable: true,
+          },
+          subscriptionTracking: {
+            enable: false, // Disable SendGrid's default unsubscribe footer
+          },
+        },
+        // Add ASM (Advanced Suppression Management) for better deliverability
+        asm: {
+          groupId: parseInt(process.env.SENDGRID_UNSUBSCRIBE_GROUP_ID || "0"),
+          groupsToDisplay: [],
+        },
       };
 
-      // Add tags for better tracking
-      sendSmtpEmail.tags = ["viteezy", "transactional", "verification"];
+      // Remove ASM if groupId is 0 (not configured)
+      if (!msg.asm.groupId || msg.asm.groupId === 0) {
+        delete msg.asm;
+      }
 
-      await apiInstance.sendTransacEmail(sendSmtpEmail);
+      await sgMail.send(msg);
       logger.debug(`Email sent successfully to ${options.to}`);
     } catch (error: any) {
       // Log detailed error information
@@ -543,7 +579,7 @@ class EmailService {
         statusCode: error?.response?.statusCode,
       };
 
-      logger.error("Brevo email sending failed:", {
+      logger.error("SendGrid email sending failed:", {
         to: options.to,
         subject: options.subject,
         ...errorDetails,
@@ -552,37 +588,39 @@ class EmailService {
       // Provide more helpful error messages based on status code and error details
       let errorMessage = error?.message || "Unknown error";
       const errorBody = error?.response?.body;
-      const errorText = errorBody?.message || errorMessage;
+      const firstError = errorBody?.errors?.[0];
+      const errorText = firstError?.message || errorMessage;
 
       if (error?.response?.statusCode === 401) {
+        // Check for specific error messages
         if (
-          errorText?.toLowerCase().includes("credits exceeded") ||
-          errorText?.toLowerCase().includes("quota exceeded")
+          errorText?.toLowerCase().includes("maximum credits exceeded") ||
+          errorText?.toLowerCase().includes("credits exceeded")
         ) {
           errorMessage =
-            "Brevo account has exceeded email credits/quota. Please upgrade your plan or wait for quota reset.";
-          logger.error("Brevo Credits Exceeded:", {
-            hint: "Check your Brevo account credits at https://app.brevo.com/settings/billing",
+            "SendGrid account has exceeded email credits/quota. Please upgrade your plan or wait for quota reset.";
+          logger.error("SendGrid Credits Exceeded:", {
+            hint: "Check your SendGrid account credits at https://app.sendgrid.com/settings/billing",
             message:
-              "You may need to upgrade your Brevo plan or wait for monthly quota reset",
+              "You may need to upgrade your SendGrid plan or wait for monthly quota reset",
           });
         } else {
           errorMessage =
-            "Brevo API key is invalid, expired, or revoked. Please check your BREVO_API_KEY in .env file.";
-          logger.error("Brevo Authentication Error:", {
-            hint: "Verify your API key at https://app.brevo.com/settings/keys",
+            "SendGrid API key is invalid, expired, or revoked. Please check your SENDGRID_API_KEY in .env file.";
+          logger.error("SendGrid Authentication Error:", {
+            hint: "Verify your API key at https://app.sendgrid.com/settings/api_keys",
             apiKeyPrefix:
-              process.env.BREVO_API_KEY?.substring(0, 5) + "..." ||
+              process.env.SENDGRID_API_KEY?.substring(0, 5) + "..." ||
               "not set",
           });
         }
       } else if (error?.response?.statusCode === 403) {
         errorMessage =
-          "Brevo API key does not have permission to send emails. Please check your API key permissions.";
+          "SendGrid API key does not have permission to send emails. Please check your API key permissions.";
       } else if (error?.response?.statusCode === 400) {
-        errorMessage = `Brevo validation error: ${errorText}`;
+        errorMessage = `SendGrid validation error: ${errorText}`;
       } else if (error?.response?.statusCode === 429) {
-        errorMessage = "Brevo rate limit exceeded. Please try again later.";
+        errorMessage = "SendGrid rate limit exceeded. Please try again later.";
       }
 
       // Re-throw error so calling methods can handle it
@@ -2106,28 +2144,44 @@ This is an automated message, please do not reply to this email.
         };
       });
 
-      // Create Brevo API instance
-      const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-      
-      // Prepare email data for Brevo
-      const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-      sendSmtpEmail.subject = options.subject;
-      sendSmtpEmail.htmlContent = html;
-      sendSmtpEmail.textContent = html.replace(/<[^>]*>/g, "");
-      sendSmtpEmail.sender = {
-        email: this.fromEmail,
-        name: this.fromName,
+      const msg: any = {
+        to: options.to,
+        from: {
+          email: this.fromEmail,
+          name: this.fromName,
+        },
+        replyTo: this.fromEmail,
+        subject: options.subject,
+        html: html,
+        text: html.replace(/<[^>]*>/g, ""),
+        attachments: attachments,
+        headers: {
+          "X-Entity-Ref-ID": `viteezy-pharmacist-${Date.now()}`,
+          "X-Mailer": "Viteezy Email Service",
+        },
+        categories: ["viteezy", "pharmacist", "csv"],
+        mailSettings: {
+          sandboxMode: {
+            enable: process.env.NODE_ENV === "test",
+          },
+          bypassListManagement: {
+            enable: true,
+          },
+        },
+        trackingSettings: {
+          clickTracking: {
+            enable: false,
+          },
+          openTracking: {
+            enable: true,
+          },
+          subscriptionTracking: {
+            enable: false,
+          },
+        },
       };
-      sendSmtpEmail.to = [{ email: options.to }];
-      sendSmtpEmail.replyTo = { email: this.fromEmail };
-      sendSmtpEmail.attachment = attachments;
-      sendSmtpEmail.headers = {
-        "X-Entity-Ref-ID": `viteezy-pharmacist-${Date.now()}`,
-        "X-Mailer": "Viteezy Email Service",
-      };
-      sendSmtpEmail.tags = ["viteezy", "pharmacist", "csv"];
 
-      await apiInstance.sendTransacEmail(sendSmtpEmail);
+      await sgMail.send(msg);
       logger.info(`Pharmacist request email sent successfully to ${options.to} with ${options.files.length} attachment(s)`);
     } catch (error: any) {
       logger.error(`Failed to send pharmacist request email: ${error.message}`, {
@@ -2207,6 +2261,102 @@ This is an automated message, please do not reply to this email.
       return true;
     } catch (error: any) {
       logger.error(`Failed to send postponement rejected email: ${error?.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Send subscription delivery date update email
+   */
+  async sendSubscriptionDeliveryDateUpdateEmail(options: {
+    to: string;
+    userName: string;
+    subscriptionNumber: string;
+    oldDeliveryDate: Date;
+    newDeliveryDate: Date;
+    oldBillingDate?: Date;
+    newBillingDate?: Date;
+    updateReason?: string;
+  }): Promise<boolean> {
+    try {
+      if (!this.isConfigured) {
+        logger.info(`[DEV MODE] Subscription delivery date update email for ${options.to}`);
+        return true;
+      }
+      
+      const d = (x: Date) => new Date(x).toLocaleDateString(undefined, { dateStyle: "medium" });
+      const subject = "Your Subscription Delivery Date Updated - Viteezy";
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #4f46e5; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .date-change { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📅 Subscription Delivery Date Updated</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${options.userName},</p>
+              <p>Your subscription delivery date has been updated for subscription <strong>${options.subscriptionNumber}</strong>.</p>
+              
+              <div class="date-change">
+                <h3>📦 Delivery Schedule Changes:</h3>
+                <p><strong>Previous delivery date:</strong> ${d(options.oldDeliveryDate)}</p>
+                <p><strong>New delivery date:</strong> ${d(options.newDeliveryDate)}</p>
+                ${options.oldBillingDate && options.newBillingDate ? `
+                  <p><strong>Previous billing date:</strong> ${d(options.oldBillingDate)}</p>
+                  <p><strong>New billing date:</strong> ${d(options.newBillingDate)}</p>
+                ` : ''}
+                ${options.updateReason ? `<p><strong>Reason:</strong> ${options.updateReason}</p>` : ''}
+              </div>
+              
+              <p>Your subscription remains active and all other terms remain unchanged.</p>
+              <p>If you have any questions about this change, please don't hesitate to contact our support team.</p>
+              <p>Thank you for choosing Viteezy!</p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+              <p>This is an automated message. Please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const text = `
+        Hello ${options.userName},
+        
+        Your subscription delivery date has been updated for subscription ${options.subscriptionNumber}.
+        
+        Previous delivery date: ${d(options.oldDeliveryDate)}
+        New delivery date: ${d(options.newDeliveryDate)}
+        ${options.oldBillingDate && options.newBillingDate ? `
+        Previous billing date: ${d(options.oldBillingDate)}
+        New billing date: ${d(options.newBillingDate)}
+        ` : ''}
+        ${options.updateReason ? `Reason: ${options.updateReason}` : ''}
+        
+        Your subscription remains active and all other terms remain unchanged.
+        
+        Thank you for choosing Viteezy!
+      `;
+      
+      await this.sendEmail({ to: options.to, subject, html, text });
+      logger.info(`Subscription delivery date update email sent to ${options.to}`);
+      return true;
+    } catch (error: any) {
+      logger.error(`Failed to send subscription delivery date update email: ${error?.message}`);
       return false;
     }
   }

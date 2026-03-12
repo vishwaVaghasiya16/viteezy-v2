@@ -195,7 +195,9 @@ class AdminSubscriptionController {
             product: item.productId
               ? {
                   id: item.productId._id,
-                  title: item.productId.title,
+                  title: item.productId.title && typeof item.productId.title === 'object' 
+                    ? item.productId.title.en || item.productId.title 
+                    : item.productId.title,
                   slug: item.productId.slug,
                 }
               : null,
@@ -336,9 +338,13 @@ class AdminSubscriptionController {
           product: item.productId
             ? {
                 id: item.productId._id,
-                title: item.productId.title,
+                title: item.productId.title && typeof item.productId.title === 'object' 
+                  ? item.productId.title.en || item.productId.title 
+                  : item.productId.title,
                 slug: item.productId.slug,
-                description: item.productId.description,
+                description: item.productId.description && typeof item.productId.description === 'object'
+                  ? item.productId.description.en || item.productId.description
+                  : item.productId.description,
                 media: item.productId.media,
               }
             : null,
@@ -1100,6 +1106,200 @@ class AdminSubscriptionController {
           },
         },
         `Test subscription created successfully${gatewayResult.success ? " with gateway subscription" : ""}${processRenewal ? " and renewal processed" : ""}`
+      );
+    }
+  );
+
+  /**
+   * Update subscription delivery date by admin
+   * @route PUT /api/v1/admin/subscriptions/:id/delivery-date
+   * @access Admin
+   * @body {String} nextDeliveryDate - New next delivery date (ISO date string, required)
+   * @body {String} [nextBillingDate] - New next billing date (ISO date string, optional)
+   * @body {String} [updateReason] - Reason for updating delivery date (optional)
+   * @body {Boolean} [notifyUser] - Whether to notify user via email (default: true)
+   */
+  updateDeliveryDate = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const { id } = req.params;
+      const {
+        nextDeliveryDate,
+        nextBillingDate,
+        updateReason,
+        notifyUser = true,
+      } = req.body;
+
+      const adminId = req.user?._id
+        ? new mongoose.Types.ObjectId(req.user._id)
+        : null;
+
+      // Validate dates
+      const newDeliveryDate = new Date(nextDeliveryDate);
+      const newBillingDate = nextBillingDate ? new Date(nextBillingDate) : null;
+
+      if (isNaN(newDeliveryDate.getTime())) {
+        throw new AppError("Invalid next delivery date format", 400);
+      }
+
+      if (newBillingDate && isNaN(newBillingDate.getTime())) {
+        throw new AppError("Invalid next billing date format", 400);
+      }
+
+      // Check if delivery date is in the past
+      const now = new Date();
+      if (newDeliveryDate < now) {
+        throw new AppError("Next delivery date cannot be in the past", 400);
+      }
+
+      const subscription = await Subscriptions.findOne({
+        _id: id,
+        isDeleted: { $ne: true },
+      })
+        .populate("userId", "firstName lastName email")
+        .lean();
+
+      if (!subscription) {
+        throw new AppError("Subscription not found", 404);
+      }
+
+      // Check if subscription is cancelled
+      if (subscription.status === SubscriptionStatus.CANCELLED) {
+        throw new AppError("Cannot update delivery date for cancelled subscription", 400);
+      }
+
+      const user = subscription.userId as any;
+      const isPopulatedUser =
+        user && typeof user === "object" && user.firstName !== undefined;
+
+      // Store old dates for logging
+      const oldDeliveryDate = subscription.nextDeliveryDate;
+      const oldBillingDate = subscription.nextBillingDate;
+
+      // Update subscription
+      const updateData: any = {
+        nextDeliveryDate: newDeliveryDate,
+        updatedBy: adminId,
+      };
+
+      if (newBillingDate) {
+        updateData.nextBillingDate = newBillingDate;
+      }
+
+      // Add metadata about the update
+      const metadata = {
+        ...((subscription as any).metadata || {}),
+        deliveryDateUpdate: {
+          updatedBy: adminId,
+          updatedAt: new Date(),
+          oldDeliveryDate: oldDeliveryDate,
+          newDeliveryDate: newDeliveryDate,
+          oldBillingDate: oldBillingDate,
+          newBillingDate: newBillingDate,
+          reason: updateReason || "Admin update",
+        },
+      };
+      updateData.metadata = metadata;
+
+      await Subscriptions.updateOne({ _id: id }, updateData);
+
+      // Send email notification to user if requested
+      if (notifyUser && isPopulatedUser && user.email) {
+        const userName = `${user.firstName} ${user.lastName}`.trim();
+        const emailSent = await emailService.sendSubscriptionDeliveryDateUpdateEmail({
+          to: user.email,
+          userName: userName,
+          subscriptionNumber: subscription.subscriptionNumber,
+          oldDeliveryDate: oldDeliveryDate,
+          newDeliveryDate: newDeliveryDate,
+          oldBillingDate: oldBillingDate || undefined,
+          newBillingDate: newBillingDate || undefined,
+          updateReason: updateReason || "Schedule adjustment",
+        });
+
+        if (emailSent) {
+          logger.info(
+            `Delivery date update email sent to ${user.email} for subscription ${subscription.subscriptionNumber}`
+          );
+        } else {
+          logger.warn(
+            `Failed to send delivery date update email to ${user.email}`
+          );
+        }
+      }
+
+      logger.info(
+        `Subscription ${subscription.subscriptionNumber} delivery date updated by admin ${adminId}: ${oldDeliveryDate} → ${newDeliveryDate}`
+      );
+
+      // Get updated subscription for response
+      const updatedSubscription = await Subscriptions.findOne({
+        _id: id,
+        isDeleted: { $ne: true },
+      })
+        .populate("userId", "firstName lastName email")
+        .populate("items.productId", "title slug")
+        .populate("orderId", "orderNumber")
+        .lean();
+
+      const transformedSubscription = {
+        id: updatedSubscription!._id,
+        subscriptionNumber: updatedSubscription!.subscriptionNumber,
+        status: updatedSubscription!.status,
+        planType: updatedSubscription!.planType,
+        cycleDays: updatedSubscription!.cycleDays,
+        subscriptionStartDate: updatedSubscription!.subscriptionStartDate,
+        subscriptionEndDate: updatedSubscription!.subscriptionEndDate,
+        user: isPopulatedUser
+          ? {
+              id: user._id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              fullName: `${user.firstName} ${user.lastName}`.trim(),
+            }
+          : null,
+        order: updatedSubscription!.orderId
+          ? {
+              id: (updatedSubscription!.orderId as any)._id || updatedSubscription!.orderId,
+              orderNumber: (updatedSubscription!.orderId as any).orderNumber || null,
+            }
+          : null,
+        items: updatedSubscription!.items.map((item: any) => ({
+          productId: item.productId?._id || item.productId,
+          product: item.productId
+            ? {
+                id: item.productId._id,
+                title: item.productId.title && typeof item.productId.title === 'object' 
+                  ? item.productId.title.en || item.productId.title 
+                  : item.productId.title,
+                slug: item.productId.slug,
+              }
+            : null,
+          name: item.name,
+          amount: item.amount,
+          discountedPrice: item.discountedPrice,
+          totalAmount: item.totalAmount,
+          durationDays: item.durationDays,
+          capsuleCount: item.capsuleCount,
+        })),
+        initialDeliveryDate: updatedSubscription!.initialDeliveryDate,
+        nextDeliveryDate: updatedSubscription!.nextDeliveryDate,
+        nextBillingDate: updatedSubscription!.nextBillingDate,
+        lastBilledDate: updatedSubscription!.lastBilledDate,
+        lastDeliveredDate: updatedSubscription!.lastDeliveredDate,
+        cancelledAt: updatedSubscription!.cancelledAt,
+        cancelledBy: updatedSubscription!.cancelledBy,
+        cancellationReason: updatedSubscription!.cancellationReason,
+        pausedAt: updatedSubscription!.pausedAt,
+        pausedUntil: updatedSubscription!.pausedUntil,
+        metadata: updatedSubscription!.metadata,
+        createdAt: updatedSubscription!.createdAt,
+        updatedAt: updatedSubscription!.updatedAt,
+      };
+
+      res.apiSuccess(
+        { subscription: transformedSubscription },
+        "Subscription delivery date updated successfully"
       );
     }
   );

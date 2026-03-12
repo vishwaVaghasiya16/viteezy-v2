@@ -15,6 +15,7 @@ import {
   PRODUCT_STATUS_VALUES,
   PRODUCT_VARIANT_VALUES,
 } from "../enums";
+import { IIngredientComposition } from "./ingredientComposition.model";
 
 // Extended price type for subscription periods with additional metadata
 // amount is optional here as it will be calculated from totalAmount
@@ -177,6 +178,8 @@ export interface IProduct extends Document {
   updatedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  // Virtual field for ingredient compositions
+  ingredientCompositions?: IIngredientComposition[];
 }
 
 const ProductSchema = new Schema<IProduct>(
@@ -336,6 +339,14 @@ const ProductSchema = new Schema<IProduct>(
     toObject: { virtuals: true },
   }
 );
+
+// Virtual field for ingredient compositions
+ProductSchema.virtual('ingredientCompositions', {
+  ref: 'ingredient_compositions',
+  localField: '_id',
+  foreignField: 'product',
+  match: { isDeleted: { $ne: true } }
+});
 
 // Indexes
 ProductSchema.index({ slug: 1 });

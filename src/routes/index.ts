@@ -22,6 +22,7 @@ import savedCardRoutes from "./savedCardRoutes";
 import subscriptionRoutes from "./subscriptionRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
+import ingredientCompositionRoutes from "./ingredientComposition.routes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
 import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
 import adminBlogCategoryRoutes from "./adminBlogCategoryRoutes";
@@ -72,6 +73,7 @@ router.use("/users", userRoutes);
 
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
 router.use("/admin/product-ingredients", adminProductIngredientRoutes);
+router.use("/ingredient-compositions", ingredientCompositionRoutes);
 router.use("/admin/blog-categories", adminBlogCategoryRoutes);
 router.use("/admin/blogs", adminBlogRoutes);
 router.use("/admin/blog-banners", adminBlogBannerRoutes);

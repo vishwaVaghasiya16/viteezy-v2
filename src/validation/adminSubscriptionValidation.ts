@@ -107,3 +107,38 @@ export const pauseSubscriptionSchema = Joi.object(
   })
 ).label("PauseSubscriptionPayload");
 
+export const updateDeliveryDateSchema = Joi.object(
+  withFieldLabels({
+    nextDeliveryDate: Joi.date()
+      .iso()
+      .required()
+      .label("Next delivery date")
+      .messages({
+        "date.format": "Next delivery date must be a valid ISO date",
+        "any.required": "Next delivery date is required",
+      }),
+    nextBillingDate: Joi.date()
+      .iso()
+      .optional()
+      .label("Next billing date")
+      .messages({
+        "date.format": "Next billing date must be a valid ISO date",
+      }),
+    updateReason: Joi.string()
+      .trim()
+      .max(500)
+      .optional()
+      .label("Update reason")
+      .messages({
+        "string.max": "Update reason cannot exceed 500 characters",
+      }),
+    notifyUser: Joi.boolean()
+      .optional()
+      .default(true)
+      .label("Notify user")
+      .messages({
+        "boolean.base": "Notify user must be a boolean",
+      }),
+  })
+).label("UpdateDeliveryDatePayload");
+

@@ -11,6 +11,7 @@ import {
   getAllSubscriptionsQuerySchema,
   cancelSubscriptionSchema,
   pauseSubscriptionSchema,
+  updateDeliveryDateSchema,
 } from "@/validation/adminSubscriptionValidation";
 
 const router = Router();
@@ -132,6 +133,23 @@ router.get(
   "/:id/transaction-history",
   validateParams(subscriptionIdParamsSchema),
   adminSubscriptionController.getTransactionHistory
+);
+
+/**
+ * @route PUT /api/v1/admin/subscriptions/:id/delivery-date
+ * @desc Update subscription delivery date by admin
+ * @access Admin
+ * @param {String} id - Subscription ID (MongoDB ObjectId)
+ * @body {String} nextDeliveryDate - New next delivery date (ISO date string, required)
+ * @body {String} [nextBillingDate] - New next billing date (ISO date string, optional)
+ * @body {String} [updateReason] - Reason for updating delivery date (optional)
+ * @body {Boolean} [notifyUser] - Whether to notify user via email (default: true)
+ */
+router.put(
+  "/:id/delivery-date",
+  validateParams(subscriptionIdParamsSchema),
+  validateJoi(updateDeliveryDateSchema),
+  adminSubscriptionController.updateDeliveryDate
 );
 
 export default router;
