@@ -1823,7 +1823,7 @@ class SubscriptionController {
         _id: new mongoose.Types.ObjectId(subscriptionId),
         userId,
       })
-        .select("newPlanSnapshot")
+        .select("items")
         .lean();
 
       if (!subscription) {

@@ -94,7 +94,24 @@ class SubscriptionUpdateController {
       res.apiSuccess(result, "Subscription cart updated");
     }
   );
+
+  removeSubscriptionProduct = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response) => {
+      const userId = req.user?.id || req.userId;
+      if (!userId) throw new AppError("User not authenticated", 401);
+      const { subscriptionId } = req.params;
+      const { productId } = req.body || {};
+      if (!productId || typeof productId !== "string") {
+        throw new AppError("productId is required", 400);
+      }
+      const result = await subscriptionUpdateService.removeSubscriptionProduct(
+        userId,
+        subscriptionId,
+        productId
+      );
+      res.apiSuccess(result, "Product removed from subscription update cart");
+    }
+  );
 }
 
 export const subscriptionUpdateController = new SubscriptionUpdateController();
-

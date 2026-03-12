@@ -719,6 +719,67 @@ export class SubscriptionUpdateService {
       total: cart.total,
     };
   }
+
+  async removeSubscriptionProduct(
+    userId: string,
+    subscriptionId: string,
+    productId: string
+  ) {
+    const subscription = await Subscriptions.findOne({
+      _id: subscriptionId,
+      userId,
+      status: SubscriptionStatus.ACTIVE,
+      isDeleted: false,
+    });
+
+    if (!subscription) throw new AppError("Subscription not found", 404);
+
+    let cart = await Carts.findOne({
+      userId,
+      linkedSubscriptionId: subscription._id,
+      cartType: "SUBSCRIPTION_UPDATE",
+      isDeleted: false,
+    });
+
+    if (!cart) {
+      throw new AppError("Subscription update cart not found", 404);
+    }
+
+    const beforeCount = cart.items.length;
+    cart.items = (cart.items || []).filter((item: any) => {
+      const id = item.productId?.toString?.() || String(item.productId);
+      const isSubChange = item.isSubscriptionChange === true;
+      return !(isSubChange && id === productId);
+    });
+
+    if (cart.items.length === beforeCount) {
+      throw new AppError("Product not found in subscription update cart", 404);
+    }
+
+    let subtotal = 0;
+    let tax = 0;
+    for (const item of cart.items) {
+      const qty = item.quantity || 1;
+      const price = item.price?.amount || 0;
+      const taxRate = item.price?.taxRate || 0;
+      subtotal += price * qty;
+      tax += taxRate * qty;
+    }
+    cart.subtotal = Number(subtotal.toFixed(2));
+    cart.tax = Number(tax.toFixed(2));
+    cart.total = Number((subtotal + tax).toFixed(2));
+
+    await cart.save();
+
+    return {
+      cartId: cart._id,
+      cartType: cart.cartType,
+      items: cart.items,
+      subtotal: cart.subtotal,
+      tax: cart.tax,
+      total: cart.total,
+    };
+  }
 }
 
 export const subscriptionUpdateService = new SubscriptionUpdateService();

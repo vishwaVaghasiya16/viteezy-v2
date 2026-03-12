@@ -28,4 +28,10 @@ router.post(
   subscriptionUpdateController.updateSubscriptionProducts
 );
 
+// Remove single product from subscription update cart
+router.post(
+  "/:subscriptionId/update/products/remove",
+  subscriptionUpdateController.removeSubscriptionProduct
+);
+
 export default router;
