@@ -61,9 +61,11 @@ class SubscriptionUpdateController {
   
       res.apiSuccess(
         {
-          subscriptionChangeId: change._id,
+          subscriptionChangeId: (change as any).subscriptionChangeId || (change as any)._id,
           status: change.status,
-          effectiveDate: change.effectiveDate
+          effectiveDate: change.effectiveDate,
+          ...(change as any).renewalOrderId ? { renewalOrderId: (change as any).renewalOrderId } : {},
+          ...(change as any).orderNumber ? { orderNumber: (change as any).orderNumber } : {},
         },
         "Subscription update scheduled for next billing cycle"
       );

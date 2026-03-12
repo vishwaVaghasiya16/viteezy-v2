@@ -3,7 +3,7 @@ import { Subscriptions } from "@/models/commerce/subscriptions.model";
 import { Carts } from "@/models/commerce/carts.model";
 import { SubscriptionChanges } from "@/models/commerce/subscriptionChanges.model";
 import { AppError } from "@/utils/AppError";
-import { CouponType, ProductVariant, SubscriptionStatus } from "@/models/enums";
+import { CouponType, ProductVariant, SubscriptionStatus, OrderPlanType, PaymentStatus, OrderStatus } from "@/models/enums";
 import { Products } from "@/models/commerce/products.model";
 import { Coupons, Orders } from "@/models/commerce";
 import { Addresses } from "@/models/core";
@@ -582,7 +582,87 @@ export class SubscriptionUpdateService {
       _id: cart._id,
     });
 
-    return change;
+    // Create placeholder renewal order for the upcoming effectiveDate
+    try {
+      const originalOrder = await Orders.findById(subscription.orderId).lean();
+      const orderNumber = `UPD-${subscription.subscriptionNumber}-${(subscription.renewalCount || 0) + 1}`;
+
+      // Build items and totals from snapshot
+      const items = newPlanSnapshot.map((snap: any) => ({
+        productId: snap.productId,
+        name: snap.name,
+        variantType: ProductVariant.SACHETS,
+        quantity: snap.quantity || 1,
+        planDays: subscription.cycleDays || 30,
+        amount: Number(snap.price || 0),
+        discountedPrice: Number(snap.price || 0),
+        taxRate: 0,
+        totalAmount: Number(snap.price || 0) * (snap.quantity || 1),
+      }));
+
+      const subTotal = items.reduce((s: number, i: any) => s + i.amount * (i.quantity || 1), 0);
+      const discountedPrice = items.reduce((s: number, i: any) => s + i.discountedPrice * (i.quantity || 1), 0);
+      const taxAmount = 0;
+      const grandTotal = discountedPrice + taxAmount;
+      const currency = "EUR";
+
+      const renewalOrder = await Orders.create({
+        orderNumber,
+        userId: subscription.userId,
+        planType: OrderPlanType.SUBSCRIPTION,
+        orderType: "SUBSCRIPTION_RENEWAL",
+        subscriptionId: subscription._id,
+        items,
+        pricing: {
+          sachets: {
+            subTotal,
+            discountedPrice,
+            membershipDiscountAmount: 0,
+            subscriptionPlanDiscountAmount: 0,
+            taxAmount,
+            total: grandTotal,
+            currency,
+          },
+          overall: {
+            subTotal,
+            discountedPrice,
+            couponDiscountAmount: 0,
+            membershipDiscountAmount: 0,
+            subscriptionPlanDiscountAmount: 0,
+            taxAmount,
+            grandTotal,
+            currency,
+          },
+        },
+        shippingAddressId: originalOrder?.shippingAddressId || new mongoose.Types.ObjectId(),
+        billingAddressId: originalOrder?.billingAddressId || new mongoose.Types.ObjectId(),
+        paymentMethod: originalOrder?.paymentMethod || "Stripe",
+        paymentStatus: PaymentStatus.PENDING,
+        status: OrderStatus.PENDING,
+        metadata: {
+          isRenewalOrder: true,
+          isSubscriptionChange: true,
+          subscriptionChangeId: (change as any)._id.toString(),
+          effectiveDate: subscription.nextBillingDate,
+          originalOrderId: (subscription.orderId as mongoose.Types.ObjectId).toString(),
+        },
+      });
+
+      return {
+        subscriptionChangeId: (change as any)._id,
+        status: change.status,
+        effectiveDate: change.effectiveDate,
+        renewalOrderId: renewalOrder._id,
+        orderNumber: renewalOrder.orderNumber,
+      };
+    } catch (e) {
+      // If order creation fails, still return change info
+      return {
+        subscriptionChangeId: (change as any)._id,
+        status: change.status,
+        effectiveDate: change.effectiveDate,
+      };
+    }
   }
 
   async updateSubscriptionProducts(

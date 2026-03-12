@@ -212,9 +212,80 @@ export class SubscriptionAutoRenewalService {
             { session }
           ).then((docs) => docs[0] as any);
 
+          // If a placeholder renewal order already exists (created during subscription update confirm), reuse it
+          let existingRenewalOrder = await Orders.findOne({
+            userId: subscription.userId,
+            subscriptionId: subscription._id,
+            status: OrderStatus.PENDING,
+            "metadata.isRenewalOrder": true,
+          }).lean();
+
+          if (existingRenewalOrder) {
+            logger.info(
+              `Found existing pending renewal order ${existingRenewalOrder.orderNumber}, reusing for payment`
+            );
+          } else {
+            // Create renewal order if no placeholder found
+            const orderNumber = `REN-${subscription.subscriptionNumber}-${subscription.renewalCount + 1}`;
+            existingRenewalOrder = await Orders.create(
+              [
+                {
+                  orderNumber: orderNumber,
+                  userId: subscription.userId,
+                  planType: subscription.planType,
+                  items: subscription.items.map((item) => ({
+                    productId: item.productId,
+                    name: item.name,
+                    variantType: ProductVariant.SACHETS,
+                    planDays: item.planDays,
+                    capsuleCount: item.capsuleCount,
+                    amount: item.amount,
+                    discountedPrice: item.discountedPrice,
+                    taxRate: item.taxRate,
+                    totalAmount: item.totalAmount,
+                    durationDays: item.durationDays,
+                    savingsPercentage: item.savingsPercentage,
+                    features: item.features || [],
+                  })),
+                  pricing: {
+                    overall: {
+                      subTotal: subscription.items.reduce((sum, item) => sum + item.amount, 0),
+                      discountedPrice: subscription.items.reduce(
+                        (sum, item) => sum + item.discountedPrice,
+                        0
+                      ),
+                      couponDiscountAmount: 0,
+                      membershipDiscountAmount: 0,
+                      subscriptionPlanDiscountAmount: 0,
+                      taxAmount: subscription.items.reduce(
+                        (sum, item) =>
+                          sum + (item.totalAmount - item.discountedPrice) * (item.taxRate / 100),
+                        0
+                      ),
+                      grandTotal: totalAmount,
+                      currency: currency,
+                    },
+                  },
+                  shippingAddressId: originalOrder?.shippingAddressId || new mongoose.Types.ObjectId(),
+                  billingAddressId: originalOrder?.billingAddressId || new mongoose.Types.ObjectId(),
+                  paymentMethod: paymentMethod,
+                  paymentStatus: PaymentStatus.PENDING,
+                  status: OrderStatus.PENDING,
+                  metadata: {
+                    isRenewalOrder: true,
+                    subscriptionId: (subscription._id as mongoose.Types.ObjectId).toString(),
+                    renewalNumber: subscription.renewalCount + 1,
+                    originalOrderId: (subscription.orderId as mongoose.Types.ObjectId).toString(),
+                  },
+                },
+              ],
+              { session }
+            ).then((docs) => docs[0] as any);
+          }
+
           // Create payment through PaymentService
           const paymentServiceResult = await this.paymentService.createPayment({
-            orderId: (renewalOrder._id as mongoose.Types.ObjectId).toString(),
+            orderId: ((existingRenewalOrder as any)._id as mongoose.Types.ObjectId).toString(),
             userId: (subscription.userId as mongoose.Types.ObjectId).toString(),
             paymentMethod: paymentMethod,
             amount: {
@@ -238,7 +309,7 @@ export class SubscriptionAutoRenewalService {
           payment.transactionId = paymentServiceResult.result.gatewayTransactionId;
           
           // Link payment to renewal order
-          payment.orderId = renewalOrder._id as mongoose.Types.ObjectId;
+          payment.orderId = (existingRenewalOrder as any)._id as mongoose.Types.ObjectId;
           
           // Note: Payment will be PENDING until user confirms or webhook processes it
           // For automatic renewals, you need saved payment methods or Stripe Subscriptions
@@ -325,6 +396,17 @@ export class SubscriptionAutoRenewalService {
       // Create renewal order if it wasn't created during payment processing
       if (!renewalOrder) {
         try {
+          // Try to reuse existing pending renewal order first
+          renewalOrder = await Orders.findOne({
+            userId: subscription.userId,
+            subscriptionId: subscription._id,
+            status: OrderStatus.PENDING,
+            "metadata.isRenewalOrder": true,
+          }).lean();
+
+          if (renewalOrder) {
+            logger.info(`Using existing pending renewal order ${renewalOrder.orderNumber} post-payment`);
+          } else {
           // Determine shipping and billing addresses for renewal:
           // 1. If subscription.metadata.shippingAddressId is set, use that as preferred shipping address
           // 2. Otherwise, fall back to original order's shippingAddressId
@@ -381,6 +463,7 @@ export class SubscriptionAutoRenewalService {
             ],
             { session }
           ).then((docs) => docs[0] as any);
+          }
 
           // Link payment to renewal order if not already linked
           if (!payment.orderId) {
@@ -639,4 +722,3 @@ export class SubscriptionAutoRenewalService {
 }
 
 export const subscriptionAutoRenewalService = new SubscriptionAutoRenewalService();
-
