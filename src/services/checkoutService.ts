@@ -2362,6 +2362,7 @@ class CheckoutService {
           planKey: string;
           label: string;
           durationDays: number;
+          unitAmount: number;
           totalAmount: number;
           discountedPrice: number;
           capsuleCount: number;
@@ -2561,6 +2562,7 @@ class CheckoutService {
                 planKey: planKeyForResponse,
                 label: planInfo.label, // Label from config (60/120)
                 durationDays: 0, // Not applicable for stand-up pouch
+              unitAmount: planPrice,
                 totalAmount,
                 discountedPrice: totalDiscountedPrice,
                 // capsuleCount should reflect the configured value (60 or 120), not from DB
@@ -2570,7 +2572,7 @@ class CheckoutService {
                 features: new Set<string>(),
                 isSubscription: false, // Stand-up pouch is one-time purchase
                 isSelected, // Set based on product's selected planDays
-              });
+              } as any);
             }
           }
         }
@@ -2683,6 +2685,7 @@ class CheckoutService {
               label: plan.label || getStandUpPouchPlanLabel(plan.capsuleCount),
               durationDays: plan.durationDays,
               capsuleCount: plan.capsuleCount,
+              amount: this.roundAmount(((plan as any).unitAmount || 0)),
               totalAmount: this.roundAmount(plan.totalAmount),
               discountedPrice: this.roundAmount(plan.discountedPrice),
               savePercentage,
