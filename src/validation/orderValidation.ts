@@ -266,7 +266,9 @@ export const createOrderSchema = Joi.object(
         taxAmount: Joi.number().min(0).default(0),
         total: Joi.number().min(0).required(),
         currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
-      }).optional(),
+      })
+        .optional()
+        .allow(null),
       standUpPouch: Joi.object({
         subTotal: Joi.number().min(0).required(),
         discountedPrice: Joi.number().min(0).required(),
@@ -274,7 +276,9 @@ export const createOrderSchema = Joi.object(
         taxAmount: Joi.number().min(0).default(0),
         total: Joi.number().min(0).required(),
         currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
-      }).optional(),
+      })
+        .optional()
+        .allow(null),
       overall: Joi.object({
         subTotal: Joi.number().min(0).required(),
         discountedPrice: Joi.number().min(0).required(),
