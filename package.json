@@ -35,6 +35,7 @@
     "@mollie/api-client": "^4.3.3",
     "@sendgrid/mail": "^8.1.6",
     "@types/markdown-it": "^14.1.2",
+    "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
