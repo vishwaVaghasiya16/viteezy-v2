@@ -50,18 +50,11 @@ class CouponController {
 
       // If couponCode is null or empty, remove coupon from cart
       if (!couponCode || couponCode.trim() === "") {
-        // Use cartService to remove coupon (it will get the cart by userId and update it)
-        // But first verify the cart belongs to this user
-        const userCart = await Carts.findOne({
-          userId: new mongoose.Types.ObjectId(userId),
-          isDeleted: false,
-        }).lean();
-
-        if (!userCart || userCart._id.toString() !== cartId) {
-          throw new AppError("Cart not found or does not belong to user", 404);
-        }
-
-        const result = await cartService.removeCoupon(userId);
+        // Remove coupon directly from the specified cart
+        const result = await cartService.removeCouponByCartId(
+          userId,
+          cartId
+        );
         res.apiSuccess(
           {
             cart: result.cart,
@@ -387,9 +380,10 @@ class CouponController {
           }
         }
 
-        // Apply coupon to cart using cartService
-        const result = await cartService.applyCoupon(
+        // Apply coupon to this specific cart using cartId
+        const result = await cartService.applyCouponByCartId(
           userId,
+          cartId,
           normalizedCouponCode
         );
 

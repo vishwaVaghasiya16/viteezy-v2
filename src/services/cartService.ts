@@ -212,6 +212,71 @@ class CartService {
   }
 
   /**
+   * Calculate totals using ONLY cart items' stored price objects
+   * This uses item.price.amount, item.price.discountedPrice, and item.price.taxRate,
+   * multiplied by item.quantity, without fetching product pricing.
+   */
+  calculateTotalsFromCartItems(
+    items: any[],
+    couponDiscountAmount: number = 0
+  ): {
+    subtotal: number;
+    tax: number;
+    discount: number;
+    total: number;
+    currency: string;
+  } {
+    if (!items || items.length === 0) {
+      return {
+        subtotal: 0,
+        tax: 0,
+        discount: 0,
+        total: 0,
+        currency: "EUR",
+      };
+    }
+
+    const currency = items[0]?.price?.currency || "EUR";
+
+    let subtotal = 0;
+    let tax = 0;
+    let discount = 0;
+
+    for (const item of items) {
+      const qty = item?.quantity || 1;
+      const amount = item?.price?.amount || 0;
+      const discountedPrice =
+        item?.price?.discountedPrice !== undefined &&
+        item?.price?.discountedPrice !== null
+          ? item.price.discountedPrice
+          : amount;
+      const taxAmount = item?.price?.taxRate || 0;
+
+      subtotal += amount * qty;
+      tax += taxAmount * qty;
+      discount += (amount - discountedPrice) * qty;
+    }
+
+    // Round to 2 decimals
+    subtotal = Math.round(subtotal * 100) / 100;
+    tax = Math.round(tax * 100) / 100;
+    discount = Math.round(discount * 100) / 100;
+    couponDiscountAmount = Math.round(couponDiscountAmount * 100) / 100;
+
+    const total =
+      Math.round((subtotal + tax - discount - couponDiscountAmount) * 100) /
+      100;
+
+    return {
+      subtotal,
+      tax,
+      discount,
+      total: Math.max(0, total),
+      currency,
+    };
+  }
+
+  /**
    * Calculate cart totals
    */
   private calculateCartTotals(
@@ -1616,6 +1681,229 @@ class CartService {
     return {
       cart: updatedCart,
       message: "Coupon removed successfully",
+    };
+  }
+
+  /**
+   * Remove coupon by specific cartId (supports NORMAL and SUBSCRIPTION_UPDATE)
+   */
+  async removeCouponByCartId(
+    userId: string,
+    cartId: string
+  ): Promise<{ cart: any; message: string }> {
+    const cart = await Carts.findOne({
+      _id: new mongoose.Types.ObjectId(cartId),
+      userId: new mongoose.Types.ObjectId(userId),
+      isDeleted: false,
+    }).lean();
+
+    if (!cart) {
+      throw new AppError("Cart not found or does not belong to user", 404);
+    }
+
+    let update: any = {
+      couponCode: null,
+      couponDiscountAmount: 0,
+      updatedAt: new Date(),
+    };
+
+    if (cart.cartType === "NORMAL") {
+      const totals = this.calculateTotalsFromCartItems(cart.items, 0);
+      update = {
+        ...update,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        currency: totals.currency,
+      };
+    } else {
+      const totals = this.calculateTotalsFromCartItems(cart.items, 0);
+      update = {
+        ...update,
+        subtotal: totals.subtotal,
+        tax: totals.tax,
+        discount: totals.discount,
+        total: totals.total,
+        currency: totals.currency,
+        linkedSubscriptionId: cart.linkedSubscriptionId,
+      };
+    }
+
+    const updatedCart = await Carts.findByIdAndUpdate(cart._id, update, {
+      new: true,
+    }).lean();
+
+    logger.info(`Coupon removed from cart ${cartId} for user ${userId}`);
+
+    return {
+      cart: updatedCart,
+      message: "Coupon removed successfully",
+    };
+  }
+
+  /**
+   * Apply coupon by specific cartId (supports NORMAL and SUBSCRIPTION_UPDATE)
+   */
+  async applyCouponByCartId(
+    userId: string,
+    cartId: string,
+    couponCode: string
+  ): Promise<{ cart: any; message: string; couponDiscountAmount: number }> {
+    const cart = await Carts.findOne({
+      _id: new mongoose.Types.ObjectId(cartId),
+      userId: new mongoose.Types.ObjectId(userId),
+      isDeleted: false,
+    }).lean();
+
+    if (!cart) {
+      throw new AppError("Cart not found or does not belong to user", 404);
+    }
+
+    if (!cart.items || cart.items.length === 0) {
+      throw new AppError("Cannot apply coupon to empty cart", 400);
+    }
+
+    const normalizedCouponCode = couponCode.toUpperCase().trim();
+    const coupon = await Coupons.findOne({
+      code: normalizedCouponCode,
+      isDeleted: false,
+    }).lean();
+
+    if (!coupon) {
+      throw new AppError("Invalid coupon code", 404);
+    }
+    if (!coupon.isActive) {
+      throw new AppError("This coupon is not active", 400);
+    }
+
+    const now = new Date();
+    if (coupon.validFrom && now < coupon.validFrom) {
+      throw new AppError("This coupon is not yet valid", 400);
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      throw new AppError("This coupon has expired", 400);
+    }
+
+    const productIds = cart.items.map((item: any) => item.productId.toString());
+    const products = await Products.find({
+      _id: { $in: cart.items.map((item: any) => item.productId) },
+      isDeleted: false,
+    })
+      .select("categories")
+      .lean();
+    const categoryIds = new Set<string>();
+    products.forEach((product: any) => {
+      (product.categories || []).forEach((catId: any) =>
+        categoryIds.add(catId.toString())
+      );
+    });
+
+    if (coupon.applicableProducts && coupon.applicableProducts.length > 0) {
+      const applicableProductIds = coupon.applicableProducts.map(
+        (id: any) => id.toString()
+      );
+      if (!productIds.some((id: string) => applicableProductIds.includes(id))) {
+        throw new AppError(
+          "This coupon is not applicable to the selected products",
+          400
+        );
+      }
+    }
+
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+      const applicableCategoryIds = coupon.applicableCategories.map(
+        (id: any) => id.toString()
+      );
+      if (
+        !Array.from(categoryIds).some((id: string) =>
+          applicableCategoryIds.includes(id)
+        )
+      ) {
+        throw new AppError(
+          "This coupon is not applicable to the selected categories",
+          400
+        );
+      }
+    }
+
+    if (coupon.excludedProducts && coupon.excludedProducts.length > 0) {
+      const excludedProductIds = coupon.excludedProducts.map(
+        (id: any) => id.toString()
+      );
+      if (productIds.some((id: string) => excludedProductIds.includes(id))) {
+        throw new AppError(
+          "This coupon cannot be applied to one or more selected products",
+          400
+        );
+      }
+    }
+
+    const totals = this.calculateTotalsFromCartItems(cart.items, 0);
+    const orderAmount = totals.subtotal - totals.discount + totals.tax;
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+      throw new AppError(
+        `Minimum order amount of ${coupon.minOrderAmount} ${totals.currency} is required for this coupon`,
+        400
+      );
+    }
+
+    let couponDiscountAmount = 0;
+    if (coupon.type === CouponType.PERCENTAGE) {
+      couponDiscountAmount = (orderAmount * coupon.value) / 100;
+      if (coupon.maxDiscountAmount) {
+        couponDiscountAmount = Math.min(
+          couponDiscountAmount,
+          coupon.maxDiscountAmount
+        );
+      }
+    } else if (coupon.type === CouponType.FIXED) {
+      couponDiscountAmount = Math.min(coupon.value, orderAmount);
+    }
+    couponDiscountAmount = Math.min(couponDiscountAmount, orderAmount);
+    couponDiscountAmount = Math.round(couponDiscountAmount * 100) / 100;
+
+    const finalTotals = this.calculateTotalsFromCartItems(
+      cart.items,
+      couponDiscountAmount
+    );
+
+    const update =
+      cart.cartType === "NORMAL"
+        ? {
+            couponCode: normalizedCouponCode,
+            couponDiscountAmount,
+            subtotal: finalTotals.subtotal,
+            tax: finalTotals.tax,
+            discount: finalTotals.discount,
+            total: finalTotals.total,
+            currency: finalTotals.currency,
+            updatedAt: new Date(),
+          }
+        : {
+            couponCode: normalizedCouponCode,
+            couponDiscountAmount,
+            subtotal: finalTotals.subtotal,
+            tax: finalTotals.tax,
+            discount: finalTotals.discount,
+            total: finalTotals.total,
+            currency: finalTotals.currency,
+            linkedSubscriptionId: cart.linkedSubscriptionId,
+            updatedAt: new Date(),
+          };
+
+    const updatedCart = await Carts.findByIdAndUpdate(cart._id, update, {
+      new: true,
+    }).lean();
+
+    logger.info(
+      `Coupon ${normalizedCouponCode} applied to cart ${cartId} for user ${userId}`
+    );
+
+    return {
+      cart: updatedCart,
+      message: "Coupon applied successfully",
+      couponDiscountAmount,
     };
   }
 
