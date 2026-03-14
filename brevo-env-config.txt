@@ -1,0 +1,11 @@
+# Add these lines to your .env file for Brevo email configuration
+
+# Email Configuration (Brevo)
+BREVO_API_KEY="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"
+BREVO_FROM_EMAIL="shreya.logicgo@gmail.com"
+BREVO_FROM_NAME="Shreya"
+
+# Note: Make sure to remove or comment out any SendGrid configuration
+# SENDGRID_API_KEY=your_sendgrid_api_key_here
+# SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+# SENDGRID_FROM_NAME=Viteezy
