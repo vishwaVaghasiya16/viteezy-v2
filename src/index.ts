@@ -568,6 +568,15 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
+    // Initialize coupon schedule cron job
+    try {
+      await import("@/jobs/couponScheduleJob");
+      logger.info("✅ Coupon schedule cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize coupon schedule job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
     // Initialize packing slip PDF generation cron job
     try {
       await import("@/jobs/packingSlipPdfJob");
