@@ -62,29 +62,29 @@ class AdminUserController {
       const limitNum = parseInt(limit, 10) || 10;
       const skip = (pageNum - 1) * limitNum;
 
-      // Build query
-      const query: any = {};
+      // Build query for non-search filters
+      const baseQuery: any = {};
 
       // Exclude deleted users by default
-      query.isDeleted = { $ne: true };
+      baseQuery.isDeleted = { $ne: true };
 
       // Filter by active status
       if (isActive !== undefined) {
         const value: string | boolean = isActive;
-        query.isActive = value === "true" || value === true || value === "1";
+        baseQuery.isActive = value === "true" || value === true || value === "1";
       }
 
       // Filter by registration date
       if (registrationDate) {
-        // Parse the date string (YYYY-MM-DD format)
+        // Parse date string (YYYY-MM-DD format)
         const date = new Date(registrationDate);
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
-        
+
         // Filter by registeredAt or createdAt (fallback)
-        query.$or = [
+        baseQuery.$or = [
           {
             registeredAt: {
               $gte: startOfDay,
@@ -101,38 +101,66 @@ class AdminUserController {
         ];
       }
 
-      // Search functionality - only by name or email
+      // Get all users first (for userType filtering)
+      let allUsers;
+
+      // If search is provided, use aggregation pipeline for combined name search
       if (search) {
-        // If registrationDate filter exists, we need to combine $or conditions
-        if (query.$or) {
-          const registrationDateOr = query.$or;
-          query.$and = [
-            { $or: registrationDateOr },
-            {
+        const searchPipeline: any[] = [
+          {
+            $match: baseQuery
+          },
+          {
+            $addFields: {
+              fullName: { $concat: ["$firstName", " ", "$lastName"] }
+            }
+          },
+          {
+            $match: {
               $or: [
                 { firstName: { $regex: search, $options: "i" } },
                 { lastName: { $regex: search, $options: "i" } },
                 { email: { $regex: search, $options: "i" } },
-              ],
-            },
-          ];
-          delete query.$or;
-        } else {
-          query.$or = [
-            { firstName: { $regex: search, $options: "i" } },
-            { lastName: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-          ];
-        }
-      }
+                { fullName: { $regex: search, $options: "i" } }
+              ]
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              firstName: 1,
+              lastName: 1,
+              email: 1,
+              phone: 1,
+              countryCode: 1,
+              memberId: 1,
+              registeredAt: 1,
+              createdAt: 1,
+              isActive: 1,
+              lastLogin: 1
+            }
+          },
+          { $sort: { createdAt: -1 } }
+        ];
 
-      // Get all users first (for userType filtering)
-      let allUsers = await User.find(query)
-        .select(
-          "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
-        )
-        .sort({ createdAt: -1 })
-        .lean();
+        // Add pagination stages if needed
+        if (skip > 0) {
+          searchPipeline.push({ $skip: skip });
+        }
+        if (limitNum > 0) {
+          searchPipeline.push({ $limit: limitNum });
+        }
+
+        allUsers = await User.aggregate(searchPipeline);
+      } else {
+        // Normal query without search
+        allUsers = await User.find(baseQuery)
+          .select(
+            "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+          )
+          .sort({ createdAt: -1 })
+          .lean();
+      }
 
       // Get order counts for all users
       const userIds = allUsers.map((user) => user._id);
