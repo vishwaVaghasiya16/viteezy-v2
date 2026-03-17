@@ -304,7 +304,7 @@ export class ProductController {
         sort,
         {
           search: searchTerm,
-          status: status as any,
+          status: status !== undefined ? status === "true" : undefined,
           variant: variant as any,
           hasStandupPouch:
             hasStandupPouch !== undefined
@@ -488,7 +488,7 @@ export class ProductController {
         sort,
         {
           search: searchTerm,
-          status: status as any,
+          status: status !== undefined ? status === "true" : undefined,
           variant: variant as any,
           hasStandupPouch:
             hasStandupPouch !== undefined
