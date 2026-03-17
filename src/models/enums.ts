@@ -244,7 +244,7 @@ export enum WorkingDay {
 
 // Currency Codes
 export enum Currency {
-  EUR = "EUR",
+  EUR = "USD",
   USD = "USD",
   GBP = "GBP",
   INR = "INR",

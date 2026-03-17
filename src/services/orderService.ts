@@ -107,7 +107,7 @@ class OrderService {
       subscriptionPlanDiscountAmount: 0,
       taxAmount: 0,
       grandTotal: 0,
-      currency: "EUR",
+      currency: "USD",
     };
 
     // Validate refund amount doesn't exceed order total

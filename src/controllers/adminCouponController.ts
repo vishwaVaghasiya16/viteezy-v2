@@ -339,7 +339,7 @@ class AdminCouponController {
 
       const totalDiscountCurrent = totalDiscountAmountCurrentMonth[0]?.total || 0;
       const totalDiscountLast = totalDiscountAmountLastMonth[0]?.total || 0;
-      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "EUR";
+      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "USD";
 
       res.apiSuccess(
         {

@@ -40,7 +40,7 @@ curl -X POST "${BASE_URL}/products" \
     "howToUse": "Take one sachet daily with food",
     "status": "Active",
     "price": {
-      "currency": "EUR",
+      "currency": "USD",
       "amount": 29.99,
       "taxRate": 0.21
     },
@@ -77,7 +77,7 @@ curl -X POST "${BASE_URL}/products" \
     "howToUse": "Take one pouch daily with water",
     "status": "Active",
     "price": {
-      "currency": "EUR",
+      "currency": "USD",
       "amount": 39.99,
       "taxRate": 0.21
     },
@@ -85,27 +85,27 @@ curl -X POST "${BASE_URL}/products" \
     "hasStandupPouch": true,
     "standupPouchPrices": {
       "oneTime": {
-        "currency": "EUR",
+        "currency": "USD",
         "amount": 39.99,
         "taxRate": 0.21
       },
       "thirtyDays": {
-        "currency": "EUR",
+        "currency": "USD",
         "amount": 109.99,
         "taxRate": 0.21
       },
       "sixtyDays": {
-        "currency": "EUR",
+        "currency": "USD",
         "amount": 199.99,
         "taxRate": 0.21
       },
       "ninetyDays": {
-        "currency": "EUR",
+        "currency": "USD",
         "amount": 279.99,
         "taxRate": 0.21
       },
       "oneEightyDays": {
-        "currency": "EUR",
+        "currency": "USD",
         "amount": 499.99,
         "taxRate": 0.21
       }
@@ -123,7 +123,7 @@ curl -X PUT "${BASE_URL}/products/${PRODUCT_ID}" \
     "title": "Updated Vitamin D3 Supplement",
     "status": "Active",
     "price": {
-      "currency": "EUR",
+      "currency": "USD",
       "amount": 34.99,
       "taxRate": 0.21
     }

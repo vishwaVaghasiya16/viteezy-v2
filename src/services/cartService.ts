@@ -81,7 +81,7 @@ class CartService {
         tax: 0,
         discount: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
       };
     }
 
@@ -99,7 +99,7 @@ class CartService {
     let subtotalAmount = 0;
     let totalTaxAmount = 0;
     let totalDiscount = 0; // Sum of (amount - discountedPrice) for all products
-    const currency = "EUR";
+    const currency = "USD";
 
     items.forEach((item: any) => {
       const product = productMap.get(item.productId.toString());
@@ -232,11 +232,11 @@ class CartService {
         tax: 0,
         discount: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
       };
     }
 
-    const currency = items[0]?.price?.currency || "EUR";
+    const currency = items[0]?.price?.currency || "USD";
 
     let subtotal = 0;
     let tax = 0;
@@ -292,11 +292,11 @@ class CartService {
   } {
     if (items.length === 0) {
       return {
-        subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-        tax: { currency: "EUR", amount: 0, taxRate: 0 },
-        shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-        discount: { currency: "EUR", amount: 0, taxRate: 0 },
-        total: { currency: "EUR", amount: 0, taxRate: 0 },
+        subtotal: { currency: "USD", amount: 0, taxRate: 0 },
+        tax: { currency: "USD", amount: 0, taxRate: 0 },
+        shipping: { currency: "USD", amount: 0, taxRate: 0 },
+        discount: { currency: "USD", amount: 0, taxRate: 0 },
+        total: { currency: "USD", amount: 0, taxRate: 0 },
       };
     }
 
@@ -362,7 +362,7 @@ class CartService {
         shipping: 0,
         discount: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
         couponDiscountAmount: 0,
         cartType: "NORMAL",
         linkedSubscriptionId: null,
@@ -406,7 +406,7 @@ class CartService {
         shipping: 0,
         discount: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
         couponDiscountAmount: 0,
         cartType,
         linkedSubscriptionId: cartType === "SUBSCRIPTION_UPDATE"
@@ -539,7 +539,7 @@ class CartService {
       // Calculate price based on item-level variantType
       let originalAmount = 0;
       let discountedPrice = 0;
-      let currency = "EUR";
+      let currency = "USD";
       let taxRate = 0;
 
       if (itemVariantType === ProductVariant.SACHETS && product.sachetPrices) {
@@ -547,7 +547,7 @@ class CartService {
         const thirtyDaysPlan = product.sachetPrices.thirtyDays;
         if (thirtyDaysPlan) {
           const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
-          currency = thirtyDaysPlan.currency || "EUR";
+          currency = thirtyDaysPlan.currency || "USD";
           taxRate = thirtyDaysPlan.taxRate || 0;
           originalAmount = baseTotalAmount;
           discountedPrice = baseTotalAmount;
@@ -584,20 +584,20 @@ class CartService {
         if (selectedCount) {
           const baseTotalAmount =
             selectedCount.totalAmount ?? selectedCount.amount ?? 0;
-          currency = selectedCount.currency || "EUR";
+          currency = selectedCount.currency || "USD";
           taxRate = selectedCount.taxRate || 0;
           originalAmount = baseTotalAmount;
           discountedPrice = baseTotalAmount;
         } else if (standupPrice.amount || standupPrice.totalAmount) {
           const baseTotalAmount = standupPrice.totalAmount ?? standupPrice.amount ?? 0;
-          currency = standupPrice.currency || "EUR";
+          currency = standupPrice.currency || "USD";
           taxRate = standupPrice.taxRate || 0;
           originalAmount = baseTotalAmount;
           discountedPrice = baseTotalAmount;
         }
       } else {
         // Fallback to item price if no variantType match
-        currency = item.price?.currency || "EUR";
+        currency = item.price?.currency || "USD";
         taxRate = item.price?.taxRate || 0;
         originalAmount = item.price?.amount || 0;
         discountedPrice = item.price?.amount || 0;
@@ -820,7 +820,7 @@ class CartService {
 
     // Calculate price based on variantType, isOneTime, and planDays
     let calculatedPrice = price; // Default to validated price
-    let currency = "EUR";
+    let currency = "USD";
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
@@ -828,7 +828,7 @@ class CartService {
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
         const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
-        currency = thirtyDaysPlan.currency || "EUR";
+        currency = thirtyDaysPlan.currency || "USD";
         taxRate = thirtyDaysPlan.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -870,7 +870,7 @@ class CartService {
       if (selectedCount) {
         const baseTotalAmount =
           selectedCount.totalAmount ?? selectedCount.amount ?? 0;
-        currency = selectedCount.currency || "EUR";
+        currency = selectedCount.currency || "USD";
         taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -880,7 +880,7 @@ class CartService {
       } else if (standupPrice.amount || standupPrice.totalAmount) {
         const baseTotalAmount =
           standupPrice.totalAmount ?? standupPrice.amount ?? 0;
-        currency = standupPrice.currency || "EUR";
+        currency = standupPrice.currency || "USD";
         taxRate = standupPrice.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -1135,7 +1135,7 @@ class CartService {
 
     // Calculate price based on variantType, isOneTime (for STAND_UP_POUCH), and planDays (for STAND_UP_POUCH)
     let calculatedPrice = price; // Default to validated price
-    let currency = "EUR";
+    let currency = "USD";
     let taxRate = 0;
 
     if (variantType === ProductVariant.SACHETS && product.sachetPrices) {
@@ -1143,7 +1143,7 @@ class CartService {
       const thirtyDaysPlan = product.sachetPrices.thirtyDays;
       if (thirtyDaysPlan) {
         const baseTotalAmount = thirtyDaysPlan.totalAmount ?? thirtyDaysPlan.amount ?? 0;
-        currency = thirtyDaysPlan.currency || "EUR";
+        currency = thirtyDaysPlan.currency || "USD";
         taxRate = thirtyDaysPlan.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -1185,7 +1185,7 @@ class CartService {
       if (selectedCount) {
         const baseTotalAmount =
           selectedCount.totalAmount ?? selectedCount.amount ?? 0;
-        currency = selectedCount.currency || "EUR";
+        currency = selectedCount.currency || "USD";
         taxRate = selectedCount.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -1195,7 +1195,7 @@ class CartService {
       } else if (standupPrice.amount || standupPrice.totalAmount) {
         const baseTotalAmount =
           standupPrice.totalAmount ?? standupPrice.amount ?? 0;
-        currency = standupPrice.currency || "EUR";
+        currency = standupPrice.currency || "USD";
         taxRate = standupPrice.taxRate || 0;
         calculatedPrice = {
           currency,
@@ -1359,7 +1359,7 @@ class CartService {
         tax: 0,
         discount: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
       };
     } else {
       // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
@@ -1925,7 +1925,7 @@ class CartService {
           tax: 0,
           discount: 0,
           total: 0,
-          currency: "EUR",
+          currency: "USD",
           couponCode: null,
           linkedSubscriptionId: null,
           cartType: "NORMAL",
@@ -1985,12 +1985,12 @@ class CartService {
         errors: ["Cart is empty"],
         cart,
         pricing: {
-          subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-          originalSubtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-          membershipDiscount: { currency: "EUR", amount: 0, taxRate: 0 },
-          tax: { currency: "EUR", amount: 0, taxRate: 0 },
-          shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-          total: { currency: "EUR", amount: 0, taxRate: 0 },
+          subtotal: { currency: "USD", amount: 0, taxRate: 0 },
+          originalSubtotal: { currency: "USD", amount: 0, taxRate: 0 },
+          membershipDiscount: { currency: "USD", amount: 0, taxRate: 0 },
+          tax: { currency: "USD", amount: 0, taxRate: 0 },
+          shipping: { currency: "USD", amount: 0, taxRate: 0 },
+          total: { currency: "USD", amount: 0, taxRate: 0 },
         },
         items: [],
       };
@@ -1998,7 +1998,7 @@ class CartService {
 
     let originalSubtotal = 0;
     let memberSubtotal = 0;
-    let currency = cart.items[0]?.price?.currency || "EUR";
+    let currency = cart.items[0]?.price?.currency || "USD";
 
     // Batch fetch all products at once for better performance
     const productIds = cart.items.map((item: any) => item.productId);
@@ -2152,12 +2152,12 @@ class CartService {
       return {
         products: [],
         pricing: {
-          subtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-          originalSubtotal: { currency: "EUR", amount: 0, taxRate: 0 },
-          membershipDiscount: { currency: "EUR", amount: 0, taxRate: 0 },
-          tax: { currency: "EUR", amount: 0, taxRate: 0 },
-          shipping: { currency: "EUR", amount: 0, taxRate: 0 },
-          total: { currency: "EUR", amount: 0, taxRate: 0 },
+          subtotal: { currency: "USD", amount: 0, taxRate: 0 },
+          originalSubtotal: { currency: "USD", amount: 0, taxRate: 0 },
+          membershipDiscount: { currency: "USD", amount: 0, taxRate: 0 },
+          tax: { currency: "USD", amount: 0, taxRate: 0 },
+          shipping: { currency: "USD", amount: 0, taxRate: 0 },
+          total: { currency: "USD", amount: 0, taxRate: 0 },
         },
       };
     }
@@ -2242,7 +2242,7 @@ class CartService {
       // Get pricing information
       const cartPrice = item.price;
       const productPrice = product.price || {
-        currency: "EUR",
+        currency: "USD",
         amount: 0,
         taxRate: 0,
       };
@@ -2445,7 +2445,7 @@ class CartService {
     const validProducts = checkoutProducts.filter((p: any) => p !== null);
 
     // Calculate totals
-    const currency = cart.items[0]?.price?.currency || "EUR";
+    const currency = cart.items[0]?.price?.currency || "USD";
 
     let originalSubtotal = 0;
     let memberSubtotal = 0;

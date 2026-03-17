@@ -28,7 +28,7 @@ export interface ICart extends Document {
   shipping: number;
   discount: number; // Sum of all discountedPrice values
   total: number; // subtotal + tax - discount - couponDiscountAmount
-  currency: string; // Currency code (e.g., "EUR")
+  currency: string; // Currency code (e.g., "USD")
   couponCode?: string;
   couponDiscountAmount: number; // Calculated coupon discount (fixed or percentage)
   expiresAt: Date;
@@ -119,7 +119,7 @@ const CartSchema = new Schema<ICart>(
     },
     currency: {
       type: String,
-      default: "EUR",
+      default: "USD",
       trim: true,
     },
     couponCode: {

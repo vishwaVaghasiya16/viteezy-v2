@@ -208,7 +208,7 @@ class CouponController {
           );
           throw new AppError(
             `Minimum order amount of ${coupon.minOrderAmount} ${
-              totalsWithoutCoupon.currency || cart.currency || "EUR"
+              totalsWithoutCoupon.currency || cart.currency || "USD"
             } is required for this coupon`,
             400
           );

@@ -18,7 +18,7 @@ class ReferralService {
     this.config = {
       defaultDiscountAmount: 10, // €10
       defaultMinOrderAmount: 19.99, // €19.99
-      currency: "EUR",
+      currency: "USD",
     };
   }
 

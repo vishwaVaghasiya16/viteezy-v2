@@ -842,7 +842,7 @@ export class PaymentService {
                     orderId: order._id as mongoose.Types.ObjectId,
                     discountAmount: {
                       amount: order.pricing?.overall?.couponDiscountAmount || 0,
-                      currency: order.pricing?.overall?.currency || "EUR",
+                      currency: order.pricing?.overall?.currency || "USD",
                       taxRate: 0,
                     },
                     couponCode: order.couponCode,
@@ -1309,7 +1309,7 @@ export class PaymentService {
         subTotal: 0,
         taxAmount: 0,
         grandTotal: 0,
-        currency: "EUR",
+        currency: "USD",
       };
       const lineItems = this.buildOrderCheckoutLineItems(order);
       const amountInMinorUnits = this.toMinorUnits(overallPricing.grandTotal);
@@ -1560,7 +1560,7 @@ export class PaymentService {
                   typeof payment.amount === 'object' ? payment.amount.amount : payment.amount,
                   typeof payment.amount === 'object'
                     ? payment.amount.currency
-                    : (payment.currency || order.pricing?.overall?.currency || "EUR"),
+                    : (payment.currency || order.pricing?.overall?.currency || "USD"),
                   order.userId
                 ),
                 orderNotifications.orderConfirmed(
@@ -1950,7 +1950,7 @@ export class PaymentService {
       );
     }
 
-    const currency = overallPricing.currency || "EUR";
+    const currency = overallPricing.currency || "USD";
 
     return [
       {
@@ -2004,14 +2004,14 @@ export class PaymentService {
         discountedPrice: 0,
         taxAmount: 0,
         grandTotal: 0,
-        currency: "EUR",
+        currency: "USD",
       };
       const items = Array.isArray(order.items)
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
             quantity: 1, // Quantity removed from order items
             unitAmount: item.amount || item.totalAmount || 0,
-            currency: overallPricing.currency || "EUR",
+            currency: overallPricing.currency || "USD",
           }))
         : [];
 
@@ -2347,7 +2347,7 @@ export class PaymentService {
           currency:
             order.pricing.sachets.currency ||
             order.pricing?.overall?.currency ||
-            "EUR",
+            "USD",
         };
         console.log("✅ [SUBSCRIPTION] - Using pricing from order.pricing.sachets");
       } else {
@@ -2382,7 +2382,7 @@ export class PaymentService {
           subscriptionPlanDiscountAmount: Math.round(sachetSubscriptionPlanDiscountAmount * 100) / 100,
           taxAmount: Math.round(sachetTaxAmount * 100) / 100,
           total: Math.round(sachetTotal * 100) / 100,
-          currency: order.pricing?.overall?.currency || "EUR",
+          currency: order.pricing?.overall?.currency || "USD",
         };
         console.log("✅ [SUBSCRIPTION] - Calculated pricing from subscription items");
       }
@@ -2515,7 +2515,7 @@ export class PaymentService {
           console.log("   📋 Database Subscription Number:", subscription.subscriptionNumber);
           console.log("   📋 Cycle Days:", cycleDays, "days");
           console.log("   💰 Amount:", amountInCents, "cents (", sachetsPricing.total, sachetsPricing.currency, ")");
-          console.log("   💰 Currency:", sachetsPricing.currency || "EUR");
+          console.log("   💰 Currency:", sachetsPricing.currency || "USD");
           console.log("   🔄 Auto-Renew: Enabled (true)");
           
           console.log("🟢 [STRIPE SUBSCRIPTION] - Retrieving payment intent ID from payment...");
@@ -2562,7 +2562,7 @@ export class PaymentService {
           
           console.log("   - Number of sachets items:", orderItemsForStripe.length);
           orderItemsForStripe.forEach((item: any, index: number) => {
-            console.log(`   - Item ${index + 1}: ${item.name} (${item.discountedPrice} ${sachetsPricing.currency || "EUR"})`);
+            console.log(`   - Item ${index + 1}: ${item.name} (${item.discountedPrice} ${sachetsPricing.currency || "USD"})`);
           });
           
           console.log("🟢 [STRIPE SUBSCRIPTION] - Calling SubscriptionGatewayService.createSubscription()...");
@@ -2573,7 +2573,7 @@ export class PaymentService {
             orderId: order._id.toString(),
             paymentMethod: PaymentMethod.STRIPE,
             amount: amountInCents,
-            currency: sachetsPricing.currency || "EUR",
+            currency: sachetsPricing.currency || "USD",
             cycleDays: cycleDays,
             customerEmail: user.email,
             customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,

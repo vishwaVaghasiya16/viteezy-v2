@@ -315,9 +315,9 @@ class AdminUserController {
         totalSpentResult.length > 0
           ? {
               amount: totalSpentResult[0].totalSpent || 0,
-              currency: totalSpentResult[0].currency || "EUR",
+              currency: totalSpentResult[0].currency || "USD",
             }
-          : { amount: 0, currency: "EUR" };
+          : { amount: 0, currency: "USD" };
 
       // Format subscriptions
       const subscriptionDetails = subscriptions.map((sub) => ({
@@ -394,7 +394,7 @@ class AdminUserController {
               discountedPrice: item.discountedPrice || 0,
               taxRate: item.taxRate || 0,
               totalAmount: item.totalAmount || 0,
-              currency: order.pricing?.overall?.currency || "EUR",
+              currency: order.pricing?.overall?.currency || "USD",
             },
           };
         });

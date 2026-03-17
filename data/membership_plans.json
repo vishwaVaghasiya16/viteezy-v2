@@ -20,7 +20,7 @@
             "es": "Nuestra membresía Premium Mensual le ofrece descuentos exclusivos en todos los productos, soporte al cliente prioritario, acceso anticipado a nuevos productos y envío gratuito en todos los pedidos. Perfecto para clientes habituales que desean ahorrar en sus necesidades mensuales de suplementos."
         },
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 9.99,
             "taxRate": 0.21
         },
@@ -69,7 +69,7 @@
             "es": "Nuestra membresía Premium Trimestral ofrece el mejor valor para clientes que se comprometen con un plan de 3 meses. Disfrute de un 15% de descuento en todos los productos, envío express gratuito, soporte prioritario, lanzamientos exclusivos de productos y evaluaciones de salud trimestrales."
         },
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 24.99,
             "taxRate": 0.21
         },
@@ -119,7 +119,7 @@
             "es": "Nuestra membresía Premium Anual es el plan definitivo para entusiastas serios de la salud. Obtenga un 20% de descuento en todos los productos, envío express gratuito, soporte prioritario 24/7, acceso exclusivo a consultas de expertos, evaluación de salud integral anual y recomendaciones de productos personalizadas mensuales."
         },
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 79.99,
             "taxRate": 0.21
         },
@@ -172,7 +172,7 @@
             "es": "Nuestra membresía Básica Mensual es perfecta para clientes que compran ocasionalmente. Disfrute de un 5% de descuento en todos los productos y envío estándar gratuito en pedidos superiores a 50 €."
         },
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 4.99,
             "taxRate": 0.21
         },
@@ -218,7 +218,7 @@
             "es": "Nuestra membresía Básica Trimestral ofrece una opción económica para clientes que desean ahorrar en un compromiso de 3 meses. Obtenga un 8% de descuento en todos los productos y envío estándar gratuito en todos los pedidos."
         },
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 12.99,
             "taxRate": 0.21
         },

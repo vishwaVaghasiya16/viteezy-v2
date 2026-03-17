@@ -199,7 +199,7 @@ export const createManualOrderSchema = Joi.object(
       .uppercase()
       .min(3)
       .max(5)
-      .default("EUR")
+      .default("USD")
       .label("Currency"),
     couponCode: Joi.string().trim().uppercase().optional().label("Coupon Code"),
     paymentMethod: Joi.string()

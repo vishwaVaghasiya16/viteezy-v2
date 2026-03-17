@@ -785,7 +785,7 @@ class AdminSubscriptionController {
         discountedPrice: 39.99,
         taxAmount: 8.39,
         grandTotal: 48.39,
-        currency: "EUR",
+        currency: "USD",
         shippingAddressId: new mongoose.Types.ObjectId(), // Dummy address
         billingAddressId: new mongoose.Types.ObjectId(), // Dummy address
         paymentMethod: PaymentMethod.STRIPE,
@@ -805,10 +805,10 @@ class AdminSubscriptionController {
         status: PaymentStatus.COMPLETED,
         amount: {
           amount: 48.39,
-          currency: "EUR",
+          currency: "USD",
           taxRate: 0.21,
         },
-        currency: "EUR",
+        currency: "USD",
         gatewayTransactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
         gatewaySessionId: `TEST_SESSION_${Date.now()}_${testOrder._id}`,
         transactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
@@ -860,7 +860,7 @@ class AdminSubscriptionController {
         orderId: (testOrder._id as mongoose.Types.ObjectId).toString(),
         paymentMethod: PaymentMethod.STRIPE, // Use Stripe for test
         amount: totalAmount,
-        currency: testOrder.pricing?.overall?.currency || "EUR",
+        currency: testOrder.pricing?.overall?.currency || "USD",
         cycleDays: cycleDays,
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
@@ -950,7 +950,7 @@ class AdminSubscriptionController {
           orderId: testOrder._id as mongoose.Types.ObjectId,
           amount: {
             amount: testOrder.pricing?.overall?.grandTotal || 0,
-            currency: testOrder.pricing?.overall?.currency || "EUR",
+            currency: testOrder.pricing?.overall?.currency || "USD",
             taxRate: testOrder.items[0]?.taxRate || 0.21,
           },
           status: PaymentStatus.COMPLETED,

@@ -616,7 +616,7 @@ export const createProductSchema = Joi.object({
         ? thirtyDays.discountedPrice
         : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: thirtyDays.currency || "EUR",
+      currency: thirtyDays.currency || "USD",
       amount: baseAmount,
       taxRate: thirtyDays.taxRate || 0,
     };
@@ -698,7 +698,7 @@ export const updateProductSchema = Joi.object({
         ? thirtyDays.discountedPrice
         : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: thirtyDays.currency || "EUR",
+      currency: thirtyDays.currency || "USD",
       amount: baseAmount,
       taxRate: thirtyDays.taxRate || 0,
     };

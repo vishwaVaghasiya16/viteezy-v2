@@ -227,7 +227,7 @@ Both APIs now follow the same flow:
       "paymentStatus": "PENDING",
       "total": {
         "amount": 99.99,
-        "currency": "EUR"
+        "currency": "USD"
       }
     },
     "gateway": {
@@ -253,7 +253,7 @@ Both APIs now follow the same flow:
   paymentMethod: "MOLLIE",
   amount: {
     value: 99.99,
-    currency: "EUR"
+    currency: "USD"
   },
   returnUrl: "..."
 }

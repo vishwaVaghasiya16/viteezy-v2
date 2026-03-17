@@ -90,7 +90,7 @@ class PaymentController {
             paymentStatus: result.order.paymentStatus,
             total: {
               amount: result.order.pricing?.overall?.grandTotal || 0,
-              currency: result.order.pricing?.overall?.currency || "EUR",
+              currency: result.order.pricing?.overall?.currency || "USD",
             },
           },
           gateway: {
@@ -169,7 +169,7 @@ class PaymentController {
             paymentStatus: result.order.paymentStatus,
             total: {
               amount: result.order.pricing?.overall?.grandTotal || 0,
-              currency: result.order.pricing?.overall?.currency || "EUR",
+              currency: result.order.pricing?.overall?.currency || "USD",
             },
           },
           gateway: {
@@ -228,7 +228,7 @@ class PaymentController {
             paymentStatus: result.order.paymentStatus,
             total: {
               amount: result.order.pricing?.overall?.grandTotal || 0,
-              currency: result.order.pricing?.overall?.currency || "EUR",
+              currency: result.order.pricing?.overall?.currency || "USD",
             },
           },
           updated: result.updated,
@@ -1089,7 +1089,7 @@ class PaymentController {
           orderStatus: order.status,
           paymentStatus: order.paymentStatus,
           grandTotal: order.pricing?.overall?.grandTotal || 0,
-          currency: order.pricing?.overall?.currency || "EUR",
+          currency: order.pricing?.overall?.currency || "USD",
           items: order.items?.length || 0,
           planType: order.planType,
         };
@@ -1117,7 +1117,7 @@ class PaymentController {
         paymentStatus: payment.status,
         paymentMethod: payment.paymentMethod,
         amount: payment.amount?.amount || 0,
-        currency: payment.currency || payment.amount?.currency || "EUR",
+        currency: payment.currency || payment.amount?.currency || "USD",
         gatewayTransactionId: payment.gatewayTransactionId,
         processedAt: payment.processedAt,
         createdAt: payment.createdAt,

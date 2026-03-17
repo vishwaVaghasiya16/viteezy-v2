@@ -126,7 +126,7 @@ router.delete(
  * @body {Number} subTotal - Subtotal amount
  * @body {Number} discountedPrice - Discounted price
  * @body {Number} grandTotal - Grand total amount
- * @body {String} [currency] - Currency code (default: "EUR")
+ * @body {String} [currency] - Currency code (default: "USD")
  * @body {String} [couponCode] - Coupon code (optional)
  * @body {String} [paymentMethod] - Payment method (optional)
  * @body {String} [notes] - Order notes (optional)

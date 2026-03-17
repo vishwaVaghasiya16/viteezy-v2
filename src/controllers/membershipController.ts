@@ -182,7 +182,7 @@ class MembershipController {
       ).toString();
 
       const amount = plan.price?.amount || 0;
-      const currency = plan.price?.currency || "EUR";
+      const currency = plan.price?.currency || "USD";
 
       const paymentMetadata: Record<string, string> = {
         membershipId,

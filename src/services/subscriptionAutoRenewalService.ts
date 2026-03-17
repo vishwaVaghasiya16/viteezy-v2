@@ -63,8 +63,8 @@ export class SubscriptionAutoRenewalService {
       );
 
       const currency = subscription.items[0]?.totalAmount
-        ? "EUR" // Default currency, adjust based on your needs
-        : "EUR";
+        ? "USD" // Default currency, adjust based on your needs
+        : "USD";
 
       // Get user's payment method and original order details
       const originalOrder = await Orders.findById(subscription.orderId).lean();
@@ -558,7 +558,7 @@ export class SubscriptionAutoRenewalService {
           paymentId: new mongoose.Types.ObjectId(), // Dummy ID for failed payment
           amount: {
             amount: subscription.items.reduce((sum, item) => sum + item.totalAmount, 0),
-            currency: "EUR",
+            currency: "USD",
             taxRate: 0,
           },
           status: PaymentStatus.FAILED,

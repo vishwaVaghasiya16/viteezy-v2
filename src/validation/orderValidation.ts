@@ -29,7 +29,7 @@ const objectIdSchema = Joi.string()
 
 const priceSchema = Joi.object(
   withFieldLabels({
-    currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+    currency: Joi.string().trim().uppercase().min(3).max(5).default("USD"),
     amount: Joi.number().precision(2).min(0).required(),
     taxRate: Joi.number().precision(4).min(0).max(1).default(0),
   })
@@ -265,7 +265,7 @@ export const createOrderSchema = Joi.object(
         subscriptionPlanDiscountAmount: Joi.number().min(0).default(0),
         taxAmount: Joi.number().min(0).default(0),
         total: Joi.number().min(0).required(),
-        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("USD"),
       })
         .optional()
         .allow(null),
@@ -275,7 +275,7 @@ export const createOrderSchema = Joi.object(
         membershipDiscountAmount: Joi.number().min(0).default(0),
         taxAmount: Joi.number().min(0).default(0),
         total: Joi.number().min(0).required(),
-        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("USD"),
       })
         .optional()
         .allow(null),
@@ -287,7 +287,7 @@ export const createOrderSchema = Joi.object(
         subscriptionPlanDiscountAmount: Joi.number().min(0).default(0),
         taxAmount: Joi.number().min(0).default(0),
         grandTotal: Joi.number().min(0).required(),
-        currency: Joi.string().trim().uppercase().min(3).max(5).default("EUR"),
+        currency: Joi.string().trim().uppercase().min(3).max(5).default("USD"),
       }).required(),
     })
       .required()

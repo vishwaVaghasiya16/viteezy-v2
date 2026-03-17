@@ -296,7 +296,7 @@ const SubscriptionSchema = new Schema<ISubscription>(
         subscriptionPlanDiscountAmount: { type: Number, default: 0 },
         taxAmount: { type: Number, default: 0 },
         total: { type: Number, default: 0 },
-        currency: { type: String, default: "EUR" },
+        currency: { type: String, default: "USD" },
       },
       required: false,
     },

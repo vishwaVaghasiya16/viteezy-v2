@@ -417,7 +417,7 @@ class ProductService {
           ? thirtyDaysPrice.discountedPrice
           : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
-        currency: thirtyDaysPrice.currency || "EUR",
+        currency: thirtyDaysPrice.currency || "USD",
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
@@ -1529,7 +1529,7 @@ class ProductService {
           ? thirtyDaysPrice.discountedPrice
           : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
-        currency: thirtyDaysPrice.currency || "EUR",
+        currency: thirtyDaysPrice.currency || "USD",
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };

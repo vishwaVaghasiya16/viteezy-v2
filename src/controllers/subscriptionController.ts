@@ -1129,7 +1129,7 @@ class SubscriptionController {
           Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
         taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
         grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
-        currency: subscription.pricing?.currency || "EUR",
+        currency: subscription.pricing?.currency || "USD",
         pricing: {
           sachets: {
             subTotal: Math.round(newItemsSubTotal * 100) / 100,
@@ -1140,7 +1140,7 @@ class SubscriptionController {
               Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
             taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
             total: Math.round(newItemsGrandTotal * 100) / 100,
-            currency: subscription.pricing?.currency || "EUR",
+            currency: subscription.pricing?.currency || "USD",
           },
           overall: {
             subTotal: Math.round(newItemsSubTotal * 100) / 100,
@@ -1152,7 +1152,7 @@ class SubscriptionController {
               Math.round(newItemsSubscriptionPlanDiscount * 100) / 100,
             taxAmount: Math.round(newItemsTaxAmount * 100) / 100,
             grandTotal: Math.round(newItemsGrandTotal * 100) / 100,
-            currency: subscription.pricing?.currency || "EUR",
+            currency: subscription.pricing?.currency || "USD",
           },
         },
         shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
@@ -1181,7 +1181,7 @@ class SubscriptionController {
         paymentMethod: paymentMethod as PaymentMethod,
         amount: {
           value: Math.round(newItemsGrandTotal * 100) / 100,
-          currency: subscription.pricing?.currency || "EUR",
+          currency: subscription.pricing?.currency || "USD",
         },
         description: `Payment for adding products to subscription ${subscription.subscriptionNumber}`,
         metadata: {
@@ -1241,7 +1241,7 @@ class SubscriptionController {
           Math.round(subscriptionPlanDiscountAmount * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
-        currency: subscription.pricing?.currency || "EUR",
+        currency: subscription.pricing?.currency || "USD",
       };
 
       // Update subscription dates (start from today, end = start + cycleDays)
@@ -1283,7 +1283,7 @@ class SubscriptionController {
             id: order._id,
             orderNumber: order.orderNumber,
             grandTotal: order.pricing?.overall?.grandTotal || 0,
-            currency: order.pricing?.overall?.currency || "EUR",
+            currency: order.pricing?.overall?.currency || "USD",
             paymentStatus: order.paymentStatus,
           },
           payment: {
@@ -1409,7 +1409,7 @@ class SubscriptionController {
           Math.round(subscriptionPlanDiscountAmount * 100) / 100,
         taxAmount: Math.round(taxAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
-        currency: subscription.pricing?.currency || "EUR",
+        currency: subscription.pricing?.currency || "USD",
       };
 
       // Update subscription dates (start from today, end = start + cycleDays)
@@ -1877,7 +1877,7 @@ class SubscriptionController {
               plan.totalAmount ||
               0;
             subscriptionPrice = {
-              currency: plan.currency || "EUR",
+              currency: plan.currency || "USD",
               amount,
               taxRate: plan.taxRate || 0,
               totalAmount: amount + (plan.taxRate || 0),

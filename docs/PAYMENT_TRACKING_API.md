@@ -57,7 +57,7 @@ GET /api/v1/payments/track/694f61a0de6c27827ee53dcb
     "paymentStatus": "Completed",
     "paymentMethod": "Stripe",
     "amount": 49.99,
-    "currency": "EUR",
+    "currency": "USD",
     "gatewayTransactionId": "pi_3SipCHGhoBwNfpLs1JYogSKF",
     "processedAt": "2025-12-27T04:33:45.000Z",
     "createdAt": "2025-12-27T04:30:00.000Z",
@@ -67,7 +67,7 @@ GET /api/v1/payments/track/694f61a0de6c27827ee53dcb
       "orderId": "694f5c75e410a6d657bb4cb9",
       "orderStatus": "Confirmed",
       "grandTotal": 49.99,
-      "currency": "EUR",
+      "currency": "USD",
       "items": 1
     },
     "isPending": false,
@@ -104,7 +104,7 @@ GET /api/v1/payments/track/694f61a0de6c27827ee53dcb
     "orderId": "xxx",
     "orderStatus": "Confirmed",
     "grandTotal": 49.99,
-    "currency": "EUR",
+    "currency": "USD",
     "items": 1
   }
 }

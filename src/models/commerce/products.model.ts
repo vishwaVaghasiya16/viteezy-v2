@@ -32,7 +32,7 @@ export interface SubscriptionPriceWithMetadata
 const SubscriptionPriceWithMetadataSchema =
   new Schema<SubscriptionPriceWithMetadata>(
     {
-      currency: { type: String, default: "EUR" },
+      currency: { type: String, default: "USD" },
       amount: { type: Number, optional: true }, // Optional - will be calculated from totalAmount
       discountedPrice: { type: Number, min: 0, optional: true },
       taxRate: { type: Number, default: 0 },
@@ -57,7 +57,7 @@ const StandupPouchPlanOptionsSchema = new Schema<StandupPouchPlanOptions>(
     count_0: {
       type: new Schema(
         {
-          currency: { type: String, default: "EUR" },
+          currency: { type: String, default: "USD" },
           amount: { type: Number, required: true },
           discountedPrice: { type: Number, min: 0, optional: true },
           taxRate: { type: Number, default: 0 },
@@ -70,7 +70,7 @@ const StandupPouchPlanOptionsSchema = new Schema<StandupPouchPlanOptions>(
     count_1: {
       type: new Schema(
         {
-          currency: { type: String, default: "EUR" },
+          currency: { type: String, default: "USD" },
           amount: { type: Number, required: true },
           discountedPrice: { type: Number, min: 0, optional: true },
           taxRate: { type: Number, default: 0 },

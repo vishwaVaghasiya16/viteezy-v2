@@ -79,7 +79,7 @@ class PreCheckoutController {
           subtotal: 0,
           membershipDiscount: 0,
           total: 0,
-          currency: "EUR",
+          currency: "USD",
         },
         address: {
           shippingAddressValid: false,
@@ -130,7 +130,7 @@ class PreCheckoutController {
       );
 
       let subtotal = 0;
-      let currency = items[0]?.price?.currency || "EUR";
+      let currency = items[0]?.price?.currency || "USD";
 
       // Validate each item
       for (const item of items) {

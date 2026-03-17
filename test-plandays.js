@@ -91,7 +91,7 @@ const mockProducts = {
 function calculateItemPricing(item, product) {
   let originalAmount = 0;
   let discountedPrice = 0;
-  let currency = "EUR";
+  let currency = "USD";
   let taxRate = 0;
 
   if (item.variantType === 'SACHETS' && product.sachetPrices) {
@@ -99,7 +99,7 @@ function calculateItemPricing(item, product) {
     if (item.isSubscriptionChange && item.planDays) {
       // First, try to use the stored item price (which should be correctly calculated)
       if (item.price && item.price.amount) {
-        currency = item.price.currency || "EUR";
+        currency = item.price.currency || "USD";
         taxRate = item.price.taxRate || 0;
         originalAmount = item.price.amount;
         discountedPrice = item.price.amount; // For subscription change, no discount
@@ -124,7 +124,7 @@ function calculateItemPricing(item, product) {
         }
         
         if (selectedPlan) {
-          currency = selectedPlan.currency || "EUR";
+          currency = selectedPlan.currency || "USD";
           taxRate = selectedPlan.taxRate || 0;
           originalAmount = selectedPlan.totalAmount || selectedPlan.amount || 0;
           discountedPrice = selectedPlan.totalAmount || selectedPlan.amount || 0;
@@ -153,7 +153,7 @@ function calculateItemPricing(item, product) {
       }
       
       if (selectedPlan) {
-        currency = selectedPlan.currency || "EUR";
+        currency = selectedPlan.currency || "USD";
         taxRate = selectedPlan.taxRate || 0;
         originalAmount = selectedPlan.amount || selectedPlan.totalAmount || 0;
         discountedPrice = selectedPlan.discountedPrice || selectedPlan.amount || selectedPlan.totalAmount || 0;
@@ -167,7 +167,7 @@ function calculateItemPricing(item, product) {
     const selectedCount = standupPrice[countKey] || standupPrice.count_0 || standupPrice.count_1 || standupPrice;
     
     if (selectedCount) {
-      currency = selectedCount.currency || "EUR";
+      currency = selectedCount.currency || "USD";
       taxRate = selectedCount.taxRate || 0;
       originalAmount = selectedCount.amount || 0;
       discountedPrice = selectedCount.discountedPrice || selectedCount.amount || 0;

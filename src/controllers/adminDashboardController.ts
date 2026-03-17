@@ -1122,7 +1122,7 @@ class AdminDashboardController {
           status: product?.status !== undefined ? product.status : null,
           category: categoryName,
           price: product?.price?.amount || 0,
-          currency: product?.price?.currency || "EUR",
+          currency: product?.price?.currency || "USD",
           totalSales: item.totalSales, // Number of times product was ordered
           orderCount: item.orderCount, // Number of unique orders
           averageOrderValue,

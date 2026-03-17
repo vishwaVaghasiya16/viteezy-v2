@@ -563,7 +563,7 @@ class UserController {
             payment.gatewaySessionId ||
             null,
           amount: payment.amount?.amount ?? null,
-          currency: payment.amount?.currency || payment.currency || "EUR",
+          currency: payment.amount?.currency || payment.currency || "USD",
           taxRate: payment.amount?.taxRate ?? null,
           processedAt: payment.processedAt || payment.createdAt,
           orderId: payment.orderId,

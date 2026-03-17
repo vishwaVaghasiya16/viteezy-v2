@@ -246,7 +246,7 @@ export class SubscriptionUpdateService {
         subscriptionPlanDiscountAmount: 0,
         taxAmount,
         total: round(discountedPrice - membershipDiscountAmount),
-        currency: "EUR",
+        currency: "USD",
       },
       standUpPouch: null,
       overall: {
@@ -259,7 +259,7 @@ export class SubscriptionUpdateService {
         grandTotal: round(
           discountedPrice - membershipDiscountAmount + taxAmount,
         ),
-        currency: "EUR",
+        currency: "USD",
       },
     };
 
@@ -604,7 +604,7 @@ export class SubscriptionUpdateService {
       const discountedPrice = items.reduce((s: number, i: any) => s + i.discountedPrice * (i.quantity || 1), 0);
       const taxAmount = 0;
       const grandTotal = discountedPrice + taxAmount;
-      const currency = "EUR";
+      const currency = "USD";
 
       const renewalOrder = await Orders.create({
         orderNumber,
@@ -705,7 +705,7 @@ export class SubscriptionUpdateService {
         subtotal: 0,
         tax: 0,
         total: 0,
-        currency: "EUR",
+        currency: "USD",
       });
     }
 

@@ -595,7 +595,7 @@ class OrderController {
         throw new AppError("pricing.overall is required", 400);
       }
       const normalizedCurrency =
-        (pricing.overall.currency || "EUR").toString().toUpperCase();
+        (pricing.overall.currency || "USD").toString().toUpperCase();
 
       const categoryIds = new Set<string>();
 

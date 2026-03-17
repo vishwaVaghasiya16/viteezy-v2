@@ -1114,7 +1114,7 @@ class AdminOrderController {
             subscriptionPlanDiscountAmount: roundAmount(subscriptionPlanDiscountAmount || 0),
             taxAmount: roundAmount(taxAmount || 0),
             grandTotal: roundAmount(grandTotal),
-            currency: currency || "EUR",
+            currency: currency || "USD",
           },
         };
 
@@ -1127,7 +1127,7 @@ class AdminOrderController {
             subscriptionPlanDiscountAmount: roundAmount(sachetSubscriptionPlanDiscountAmount),
             taxAmount: roundAmount(sachetTaxAmount),
             total: sachetTotal,
-            currency: currency || "EUR",
+            currency: currency || "USD",
           };
         }
 
@@ -1139,7 +1139,7 @@ class AdminOrderController {
             membershipDiscountAmount: roundAmount(standUpPouchMembershipDiscountAmount),
             taxAmount: roundAmount(standUpPouchTaxAmount),
             total: standUpPouchTotal,
-            currency: currency || "EUR",
+            currency: currency || "USD",
           };
         }
 
@@ -1266,7 +1266,7 @@ class AdminOrderController {
             status: order.status,
             paymentStatus: order.paymentStatus,
             grandTotal: order.pricing?.overall?.grandTotal || 0,
-            currency: order.pricing?.overall?.currency || "EUR",
+            currency: order.pricing?.overall?.currency || "USD",
             orderType: orderType,
             paymentLink: paymentLink,
             cartId: cartId,
@@ -1309,7 +1309,7 @@ class AdminOrderController {
     const userName =
       `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
     const orderNumber = order.orderNumber;
-    const orderTotal = `${order.pricing?.overall?.currency || "EUR"} ${(
+    const orderTotal = `${order.pricing?.overall?.currency || "USD"} ${(
       order.pricing?.overall?.grandTotal || 0
     ).toFixed(2)}`;
 

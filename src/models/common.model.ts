@@ -132,7 +132,7 @@ export const PriceSchema = new Schema<PriceType>(
   {
     currency: {
       type: String,
-      default: "EUR",
+      default: "USD",
       enum: CURRENCY_VALUES,
       uppercase: true,
     },

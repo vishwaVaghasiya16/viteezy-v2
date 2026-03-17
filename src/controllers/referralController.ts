@@ -172,7 +172,7 @@ class ReferralController {
             referralCode: normalizedReferralCode,
             referralDiscount: {
               amount: referralDiscountAmount,
-              currency: totalsWithReferral.currency || "EUR",
+              currency: totalsWithReferral.currency || "USD",
             },
           },
           "Referral code applied successfully"

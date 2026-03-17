@@ -240,7 +240,7 @@ class CheckoutService {
     let totalSubtotal = 0;
     let totalTax = 0;
     let totalDiscount = 0;
-    const currency = products[0]?.price?.currency || "EUR";
+    const currency = products[0]?.price?.currency || "USD";
     const taxRate = products[0]?.price?.taxRate || 0;
 
     for (const product of products) {
@@ -1320,7 +1320,7 @@ class CheckoutService {
       throw new AppError("No valid products found in cart", 404);
     }
 
-    const currency = "EUR";
+    const currency = "USD";
     let mrpTotal = 0;
     let planDiscountTotal = 0;
     let membershipDiscountTotal = 0;
@@ -1883,7 +1883,7 @@ class CheckoutService {
                   currency:
                     selectedCountPrice.currency ||
                     item.price?.currency ||
-                    "EUR",
+                    "USD",
                   amount: unitPrice,
                   taxRate:
                     selectedCountPrice.taxRate || item.price?.taxRate || 0,
@@ -2139,7 +2139,7 @@ class CheckoutService {
       }
     }
 
-    const currency = "EUR";
+    const currency = "USD";
 
     // Determine plan key based on selected plan duration for SACHETS
     const planKey = this.getPlanKey(selectedPlanDays, true); // true for subscription

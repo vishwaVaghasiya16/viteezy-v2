@@ -68,7 +68,7 @@ const ExpertSchema = new Schema<IExpert>(
     ],
     pricing: {
       type: PriceSchema,
-      default: () => ({ currency: "EUR", amount: 0, taxRate: 0 }),
+      default: () => ({ currency: "USD", amount: 0, taxRate: 0 }),
     },
     bufferMins: {
       type: Number,
