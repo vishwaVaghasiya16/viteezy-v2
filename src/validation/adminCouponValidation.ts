@@ -281,6 +281,7 @@ export const updateCouponStatusSchema = Joi.object(
 // Query schemas for coupon listing and usage logs
 export const getCouponsQuerySchema = paginationQuerySchema.keys(
   withFieldLabels({
+    status: Joi.string().valid("active", "inactive", "all", "expired").optional().label("Status"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .optional()

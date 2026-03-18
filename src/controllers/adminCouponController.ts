@@ -380,7 +380,7 @@ class AdminCouponController {
     async (req: Request, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { status, search, type, expiryDateFrom, expiryDateTo } = req.query as {
-        status?: "active" | "inactive" | "all";
+        status?: "active" | "inactive" | "all" | "expired";
         search?: string;
         type?: CouponType;
         expiryDateFrom?: string;
@@ -395,6 +395,9 @@ class AdminCouponController {
         filter.isActive = true;
       } else if (status === "inactive") {
         filter.isActive = false;
+      } else if (status === "expired") {
+        const now = new Date();
+        filter.validUntil = { $lt: now };
       }
 
       if (type) {
