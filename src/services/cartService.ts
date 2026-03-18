@@ -473,6 +473,13 @@ class CartService {
         cart: {
           ...cart,
           items: [],
+          // Ensure totals are zero for empty cart
+          subtotal: 0,
+          tax: 0,
+          discount: 0,
+          total: 0,
+          currency: "USD",
+          couponDiscountAmount: 0,
         },
       };
 
@@ -651,6 +658,18 @@ class CartService {
       };
     });
 
+    // Recalculate totals to ensure coupon discount is applied
+    // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+    const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+      ? cart.items[0].variantType 
+      : ProductVariant.SACHETS;
+    
+    const recalculatedTotals = await this.calculateCartTotalsWithVariantType(
+      cart.items,
+      firstItemVariantType,
+      cart.couponDiscountAmount || 0
+    );
+
     const result: {
       cart: any;
       suggestedProducts?: any[];
@@ -658,6 +677,12 @@ class CartService {
       cart: {
         ...cart,
         items: itemsWithDetails,
+        // Update with recalculated totals to ensure coupon discount is applied
+        subtotal: recalculatedTotals.subtotal,
+        tax: recalculatedTotals.tax,
+        discount: recalculatedTotals.discount,
+        total: recalculatedTotals.total,
+        currency: recalculatedTotals.currency,
       },
     };
 

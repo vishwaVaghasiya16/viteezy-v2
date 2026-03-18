@@ -2869,11 +2869,17 @@ class CheckoutService {
         }
       | undefined;
 
-    // Determine coupon code to use (normalize empty strings to null)
-    const couponCodeToProcess =
-      options.couponCode && options.couponCode.trim()
-        ? options.couponCode.trim().toUpperCase()
-        : null;
+    // Determine coupon code to use
+    // First, try to use coupon from options (request body)
+    // If not provided, use existing coupon from cart
+    let couponCodeToProcess: string | null = null;
+    
+    if (options.couponCode && options.couponCode.trim()) {
+      couponCodeToProcess = options.couponCode.trim().toUpperCase();
+    } else if (cart.couponCode && cart.couponCode.trim()) {
+      // Use existing coupon from cart if none provided in options
+      couponCodeToProcess = cart.couponCode.trim().toUpperCase();
+    }
 
     if (couponCodeToProcess) {
       try {
@@ -2908,57 +2914,84 @@ class CheckoutService {
           message: "Coupon applied successfully",
         };
 
-        // Update cart with valid coupon
-        await Carts.findByIdAndUpdate(
-          cart._id,
-          {
-            couponCode: couponCodeToProcess,
-            couponDiscountAmount: this.roundAmount(couponDiscountAmount),
-            updatedAt: new Date(),
-          },
-          { new: true },
-        );
+        // Update cart with valid coupon only if it's different from existing
+        if (cart.couponCode !== couponCodeToProcess || cart.couponDiscountAmount !== couponDiscountAmount) {
+          await Carts.findByIdAndUpdate(
+            cart._id,
+            {
+              couponCode: couponCodeToProcess,
+              couponDiscountAmount: this.roundAmount(couponDiscountAmount),
+              updatedAt: new Date(),
+            },
+            { new: true },
+          );
+        }
       } catch (error: any) {
-        // Coupon validation failed, but don't throw error
+        // Coupon validation failed
+        // If we're using the existing cart coupon, use its stored discount amount as fallback
+        const isUsingExistingCartCoupon = cart.couponCode === couponCodeToProcess;
+        
         couponInfo = {
           code: couponCodeToProcess,
           isValid: false,
-          discountAmount: 0,
+          discountAmount: isUsingExistingCartCoupon ? (cart.couponDiscountAmount || 0) : 0,
           message: error.message || "Invalid coupon code",
         };
         logger.warn(
           `Coupon validation failed for ${couponCodeToProcess}: ${error.message}`,
         );
 
-        // Update cart to remove invalid coupon
-        await Carts.findByIdAndUpdate(
-          cart._id,
-          {
-            couponCode: null,
-            couponDiscountAmount: 0,
-            updatedAt: new Date(),
-          },
-          { new: true },
-        );
+        // If using existing cart coupon, keep it (don't remove)
+        // If new coupon failed, remove it
+        if (!isUsingExistingCartCoupon) {
+          // Update cart to remove invalid coupon only if coupon exists in cart
+          if (cart.couponCode || cart.couponDiscountAmount > 0) {
+            await Carts.findByIdAndUpdate(
+              cart._id,
+              {
+                couponCode: null,
+                couponDiscountAmount: 0,
+                updatedAt: new Date(),
+              },
+              { new: true },
+            );
+          }
+        }
+        
+        // Use existing cart discount amount if available
+        couponDiscountAmount = isUsingExistingCartCoupon ? (cart.couponDiscountAmount || 0) : 0;
       }
     } else {
       // No coupon code provided (null or empty string)
-      // Update cart to remove coupon
-      await Carts.findByIdAndUpdate(
-        cart._id,
-        cart.cartType === "NORMAL"
-        ? {
-          couponCode: null,
-          couponDiscountAmount: 0,
-          updatedAt: new Date(),
-          } : {
-            couponCode: null,
-            couponDiscountAmount: 0,
-            linkedSubscriptionId: cart.linkedSubscriptionId,
-            updatedAt: new Date(),
-        },
-        { new: true },
-      );
+      // But if cart has existing coupon, use its discount amount
+      if (cart.couponCode && cart.couponDiscountAmount > 0) {
+        couponDiscountAmount = cart.couponDiscountAmount;
+        couponInfo = {
+          code: cart.couponCode,
+          isValid: true,
+          discountAmount: this.roundAmount(cart.couponDiscountAmount),
+          message: "Using existing coupon from cart",
+        };
+      } else {
+        // Update cart to remove coupon only if coupon exists
+        if (cart.couponCode || cart.couponDiscountAmount > 0) {
+          await Carts.findByIdAndUpdate(
+            cart._id,
+            cart.cartType === "NORMAL"
+            ? {
+              couponCode: null,
+              couponDiscountAmount: 0,
+              updatedAt: new Date(),
+              } : {
+                couponCode: null,
+                couponDiscountAmount: 0,
+                linkedSubscriptionId: cart.linkedSubscriptionId,
+                updatedAt: new Date(),
+            },
+            { new: true },
+          );
+        }
+      }
     }
 
     // Calculate subtotal after coupon
