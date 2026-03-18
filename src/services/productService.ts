@@ -645,7 +645,7 @@ class ProductService {
     sort: Record<string, 1 | -1>,
     filters: {
       search?: string;
-      status?: ProductStatus;
+      status?: boolean;
       variant?: ProductVariant;
       hasStandupPouch?: boolean;
       categories?: string[];
@@ -673,12 +673,19 @@ class ProductService {
       isDeleted: false,
     };
 
-    // If includeInactive (admin), skip status filter; else if status provided use it, else only active
-    if (!includeInactive) {
+    // If includeInactive (admin), apply status filter if provided; else if status provided use it, else only active
+    if (includeInactive) {
+      // Admin mode: include inactive products, but still apply status filter if provided
+      if (status !== undefined) {
+        matchStage.status = status;
+      }
+      // If no status provided, don't filter by status (return all active and inactive)
+    } else {
+      // Public mode: always filter by status
       if (status !== undefined) {
         matchStage.status = status;
       } else {
-        matchStage.status = true;
+        matchStage.status = true; // Default to active only for public
       }
     }
 
