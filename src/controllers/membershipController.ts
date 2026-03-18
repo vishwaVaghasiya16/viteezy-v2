@@ -2,16 +2,18 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { MembershipPlans, Memberships } from "@/models/commerce";
+import { MembershipPlans, Memberships, Payments } from "@/models/commerce";
 import { membershipService } from "@/services/membershipService";
 import { paymentService } from "@/services/payment/PaymentService";
-import { PaymentMethod } from "@/models/enums";
+import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import { MemberReferrals } from "@/models/core/memberReferrals.model";
 import { User } from "@/models/index.model";
 import { 
   MembershipStatus, 
   MembershipInterval 
 } from "@/models/enums";
+
+// Fixed TypeScript compilation errors
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -737,6 +739,142 @@ class MembershipController {
           },
         },
       });
+    }
+  );
+
+  /**
+   * Get membership transaction history
+   * @route GET /api/memberships/:membershipId/transactions
+   * @access Private
+   * @query {Number} [page] - Page number (default: 1)
+   * @query {Number} [limit] - Items per page (default: 10)
+   * @query {String} [status] - Filter by payment status
+   * @query {String} [paymentMethod] - Filter by payment method
+   * @query {String} [sortBy] - Sort by field (createdAt, processedAt, amount, status)
+   * @query {String} [sortOrder] - Sort order (asc, desc)
+   * @query {String} [search] - Search by transaction ID
+   */
+  getMembershipTransactions = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { membershipId } = req.params;
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const { status, paymentMethod, search } = req.query as {
+        status?: string;
+        paymentMethod?: string;
+        search?: string;
+      };
+
+      // Validate membershipId format
+      if (!mongoose.Types.ObjectId.isValid(membershipId)) {
+        throw new AppError("Invalid membership ID format", 400);
+      }
+
+      const membershipObjectId = new mongoose.Types.ObjectId(membershipId);
+
+      // Check if membership exists and belongs to the user
+      const membership = await Memberships.findOne({
+        _id: membershipObjectId,
+        userId: req.user._id,
+        isDeleted: { $ne: true },
+      })
+        .populate("planId")
+        .lean();
+
+      if (!membership) {
+        throw new AppError("Membership not found or access denied", 404);
+      }
+
+      // Build filters for payments
+      const filters: any = {
+        userId: req.user._id,
+        membershipId: membershipObjectId,
+        isDeleted: { $ne: true },
+      };
+
+      // Filter by payment status
+      if (status) {
+        filters.status = status as PaymentStatus;
+      }
+
+      // Filter by payment method
+      if (paymentMethod) {
+        filters.paymentMethod = paymentMethod as PaymentMethod;
+      }
+
+      // Search functionality
+      if (search && search.trim()) {
+        const regex = new RegExp(search.trim(), "i");
+        filters.$or = [
+          { transactionId: regex },
+          { gatewayTransactionId: regex },
+          { gatewaySessionId: regex },
+        ];
+      }
+
+      // Get transactions and total count
+      const [transactions, total] = await Promise.all([
+        Payments.find(filters)
+          .select(
+            "paymentMethod status amount currency transactionId gatewayTransactionId gatewaySessionId processedAt createdAt orderId metadata failureReason"
+          )
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Payments.countDocuments(filters),
+      ]);
+
+      // Format transactions for response
+      const formattedTransactions = transactions.map((payment: any) => ({
+        id: payment._id,
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+        transactionId:
+          payment.transactionId ||
+          payment.gatewayTransactionId ||
+          payment.gatewaySessionId ||
+          null,
+        amount: payment.amount?.amount ?? null,
+        currency: payment.amount?.currency || payment.currency || "USD",
+        taxRate: payment.amount?.taxRate ?? null,
+        processedAt: payment.processedAt || payment.createdAt,
+        createdAt: payment.createdAt,
+        orderId: payment.orderId,
+        failureReason: payment.failureReason || null,
+        metadata: payment.metadata || {},
+      }));
+
+      // Add membership details to response
+      const membershipDetails = {
+        id: membership._id,
+        planName: (membership as any).planSnapshot?.name || ((membership as any).planId as any)?.name || "Unknown Plan",
+        status: membership.status,
+        startedAt: membership.startedAt,
+        expiresAt: membership.expiresAt,
+        planPrice: (membership as any).planSnapshot?.price?.amount || ((membership as any).planId as any)?.price?.amount || 0,
+        currency: (membership as any).planSnapshot?.price?.currency || ((membership as any).planId as any)?.price?.currency || "USD",
+        interval: (membership as any).planSnapshot?.interval || ((membership as any).planId as any)?.interval || "Monthly",
+      };
+
+      // Response with pagination
+      const pagination = getPaginationMeta(
+        Number(page) || 1, 
+        Number(limit) || 10, 
+        total
+      );
+
+      res.apiPaginated(
+        {
+          membership: membershipDetails,
+          transactions: formattedTransactions,
+        } as any,
+        pagination,
+        "Membership transactions retrieved successfully"
+      );
     }
   );
 }

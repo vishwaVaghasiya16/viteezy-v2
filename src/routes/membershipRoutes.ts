@@ -7,6 +7,7 @@ import {
   getMembershipDetailsParamsSchema,
   getMembershipsQuerySchema,
   cancelMembershipSchema,
+  getMembershipTransactionsQuerySchema,
 } from "@/validation/membershipValidation";
 import { membershipController } from "@/controllers/membershipController";
 
@@ -87,6 +88,20 @@ router.post(
   validateParams(getMembershipDetailsParamsSchema),
   validateJoi(cancelMembershipSchema),
   membershipController.cancelMembership
+);
+
+/**
+ * @route   GET /api/memberships/:membershipId/transactions
+ * @desc    Get membership transaction history
+ * @access  Private
+ * @params  membershipId
+ * @query   page, limit, status, paymentMethod, sortBy, sortOrder, search
+ */
+router.get(
+  "/:membershipId/transactions",
+  validateParams(getMembershipDetailsParamsSchema),
+  validateQuery(getMembershipTransactionsQuerySchema),
+  membershipController.getMembershipTransactions
 );
 
 export default router;
