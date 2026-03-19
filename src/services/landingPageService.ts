@@ -110,8 +110,27 @@ const transformI18nStringArray = (
   return i18nArray.map((item) => getTranslatedString(item, lang));
 };
 
+/**
+ * Convert input to I18n format - handles both string and multi-language object
+ */
+const convertToI18n = (
+  input: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string } | undefined
+): { en?: string; nl?: string; de?: string; fr?: string; es?: string } | undefined => {
+  if (!input) return undefined;
+  
+  if (typeof input === "string") {
+    return { en: input };
+  }
+  
+  if (typeof input === "object" && !Array.isArray(input)) {
+    return input;
+  }
+  
+  return { en: String(input) };
+};
+
 interface PrimaryCTAInput {
-  label: string;
+  label: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   image?: string;
   link?: string;
   order?: number;
@@ -119,13 +138,13 @@ interface PrimaryCTAInput {
 
 interface MembershipBenefitInput {
   icon?: string;
-  title: string;
-  description?: string;
+  title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+  description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   order?: number;
 }
 
 interface CommunityMetricInput {
-  label: string;
+  label: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   value: string | number;
   order?: number;
 }
@@ -140,109 +159,109 @@ interface CreateLandingPageData {
     imageUrl?: string;
     videoUrl?: string;
     backgroundImage?: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
-    highlightedText?: string[];
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    highlightedText?: (string | { en?: string; nl?: string; de?: string; fr?: string; es?: string })[];
     primaryCTA?: PrimaryCTAInput[];
     isEnabled?: boolean;
     order?: number;
   };
   membershipSection?: {
     backgroundImage: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     benefits?: MembershipBenefitInput[];
     isEnabled?: boolean;
     order?: number;
   };
   howItWorksSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     stepsCount?: number;
     steps: Array<{
       image: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   productCategorySection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
   communitySection?: {
     backgroundImage?: string;
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     metrics?: CommunityMetricInput[];
     isEnabled?: boolean;
     order?: number;
   };
   missionSection?: {
     backgroundImage: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   featuresSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     features: Array<{
       icon: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   designedByScienceSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     steps: Array<{
       image: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   testimonialsSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     testimonialIds?: (mongoose.Types.ObjectId | string)[];
     isEnabled?: boolean;
     order?: number;
   };
   customerResultsSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   blogSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   faqSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     faqs: Array<{
-      question: string; // Simple string for now
-      answer?: string; // Simple string for now
+      question: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      answer?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
@@ -262,110 +281,110 @@ interface UpdateLandingPageData {
     imageUrl?: string;
     videoUrl?: string;
     backgroundImage?: string;
-    title?: string;
-    description?: string;
-    subTitle?: string;
-    highlightedText?: string[];
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    highlightedText?: (string | { en?: string; nl?: string; de?: string; fr?: string; es?: string })[];
     primaryCTA?: PrimaryCTAInput[];
     isEnabled?: boolean;
     order?: number;
   };
   membershipSection?: {
     backgroundImage?: string;
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     benefits?: MembershipBenefitInput[];
     isEnabled?: boolean;
     order?: number;
   };
   howItWorksSection?: {
-    title?: string;
-    subTitle?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     stepsCount?: number;
     steps?: Array<{
       image?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   productCategorySection?: {
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
   communitySection?: {
     backgroundImage?: string;
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     metrics?: CommunityMetricInput[];
     isEnabled?: boolean;
     order?: number;
   };
   missionSection?: {
     backgroundImage?: string;
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   featuresSection?: {
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     features?: Array<{
       icon?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   designedByScienceSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     steps?: Array<{
       image?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   testimonialsSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     testimonialIds?: (mongoose.Types.ObjectId | string)[];
     isEnabled?: boolean;
     order?: number;
   };
   customerResultsSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   blogSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   faqSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     faqs?: Array<{
-      question?: string;
-      answer?: string;
+      question?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      answer?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
@@ -394,34 +413,22 @@ class LandingPageService {
       );
     }
 
-    // Convert simple strings to I18n format for database
+    // Convert input to I18n format for database
     const landingPageData: any = {
       heroSection: {
         ...data.heroSection,
         imageUrl: data.heroSection.imageUrl,
         videoUrl: data.heroSection.videoUrl,
         backgroundImage: data.heroSection.backgroundImage,
-        title:
-          typeof data.heroSection.title === "string"
-            ? { en: data.heroSection.title }
-            : data.heroSection.title,
-        description: data.heroSection.description
-          ? typeof data.heroSection.description === "string"
-            ? { en: data.heroSection.description }
-            : data.heroSection.description
-          : undefined,
-        // subTitle removed from create API
+        title: convertToI18n(data.heroSection.title),
+        description: convertToI18n(data.heroSection.description),
+        subTitle: convertToI18n(data.heroSection.subTitle),
         highlightedText: Array.isArray(data.heroSection.highlightedText)
-          ? data.heroSection.highlightedText.map((text) =>
-              typeof text === "string" ? { en: text } : text
-            )
+          ? data.heroSection.highlightedText.map((text) => convertToI18n(text))
           : undefined,
         primaryCTA: Array.isArray(data.heroSection.primaryCTA)
           ? data.heroSection.primaryCTA.map((cta) => ({
-              label:
-                typeof cta.label === "string"
-                  ? { en: cta.label }
-                  : (cta as any).label,
+              label: convertToI18n(cta.label),
               image: cta.image,
               link: cta.link,
               order: cta.order ?? 0,
@@ -446,32 +453,14 @@ class LandingPageService {
     if (data.membershipSection) {
       landingPageData.membershipSection = {
         backgroundImage: data.membershipSection.backgroundImage,
-        title:
-          typeof data.membershipSection.title === "string"
-            ? { en: data.membershipSection.title }
-            : data.membershipSection.title,
-        description: data.membershipSection.description
-          ? typeof data.membershipSection.description === "string"
-            ? { en: data.membershipSection.description }
-            : data.membershipSection.description
-          : undefined,
-        subTitle: data.membershipSection.subTitle
-          ? typeof data.membershipSection.subTitle === "string"
-            ? { en: data.membershipSection.subTitle }
-            : data.membershipSection.subTitle
-          : undefined,
+        title: convertToI18n(data.membershipSection.title),
+        description: convertToI18n(data.membershipSection.description),
+        subTitle: convertToI18n(data.membershipSection.subTitle),
         benefits: Array.isArray(data.membershipSection.benefits)
           ? data.membershipSection.benefits.map((benefit) => ({
               icon: benefit.icon,
-              title:
-                typeof benefit.title === "string"
-                  ? { en: benefit.title }
-                  : (benefit as any).title,
-              description: benefit.description
-                ? typeof benefit.description === "string"
-                  ? { en: benefit.description }
-                  : (benefit as any).description
-                : undefined,
+              title: convertToI18n(benefit.title),
+              description: convertToI18n(benefit.description),
               order: benefit.order ?? 0,
             }))
           : undefined,
@@ -486,28 +475,15 @@ class LandingPageService {
     // Convert how it works section strings to I18n format
     if (data.howItWorksSection && data.howItWorksSection.steps) {
       landingPageData.howItWorksSection = {
-        title: data.howItWorksSection.title
-          ? typeof data.howItWorksSection.title === "string"
-            ? { en: data.howItWorksSection.title }
-            : (data.howItWorksSection as any).title
-          : undefined,
-        subTitle: data.howItWorksSection.subTitle
-          ? typeof data.howItWorksSection.subTitle === "string"
-            ? { en: data.howItWorksSection.subTitle }
-            : (data.howItWorksSection as any).subTitle
-          : undefined,
+        title: convertToI18n(data.howItWorksSection.title),
+        subTitle: convertToI18n(data.howItWorksSection.subTitle),
         stepsCount:
           data.howItWorksSection.stepsCount ??
           data.howItWorksSection.steps.length,
         steps: data.howItWorksSection.steps.map((step) => ({
           image: step.image,
-          title:
-            typeof step.title === "string" ? { en: step.title } : step.title,
-          description: step.description
-            ? typeof step.description === "string"
-              ? { en: step.description }
-              : step.description
-            : undefined,
+          title: convertToI18n(step.title),
+          description: convertToI18n(step.description),
           order: step.order || 0,
         })),
         isEnabled:
@@ -528,20 +504,9 @@ class LandingPageService {
             )
           : undefined;
       landingPageData.productCategorySection = {
-        title:
-          typeof data.productCategorySection.title === "string"
-            ? { en: data.productCategorySection.title }
-            : data.productCategorySection.title,
-        description: data.productCategorySection.description
-          ? typeof data.productCategorySection.description === "string"
-            ? { en: data.productCategorySection.description }
-            : data.productCategorySection.description
-          : undefined,
-        subTitle: data.productCategorySection.subTitle
-          ? typeof data.productCategorySection.subTitle === "string"
-            ? { en: data.productCategorySection.subTitle }
-            : (data.productCategorySection as any).subTitle
-          : undefined,
+        title: convertToI18n(data.productCategorySection.title),
+        description: convertToI18n(data.productCategorySection.description),
+        subTitle: convertToI18n(data.productCategorySection.subTitle),
         ...(productCategoryIds && { productCategoryIds }),
         isEnabled:
           data.productCategorySection.isEnabled !== undefined
@@ -555,22 +520,11 @@ class LandingPageService {
     if (data.communitySection) {
       landingPageData.communitySection = {
         backgroundImage: data.communitySection.backgroundImage,
-        title: data.communitySection.title
-          ? typeof data.communitySection.title === "string"
-            ? { en: data.communitySection.title }
-            : (data.communitySection as any).title
-          : undefined,
-        subTitle: data.communitySection.subTitle
-          ? typeof data.communitySection.subTitle === "string"
-            ? { en: data.communitySection.subTitle }
-            : (data.communitySection as any).subTitle
-          : undefined,
+        title: convertToI18n(data.communitySection.title),
+        subTitle: convertToI18n(data.communitySection.subTitle),
         metrics: Array.isArray(data.communitySection.metrics)
           ? data.communitySection.metrics.map((metric) => ({
-              label:
-                typeof metric.label === "string"
-                  ? { en: metric.label }
-                  : (metric as any).label,
+              label: convertToI18n(metric.label),
               value: metric.value,
               order: metric.order ?? 0,
             }))
@@ -587,15 +541,8 @@ class LandingPageService {
     if (data.missionSection) {
       landingPageData.missionSection = {
         backgroundImage: data.missionSection.backgroundImage,
-        title:
-          typeof data.missionSection.title === "string"
-            ? { en: data.missionSection.title }
-            : data.missionSection.title,
-        description: data.missionSection.description
-          ? typeof data.missionSection.description === "string"
-            ? { en: data.missionSection.description }
-            : data.missionSection.description
-          : undefined,
+        title: convertToI18n(data.missionSection.title),
+        description: convertToI18n(data.missionSection.description),
         isEnabled:
           data.missionSection.isEnabled !== undefined
             ? data.missionSection.isEnabled
@@ -607,31 +554,13 @@ class LandingPageService {
     // Convert features section strings to I18n format
     if (data.featuresSection && data.featuresSection.features) {
       landingPageData.featuresSection = {
-        title:
-          typeof data.featuresSection.title === "string"
-            ? { en: data.featuresSection.title }
-            : data.featuresSection.title,
-        description: data.featuresSection.description
-          ? typeof data.featuresSection.description === "string"
-            ? { en: data.featuresSection.description }
-            : data.featuresSection.description
-          : undefined,
-        subTitle: data.featuresSection.subTitle
-          ? typeof data.featuresSection.subTitle === "string"
-            ? { en: data.featuresSection.subTitle }
-            : (data.featuresSection as any).subTitle
-          : undefined,
+        title: convertToI18n(data.featuresSection.title),
+        description: convertToI18n(data.featuresSection.description),
+        subTitle: convertToI18n(data.featuresSection.subTitle),
         features: data.featuresSection.features.map((feature) => ({
           icon: feature.icon,
-          title:
-            typeof feature.title === "string"
-              ? { en: feature.title }
-              : feature.title,
-          description: feature.description
-            ? typeof feature.description === "string"
-              ? { en: feature.description }
-              : feature.description
-            : undefined,
+          title: convertToI18n(feature.title),
+          description: convertToI18n(feature.description),
           order: feature.order || 0,
         })),
         isEnabled:
@@ -645,24 +574,12 @@ class LandingPageService {
     // Convert designed by science section strings to I18n format
     if (data.designedByScienceSection && data.designedByScienceSection.steps) {
       landingPageData.designedByScienceSection = {
-        title:
-          typeof data.designedByScienceSection.title === "string"
-            ? { en: data.designedByScienceSection.title }
-            : data.designedByScienceSection.title,
-        description: data.designedByScienceSection.description
-          ? typeof data.designedByScienceSection.description === "string"
-            ? { en: data.designedByScienceSection.description }
-            : data.designedByScienceSection.description
-          : undefined,
+        title: convertToI18n(data.designedByScienceSection.title),
+        description: convertToI18n(data.designedByScienceSection.description),
         steps: data.designedByScienceSection.steps.map((step) => ({
           image: step.image,
-          title:
-            typeof step.title === "string" ? { en: step.title } : step.title,
-          description: step.description
-            ? typeof step.description === "string"
-              ? { en: step.description }
-              : step.description
-            : undefined,
+          title: convertToI18n(step.title),
+          description: convertToI18n(step.description),
           order: step.order || 0,
         })),
         isEnabled:
@@ -676,16 +593,8 @@ class LandingPageService {
     // Testimonials Section
     if (data.testimonialsSection) {
       landingPageData.testimonialsSection = {
-        title: data.testimonialsSection.title
-          ? typeof data.testimonialsSection.title === "string"
-            ? { en: data.testimonialsSection.title }
-            : (data.testimonialsSection as any).title
-          : undefined,
-        subTitle: data.testimonialsSection.subTitle
-          ? typeof data.testimonialsSection.subTitle === "string"
-            ? { en: data.testimonialsSection.subTitle }
-            : (data.testimonialsSection as any).subTitle
-          : undefined,
+        title: convertToI18n(data.testimonialsSection.title),
+        subTitle: convertToI18n(data.testimonialsSection.subTitle),
         // Testimonials are not stored here, they will be fetched dynamically from ProductTestimonials model
         isEnabled:
           data.testimonialsSection.isEnabled !== undefined
@@ -698,15 +607,8 @@ class LandingPageService {
     // Convert customer results section strings to I18n format
     if (data.customerResultsSection) {
       landingPageData.customerResultsSection = {
-        title:
-          typeof data.customerResultsSection.title === "string"
-            ? { en: data.customerResultsSection.title }
-            : data.customerResultsSection.title,
-        description: data.customerResultsSection.description
-          ? typeof data.customerResultsSection.description === "string"
-            ? { en: data.customerResultsSection.description }
-            : data.customerResultsSection.description
-          : undefined,
+        title: convertToI18n(data.customerResultsSection.title),
+        description: convertToI18n(data.customerResultsSection.description),
         isEnabled:
           data.customerResultsSection.isEnabled !== undefined
             ? data.customerResultsSection.isEnabled
@@ -718,15 +620,8 @@ class LandingPageService {
     // Convert blog section strings to I18n format
     if (data.blogSection) {
       landingPageData.blogSection = {
-        title:
-          typeof data.blogSection.title === "string"
-            ? { en: data.blogSection.title }
-            : data.blogSection.title,
-        description: data.blogSection.description
-          ? typeof data.blogSection.description === "string"
-            ? { en: data.blogSection.description }
-            : data.blogSection.description
-          : undefined,
+        title: convertToI18n(data.blogSection.title),
+        description: convertToI18n(data.blogSection.description),
         isEnabled:
           data.blogSection.isEnabled !== undefined
             ? data.blogSection.isEnabled
@@ -739,15 +634,8 @@ class LandingPageService {
     // FAQs will be fetched dynamically from FAQs model (latest 8)
     if (data.faqSection) {
       landingPageData.faqSection = {
-        title:
-          typeof data.faqSection.title === "string"
-            ? { en: data.faqSection.title }
-            : data.faqSection.title,
-        description: data.faqSection.description
-          ? typeof data.faqSection.description === "string"
-            ? { en: data.faqSection.description }
-            : data.faqSection.description
-          : undefined,
+        title: convertToI18n(data.faqSection.title),
+        description: convertToI18n(data.faqSection.description),
         // FAQs are not stored here, they will be fetched dynamically from FAQs model
         isEnabled:
           data.faqSection.isEnabled !== undefined
@@ -1862,49 +1750,31 @@ class LandingPageService {
       // Non-image fields: update if provided, else empty
       if (data.heroSection.title !== undefined) {
         if (data.heroSection.title) {
-          const existingTitle = landingPage.heroSection.title as any;
-          const titleObj =
-            existingTitle &&
-            typeof existingTitle === "object" &&
-            !Array.isArray(existingTitle)
-              ? (existingTitle as Record<string, any>)
-              : {};
-          (landingPage.heroSection.title as any) =
-            typeof data.heroSection.title === "string"
-              ? { ...titleObj, en: data.heroSection.title }
-              : {
-                  ...titleObj,
-                  ...(data.heroSection.title as Record<string, any>),
-                };
+          const convertedTitle = convertToI18n(data.heroSection.title);
+          (landingPage.heroSection.title as any) = convertedTitle || {};
         } else {
           (landingPage.heroSection.title as any) = {};
         }
       }
       if (data.heroSection.description !== undefined) {
         if (data.heroSection.description) {
-          const existingDesc = landingPage.heroSection.description as any;
-          const descObj =
-            existingDesc &&
-            typeof existingDesc === "object" &&
-            !Array.isArray(existingDesc)
-              ? (existingDesc as Record<string, any>)
-              : {};
-          (landingPage.heroSection.description as any) =
-            typeof data.heroSection.description === "string"
-              ? { ...descObj, en: data.heroSection.description }
-              : {
-                  ...descObj,
-                  ...(data.heroSection.description as Record<string, any>),
-                };
+          const convertedDesc = convertToI18n(data.heroSection.description);
+          (landingPage.heroSection.description as any) = convertedDesc || {};
         } else {
           (landingPage.heroSection.description as any) = {};
         }
       }
+      if (data.heroSection.subTitle !== undefined) {
+        if (data.heroSection.subTitle) {
+          const convertedSubTitle = convertToI18n(data.heroSection.subTitle);
+          (landingPage.heroSection.subTitle as any) = convertedSubTitle || {};
+        } else {
+          (landingPage.heroSection.subTitle as any) = {};
+        }
+      }
       if (data.heroSection.highlightedText !== undefined) {
         (landingPage.heroSection.highlightedText as any) = Array.isArray(data.heroSection.highlightedText)
-          ? data.heroSection.highlightedText.map((text: any) =>
-              typeof text === "string" ? { en: text } : text
-            )
+          ? data.heroSection.highlightedText.map((text: any) => convertToI18n(text))
           : [];
       }
       if (data.heroSection.isEnabled !== undefined) {
