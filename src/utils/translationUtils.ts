@@ -488,8 +488,43 @@ export const prepareDataForTranslation = async (
     if (fieldValue !== undefined && fieldValue !== null) {
       let translatedValue: any;
 
+      // Handle arrays - translate each item individually
+      if (Array.isArray(fieldValue)) {
+        translatedValue = await Promise.all(
+          fieldValue.map(async (item) => {
+            // If array item is an object with label property (like CTA)
+            if (typeof item === 'object' && item.label) {
+              return {
+                ...item,
+                label: await translationService.translateI18nString(item.label)
+              };
+            }
+            // If array item is an object with title and/or description properties (like benefits, steps, features)
+            else if (typeof item === 'object' && (item.title || item.description)) {
+              const translatedItem = { ...item };
+              if (item.title) {
+                translatedItem.title = await translationService.translateI18nString(item.title);
+              }
+              if (item.description) {
+                translatedItem.description = await translationService.translateI18nString(item.description);
+              }
+              return translatedItem;
+            }
+            // If array item is a plain string (like highlightedText)
+            else if (typeof item === 'string') {
+              return await translationService.translateI18nString(item);
+            }
+            // If array item is already an I18n object
+            else if (typeof item === 'object' && item.en) {
+              return await translationService.translateI18nString(item);
+            }
+            // Return as-is for other cases
+            return item;
+          })
+        );
+      }
       // If it's already an I18n object with English, translate it
-      if (
+      else if (
         typeof fieldValue === "object" &&
         !Array.isArray(fieldValue) &&
         fieldValue.en
@@ -525,8 +560,43 @@ export const prepareDataForTranslation = async (
     if (fieldValue !== undefined && fieldValue !== null) {
       let translatedValue: any;
 
+      // Handle arrays - translate each item individually
+      if (Array.isArray(fieldValue)) {
+        translatedValue = await Promise.all(
+          fieldValue.map(async (item) => {
+            // If array item is an object with label property (like CTA)
+            if (typeof item === 'object' && item.label) {
+              return {
+                ...item,
+                label: await translationService.translateI18nText(item.label)
+              };
+            }
+            // If array item is an object with title and/or description properties (like benefits, steps, features)
+            else if (typeof item === 'object' && (item.title || item.description)) {
+              const translatedItem = { ...item };
+              if (item.title) {
+                translatedItem.title = await translationService.translateI18nText(item.title);
+              }
+              if (item.description) {
+                translatedItem.description = await translationService.translateI18nText(item.description);
+              }
+              return translatedItem;
+            }
+            // If array item is a plain string
+            else if (typeof item === 'string') {
+              return await translationService.translateI18nText(item);
+            }
+            // If array item is already an I18n object
+            else if (typeof item === 'object' && item.en) {
+              return await translationService.translateI18nText(item);
+            }
+            // Return as-is for other cases
+            return item;
+          })
+        );
+      }
       // If it's already an I18n object with English, translate it
-      if (
+      else if (
         typeof fieldValue === "object" &&
         !Array.isArray(fieldValue) &&
         fieldValue.en
