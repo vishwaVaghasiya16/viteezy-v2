@@ -41,8 +41,80 @@ class TranslationService {
       return text;
     }
 
-    // If translation is disabled, return placeholder
+    // If translation is disabled, return basic mock translations for testing
     if (!this.enabled) {
+      // Basic mock translations for common words
+      const mockTranslations: Record<string, Record<string, string>> = {
+        "welcome": {
+          "nl": "welkom",
+          "de": "willkommen", 
+          "fr": "bienvenue",
+          "es": "bienvenido"
+        },
+        "to": {
+          "nl": "tot",
+          "de": "zu",
+          "fr": "à", 
+          "es": "a"
+        },
+        "viteezy": {
+          "nl": "viteezy",
+          "de": "viteezy",
+          "fr": "viteezy",
+          "es": "viteezy"
+        },
+        "your journey": {
+          "nl": "jouw reis",
+          "de": "deine reise",
+          "fr": "votre voyage",
+          "es": "tu viaje"
+        },
+        "to optimal": {
+          "nl": "naar optimale",
+          "de": "zu optimaler",
+          "fr": "à optimal",
+          "es": "a óptimo"
+        },
+        "health": {
+          "nl": "gezondheid",
+          "de": "gesundheit",
+          "fr": "santé",
+          "es": "salud"
+        },
+        "starts here": {
+          "nl": "begint hier",
+          "de": "beginnt hier",
+          "fr": "commence ici",
+          "es": "comienza aquí"
+        },
+        "science-backed": {
+          "nl": "wetenschappelijk onderbouwd",
+          "de": "wissenschaftlich fundiert",
+          "fr": "soutenu par la science",
+          "es": "con respaldo científico"
+        },
+        "wellness": {
+          "nl": "welzijn",
+          "de": "wellness",
+          "fr": "bien-être",
+          "es": "bienestar"
+        },
+        "solutions": {
+          "nl": "oplossingen",
+          "de": "lösungen",
+          "fr": "solutions",
+          "es": "soluciones"
+        }
+      };
+
+      const lowerText = text.toLowerCase();
+      
+      // Try to find exact match in mock translations
+      if (mockTranslations[lowerText]?.[targetLang]) {
+        return mockTranslations[lowerText][targetLang];
+      }
+      
+      // For demonstration, return a simple translation
       return `[${targetLang.toUpperCase()}] ${text}`;
     }
 
