@@ -11,6 +11,7 @@ const router = Router();
  * @desc    Get active header banner by device type (Public endpoint with optional authentication)
  * @access  Public (optional authentication for language detection)
  * @query   {String} deviceType - Device type (WEB or MOBILE) - Required
+ * @query   {String} lang - Language code (en, es, fr, nl, de) - Optional
  */
 router.get(
   "/",

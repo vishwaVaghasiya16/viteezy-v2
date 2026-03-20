@@ -232,6 +232,12 @@ export const getActiveHeaderBannerQuerySchema = Joi.object(
         "any.required": "Device type is required",
         "any.only": `Device type must be one of: ${DEVICE_TYPE_VALUES.join(", ")}`,
       }),
+    lang: Joi.string()
+      .valid("en", "es", "fr", "nl", "de")
+      .optional()
+      .messages({
+        "any.only": "Language must be one of: en, es, fr, nl, de",
+      }),
   })
 ).label("GetActiveHeaderBannerQuery");
 
