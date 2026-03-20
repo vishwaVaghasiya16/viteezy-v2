@@ -31,6 +31,7 @@ export interface ICart extends Document {
   currency: string; // Currency code (e.g., "USD")
   couponCode?: string;
   couponDiscountAmount: number; // Calculated coupon discount (fixed or percentage)
+  membershipDiscount?: number; // Membership discount percentage for the user
   expiresAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -130,6 +131,10 @@ const CartSchema = new Schema<ICart>(
     couponDiscountAmount: {
       type: Number,
       default: 0,
+    },
+    membershipDiscount: {
+      type: Number,
+      default: null,
     },
     expiresAt: {
       type: Date,

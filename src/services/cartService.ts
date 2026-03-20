@@ -9,6 +9,7 @@ import { logger } from "../utils/logger";
 import {
   calculateMemberPrice,
   ProductPriceSource,
+  getMembershipDiscount,
 } from "../utils/membershipPrice";
 import mongoose from "mongoose";
 import { ProductVariant, ReviewStatus } from "../models/enums";
@@ -466,6 +467,9 @@ class CartService {
           );
 
     if (!cart.items || cart.items.length === 0) {
+      // Get user's membership discount percentage for empty cart as well
+      const membershipDiscount = await getMembershipDiscount(userId);
+
       const result: {
         cart: any;
         suggestedProducts?: any[];
@@ -480,6 +484,8 @@ class CartService {
           total: 0,
           currency: "USD",
           couponDiscountAmount: 0,
+          // Add membership discount percentage
+          membershipDiscount: membershipDiscount,
         },
       };
 
@@ -640,6 +646,13 @@ class CartService {
           variants: variantsArray,
           isInCart: true,
         };
+
+        // Add membershipDiscount percentage if product has member pricing
+        if (productWithCartFlag.isMember && productWithCartFlag.discount) {
+          productWithCartFlag.membershipDiscount = productWithCartFlag.discount.percentage;
+        } else {
+          productWithCartFlag.membershipDiscount = null;
+        }
       }
 
       // Build item object
@@ -670,6 +683,9 @@ class CartService {
       cart.couponDiscountAmount || 0
     );
 
+    // Get user's membership discount percentage
+    const membershipDiscount = await getMembershipDiscount(userId);
+
     const result: {
       cart: any;
       suggestedProducts?: any[];
@@ -683,6 +699,8 @@ class CartService {
         discount: recalculatedTotals.discount,
         total: recalculatedTotals.total,
         currency: recalculatedTotals.currency,
+        // Add membership discount percentage
+        membershipDiscount: membershipDiscount,
       },
     };
 

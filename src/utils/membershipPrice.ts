@@ -87,7 +87,7 @@ async function isActiveMember(userId: string): Promise<boolean> {
 /**
  * Get user's membership plan discount percentage
  */
-async function getMembershipDiscount(userId: string): Promise<number | null> {
+export async function getMembershipDiscount(userId: string): Promise<number | null> {
   try {
     const user = await User.findById(userId)
       .select("membershipPlanId membershipStatus membershipExpiresAt")
