@@ -91,6 +91,22 @@ export const getSubscriptionDetailsParamsSchema = Joi.object(
 ).label("SubscriptionDetailsParams");
 
 /**
+ * Joi schema for getting subscription details query parameters
+ */
+export const getSubscriptionDetailsQuerySchema = Joi.object(
+  withFieldLabels({
+    lang: Joi.string()
+      .valid("en", "es", "fr", "nl", "de")
+      .optional()
+      .messages({
+        "any.only": "Language must be one of: en, es, fr, nl, de",
+      }),
+  }),
+)
+  .default({})
+  .label("SubscriptionDetailsQuery");
+
+/**
  * Joi schema for getting user's subscriptions
  */
 export const getSubscriptionsQuerySchema = Joi.object(
@@ -100,6 +116,12 @@ export const getSubscriptionsQuerySchema = Joi.object(
       .optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
+    lang: Joi.string()
+      .valid("en", "es", "fr", "nl", "de")
+      .optional()
+      .messages({
+        "any.only": "Language must be one of: en, es, fr, nl, de",
+      }),
   }),
 )
   .default({})

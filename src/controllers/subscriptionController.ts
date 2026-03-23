@@ -19,6 +19,7 @@ import { computeSubscriptionMetrics } from "@/services/subscriptionService";
 import { getSubscriptionPriceFromProduct } from "@/utils/productSubscriptionPrice";
 import { calculateMemberPrice } from "@/utils/membershipPrice";
 import { getTranslatedString } from "@/utils/translationUtils";
+import { SupportedLanguage } from "@/models/common.model";
 import { paymentService } from "@/services/payment/PaymentService";
 import { subscriptionAutoRenewalService } from "@/services/subscriptionAutoRenewalService";
 import { cartService } from "@/services/cartService";
@@ -267,8 +268,34 @@ class SubscriptionController {
         throw new AppError("User not authenticated", 401);
       }
 
-      const { status } = req.query;
+      const { status, lang } = req.query;
       const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Get language from query parameter or fall back to user language
+      let userLang: SupportedLanguage = "en"; // Default
+      if (lang && typeof lang === 'string') {
+        const validLangs: SupportedLanguage[] = ['en', 'es', 'fr', 'nl', 'de'];
+        if (validLangs.includes(lang as SupportedLanguage)) {
+          userLang = lang as SupportedLanguage;
+        }
+      } else {
+        // Fall back to user language from database
+        try {
+          const user = await User.findById(userId).select("language").lean();
+          if (user?.language) {
+            const languageMap: Record<string, SupportedLanguage> = {
+              English: "en",
+              Spanish: "es", 
+              French: "fr",
+              Dutch: "nl",
+              German: "de",
+            };
+            userLang = languageMap[user.language] || "en";
+          }
+        } catch {
+          // Ignore error and use default
+        }
+      }
 
       const paginationOptions = getPaginationOptions(req);
       const skip = (paginationOptions.page - 1) * paginationOptions.limit;
@@ -290,6 +317,11 @@ class SubscriptionController {
             "orderId",
             "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency",
           )
+          .populate({
+            path: "items.productId",
+            select: "title slug description",
+            model: Products,
+          })
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(paginationOptions.limit)
@@ -303,7 +335,7 @@ class SubscriptionController {
         total,
       );
 
-      // Format response
+      // Format response with translation
       const formattedSubscriptions = subscriptions.map((sub: any) => {
         const now = new Date();
         const daysUntilDelivery = sub.nextDeliveryDate
@@ -319,6 +351,45 @@ class SubscriptionController {
             )
           : null;
 
+        // Translate subscription items using product data
+        const translatedItems = sub.items.map((item: any) => {
+          let translatedName = item.name; // Default to stored name
+          let translatedProductData = null;
+          
+          // Try to get translated name from product if available
+          if (item.productId && typeof item.productId === 'object' && item.productId.title) {
+            const productTitle = item.productId.title;
+            if (typeof productTitle === 'object' && productTitle !== null) {
+              // Product has I18n title, translate it
+              translatedName = getTranslatedString(productTitle, userLang) || item.name;
+              
+              // Create translated product object with only requested language
+              translatedProductData = {
+                _id: item.productId._id,
+                title: getTranslatedString(item.productId.title, userLang),
+                slug: item.productId.slug,
+                description: getTranslatedString(item.productId.description, userLang),
+              };
+            } else {
+              // Product title is already a string, use as-is
+              translatedName = productTitle;
+              translatedProductData = {
+                _id: item.productId._id,
+                title: productTitle,
+                slug: item.productId.slug,
+                description: item.productId.description,
+              };
+            }
+          }
+          
+          return {
+            ...item,
+            name: translatedName,
+            productId: translatedProductData || item.productId, // Replace with translated data
+            // Keep other fields as-is
+          };
+        });
+
         return {
           id: sub._id,
           subscriptionNumber: sub.subscriptionNumber,
@@ -328,7 +399,7 @@ class SubscriptionController {
           cycleDays: sub.cycleDays,
           subscriptionStartDate: sub.subscriptionStartDate,
           subscriptionEndDate: sub.subscriptionEndDate,
-          items: sub.items,
+          items: translatedItems,
           initialDeliveryDate: sub.initialDeliveryDate,
           nextDeliveryDate: sub.nextDeliveryDate,
           nextBillingDate: sub.nextBillingDate,
@@ -364,7 +435,34 @@ class SubscriptionController {
       }
 
       const { subscriptionId } = req.params;
+      const { lang } = req.query;
       const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // Get language from query parameter or fall back to user language
+      let userLang: SupportedLanguage = "en"; // Default
+      if (lang && typeof lang === 'string') {
+        const validLangs: SupportedLanguage[] = ['en', 'es', 'fr', 'nl', 'de'];
+        if (validLangs.includes(lang as SupportedLanguage)) {
+          userLang = lang as SupportedLanguage;
+        }
+      } else {
+        // Fall back to user language from database
+        try {
+          const user = await User.findById(userId).select("language").lean();
+          if (user?.language) {
+            const languageMap: Record<string, SupportedLanguage> = {
+              English: "en",
+              Spanish: "es", 
+              French: "fr",
+              Dutch: "nl",
+              German: "de",
+            };
+            userLang = languageMap[user.language] || "en";
+          }
+        } catch {
+          // Ignore error and use default
+        }
+      }
 
       const subscription = await Subscriptions.findOne({
         _id: new mongoose.Types.ObjectId(subscriptionId),
@@ -375,6 +473,11 @@ class SubscriptionController {
           "orderId",
           "orderNumber status subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency",
         )
+        .populate({
+          path: "items.productId",
+          select: "title slug description",
+          model: Products,
+        })
         .lean();
 
       if (!subscription) {
@@ -395,6 +498,45 @@ class SubscriptionController {
           )
         : null;
 
+      // Translate subscription items using product data
+      const translatedItems = subscription.items.map((item: any) => {
+        let translatedName = item.name; // Default to stored name
+        let translatedProductData = null;
+        
+        // Try to get translated name from product if available
+        if (item.productId && typeof item.productId === 'object' && item.productId.title) {
+          const productTitle = item.productId.title;
+          if (typeof productTitle === 'object' && productTitle !== null) {
+            // Product has I18n title, translate it
+            translatedName = getTranslatedString(productTitle, userLang) || item.name;
+            
+            // Create translated product object with only requested language
+            translatedProductData = {
+              _id: item.productId._id,
+              title: getTranslatedString(item.productId.title, userLang),
+              slug: item.productId.slug,
+              description: getTranslatedString(item.productId.description, userLang),
+            };
+          } else {
+            // Product title is already a string, use as-is
+            translatedName = productTitle;
+            translatedProductData = {
+              _id: item.productId._id,
+              title: productTitle,
+              slug: item.productId.slug,
+              description: item.productId.description,
+            };
+          }
+        }
+        
+        return {
+          ...item,
+          name: translatedName,
+          productId: translatedProductData || item.productId, // Replace with translated data
+          // Keep other fields as-is
+        };
+      });
+
       res.status(200).json({
         success: true,
         message: "Subscription details retrieved successfully",
@@ -408,7 +550,7 @@ class SubscriptionController {
             cycleDays: subscription.cycleDays,
             subscriptionStartDate: subscription.subscriptionStartDate,
             subscriptionEndDate: subscription.subscriptionEndDate,
-            items: subscription.items,
+            items: translatedItems,
             initialDeliveryDate: subscription.initialDeliveryDate,
             nextDeliveryDate: subscription.nextDeliveryDate,
             nextBillingDate: subscription.nextBillingDate,

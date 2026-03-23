@@ -9,6 +9,7 @@ import {
   createSubscriptionSchema,
   updateSubscriptionSchema,
   getSubscriptionDetailsParamsSchema,
+  getSubscriptionDetailsQuerySchema,
   getSubscriptionsQuerySchema,
   getSubscriptionTransactionHistoryQuerySchema,
   pauseSubscriptionSchema,
@@ -61,6 +62,7 @@ router.get(
 router.get(
   "/:subscriptionId",
   validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionDetailsQuerySchema),
   subscriptionController.getSubscriptionDetails
 );
 
