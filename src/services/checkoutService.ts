@@ -21,6 +21,7 @@ import {
   getTranslatedString,
   getUserLanguageCode,
 } from "../utils/translationUtils";
+import { transformProductForLanguage } from "../services/productEnrichmentService";
 import { User } from "../models/core";
 import {
   SACHETS_PLANS_CONFIG,
@@ -2116,6 +2117,20 @@ class CheckoutService {
     // Determine user's language for translating any I18n fields
     const userDoc = await User.findById(userId).select("language").lean();
     const userLang = getUserLanguageCode(userDoc?.language);
+    
+    // TEMP DEBUG: Log language detection
+    console.log(`[DEBUG] User ID: ${userId}`);
+    console.log(`[DEBUG] User Doc Language: ${userDoc?.language}`);
+    console.log(`[DEBUG] Detected Language: ${userLang}`);
+
+    // Transform all products for user's language
+    const transformedProducts = products.map(product => 
+      transformProductForLanguage(product, userLang)
+    );
+    
+    // TEMP DEBUG: Log transformation
+    console.log(`[DEBUG] Transformed ${transformedProducts.length} products`);
+    console.log(`[DEBUG] Sample product title: ${transformedProducts[0]?.title}`);
 
     // For SACHETS with subscription: Check if user already has an active subscription with same cycleDays
     // Show warning if user tries to create a subscription plan that already exists
@@ -2147,16 +2162,14 @@ class CheckoutService {
     // Build cart items with selected plan price and membership discount
     // Process SACHETS items
     const sachetCartItemsPromises = sachetItems.map(async (item: any) => {
-      const product = products.find(
+      const product = transformedProducts.find(
         (p) => p._id.toString() === item.productId.toString(),
       );
 
       if (!product || !product.sachetPrices) return null;
 
-      const productTitle =
-        typeof product.title === "string"
-          ? product.title
-          : product.title?.en || product.title?.nl || "Product";
+      // Use transformed product title (already translated)
+      const productTitle = product.title || "Product";
 
       const sachetPrices = product.sachetPrices as any;
       const selectedPlanData = sachetPrices[planKey];
@@ -2226,17 +2239,15 @@ class CheckoutService {
     // Process STAND_UP_POUCH items
     const standupPouchCartItemsPromises = standupPouchItems.map(
       async (item: any) => {
-        const product = products.find(
+        const product = transformedProducts.find(
           (p) => p._id.toString() === item.productId.toString(),
         );
 
         if (!product || !product.hasStandupPouch || !product.standupPouchPrice)
           return null;
 
-        const productTitle =
-          typeof product.title === "string"
-            ? product.title
-            : product.title?.en || product.title?.nl || "Product";
+        // Use transformed product title (already translated)
+        const productTitle = product.title || "Product";
 
         const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
         
@@ -2376,7 +2387,7 @@ class CheckoutService {
 
     // Build plans for SACHETS variant
     if (sachetItems.length > 0) {
-      for (const product of products) {
+      for (const product of transformedProducts) {
         if (product.sachetPrices) {
           const sachetPrices = product.sachetPrices as any;
           const cartItem = sachetItems.find(
@@ -2513,7 +2524,7 @@ class CheckoutService {
       // For STAND_UP_POUCH, use dynamic plan configuration (60-count and 120-count plans)
       const standupPouchPlans = STAND_UP_POUCH_PLANS_CONFIG;
 
-      for (const product of products) {
+      for (const product of transformedProducts) {
         if (product.hasStandupPouch && product.standupPouchPrice) {
           const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
           const cartItem = standupPouchItems.find(
@@ -3019,6 +3030,7 @@ class CheckoutService {
       allProductIds,
       3,
       5,
+      userLang
     );
 
     const result: any = {
@@ -3130,6 +3142,7 @@ class CheckoutService {
     excludeProductIds: mongoose.Types.ObjectId[],
     minCount: number = 3,
     maxCount: number = 5,
+    userLang: SupportedLanguage = DEFAULT_LANGUAGE,
   ): Promise<
     Array<{
       productId: string;
@@ -3150,13 +3163,14 @@ class CheckoutService {
       .sort({ isFeatured: -1, createdAt: -1 })
       .lean();
 
-    return suggestedProductDocs.map((product) => {
-      const productTitle =
-        typeof product.title === "string"
-          ? product.title
-          : (product.title as any)?.en ||
-            (product.title as any)?.nl ||
-            "Product";
+    // Transform suggested products for user's language
+    const transformedSuggestedProducts = suggestedProductDocs.map(product => 
+      transformProductForLanguage(product, userLang)
+    );
+
+    return transformedSuggestedProducts.map((product) => {
+      // Use transformed product title (already translated)
+      const productTitle = product.title || "Product";
 
       // Get base price from product
       let price = product.price?.amount || 0;
