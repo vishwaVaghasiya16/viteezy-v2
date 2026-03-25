@@ -23,6 +23,7 @@ import subscriptionRoutes from "./subscriptionRoutes";
 import subscriptionUpdateRoutes from "./subscriptionUpdateRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
+import familyLinkingRoutes from "./familyLinkingRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
 import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
 import adminBlogCategoryRoutes from "./adminBlogCategoryRoutes";
@@ -70,6 +71,7 @@ const router = Router();
 // API Routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
+router.use("/family", familyLinkingRoutes);
 
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
 router.use("/admin/product-ingredients", adminProductIngredientRoutes);

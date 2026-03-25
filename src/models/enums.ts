@@ -17,6 +17,9 @@ export enum UserRole {
   USER = "User",
   ADMIN = "Admin",
   MODERATOR = "Moderator",
+  MAIN_MEMBER = "MAIN_MEMBER",
+  SUB_MEMBER = "SUB_MEMBER",
+  INDEPENDENT = "INDEPENDENT",
 }
 
 // User Status
