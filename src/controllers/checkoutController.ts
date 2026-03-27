@@ -3,6 +3,7 @@ import { cartService } from "../services/cartService";
 import { checkoutService } from "../services/checkoutService";
 import { AppError } from "../utils/AppError";
 import { Addresses } from "../models/core/addresses.model";
+import { User } from "../models/index.model";
 import mongoose from "mongoose";
 import {
   calculateMemberPrice,
@@ -507,7 +508,7 @@ class CheckoutController {
       const userLang = getUserLanguage(req);
 
       // Parallel execution: Validate cart and fetch addresses simultaneously
-      const [cartValidation, shippingAddress, billingAddress] =
+      const [cartValidation, shippingAddress, billingAddress, user] =
         await Promise.all([
           cartService.validateCart(userId),
           Addresses.findOne({
@@ -520,7 +521,27 @@ class CheckoutController {
             isDefault: true,
             isDeleted: false,
           }).lean(),
+          User.findById(userId).lean()
         ]);
+
+      // ADDRESS INHERITANCE LOGIC
+      let finalShippingAddress = shippingAddress;
+      if (!shippingAddress && user?.parentId) {
+        // Try to get parent's default address
+        const parentAddress = await Addresses.findOne({
+          userId: user.parentId,
+          isDefault: true,
+          isDeleted: false,
+        }).lean();
+        
+        if (parentAddress) {
+          finalShippingAddress = {
+            ...parentAddress,
+            inherited: true,
+            inheritedFrom: user.parentId
+          } as any;
+        }
+      }
 
       if (!cartValidation.isValid) {
         res.status(400).json({
@@ -694,21 +715,23 @@ class CheckoutController {
           total: cartValidation.pricing.total,
         },
         addresses: {
-          shipping: shippingAddress
+          shipping: finalShippingAddress
             ? {
-                id: shippingAddress._id,
-                firstName: shippingAddress.firstName,
-                lastName: shippingAddress.lastName,
-                streetName: shippingAddress.streetName,
-                houseNumber: shippingAddress.houseNumber,
-                houseNumberAddition: shippingAddress.houseNumberAddition,
-                postalCode: shippingAddress.postalCode,
-                address: shippingAddress.address,
-                phone: shippingAddress.phone,
-                city: shippingAddress.city,
-                country: shippingAddress.country,
-                isDefault: shippingAddress.isDefault,
-                note: shippingAddress.note,
+                id: finalShippingAddress._id,
+                firstName: finalShippingAddress.firstName,
+                lastName: finalShippingAddress.lastName,
+                streetName: finalShippingAddress.streetName,
+                houseNumber: finalShippingAddress.houseNumber,
+                houseNumberAddition: finalShippingAddress.houseNumberAddition,
+                postalCode: finalShippingAddress.postalCode,
+                address: finalShippingAddress.address,
+                phone: finalShippingAddress.phone,
+                city: finalShippingAddress.city,
+                country: finalShippingAddress.country,
+                isDefault: finalShippingAddress.isDefault,
+                note: finalShippingAddress.note,
+                inherited: finalShippingAddress.inherited,
+                inheritedFrom: finalShippingAddress.inheritedFrom,
               }
             : null,
           billing: billingAddress

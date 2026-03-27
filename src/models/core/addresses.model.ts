@@ -15,6 +15,8 @@ export interface IAddress extends Document {
   city?: string; // Optional, but may be needed for BE validation
   isDefault: boolean;
   note?: string; // Renamed from instructions
+  inherited?: boolean; // Flag for inherited addresses from family members
+  inheritedFrom?: mongoose.Types.ObjectId; // Parent user ID if inherited
   createdAt: Date;
   updatedAt: Date;
 }

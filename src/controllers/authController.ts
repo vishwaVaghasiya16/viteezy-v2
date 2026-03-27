@@ -452,6 +452,26 @@ class AuthController {
         relationshipToParent,
       } = req.body;
 
+      // VALIDATION 1: Check if user already in family
+      const existingUser = await User.findOne({ email });
+      if (existingUser && existingUser.parentId) {
+        throw new AppError("User is already in a family", 400);
+      }
+      
+      // VALIDATION 2: Check if main member is actually main member
+      const mainMember = await User.findById(userId);
+      if (mainMember?.parentId) {
+        throw new AppError("Cannot add family member to a sub-member", 400);
+      }
+      
+      // VALIDATION 3: Check max sub-member limit
+      const subMemberCount = await User.countDocuments({ parentId: userId });
+      const maxSubMembers = 10;
+      
+      if (subMemberCount >= maxSubMembers) {
+        throw new AppError(`Maximum sub-member limit (${maxSubMembers}) reached`, 400);
+      }
+
       const result = await authService.registerFamilyMember({
         parentMemberId: userId,
         firstName,

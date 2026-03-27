@@ -129,7 +129,18 @@ export class CartController {
         isOneTime?: boolean;
         planDays?: number;
       }> = [];
-      const { productId, variantType, quantity, isOneTime, planDays } = req.body;
+      const { productId, variantType, quantity, isOneTime, planDays, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || req.user._id;
 
       if (productId || variantType) {
         if (!productId || !variantType) {
@@ -244,7 +255,18 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, variantType, quantity, isOneTime, planDays } = req.body;
+      const { productId, variantType, quantity, isOneTime, planDays, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
@@ -271,7 +293,7 @@ export class CartController {
         }
       }
 
-      const result = await cartService.updateItem(userId, {
+      const result = await cartService.updateItem(targetUserId, {
         productId,
         variantType: variantType as ProductVariant,
         quantity: quantity ? Number(quantity) : undefined,
@@ -305,13 +327,24 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId } = req.body;
+      const { productId, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
       }
 
-      const result = await cartService.removeItem(userId, {
+      const result = await cartService.removeItem(targetUserId, {
         productId,
       });
 
@@ -341,7 +374,20 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const result = await cartService.clearCart(userId);
+      const { for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
+
+      const result = await cartService.clearCart(targetUserId);
 
       res.status(200).json({
         success: true,

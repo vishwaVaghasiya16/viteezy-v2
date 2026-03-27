@@ -7,8 +7,24 @@ import {
   userImageUpload,
   handleProfileImageUploadError,
 } from "@/middleware/profileImageUpload";
+import { validateJoi as validate } from "@/middleware/joiValidation";
+import Joi from "joi";
 
 const router = Router();
+
+// Family linking validation schemas
+const linkByMemberIdSchema = Joi.object({
+  memberId: Joi.string().required().pattern(/^MEM-[A-Z0-9]{8}$/),
+  relationshipToParent: Joi.string().valid("Child", "Spouse", "Parent", "Sibling", "Other").optional()
+});
+
+const leaveFamilySchema = Joi.object({
+  confirmation: Joi.string().valid("CONFIRM_LEAVE").required()
+});
+
+const removeSubMemberSchema = Joi.object({
+  subMemberId: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/)
+});
 
 /**
  * Get current authenticated user profile
@@ -91,5 +107,21 @@ router.delete(
   authenticate,
   userController.removeDeviceToken
 );
+
+router.post("/family/leave", authenticate, userController.leaveFamily);
+router.post("/family/dissolve", authenticate, userController.leaveFamilyAsMainMember);
+
+// Additional family management endpoints
+router.post(
+  "/family/link",
+  authenticate,
+  validate(linkByMemberIdSchema),
+  userController.linkByMemberId
+);
+
+router.get("/family/info", authenticate, userController.getFamilyInfo);
+router.get("/family/sub-members", authenticate, userController.getMySubMembers);
+router.delete("/family/remove/:subMemberId", authenticate, userController.removeSubMember);
+router.get("/verify-member/:memberId", userController.verifyMemberId);
 
 export default router;

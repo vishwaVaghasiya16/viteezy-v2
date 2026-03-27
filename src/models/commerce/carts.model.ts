@@ -19,6 +19,7 @@ export interface ICart extends Document {
     price: PriceType;
     totalAmount?: number; // Total amount (unit price * quantity) for STAND_UP_POUCH items
     isSubscriptionChange?: boolean; // Flag to indicate this item was added from subscription-change flow
+    profileId?: mongoose.Types.ObjectId; // Profile ID this item is for (commerce context)
     addedAt: Date;
   }>;
   cartType?: "NORMAL" | "SUBSCRIPTION_UPDATE" ;
@@ -81,6 +82,11 @@ const CartSchema = new Schema<ICart>(
         isSubscriptionChange: {
           type: Boolean,
           default: false,
+        },
+        profileId: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
         },
         addedAt: {
           type: Date,

@@ -21,8 +21,65 @@ interface AuthenticatedRequest extends Request {
     email?: string;
     firstName?: string;
     lastName?: string;
-  };
+  }
 }
+
+/**
+ * Get effective membership for a user with family benefits
+ * Merges self benefits with inherited benefits from main member
+ */
+const getEffectiveMembership = async (userId: string) => {
+  try {
+    // Get user's family role
+    const user = await User.findById(userId).select('parentId').lean();
+    if (!user) {
+      return null;
+    }
+
+    // Get user's own membership
+    const userMembership = await Memberships.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+      status: MembershipStatus.ACTIVE,
+      isDeleted: false
+    }).populate('planId').lean();
+
+    // If user is independent or main member, return their own membership
+    if (!user.parentId) {
+      return userMembership;
+    }
+
+    // For sub-members, get main member's membership
+    const mainMembership = await Memberships.findOne({
+      userId: user.parentId,
+      status: MembershipStatus.ACTIVE,
+      isDeleted: false
+    }).populate('planId').lean();
+
+    // Merge benefits: self benefits take priority over inherited
+    if (userMembership && mainMembership && userMembership.planId && mainMembership.planId) {
+      const selfBenefits = (userMembership.planId as any).benefits || [];
+      const inheritedBenefits = ((mainMembership.planId as any).benefits || []).filter(
+        (benefit: any) => benefit.familyShareable !== false
+      );
+      
+      // Remove duplicates, keeping self benefits
+      const allBenefits = [...new Set([...selfBenefits, ...inheritedBenefits])];
+      
+      return {
+        ...userMembership,
+        effectiveBenefits: allBenefits,
+        hasInheritedBenefits: inheritedBenefits.length > 0,
+        inheritedFrom: user.parentId
+      };
+    }
+
+    // Return whichever membership exists
+    return userMembership || mainMembership;
+  } catch (error) {
+    console.error('Error getting effective membership:', error);
+    return null;
+  }
+};
 
 class MembershipController {
   /**
@@ -178,6 +235,23 @@ class MembershipController {
             ? req.user._id
             : undefined,
       });
+
+      // FAMILY BENEFIT MARKING
+      const { getUserFamilyRole } = await import("@/services/familyValidationService");
+      const userRole = await getUserFamilyRole(req.user._id);
+      if (userRole === 'MAIN_MEMBER') {
+        await Memberships.updateOne(
+          { _id: membership._id },
+          { 
+            $set: { 
+              'benefits.$[elem].familyShareable': true 
+            }
+          },
+          { 
+            arrayFilters: [{ 'elem.type': { $in: ['FREE_SHIPPING', 'DISCOUNT'] } }]
+          }
+        );
+      }
 
       const membershipId = (
         membership._id as mongoose.Types.ObjectId
@@ -739,6 +813,83 @@ class MembershipController {
           },
         },
       });
+    }
+  );
+
+  /**
+   * Get user's effective membership with family benefits
+   * @route GET /api/memberships/effective
+   * @access Private
+   */
+  getEffectiveMembership = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const effectiveMembership = await getEffectiveMembership(req.user._id);
+
+      if (!effectiveMembership) {
+        res.apiSuccess(
+          { hasMembership: false },
+          "No active membership found"
+        );
+        return;
+      }
+
+      res.apiSuccess(
+        { 
+          hasMembership: true,
+          membership: effectiveMembership
+        },
+        "Effective membership retrieved successfully"
+      );
+    }
+  );
+
+  /**
+   * Get membership benefits (available benefits from active plans)
+   * @route GET /api/memberships/benefits
+   * @access Private
+   */
+  getMembershipBenefits = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { lang = "en" } = req.query as { lang?: string };
+
+      // Get all active membership plans and their benefits
+      const membershipPlans = await MembershipPlans.find({
+        isActive: true,
+        isDeleted: false,
+      })
+        .select("name benefits")
+        .lean();
+
+      // Collect all unique benefits from all plans
+      const allBenefits = new Set<string>();
+      membershipPlans.forEach((plan) => {
+        if (plan.benefits && Array.isArray(plan.benefits)) {
+          plan.benefits.forEach((benefit) => {
+            if (typeof benefit === "string" && benefit.trim()) {
+              allBenefits.add(benefit.trim());
+            }
+          });
+        }
+      });
+
+      // Convert to array and sort alphabetically
+      const benefitsList = Array.from(allBenefits).sort();
+
+      res.apiSuccess(
+        { 
+          benefits: benefitsList,
+          totalBenefits: benefitsList.length 
+        },
+        "Membership benefits retrieved successfully"
+      );
     }
   );
 

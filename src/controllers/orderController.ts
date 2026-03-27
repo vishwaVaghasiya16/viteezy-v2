@@ -36,6 +36,18 @@ interface AuthenticatedRequest extends Request {
     _id: string;
     language?: string;
   };
+  orderContext?: {
+    orderedBy: string;
+    orderedFor: string;
+    relationshipType: "SELF" | "FAMILY";
+  };
+  resolvedAddress?: {
+    addressId?: string;
+    address: any;
+    source: "SELF" | "INHERITED" | "MANUAL";
+    inheritedFrom?: string;
+    isManual: boolean;
+  };
 }
 
 const mapLanguageToCode = (language?: string): SupportedLanguage => {
@@ -342,6 +354,7 @@ class OrderController {
         cartId,
         sachets,
         standUpPouch,
+        orderedFor,
         // Legacy fields (for backward compatibility)
         variantType,
         planDurationDays,
@@ -358,6 +371,14 @@ class OrderController {
       } = req.body;
 
       const userId = new mongoose.Types.ObjectId(req.user._id);
+
+      // FAMILY PERMISSION VALIDATION
+      const targetUserId = orderedFor || req.user._id;
+      const { validateFamilyRelation } = await import("@/services/familyValidationService");
+      const validation = await validateFamilyRelation(req.user._id, targetUserId);
+      if (!validation.allowed) {
+        throw new AppError(validation.reason || "Access denied", 403);
+      }
 
       // Get user language for feature translation
       const userLang = await getUserLanguage(req, req.user._id.toString());
@@ -517,26 +538,47 @@ class OrderController {
       // If order has both, isOneTime = false (because subscriptions are primary)
       const orderIsOneTime = standupPouchItems.length > 0 && sachetItems.length === 0;
 
-      // Validate and fetch shipping address
-      if (!shippingAddressId) {
-        throw new AppError("Shipping address ID is required", 400);
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(shippingAddressId)) {
-        throw new AppError("Invalid shipping address ID format", 400);
-      }
-
-      const shippingAddressDoc = await Addresses.findOne({
-        _id: new mongoose.Types.ObjectId(shippingAddressId),
-        userId: userId,
-        isDeleted: false,
-      }).lean();
-
-      if (!shippingAddressDoc) {
+      // Use resolved shipping address from middleware
+      const resolvedAddress = req.resolvedAddress;
+      
+      if (!resolvedAddress) {
         throw new AppError(
-          "Shipping address not found or does not belong to user",
-          404
+          "Shipping address resolution failed",
+          500,
+          true,
+          "ADDRESS_RESOLUTION_FAILED"
         );
+      }
+
+      let shippingAddressDoc;
+      
+      // For manual addresses, use the address object directly
+      if (resolvedAddress.isManual) {
+        shippingAddressDoc = resolvedAddress.address;
+      } else {
+        // For saved addresses, validate the address exists
+        if (!resolvedAddress.addressId) {
+          throw new AppError(
+            "Saved address ID not found in resolved address",
+            500,
+            true,
+            "RESOLVED_ADDRESS_MISSING_ID"
+          );
+        }
+
+        shippingAddressDoc = await Addresses.findOne({
+          _id: new mongoose.Types.ObjectId(resolvedAddress.addressId),
+          isDeleted: false,
+        }).lean();
+
+        if (!shippingAddressDoc) {
+          throw new AppError(
+            "Resolved shipping address not found",
+            404,
+            true,
+            "RESOLVED_ADDRESS_NOT_FOUND"
+          );
+        }
       }
 
       // Validate billing address if provided
@@ -947,13 +989,33 @@ class OrderController {
           : {}),
       };
 
+      // Prepare address metadata
+      const addressMetadata = {
+        source: req.body.addressSource,
+        inheritedFrom: req.body.addressInheritedFrom,
+        isManual: req.body.addressIsManual,
+      };
+
+      // For manual addresses, we need to create a temporary address ID
+      let finalShippingAddressId;
+      if (resolvedAddress.isManual) {
+        // For manual addresses, create a temporary ID for consistency
+        // In production, you might want to save manual addresses to the database
+        finalShippingAddressId = new mongoose.Types.ObjectId();
+      } else {
+        finalShippingAddressId = new mongoose.Types.ObjectId(resolvedAddress.addressId!);
+      }
+
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
+        orderedBy: req.body.orderedBy ? new mongoose.Types.ObjectId(req.body.orderedBy) : new mongoose.Types.ObjectId(req.user._id),
+        orderedFor: req.body.orderedFor ? new mongoose.Types.ObjectId(req.body.orderedFor) : new mongoose.Types.ObjectId(req.user._id),
+        relationshipType: req.body.relationshipType,
         planType: planType,
         items: orderItems,
         pricing: pricingBreakdown,
-        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        shippingAddressId: finalShippingAddressId,
         billingAddressId: billingAddressId
           ? new mongoose.Types.ObjectId(billingAddressId)
           : undefined,
@@ -961,7 +1023,10 @@ class OrderController {
         couponCode: normalizedCouponCode,
         couponMetadata: couponMetadata || {},
         membershipMetadata: membershipMetadata,
-        metadata: orderMetadata,
+        metadata: {
+          ...orderMetadata,
+          addressResolution: addressMetadata,
+        },
         notes,
       });
 
@@ -977,6 +1042,34 @@ class OrderController {
       } catch (error: any) {
         logger.error(`Failed to send order placed notification: ${error.message}`);
         // Don't fail the order creation if notification fails
+      }
+
+      // Emit order placed event
+      try {
+        const { familyEventEmitter, FAMILY_EVENTS } = await import("@/utils/familyEvents");
+        
+        const orderPlacedEvent = {
+          orderedBy: req.body.orderedBy || userId,
+          orderedFor: req.body.orderedFor || userId,
+          relationshipType: req.body.relationshipType || "SELF",
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          timestamp: new Date(),
+        };
+
+        familyEventEmitter.emit(FAMILY_EVENTS.ORDER_PLACED, orderPlacedEvent);
+        
+        logger.info("Order placed event emitted", {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          orderedBy: orderPlacedEvent.orderedBy,
+          orderedFor: orderPlacedEvent.orderedFor,
+          relationshipType: orderPlacedEvent.relationshipType,
+        });
+
+      } catch (error: any) {
+        logger.error(`Failed to emit order placed event: ${error.message}`);
+        // Don't fail the order creation if event emission fails
       }
 
       // Check if couponCode is a referral code and create referral record

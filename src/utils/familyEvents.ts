@@ -15,6 +15,11 @@ export const FAMILY_EVENTS = {
   MEMBER_LINKED: "FAMILY_MEMBER_LINKED",
   MEMBER_REMOVED: "FAMILY_MEMBER_REMOVED",
   MEMBER_LEFT: "FAMILY_MEMBER_LEFT",
+  ORDER_PLACED: "ORDER_PLACED",
+  ADDRESS_RESOLVED: "ADDRESS_RESOLVED",
+  CONTEXT_SWITCHED: "CONTEXT_SWITCHED",
+  ITEM_ADDED_TO_CART: "ITEM_ADDED_TO_CART",
+  RECOMMENDATION_FETCHED: "RECOMMENDATION_FETCHED",
 } as const;
 
 // ============================================================================
@@ -43,10 +48,58 @@ export interface FamilyMemberLeftEvent {
   timestamp: Date;
 }
 
+export interface OrderPlacedEvent {
+  orderedBy: string;
+  orderedFor: string;
+  relationshipType: "SELF" | "FAMILY";
+  orderId: string;
+  orderNumber: string;
+  timestamp: Date;
+}
+
+export interface AddressResolvedEvent {
+  orderedBy: string;
+  orderedFor: string;
+  source: "SELF" | "INHERITED" | "MANUAL";
+  inheritedFrom?: string;
+  addressId?: string;
+  timestamp: Date;
+}
+
+export interface ContextSwitchedEvent {
+  selectedBy: string;
+  oldProfileId?: string;
+  newProfileId: string;
+  relationshipType: "SELF" | "FAMILY";
+  timestamp: Date;
+}
+
+export interface ItemAddedToCartEvent {
+  userId: string;
+  profileId: string;
+  productId: string;
+  variantType: string;
+  quantity: number;
+  timestamp: Date;
+}
+
+export interface RecommendationFetchedEvent {
+  selectedBy: string;
+  profileId: string;
+  recommendationCount: number;
+  criteria: any;
+  timestamp: Date;
+}
+
 export type FamilyEvent = 
   | FamilyMemberLinkedEvent
   | FamilyMemberRemovedEvent
-  | FamilyMemberLeftEvent;
+  | FamilyMemberLeftEvent
+  | OrderPlacedEvent
+  | AddressResolvedEvent
+  | ContextSwitchedEvent
+  | ItemAddedToCartEvent
+  | RecommendationFetchedEvent;
 
 // ============================================================================
 // EVENT EMITTER

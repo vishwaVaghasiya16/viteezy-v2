@@ -18,6 +18,9 @@ import {
 export interface IOrder extends Document {
   orderNumber: string;
   userId: mongoose.Types.ObjectId;
+  orderedBy?: mongoose.Types.ObjectId; // Who placed the order (for family orders)
+  orderedFor?: mongoose.Types.ObjectId; // Whose profile the order is for
+  relationshipType?: "SELF" | "FAMILY"; // Relationship between orderedBy and orderedFor
   status: OrderStatus;
   planType: OrderPlanType;
   orderType?: "NORMAL" | "SUBSCRIPTION_INITIAL" | "SUBSCRIPTION_RENEWAL";
@@ -94,6 +97,23 @@ const OrderSchema = new Schema<IOrder>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      default: null,
+    },
+    orderedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    orderedFor: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    relationshipType: {
+      type: String,
+      enum: ["SELF", "FAMILY"],
       default: null,
     },
     status: {

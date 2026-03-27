@@ -165,6 +165,10 @@ export const FAMILY_CACHE_KEYS = {
   familyDetails: (userId: string) => `family:details:${userId}`,
   subMembers: (mainMemberId: string) => `family:submembers:${mainMemberId}`,
   userRole: (userId: string) => `family:role:${userId}`,
+  userAddresses: (userId: string) => `family:addresses:${userId}`,
+  defaultAddress: (userId: string) => `family:default_address:${userId}`,
+  commerceContext: (userId: string) => `family:commerce_context:${userId}`,
+  recommendations: (key: string) => `family:recommendations:${key}`,
 } as const;
 
 /**
@@ -210,10 +214,87 @@ export const setCachedUserRole = (userId: string, data: any, ttl?: number): void
 };
 
 /**
+ * Get user addresses from cache
+ */
+export const getCachedUserAddresses = (userId: string): any => {
+  return familyCache.get(FAMILY_CACHE_KEYS.userAddresses(userId));
+};
+
+/**
+ * Set user addresses in cache
+ */
+export const setCachedUserAddresses = (userId: string, data: any, ttl?: number): void => {
+  familyCache.set(FAMILY_CACHE_KEYS.userAddresses(userId), data, ttl);
+};
+
+/**
+ * Get default address from cache
+ */
+export const getCachedDefaultAddress = (userId: string): any => {
+  return familyCache.get(FAMILY_CACHE_KEYS.defaultAddress(userId));
+};
+
+/**
+ * Set default address in cache
+ */
+export const setCachedDefaultAddress = (userId: string, data: any, ttl?: number): void => {
+  familyCache.set(FAMILY_CACHE_KEYS.defaultAddress(userId), data, ttl);
+};
+
+/**
  * Invalidate user-related cache entries
  */
 export const invalidateUserCache = (userId: string): void => {
   familyCache.invalidatePattern(`family:.*:${userId}`);
+};
+
+/**
+ * Invalidate user address cache entries
+ */
+export const invalidateUserAddressCache = (userId: string): void => {
+  familyCache.invalidatePattern(`family:(addresses|default_address):${userId}`);
+};
+
+/**
+ * Get commerce context from cache
+ */
+export const getCachedCommerceContext = (userId: string): any => {
+  return familyCache.get(FAMILY_CACHE_KEYS.commerceContext(userId));
+};
+
+/**
+ * Set commerce context in cache
+ */
+export const setCachedCommerceContext = (userId: string, data: any, ttl?: number): void => {
+  familyCache.set(FAMILY_CACHE_KEYS.commerceContext(userId), data, ttl);
+};
+
+/**
+ * Invalidate user commerce context cache entries
+ */
+export const invalidateUserCommerceContext = (userId: string): void => {
+  familyCache.invalidatePattern(`family:commerce_context:${userId}`);
+};
+
+/**
+ * Get recommendations from cache
+ */
+export const getCachedRecommendations = (key: string): any => {
+  return familyCache.get(FAMILY_CACHE_KEYS.recommendations(key));
+};
+
+/**
+ * Set recommendations in cache
+ */
+export const setCachedRecommendations = (key: string, data: any, ttl?: number): void => {
+  familyCache.set(FAMILY_CACHE_KEYS.recommendations(key), data, ttl);
+};
+
+/**
+ * Invalidate profile recommendations cache entries
+ */
+export const invalidateProfileRecommendations = (profileId: string): void => {
+  familyCache.invalidatePattern(`family:recommendations:*${profileId}*`);
 };
 
 /**

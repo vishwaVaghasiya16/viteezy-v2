@@ -23,7 +23,6 @@ import subscriptionRoutes from "./subscriptionRoutes";
 import subscriptionUpdateRoutes from "./subscriptionUpdateRoutes";
 import membershipRoutes from "./membershipRoutes";
 import reviewRoutes from "./reviewRoutes";
-import familyLinkingRoutes from "./familyLinkingRoutes";
 import adminMembershipPlanRoutes from "./adminMembershipPlanRoutes";
 import adminProductIngredientRoutes from "./adminProductIngredientRoutes";
 import adminBlogCategoryRoutes from "./adminBlogCategoryRoutes";
@@ -49,7 +48,6 @@ import adminAboutUsRoutes from "./adminAboutUsRoutes";
 import adminOurTeamPageRoutes from "./adminOurTeamPageRoutes";
 import adminMembershipCmsRoutes from "./adminMembershipCmsRoutes";
 import membershipCmsRoutes from "./membershipCmsRoutes";
-import memberRoutes from "./memberRoutes";
 import ourTeamPageRoutes from "./ourTeamPageRoutes";
 import dashboardRoutes from "./dashboardRoutes";
 import landingPageRoutes from "./landingPageRoutes";
@@ -71,7 +69,6 @@ const router = Router();
 // API Routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-router.use("/family", familyLinkingRoutes);
 
 router.use("/admin/membership-plans", adminMembershipPlanRoutes);
 router.use("/admin/product-ingredients", adminProductIngredientRoutes);
@@ -98,7 +95,7 @@ router.use("/admin/about-us", adminAboutUsRoutes);
 router.use("/admin/our-team-page", adminOurTeamPageRoutes);
 router.use("/admin/membership-cms", adminMembershipCmsRoutes);
 
-router.use("/members", memberRoutes);
+router.use("/membership-cms", membershipCmsRoutes);
 router.use("/examples", exampleRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/blogs", blogRoutes);
