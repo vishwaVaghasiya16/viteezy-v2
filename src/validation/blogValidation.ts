@@ -161,8 +161,9 @@ export const getBlogsSchema = Joi.object(
     sort: Joi.string().optional(),
     order: Joi.string().valid("asc", "desc").optional(),
     category: Joi.string().optional(),
+    categoryId: Joi.string().optional(),
     search: Joi.string().optional(),
-    isActive: Joi.boolean().optional(),
+    isActive: Joi.string().valid("true", "false").optional(),
     lang: Joi.string()
       .valid("en", "nl", "de", "fr", "es")
       .optional()

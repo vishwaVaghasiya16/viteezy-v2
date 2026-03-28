@@ -256,6 +256,19 @@ export const createOrderSchema = Joi.object(
       .label("Capsule Count"), // Deprecated - use standUpPouch.capsuleCount
     shippingAddressId: objectIdSchema.required().label("Shipping Address ID"),
     billingAddressId: objectIdSchema.optional().label("Billing Address ID"),
+    // Family management fields
+    orderedBy: objectIdSchema.optional().label("Ordered By User ID"),
+    orderedFor: objectIdSchema.optional().label("Ordered For User ID"),
+    relationshipType: Joi.string()
+      .valid("SELF", "FAMILY", "SPOUSE", "CHILD", "PARENT", "SIBLING", "OTHER")
+      .optional()
+      .label("Relationship Type"),
+    addressSource: Joi.string()
+      .valid("SELF", "INHERITED", "MANUAL")
+      .optional()
+      .label("Address Source"),
+    addressInheritedFrom: objectIdSchema.optional().label("Address Inherited From User ID"),
+    addressIsManual: Joi.boolean().optional().label("Address Is Manual"),
     // Pricing breakdown (this is what we store in DB)
     pricing: Joi.object({
       sachets: Joi.object({

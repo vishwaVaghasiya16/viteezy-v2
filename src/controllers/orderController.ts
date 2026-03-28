@@ -258,7 +258,7 @@ const validateCouponForOrder = async ({
     }
   }
 
-  if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+  if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
     throw new AppError(
       `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
       400
@@ -355,6 +355,12 @@ class OrderController {
         sachets,
         standUpPouch,
         orderedFor,
+        // Family management fields
+        orderedBy,
+        relationshipType,
+        addressSource,
+        addressInheritedFrom,
+        addressIsManual,
         // Legacy fields (for backward compatibility)
         variantType,
         planDurationDays,
@@ -1009,9 +1015,12 @@ class OrderController {
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
-        orderedBy: req.body.orderedBy ? new mongoose.Types.ObjectId(req.body.orderedBy) : new mongoose.Types.ObjectId(req.user._id),
-        orderedFor: req.body.orderedFor ? new mongoose.Types.ObjectId(req.body.orderedFor) : new mongoose.Types.ObjectId(req.user._id),
-        relationshipType: req.body.relationshipType,
+        orderedBy: orderedBy ? new mongoose.Types.ObjectId(orderedBy) : new mongoose.Types.ObjectId(req.user._id),
+        orderedFor: orderedFor ? new mongoose.Types.ObjectId(orderedFor) : new mongoose.Types.ObjectId(req.user._id),
+        relationshipType,
+        addressSource,
+        addressInheritedFrom: addressInheritedFrom ? new mongoose.Types.ObjectId(addressInheritedFrom) : undefined,
+        addressIsManual,
         planType: planType,
         items: orderItems,
         pricing: pricingBreakdown,

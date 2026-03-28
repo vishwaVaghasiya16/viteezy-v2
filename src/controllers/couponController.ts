@@ -195,7 +195,7 @@ class CouponController {
           totalsWithoutCoupon.tax;
 
         // Validate cart order amount with coupon minimum order amount
-        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
           // Remove coupon from cart if minimum order amount not met
           await Carts.findByIdAndUpdate(
             cart._id,

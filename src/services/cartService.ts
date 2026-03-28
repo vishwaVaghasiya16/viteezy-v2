@@ -815,24 +815,13 @@ class CartService {
           400
         );
       }
-      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
-      if (planDays !== undefined && planDays !== 60 && planDays !== 120) {
-        throw new AppError(
-          "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
-          400
-        );
-      }
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount)
     }
 
-    // Validate and get pricing
-    const { product, price } = await this.validateAndGetPricing(productId);
-
-    // Validate product supports the requested variant
-    if (variantType === ProductVariant.SACHETS && !product.sachetPrices) {
-      throw new AppError(
-        "This product does not support SACHETS variant",
-        400
-      );
+    // Validate product exists and supports the variantType
+    const product = await Products.findById(productId).lean();
+    if (!product) {
+      throw new AppError("Product not found", 404);
     }
     if (
       variantType === ProductVariant.STAND_UP_POUCH &&
@@ -862,7 +851,7 @@ class CartService {
       variantType === ProductVariant.SACHETS ? 1 : quantity || 1;
 
     // Calculate price based on variantType, isOneTime, and planDays
-    let calculatedPrice = price; // Default to validated price
+    let calculatedPrice: any = null; // Will be set based on variantType
     let currency = "USD";
     let taxRate = 0;
 
@@ -1141,13 +1130,7 @@ class CartService {
           400
         );
       }
-      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
-      if (planDays !== undefined && planDays !== 60 && planDays !== 120) {
-        throw new AppError(
-          "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
-          400
-        );
-      }
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount)
     }
 
     // Find the item in cart by productId and variantType
@@ -1618,7 +1601,7 @@ class CartService {
     const orderAmount = totals.subtotal - totals.discount + totals.tax;
 
     // Check minimum order amount
-    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
       throw new AppError(
         `Minimum order amount of ${coupon.minOrderAmount} ${totals.currency} is required for this coupon`,
         400
@@ -1884,7 +1867,7 @@ class CartService {
 
     const totals = this.calculateTotalsFromCartItems(cart.items, 0);
     const orderAmount = totals.subtotal - totals.discount + totals.tax;
-    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
       throw new AppError(
         `Minimum order amount of ${coupon.minOrderAmount} ${totals.currency} is required for this coupon`,
         400

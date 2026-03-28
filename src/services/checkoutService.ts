@@ -925,7 +925,7 @@ class CheckoutService {
       }
     }
 
-    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+    if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
       throw new AppError(
         `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
         400,

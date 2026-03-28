@@ -732,11 +732,13 @@ class ProductService {
       };
     }
 
-    // Resolve ingredients from names to string IDs
-    let ingredientIds: string[] = [];
+    // Resolve ingredients from names to ObjectIds
+    let ingredientIds: mongoose.Types.ObjectId[] = [];
     if (ingredients?.length) {
-      ingredientIds = await this.resolveIngredientIds(ingredients);
-      if (ingredientIds.length > 0) {
+      const resolvedIds = await this.resolveIngredientIds(ingredients);
+      if (resolvedIds.length > 0) {
+        // Convert string IDs to ObjectIds to match product model
+        ingredientIds = resolvedIds.map(id => new mongoose.Types.ObjectId(id));
         matchStage.ingredients = { $all: ingredientIds };
       } else {
         // If no ingredients found, return empty result

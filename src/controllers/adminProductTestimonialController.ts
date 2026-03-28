@@ -184,18 +184,43 @@ class AdminProductTestimonialController {
         query.isActive = value === "true" || value === true || value === "1";
       }
 
-      // Search functionality (if needed in future)
+      // Search functionality - search in product titles (handle both I18n objects and plain strings)
       if (search) {
-        // Can search by product names or metadata - optimize with select to only get _id
-        const productIds = await Products.find({
-          title: { $regex: search, $options: "i" },
+        const searchRegex = { $regex: search, $options: "i" };
+        
+        // Find products that match the search term
+        const matchingProducts = await Products.find({
+          $or: [
+            { title: searchRegex }, // Plain string match
+            { "title.en": searchRegex }, // I18n English match
+            { "title.nl": searchRegex }, // I18n Dutch match
+            { "title.de": searchRegex }, // I18n German match
+            { "title.fr": searchRegex }, // I18n French match
+            { "title.es": searchRegex }, // I18n Spanish match
+          ],
           isDeleted: { $ne: true },
         })
           .select("_id")
           .lean()
           .distinct("_id");
 
-        query.$or = [{ products: { $in: productIds } }];
+        // Also search in metadata if it contains searchable text
+        const testimonialsWithMetadataMatch = await ProductTestimonials.find({
+          isDeleted: { $ne: true },
+          $or: [
+            { "metadata.customerName": searchRegex },
+            { "metadata.testimonialText": searchRegex },
+            { "metadata.rating": searchRegex },
+          ],
+        })
+          .select("_id")
+          .lean()
+          .distinct("_id");
+
+        query.$or = [
+          { products: { $in: matchingProducts } },
+          { _id: { $in: testimonialsWithMetadataMatch } },
+        ];
       }
 
       // Use Promise.all for parallel execution

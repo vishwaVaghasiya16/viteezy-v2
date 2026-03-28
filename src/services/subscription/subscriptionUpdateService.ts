@@ -330,7 +330,7 @@ export class SubscriptionUpdateService {
 
         const orderAmount = round(discountedPrice - membershipDiscountAmount);
 
-        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
           throw new Error(
             `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
           );

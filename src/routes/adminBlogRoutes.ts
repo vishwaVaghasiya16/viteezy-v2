@@ -14,6 +14,7 @@ import {
   updateBlogSchema,
   blogIdParamsSchema,
   updateBlogStatusSchema,
+  getBlogsSchema,
 } from "@/validation/blogValidation";
 import { paginationQuerySchema } from "../validation/commonValidation";
 
@@ -42,8 +43,8 @@ router.post(
  * @query {Number} [page] - Page number (default: 1)
  * @query {Number} [limit] - Items per page (default: 10)
  * @query {String} [search] - Search by title, slug, or tags
- * @query {String} [status] - Filter by status: "Draft" or "Published"
  * @query {String} [categoryId] - Filter by category ID
+ * @query {Boolean} [isActive] - Filter by active status: true or false
  * @note Response is automatically transformed based on admin's language preference from token.
  *       I18n objects are converted to single language strings (no object structure in response).
  *       Both blogs and blogBanners are transformed.
@@ -51,7 +52,7 @@ router.post(
 router.get(
   "/",
   transformResponseMiddleware("blogs"), // Detects language from admin token and transforms I18n fields to single language strings
-  validateQuery(paginationQuerySchema),
+  validateQuery(getBlogsSchema),
   adminBlogController.getBlogs
 );
 

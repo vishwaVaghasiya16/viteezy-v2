@@ -115,7 +115,7 @@ router.post("/family/dissolve", authenticate, userController.leaveFamilyAsMainMe
 router.post(
   "/family/link",
   authenticate,
-  validate(linkByMemberIdSchema),
+  validateJoi(linkByMemberIdSchema),
   userController.linkByMemberId
 );
 

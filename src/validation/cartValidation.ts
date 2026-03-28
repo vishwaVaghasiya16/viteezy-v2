@@ -138,12 +138,6 @@ export const addCartItemSchema = Joi.object({
           message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
         });
       }
-      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
-      if (value.planDays !== undefined && value.planDays !== 60 && value.planDays !== 120) {
-        return helpers.error("any.custom", {
-          message: "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
-        });
-      }
     }
 
     return value;
@@ -208,12 +202,7 @@ export const updateCartItemSchema = Joi.object({
           message: "STAND_UP_POUCH is always one-time purchase, isOneTime must be true if provided",
         });
       }
-      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount: 60 or 120)
-      if (value.planDays !== undefined && value.planDays !== 60 && value.planDays !== 120) {
-        return helpers.error("any.custom", {
-          message: "For STAND_UP_POUCH, planDays (capsuleCount) must be 60 or 120 if provided",
-        });
-      }
+      // planDays is optional for STAND_UP_POUCH (treated as capsuleCount)
     }
     return value;
   });

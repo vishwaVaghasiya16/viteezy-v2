@@ -405,12 +405,10 @@ export class ProductController {
             enrichedProduct.isMember = false;
           }
 
-          // Add is_liked field if user is authenticated
-          if (userId) {
-            enrichedProduct.is_liked = userWishlistProductIds.has(
-              transformedProduct._id.toString()
-            );
-          }
+          // Add is_liked field (always present, false for unauthenticated users)
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(
+            transformedProduct._id.toString()
+          ) : false;
 
           // Add isInCart field if user is authenticated
           if (userId) {
@@ -614,12 +612,10 @@ export class ProductController {
             enrichedProduct.isMember = false;
           }
 
-          // Add is_liked field if user is authenticated
-          if (userId) {
-            enrichedProduct.is_liked = userWishlistProductIds.has(
-              transformedProduct._id.toString()
-            );
-          }
+          // Add is_liked field (always present, false for unauthenticated users)
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(
+            transformedProduct._id.toString()
+          ) : false;
 
           return enrichedProduct;
         })
@@ -762,13 +758,15 @@ export class ProductController {
         enrichedProduct.isMember = false;
       }
 
-      // Add is_liked field if user is authenticated
+      // Add is_liked field (always present, false for unauthenticated users)
       if (userId) {
         const isInWishlist = await Wishlists.exists({
           userId: new mongoose.Types.ObjectId(userId),
           productId: new mongoose.Types.ObjectId(id),
         });
         enrichedProduct.is_liked = !!isInWishlist;
+      } else {
+        enrichedProduct.is_liked = false;
       }
 
       // Add isInCart field if user is authenticated
@@ -872,13 +870,15 @@ export class ProductController {
         enrichedProduct.isMember = false;
       }
 
-      // Add is_liked field if user is authenticated
+      // Add is_liked field (always present, false for unauthenticated users)
       if (userId) {
         const isInWishlist = await Wishlists.exists({
           userId: new mongoose.Types.ObjectId(userId),
           productId: transformedProduct._id,
         });
         enrichedProduct.is_liked = !!isInWishlist;
+      } else {
+        enrichedProduct.is_liked = false;
       }
 
       // Add isInCart field if user is authenticated
