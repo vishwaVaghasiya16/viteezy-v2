@@ -56,6 +56,7 @@ export interface ISubscription extends Document {
   cancelledAt?: Date;
   cancelledBy?: mongoose.Types.ObjectId; // User or admin who cancelled
   cancellationReason?: string;
+  scheduledCancellationDate?: Date; // Date when subscription will be automatically cancelled
   // Pause/Resume
   pausedAt?: Date;
   pausedUntil?: Date; // Resume date if paused temporarily
@@ -227,6 +228,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: String,
       trim: true,
       maxlength: 500,
+      default: null,
+    },
+    scheduledCancellationDate: {
+      type: Date,
       default: null,
     },
     pausedAt: {

@@ -4,7 +4,7 @@ import { Subscriptions } from "../models/commerce/subscriptions.model";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
 import mongoose from "mongoose";
-import { ProductVariant, SubscriptionStatus } from "../models/enums";
+import { ProductVariant, SubscriptionStatus, PaymentStatus } from "../models/enums";
 import { Coupons } from "../models/commerce/coupons.model";
 import { CouponType } from "../models/enums";
 import { Orders } from "../models/commerce/orders.model";
@@ -914,6 +914,7 @@ class CheckoutService {
       const userUsageCount = await Orders.countDocuments({
         userId: new mongoose.Types.ObjectId(userId),
         couponCode: coupon.code,
+        paymentStatus: PaymentStatus.COMPLETED,
         isDeleted: false,
       });
 

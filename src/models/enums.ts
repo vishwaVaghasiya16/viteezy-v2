@@ -314,6 +314,7 @@ export enum SubscriptionStatus {
   ACTIVE = "Active",
   PAUSED = "Paused",
   CANCELLED = "Cancelled",
+  PENDING_CANCELLATION = "Pending-Cancellation",
   EXPIRED = "Expired",
   SUSPENDED = "Suspended",
   PAST_DUE = "Past Due", // Payment failed but subscription still active

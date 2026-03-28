@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Coupons, Orders, Carts, Products } from "@/models/commerce";
-import { CouponType, ProductVariant } from "@/models/enums";
+import { CouponType, ProductVariant, PaymentStatus } from "@/models/enums";
 import { cartService } from "@/services/cartService";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 
@@ -154,6 +154,7 @@ class CouponController {
           const userCouponUsageCount = await Orders.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
             couponCode: coupon.code,
+            paymentStatus: PaymentStatus.COMPLETED,
             isDeleted: false,
           });
 

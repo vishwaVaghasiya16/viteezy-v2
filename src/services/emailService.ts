@@ -1490,6 +1490,7 @@ This is an automated message, please do not reply to this email.
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): Promise<boolean> {
     try {
@@ -1750,6 +1751,7 @@ Viteezy Team
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): string {
     const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
@@ -1757,6 +1759,21 @@ Viteezy Team
       month: "long",
       day: "numeric",
     });
+
+    const scheduledDate = data.scheduledCancellationDate 
+      ? data.scheduledCancellationDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
+    const isScheduledCancellation = data.scheduledCancellationDate && !data.cancelledImmediately;
+    const cancellationType = isScheduledCancellation 
+      ? "Scheduled Cancellation" 
+      : data.cancelledImmediately 
+        ? "Immediate Cancellation" 
+        : "Cancelled at End Date";
 
     return `
       <!DOCTYPE html>
@@ -1834,21 +1851,22 @@ Viteezy Team
           </div>
           <div class="content">
             <p>Hello ${name},</p>
-            <p>We wanted to inform you that your subscription has been cancelled.</p>
+            <p>We wanted to inform you that your subscription ${isScheduledCancellation ? 'has been scheduled for cancellation' : 'has been cancelled'}.</p>
             
             <div class="info-box">
               <p><span class="info-label">Subscription Number:</span> ${data.subscriptionNumber}</p>
               <p><span class="info-label">Cancellation Date:</span> ${cancelledDate}</p>
-              <p><span class="info-label">Cancellation Type:</span> ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}</p>
+              ${scheduledDate ? `<p><span class="info-label">Scheduled Cancellation Date:</span> ${scheduledDate}</p>` : ''}
+              <p><span class="info-label">Cancellation Type:</span> ${cancellationType}</p>
               <p><span class="info-label">Reason:</span> ${data.cancellationReason}</p>
             </div>
 
-            <p>If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.</p>
+            <p>${isScheduledCancellation ? 'Your subscription will remain active until the scheduled cancellation date. If you have any questions or need to make changes, please contact our support team.' : 'If you have any questions or concerns about this cancellation, please don\'t hesitate to contact our support team.'}</p>
             <p>We're sorry to see you go and hope to serve you again in the future.</p>
             <p>Best regards,<br><strong>The Viteezy Team</strong></p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>  ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
             <p>This is an automated message, please do not reply to this email.</p>
           </div>
         </div>
@@ -1867,6 +1885,7 @@ Viteezy Team
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): string {
     const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
@@ -1875,19 +1894,35 @@ Viteezy Team
       day: "numeric",
     });
 
+    const scheduledDate = data.scheduledCancellationDate 
+      ? data.scheduledCancellationDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
+    const isScheduledCancellation = data.scheduledCancellationDate && !data.cancelledImmediately;
+    const cancellationType = isScheduledCancellation 
+      ? "Scheduled Cancellation" 
+      : data.cancelledImmediately 
+        ? "Immediate Cancellation" 
+        : "Cancelled at End Date";
+
     return `
 Viteezy - Subscription Cancelled
 
 Hello ${name},
 
-We wanted to inform you that your subscription has been cancelled.
+We wanted to inform you that your subscription ${isScheduledCancellation ? 'has been scheduled for cancellation' : 'has been cancelled'}.
 
 Subscription Number: ${data.subscriptionNumber}
 Cancellation Date: ${cancelledDate}
-Cancellation Type: ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}
+${scheduledDate ? `Scheduled Cancellation Date: ${scheduledDate}` : ''}
+Cancellation Type: ${cancellationType}
 Reason: ${data.cancellationReason}
 
-If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.
+${isScheduledCancellation ? 'Your subscription will remain active until the scheduled cancellation date. If you have any questions or need to make changes, please contact our support team.' : 'If you have any questions or concerns about this cancellation, please don\'t hesitate to contact our support team.'}
 
 We're sorry to see you go and hope to serve you again in the future.
 

@@ -319,6 +319,7 @@ export class SubscriptionUpdateService {
           const userUsageCount = await Orders.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
             couponCode: coupon.code,
+            paymentStatus: PaymentStatus.COMPLETED,
             isDeleted: false,
           });
           if (userUsageCount >= coupon.userUsageLimit) {

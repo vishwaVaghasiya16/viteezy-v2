@@ -30,6 +30,29 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+// Helper function to extract language-specific value from multi-language objects
+const getLanguageValue = (value: any, userLanguage: string = 'en'): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'object' && value !== null) {
+    // Try to get the user's preferred language first
+    if (value[userLanguage]) {
+      return value[userLanguage];
+    }
+    // Fallback to English if user's language is not available
+    if (value.en) {
+      return value.en;
+    }
+    // If English is not available, return the first available language
+    const availableLanguages = Object.keys(value);
+    if (availableLanguages.length > 0) {
+      return value[availableLanguages[0]];
+    }
+  }
+  return value || '';
+};
+
 class AdminSubscriptionController {
   /**
    * Get all subscriptions with pagination and filters
@@ -44,7 +67,7 @@ class AdminSubscriptionController {
    * @query {String} [userId] - Filter by user ID
    */
   getAllSubscriptions = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const {
         search,
@@ -150,6 +173,10 @@ class AdminSubscriptionController {
       // Get total count
       const total = await Subscriptions.countDocuments(filter);
 
+      // Get admin user's language preference
+      const adminUser = await User.findById(req.user?._id).select('language').lean();
+      const adminLanguage = adminUser?.language || 'en';
+
       // Get subscriptions with pagination
       const subscriptions = await Subscriptions.find(filter)
         .populate("userId", "firstName lastName email")
@@ -195,7 +222,7 @@ class AdminSubscriptionController {
             product: item.productId
               ? {
                   id: item.productId._id,
-                  title: item.productId.title,
+                  title: getLanguageValue(item.productId.title, adminLanguage),
                   slug: item.productId.slug,
                 }
               : null,
@@ -237,8 +264,12 @@ class AdminSubscriptionController {
    * @access Admin
    */
   getSubscriptionById = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
+
+      // Get admin user's language preference
+      const adminUser = await User.findById(req.user?._id).select('language').lean();
+      const adminLanguage = adminUser?.language || 'en';
 
       const subscription = await Subscriptions.findOne({
         _id: id,
@@ -336,9 +367,9 @@ class AdminSubscriptionController {
           product: item.productId
             ? {
                 id: item.productId._id,
-                title: item.productId.title,
+                title: getLanguageValue(item.productId.title, adminLanguage),
                 slug: item.productId.slug,
-                description: item.productId.description,
+                description: getLanguageValue(item.productId.description, adminLanguage),
                 media: item.productId.media,
               }
             : null,
@@ -473,6 +504,8 @@ class AdminSubscriptionController {
    * @body {Boolean} cancelAtEndDate - Cancel at end date (toggle)
    * @body {Boolean} cancelImmediately - Cancel immediately (toggle)
    * @body {String} cancellationReason - Cancellation reason (required)
+   * @body {String} [customReason] - Custom cancellation reason (required if cancellationReason is "Other")
+   * @body {Date} [scheduledCancellationDate] - Specific date to cancel subscription (ISO date string)
    */
   cancelSubscription = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -482,6 +515,7 @@ class AdminSubscriptionController {
         cancelImmediately,
         cancellationReason,
         customReason,
+        scheduledCancellationDate,
       } = req.body;
 
       const adminId = req.user?._id
@@ -499,9 +533,13 @@ class AdminSubscriptionController {
         throw new AppError("Subscription not found", 404);
       }
 
-      // Check if already cancelled
+      // Check if already cancelled or pending cancellation
       if (subscription.status === SubscriptionStatus.CANCELLED) {
         throw new AppError("Subscription is already cancelled", 400);
+      }
+
+      if (subscription.status === SubscriptionStatus.PENDING_CANCELLATION) {
+        throw new AppError("Subscription is already pending cancellation", 400);
       }
 
       const user = subscription.userId as any;
@@ -515,20 +553,76 @@ class AdminSubscriptionController {
           ? customReason.trim()
           : cancellationReason;
 
-      // Update subscription
-      const updateData: any = {
-        status: SubscriptionStatus.CANCELLED,
-        cancelledBy: adminId,
-        cancellationReason: finalCancellationReason,
-      };
+      let updateData: any;
+      let responseMessage: string;
 
       if (cancelImmediately) {
-        updateData.cancelledAt = new Date();
-        updateData.subscriptionEndDate = new Date();
+        // Cancel immediately
+        updateData = {
+          status: SubscriptionStatus.CANCELLED,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          cancelledAt: new Date(),
+          subscriptionEndDate: new Date(),
+          scheduledCancellationDate: null, // Clear scheduled date if any
+        };
+        responseMessage = "cancelled immediately";
+      } else if (scheduledCancellationDate) {
+        // Cancel on specific future date
+        const cancellationDate = new Date(scheduledCancellationDate);
+        const now = new Date();
+
+        if (cancellationDate <= now) {
+          throw new AppError("Scheduled cancellation date must be in the future", 400);
+        }
+
+        updateData = {
+          status: SubscriptionStatus.PENDING_CANCELLATION,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          scheduledCancellationDate: cancellationDate,
+        };
+        responseMessage = `scheduled for cancellation on ${cancellationDate.toISOString().split('T')[0]}`;
       } else if (cancelAtEndDate) {
-        // Cancel at end date - set cancelledAt to subscriptionEndDate
-        updateData.cancelledAt = subscription.subscriptionEndDate || new Date();
-        // Keep subscriptionEndDate as is
+        // Cancel at subscription end date
+        const endDate = subscription.subscriptionEndDate || new Date();
+        
+        if (endDate <= new Date()) {
+          // If end date is in the past or today, cancel immediately
+          updateData = {
+            status: SubscriptionStatus.CANCELLED,
+            cancelledBy: adminId,
+            cancellationReason: finalCancellationReason,
+            cancelledAt: new Date(),
+            subscriptionEndDate: endDate,
+            scheduledCancellationDate: null,
+          };
+          responseMessage = "cancelled immediately (subscription end date already passed)";
+        } else {
+          // Schedule for end date
+          updateData = {
+            status: SubscriptionStatus.PENDING_CANCELLATION,
+            cancelledBy: adminId,
+            cancellationReason: finalCancellationReason,
+            scheduledCancellationDate: endDate,
+          };
+          responseMessage = `scheduled for cancellation on ${endDate.toISOString().split('T')[0]}`;
+        }
+      } else if (cancelImmediately === false) {
+        // When cancelImmediately is explicitly false, always set to PENDING_CANCELLATION
+        const endDate = subscription.subscriptionEndDate || new Date();
+        
+        // Always set to PENDING_CANCELLATION when cancelImmediately is false
+        // The automated job will handle the transition to CANCELLED when end date is reached
+        updateData = {
+          status: SubscriptionStatus.PENDING_CANCELLATION,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          scheduledCancellationDate: endDate, // Use subscription end date
+        };
+        responseMessage = `scheduled for cancellation on ${endDate.toISOString().split('T')[0]}`;
+      } else {
+        throw new AppError("Either cancelImmediately, cancelAtEndDate, or scheduledCancellationDate must be provided", 400);
       }
 
       await Subscriptions.updateOne({ _id: id }, updateData);
@@ -544,6 +638,7 @@ class AdminSubscriptionController {
             cancellationReason: finalCancellationReason,
             cancelledAt: updateData.cancelledAt,
             cancelledImmediately: cancelImmediately,
+            scheduledCancellationDate: updateData.scheduledCancellationDate,
           }
         );
 
@@ -559,12 +654,12 @@ class AdminSubscriptionController {
       }
 
       logger.info(
-        `Subscription ${subscription.subscriptionNumber} cancelled by admin ${adminId}`
+        `Subscription ${subscription.subscriptionNumber} ${responseMessage} by admin ${adminId}`
       );
 
       res.apiSuccess(
         null,
-        `Subscription ${cancelImmediately ? "cancelled immediately" : "scheduled for cancellation at end date"} successfully`
+        `Subscription ${responseMessage} successfully`
       );
     }
   );

@@ -40,6 +40,14 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+// Helper function to extract English-only values from multi-language objects
+const getEnglishOnlyValue = (value: any): any => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value.en || value.nl || value;
+  }
+  return value;
+};
+
 class AdminOrderController {
   /**
    * Get order statistics with comparison to last month
@@ -308,14 +316,14 @@ class AdminOrderController {
       }
 
       if (minTotal || maxTotal) {
-        filter.grandTotal = {};
+        filter["pricing.overall.grandTotal"] = {};
 
         if (minTotal) {
-          filter.grandTotal.$gte = Number(minTotal);
+          filter["pricing.overall.grandTotal"].$gte = Number(minTotal);
         }
 
         if (maxTotal) {
-          filter.grandTotal.$lte = Number(maxTotal);
+          filter["pricing.overall.grandTotal"].$lte = Number(maxTotal);
         }
       }
 
@@ -450,10 +458,18 @@ class AdminOrderController {
           ? userLanguageMap.get(userId) || DEFAULT_LANGUAGE
           : DEFAULT_LANGUAGE;
 
+        // Calculate items total for this order
+        const itemsTotal = Math.round(
+          order.items.reduce((sum: number, item: any) => {
+            return sum + (item.totalAmount || 0);
+          }, 0) * 100
+        ) / 100;
+
         return {
           id: order._id,
           orderNumber: order.orderNumber,
           orderDate: order.createdAt,
+          itemsTotal: itemsTotal, // Add items total here
           customer: isPopulatedUser
             ? {
                 id: user._id,
@@ -471,7 +487,7 @@ class AdminOrderController {
             product: item.productId
               ? {
                   id: item.productId._id,
-                  title: item.productId.title,
+                  title: getEnglishOnlyValue(item.productId.title),
                   slug: item.productId.slug,
                 }
               : null,
@@ -508,9 +524,11 @@ class AdminOrderController {
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(
-        transformedOrders,
-        pagination,
+      res.apiSuccess(
+        {
+          orders: transformedOrders,
+          pagination: pagination
+        },
         "Orders retrieved successfully",
       );
     },
@@ -620,9 +638,9 @@ class AdminOrderController {
               product: item.productId
                 ? {
                     id: item.productId._id,
-                    title: item.productId.title,
+                    title: getEnglishOnlyValue(item.productId.title),
                     slug: item.productId.slug,
-                    description: item.productId.description,
+                    description: getEnglishOnlyValue(item.productId.description),
                     media: item.productId.media,
                     categories: item.productId.categories,
                     tags: item.productId.tags,

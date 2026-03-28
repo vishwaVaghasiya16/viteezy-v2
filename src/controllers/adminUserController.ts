@@ -274,14 +274,25 @@ class AdminUserController {
           {
             $match: {
               userId,
-              paymentStatus: PaymentStatus.COMPLETED, // Only count completed/paid orders
+              paymentStatus: { $in: [PaymentStatus.COMPLETED, PaymentStatus.PROCESSING] }, // Include completed and processing orders
             },
+          },
+          {
+            $addFields: {
+              // Try to get grandTotal from pricing, fallback to sum of item totals
+              orderTotal: {
+                $ifNull: [
+                  "$pricing.overall.grandTotal",
+                  { $sum: "$items.totalAmount" } // Fallback: sum of all item totals
+                ]
+              }
+            }
           },
           {
             $group: {
               _id: null,
-              totalSpent: { $sum: "$grandTotal" },
-              currency: { $first: "$currency" },
+              totalSpent: { $sum: "$orderTotal" },
+              currency: { $first: { $ifNull: ["$pricing.overall.currency", "USD"] } },
             },
           },
         ]),

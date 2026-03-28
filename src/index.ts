@@ -568,6 +568,16 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
+    // Initialize subscription cancellation cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/subscriptionCancellationJob");
+      logger.info("✅ Subscription cancellation cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize subscription cancellation job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
     // Initialize coupon schedule cron job
     try {
       await import("@/jobs/couponScheduleJob");
