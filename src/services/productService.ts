@@ -611,9 +611,12 @@ class ProductService {
 
     // If we have names, look them up (case-insensitive)
     if (names.length > 0) {
+      console.log(`[DEBUG] Looking up ingredients by names: ${names.join(', ')}`);
       const caseInsensitiveRegex = names.map(
-        (name) => new RegExp(`^${name}$`, "i")
+        (name) => new RegExp(name, "i") // Remove ^ and $ for partial match
       );
+      console.log(`[DEBUG] Generated regex patterns:`, caseInsensitiveRegex.map(r => r.toString()));
+      
       const ingredients = await ProductIngredients.find({
         $or: [
           { "name.en": { $in: caseInsensitiveRegex } },
@@ -625,13 +628,16 @@ class ProductService {
         isDeleted: { $ne: true },
         isActive: true,
       })
-        .select("_id")
+        .select("_id name")
         .lean();
+
+      console.log(`[DEBUG] Found ingredients:`, ingredients.map(ing => ({ id: ing._id, name: ing.name })));
 
       const foundIds = ingredients.map((ing: any) => ing._id.toString());
       ids.push(...foundIds);
     }
 
+    console.log(`[DEBUG] Final resolved ingredient IDs: ${ids.join(', ')}`);
     return ids;
   }
 

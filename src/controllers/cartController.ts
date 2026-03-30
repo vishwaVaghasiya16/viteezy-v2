@@ -327,7 +327,7 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId, for_user } = req.body;
+      const { productId, variantType, for_user } = req.body;
 
       // FAMILY PERMISSION VALIDATION
       if (for_user && for_user !== req.user._id) {
@@ -346,6 +346,7 @@ export class CartController {
 
       const result = await cartService.removeItem(targetUserId, {
         productId,
+        variantType: variantType as ProductVariant | undefined,
       });
 
       res.status(200).json({

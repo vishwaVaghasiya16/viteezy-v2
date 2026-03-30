@@ -70,7 +70,7 @@ class AuthController {
    * Login user
    */
   login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { email, password, deviceInfo } = req.body;
+    const { email, password, deviceInfo, type } = req.body;
 
     if (!deviceInfo) {
       throw new AppError("deviceInfo is required for login", 400);
@@ -80,6 +80,7 @@ class AuthController {
       email,
       password,
       deviceInfo,
+      type, // Pass type parameter
     });
 
     res.apiSuccess(
@@ -138,13 +139,13 @@ class AuthController {
    */
   forgotPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, deviceInfo, client } = req.body;
+      const { email, deviceInfo, client, type } = req.body;
 
       if (!deviceInfo) {
         throw new AppError("deviceInfo is required", 400);
       }
 
-      const result = await authService.forgotPassword(email, deviceInfo, client);
+      const result = await authService.forgotPassword(email, deviceInfo, client, type);
 
       res.apiSuccess(null, result.message);
     }

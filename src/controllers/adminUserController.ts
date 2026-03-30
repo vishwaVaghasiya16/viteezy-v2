@@ -443,7 +443,11 @@ class AdminUserController {
           orderNumber: order.orderNumber,
           paymentMethod: paymentMethod, // Mollie, Stripe, etc.
           orderCreatedDate: order.createdAt,
-          orderTotalAmount: order.pricing?.overall?.grandTotal || null,
+          orderTotalAmount: order.pricing?.overall?.grandTotal || 
+                           order.grandTotal || 
+                           (order.items && order.items.length > 0 
+                            ? order.items.reduce((sum: number, item: any) => sum + (item.totalAmount || 0), 0)
+                            : 0),
           items: orderItems,
           paymentStatus: order.paymentStatus,
         };

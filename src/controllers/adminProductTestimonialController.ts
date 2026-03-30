@@ -6,12 +6,19 @@ import { getPaginationMeta } from "@/utils/pagination";
 import { ProductTestimonials } from "@/models/cms";
 import { Products } from "@/models/commerce";
 import { fileStorageService } from "@/services/fileStorageService";
+import {
+  I18nStringType,
+  I18nTextType,
+  DEFAULT_LANGUAGE,
+  SupportedLanguage,
+} from "@/models/common.model";
 
 interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
     name?: string;
     email?: string;
+    language?: string;
   };
   file?: Express.Multer.File;
   files?:
@@ -20,6 +27,62 @@ interface AuthenticatedRequest extends Request {
       }
     | Express.Multer.File[];
 }
+
+/**
+ * Get user language from request: query param (lang) > user profile > default English
+ */
+const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
+  const queryLang = req.query?.lang;
+  if (typeof queryLang === "string" && ["en", "nl", "de", "fr", "es"].includes(queryLang)) {
+    return queryLang as SupportedLanguage;
+  }
+  if (req.user?.language) {
+    const languageMap: Record<string, SupportedLanguage> = {
+      English: "en",
+      Spanish: "es",
+      French: "fr",
+      Dutch: "nl",
+      German: "de",
+    };
+    return languageMap[req.user.language] || DEFAULT_LANGUAGE;
+  }
+  return DEFAULT_LANGUAGE;
+};
+
+/**
+ * Get translated string from I18nStringType
+ */
+const getTranslatedString = (
+  i18nString: I18nStringType | string | undefined,
+  lang: SupportedLanguage
+): string => {
+  if (!i18nString) return "";
+
+  // If it's already a plain string, return it
+  if (typeof i18nString === "string") {
+    return i18nString;
+  }
+
+  // Return translated string or fallback to English
+  return i18nString[lang] || i18nString.en || "";
+};
+
+/**
+ * Transform product titles to single language
+ */
+const transformProductsToLanguage = (products: any[], lang: SupportedLanguage): any[] => {
+  return products.map((product: any) => {
+    // Get clean product object without Mongoose internals
+    const cleanProduct = product.toObject ? product.toObject() : product;
+    
+    return {
+      _id: cleanProduct._id,
+      title: getTranslatedString(cleanProduct.title, lang),
+      slug: cleanProduct.slug,
+      productImage: cleanProduct.productImage,
+    };
+  });
+};
 
 class AdminProductTestimonialController {
   /**
@@ -170,6 +233,9 @@ class AdminProductTestimonialController {
       const limitNum = parseInt(limit, 10) || 10;
       const skip = (pageNum - 1) * limitNum;
 
+      // Get user language for translation
+      const userLang = getUserLanguage(req);
+
       // Build query
       const query: any = { isDeleted: { $ne: true } };
 
@@ -237,12 +303,21 @@ class AdminProductTestimonialController {
         ProductTestimonials.countDocuments(query),
       ]);
 
+      // Transform product titles to single language
+      const transformedTestimonials = testimonials.map((testimonial: any) => ({
+        ...testimonial,
+        products: testimonial.products ? transformProductsToLanguage(testimonial.products, userLang) : [],
+        productsForDetailsPage: testimonial.productsForDetailsPage 
+          ? transformProductsToLanguage(testimonial.productsForDetailsPage, userLang) 
+          : [],
+      }));
+
       const paginationMeta = getPaginationMeta(pageNum, limitNum, total);
       res.status(200).json({
         success: true,
         message: "Product testimonials retrieved successfully",
         data: {
-          testimonials,
+          testimonials: transformedTestimonials,
         },
         pagination: paginationMeta,
       });
@@ -262,6 +337,9 @@ class AdminProductTestimonialController {
         throw new AppError("Invalid testimonial ID", 400);
       }
 
+      // Get user language for translation
+      const userLang = getUserLanguage(req);
+
       const testimonial = await ProductTestimonials.findOne({
         _id: id,
         isDeleted: { $ne: true },
@@ -275,8 +353,17 @@ class AdminProductTestimonialController {
         throw new AppError("Product testimonial not found", 404);
       }
 
+      // Transform product titles to single language
+      const transformedTestimonial = {
+        ...testimonial.toObject(),
+        products: testimonial.products ? transformProductsToLanguage(testimonial.products, userLang) : [],
+        productsForDetailsPage: testimonial.productsForDetailsPage 
+          ? transformProductsToLanguage(testimonial.productsForDetailsPage, userLang) 
+          : [],
+      };
+
       res.apiSuccess(
-        { testimonial },
+        { testimonial: transformedTestimonial },
         "Product testimonial retrieved successfully"
       );
     }

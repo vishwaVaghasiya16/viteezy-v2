@@ -47,6 +47,7 @@ interface LoginData {
   email: string;
   password: string;
   deviceInfo: string;
+  type?: string; // Optional: 'admin' or undefined for normal login
 }
 
 interface AppleLoginData {
@@ -606,7 +607,7 @@ class AuthService {
    * Login user
    */
   async login(data: LoginData): Promise<LoginResult> {
-    const { email, password, deviceInfo } = data;
+    const { email, password, deviceInfo, type } = data;
 
     // Find user with password
     const user = await User.findOne({ email }).select("+password");
@@ -616,7 +617,7 @@ class AuthService {
     }
 
     logger.info(
-      `Login attempt for user: ${user.email}, isEmailVerified: ${user.isEmailVerified}`,
+      `Login attempt for user: ${user.email}, isEmailVerified: ${user.isEmailVerified}, type: ${type || 'normal'}`,
     );
 
     // Check if user is active
@@ -647,6 +648,12 @@ class AuthService {
         true,
         "Unverified",
       );
+    }
+
+    // Check role if type is provided
+    if (type && type === 'admin' && user.role !== 'Admin') {
+      logger.error(`Admin login attempted by non-admin user: ${email}, role: ${user.role}`);
+      throw new AppError("Access denied. Admin access required.", 403);
     }
 
     // Generate session and tokens
@@ -840,6 +847,7 @@ class AuthService {
     email: string,
     deviceInfo: string,
     client?: "user" | "admin",
+    type?: string, // Optional: 'admin' or undefined for normal flow
   ): Promise<{ message: string }> {
     const user = await User.findOne({ email, isEmailVerified: true });
     if (!user) {
@@ -848,6 +856,12 @@ class AuthService {
 
     if (!user.isActive) {
       throw new AppError("Account is deactivated. Please contact support.");
+    }
+
+    // Check role if type is provided
+    if (type && type === 'admin' && user.role !== UserRole.ADMIN) {
+      logger.error(`Admin forgot password attempted by non-admin user: ${email}, role: ${user.role}`);
+      throw new AppError("Access denied. Admin access required.", 403);
     }
 
     // Determine if request is from Web or App based on deviceInfo
@@ -887,7 +901,7 @@ class AuthService {
 
         return {
           message:
-            "If an account exists with this email, a password reset OTP has been sent. Please verify the OTP to reset your password.",
+            "Password reset OTP has been sent to your email. Please verify the OTP to reset your password.",
         };
       } catch (error) {
         logger.error("Error sending password reset OTP:", error);
@@ -951,7 +965,7 @@ class AuthService {
 
         return {
           message:
-            "If an account exists with this email, a password reset link has been sent. Please check your email to reset your password.",
+            "Password reset instructions have been sent to your email. Please check your inbox to reset your password.",
         };
       } catch (error) {
         logger.error("Error sending password reset link email:", error);

@@ -42,6 +42,7 @@ interface UpdateCartItemData {
 
 interface RemoveCartItemData {
   productId: string;
+  variantType?: ProductVariant; // Optional: remove specific variant only
 }
 
 interface CartItemWithDetails {
@@ -1360,12 +1361,24 @@ class CartService {
     data: RemoveCartItemData
   ): Promise<{ cart: any; message: string }> {
     const cart = await this.getOrCreateCart(userId);
-    const { productId } = data;
+    const { productId, variantType } = data;
 
-    // Find the item in cart by productId
-    const itemIndex = cart.items.findIndex(
-      (item: any) => item.productId.toString() === productId
-    );
+    // Find item(s) in cart by productId
+    let itemIndex = -1;
+    
+    if (variantType) {
+      // Remove specific variant
+      itemIndex = cart.items.findIndex(
+        (item: any) => 
+          item.productId.toString() === productId && 
+          item.variantType === variantType
+      );
+    } else {
+      // Remove first matching item (backward compatibility)
+      itemIndex = cart.items.findIndex(
+        (item: any) => item.productId.toString() === productId
+      );
+    }
 
     if (itemIndex === -1) {
       throw new AppError("Cart item not found", 404);
