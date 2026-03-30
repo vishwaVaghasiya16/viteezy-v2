@@ -318,7 +318,7 @@ export class ProductController {
       );
 
       // Get user ID if authenticated (optional) - for wishlist/cart
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Get target language from user's token/profile, default to English
       const targetLanguage: SupportedLanguage = getUserLanguage(req);
@@ -406,9 +406,8 @@ export class ProductController {
           }
 
           // Add is_liked field (always present, false for unauthenticated users)
-          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(
-            transformedProduct._id.toString()
-          ) : false;
+          const productId = transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(productId) : false;
 
           // Add isInCart field if user is authenticated
           if (userId) {
@@ -613,9 +612,8 @@ export class ProductController {
           }
 
           // Add is_liked field (always present, false for unauthenticated users)
-          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(
-            transformedProduct._id.toString()
-          ) : false;
+          const productId = transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(productId) : false;
 
           return enrichedProduct;
         })
@@ -693,7 +691,7 @@ export class ProductController {
       const result = await productService.getProductById(id);
 
       // Get user ID if authenticated (optional)
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Translate product using common service (automatically detects language from token)
       const transformedProduct = await translateProductForUser(result.product, req);
@@ -814,7 +812,7 @@ export class ProductController {
       const result = await productService.getProductBySlug(slug);
 
       // Get user ID if authenticated (optional)
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Translate product using common service (automatically detects language from token)
       const transformedProduct = await translateProductForUser(result.product, req);

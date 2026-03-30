@@ -55,6 +55,48 @@ const getLanguageValue = (value: any, userLanguage: string = 'en'): string => {
 
 class AdminSubscriptionController {
   /**
+   * Calculate total from subscription items
+   */
+  private calculateFromItems(items: any[]): number {
+    if (!items || items.length === 0) return 0;
+    return items.reduce((total: number, item: any) => total + (item.totalAmount || 0), 0);
+  }
+
+  /**
+   * Build overall pricing object from subscription items
+   */
+  private buildOverallFromItems(items: any): any {
+    if (!items || items.length === 0) {
+      return {
+        subTotal: 0,
+        discountedPrice: 0,
+        membershipDiscountAmount: 0,
+        subscriptionPlanDiscountAmount: 0,
+        taxAmount: 0,
+        total: 0,
+        grandTotal: 0,
+        currency: "USD",
+      };
+    }
+
+    const subTotal = items.reduce((total: number, item: any) => total + (item.amount || 0), 0);
+    const discountedPrice = items.reduce((total: number, item: any) => total + (item.discountedPrice || 0), 0);
+    const totalAmount = items.reduce((total: number, item: any) => total + (item.totalAmount || 0), 0);
+    const totalDiscount = subTotal - discountedPrice;
+    const taxAmount = 0; // Assuming no tax for now
+
+    return {
+      subTotal: Math.round(subTotal * 100) / 100,
+      discountedPrice: Math.round(discountedPrice * 100) / 100,
+      membershipDiscountAmount: 0,
+      subscriptionPlanDiscountAmount: Math.round(totalDiscount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      total: Math.round(totalAmount * 100) / 100,
+      grandTotal: Math.round(totalAmount * 100) / 100,
+      currency: "USD",
+    };
+  }
+  /**
    * Get all subscriptions with pagination and filters
    * @route GET /api/v1/admin/subscriptions
    * @access Admin
@@ -277,13 +319,19 @@ class AdminSubscriptionController {
       })
         .populate("userId", "firstName lastName email phone")
         .populate("items.productId", "title slug description media")
-        .populate("orderId", "orderNumber paymentStatus paymentMethod grandTotal currency")
+        .populate("orderId", "orderNumber paymentStatus paymentMethod overall")
         .populate("cancelledBy", "firstName lastName email")
         .lean();
 
       if (!subscription) {
         throw new AppError("Subscription not found", 404);
       }
+
+      // Debug logging - detailed
+      console.log('🔍 [DEBUG] Subscription userId:', JSON.stringify(subscription.userId, null, 2));
+      console.log('🔍 [DEBUG] Subscription orderId:', JSON.stringify(subscription.orderId, null, 2));
+      console.log('🔍 [DEBUG] Subscription items:', JSON.stringify(subscription.items, null, 2));
+      console.log('🔍 [DEBUG] Full subscription object:', JSON.stringify(subscription, null, 2));
 
       // Get payment/transaction logs for this subscription
       // Get payments linked to subscription (renewal payments)
@@ -331,8 +379,33 @@ class AdminSubscriptionController {
       );
 
       const user = subscription.userId as any;
-      const isPopulatedUser =
-        user && typeof user === "object" && user.firstName !== undefined;
+      
+      // Handle both populated and non-populated user data
+      const isPopulatedUser = user && typeof user === "object" && user.firstName !== undefined;
+      
+      // If user is not populated, fetch user data
+      let userData = null;
+      if (isPopulatedUser) {
+        userData = {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        };
+      } else if (user) {
+        // User is ObjectId, fetch user data
+        const userDoc = await User.findById(user).select('firstName lastName email phone').lean();
+        userData = userDoc ? {
+          id: userDoc._id,
+          firstName: userDoc.firstName,
+          lastName: userDoc.lastName,
+          email: userDoc.email,
+          phone: userDoc.phone,
+          fullName: `${userDoc.firstName || ''} ${userDoc.lastName || ''}`.trim(),
+        } : null;
+      }
 
       const transformedSubscription = {
         id: subscription._id,
@@ -342,24 +415,16 @@ class AdminSubscriptionController {
         cycleDays: subscription.cycleDays,
         subscriptionStartDate: subscription.subscriptionStartDate,
         subscriptionEndDate: subscription.subscriptionEndDate,
-        user: isPopulatedUser
-          ? {
-              id: user._id,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              email: user.email,
-              phone: user.phone,
-              fullName: `${user.firstName} ${user.lastName}`.trim(),
-            }
-          : null,
+        user: userData,
         order: subscription.orderId
           ? {
               id: orderId,
               orderNumber: (subscription.orderId as any).orderNumber || null,
               paymentStatus: (subscription.orderId as any).paymentStatus || null,
               paymentMethod: (subscription.orderId as any).paymentMethod || null,
-              grandTotal: (subscription.orderId as any).grandTotal ?? null,
-              currency: (subscription.orderId as any).currency ?? null,
+              grandTotal: (subscription.orderId as any).overall?.grandTotal ?? (subscription.orderId as any).grandTotal ?? this.calculateFromItems(subscription.items),
+              currency: (subscription.orderId as any).overall?.currency ?? (subscription.orderId as any).currency ?? "USD",
+              overall: (subscription.orderId as any).overall || this.buildOverallFromItems(subscription.items) || null,
             }
           : null,
         items: subscription.items.map((item: any) => ({
