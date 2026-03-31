@@ -2563,24 +2563,26 @@ class CheckoutService {
             if (planData) {
               const planPrice = planData.amount || 0;
               const discountedPrice = planData.discountedPrice || planPrice;
-              const baseCapsuleCount = desiredCapsuleCount;
+              // Use actual capsuleCount from database instead of config
+              const actualCapsuleCount = planData.capsuleCount || desiredCapsuleCount;
               const totalAmount = planPrice * quantity;
               const totalDiscountedPrice = discountedPrice * quantity;
 
               // Check if this plan is selected for this product
-              const isSelected = selectedPlanDaysForProduct === desiredCapsuleCount;
+              const isSelected = selectedPlanDaysForProduct === actualCapsuleCount;
 
               productPlansMap.set(planKeyForResponse, {
                 planKey: planKeyForResponse,
-                label: planInfo.label, // Label from config (60/120)
+                // Use actual capsule count from database for label
+                label: `${actualCapsuleCount} Count`,
                 durationDays: 0, // Not applicable for stand-up pouch
               unitAmount: planPrice,
                 totalAmount,
                 discountedPrice: totalDiscountedPrice,
-                // capsuleCount should reflect the configured value (60 or 120), not from DB
-                capsuleCount: baseCapsuleCount,
+                // Use actual capsule count from database
+                capsuleCount: actualCapsuleCount,
                 // supplementsCount represents total capsules across quantity
-                supplementsCount: baseCapsuleCount * quantity,
+                supplementsCount: actualCapsuleCount * quantity,
                 features: new Set<string>(),
                 isSubscription: false, // Stand-up pouch is one-time purchase
                 isSelected, // Set based on product's selected planDays
@@ -2692,9 +2694,8 @@ class CheckoutService {
 
             return {
               planKey: plan.planKey,
-              // Label should reflect the configured plan label (e.g. "60 Count", "120 Count")
-              // Use the label that was set from planInfo.label (from config)
-              label: plan.label || getStandUpPouchPlanLabel(plan.capsuleCount),
+              // Label should reflect actual capsule count from database
+              label: `${plan.capsuleCount} Count`,
               durationDays: plan.durationDays,
               capsuleCount: plan.capsuleCount,
               amount: this.roundAmount(((plan as any).unitAmount || 0)),

@@ -333,7 +333,7 @@ class AdminUserController {
           isActive: true,
           isDeleted: { $ne: true },
         })
-          .populate("childUserId", "name email phone countryCode profileImage")
+          .populate("childUserId", "firstName lastName email phone countryCode profileImage")
           .select("childUserId registeredAt")
           .sort({ registeredAt: -1 })
           .lean(),
@@ -391,6 +391,8 @@ class AdminUserController {
         const childUser = referral.childUserId;
         return {
           profileImage: childUser?.profileImage || null,
+          firstName: childUser?.firstName || null,
+          lastName: childUser?.lastName || null,
           email: childUser?.email || null,
           phone: childUser?.phone || null,
           countryCode: childUser?.countryCode || null,
