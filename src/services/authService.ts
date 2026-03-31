@@ -1678,6 +1678,7 @@ class AuthService {
       referralCode,
       isSubMember: true,
       parentMemberId: parentMember._id,
+      parentId: parentMember._id, // Also set parentId for consistency
       relationshipToParent,
       isEmailVerified: false, // Family members start as unverified
       isActive: true,

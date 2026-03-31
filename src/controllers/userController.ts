@@ -639,10 +639,18 @@ class UserController {
           { $set: { for_user: userId } }
         ).session(session);
         
-        // Remove parentId
+        // Remove parentId and reset isSubMember
         await User.updateOne(
           { _id: userId },
-          { $unset: { parentId: 1 } }
+          { 
+            $unset: { 
+              parentId: 1,
+              parentMemberId: 1  // Also unset parentMemberId
+            },
+            $set: { 
+              isSubMember: false  // Reset isSubMember to false
+            }
+          }
         ).session(session);
         
         await session.commitTransaction();
@@ -674,7 +682,15 @@ class UserController {
         // Make all sub-members independent
         await User.updateMany(
           { parentId: userId },
-          { $unset: { parentId: 1 } }
+          { 
+            $unset: { 
+              parentId: 1,
+              parentMemberId: 1  // Also unset parentMemberId
+            },
+            $set: { 
+              isSubMember: false  // Reset isSubMember to false
+            }
+          }
         ).session(session);
         
         // Remove inherited benefits from all sub-members
@@ -740,6 +756,8 @@ class UserController {
 
       // Update user to become sub-member
       await User.findByIdAndUpdate(req.user._id, {
+        isSubMember: true,        // ✅ Set isSubMember to true
+        parentMemberId: mainMember._id,  // ✅ Also set parentMemberId for consistency
         parentId: mainMember._id,
         relationshipToParent: relationshipToParent || "Other"
       });
@@ -833,7 +851,14 @@ class UserController {
 
       // Remove family relationship
       await User.findByIdAndUpdate(subMemberId, {
-        $unset: { parentId: 1, relationshipToParent: 1 }
+        $unset: { 
+          parentId: 1, 
+          parentMemberId: 1,  // Also unset parentMemberId
+          relationshipToParent: 1 
+        },
+        $set: { 
+          isSubMember: false  // Reset isSubMember to false
+        }
       });
 
       // Reset cart context for sub-member

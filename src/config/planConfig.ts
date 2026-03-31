@@ -19,12 +19,13 @@ export type SachetsSubscriptionPlanDays = typeof SACHETS_SUBSCRIPTION_PLANS[numb
 
 /**
  * STAND_UP_POUCH Plan Configuration
- * These are the available capsule counts and plan days for one-time purchases
+ * These are the available capsule counts for one-time purchases
  * Note: STAND_UP_POUCH only supports one-time plans (no subscription)
- * Note: capsuleCount and planDays are the same for STAND_UP_POUCH
+ * Note: This is now dynamic - any capsule count is supported
+ * The actual counts are determined by the product's standupPouchPrice configuration
  */
-export const STAND_UP_POUCH_PLANS = [60, 120] as const;
-export type StandUpPouchPlanDays = typeof STAND_UP_POUCH_PLANS[number];
+export const STAND_UP_POUCH_PLANS = [] as const; // Empty array = dynamic, no restrictions
+export type StandUpPouchPlanDays = number; // Any number is allowed
 
 /**
  * Plan Key Mappings
@@ -37,11 +38,9 @@ export const SACHETS_PLAN_KEYS: Record<SachetsSubscriptionPlanDays, string> = {
   180: "oneEightyDays",
 } as const;
 
-// Product pricing uses keys count_0 (e.g. 60 count) and count_1 (e.g. 120 count)
-export const STAND_UP_POUCH_PLAN_KEYS: Record<StandUpPouchPlanDays, string> = {
-  60: "count_0",
-  120: "count_1",
-} as const;
+// Product pricing uses dynamic keys based on actual capsule counts
+// The keys are determined by the product's standupPouchPrice configuration
+export const STAND_UP_POUCH_PLAN_KEYS: Record<number, string> = {}; // Dynamic keys
 
 /**
  * Plan Labels
@@ -54,10 +53,7 @@ export const SACHETS_PLAN_LABELS: Record<SachetsSubscriptionPlanDays, string> = 
   180: "180 Day Plan",
 } as const;
 
-export const STAND_UP_POUCH_PLAN_LABELS: Record<StandUpPouchPlanDays, string> = {
-  60: "60 Count",
-  120: "120 Count",
-} as const;
+export const STAND_UP_POUCH_PLAN_LABELS: Record<number, string> = {}; // Dynamic labels
 
 /**
  * Helper Functions
@@ -67,9 +63,10 @@ export function getSachetsPlanKey(days: number): string | null {
 }
 
 export function getStandUpPouchPlanKey(count: number): string | null {
-  const key = STAND_UP_POUCH_PLAN_KEYS[count as StandUpPouchPlanDays];
-  if (key) return key;
-  return null;
+  // This should be completely dynamic - don't use static values
+  // The actual key mapping should be determined at the product level
+  // based on the standupPouchPrice structure
+  return null; // Let the order controller handle dynamic lookup
 }
 
 /** Normalize standupPouchPrice so it always has count_0/count_1 (maps old count60/count120 from DB). */
@@ -87,7 +84,7 @@ export function getSachetsPlanLabel(days: number): string {
 }
 
 export function getStandUpPouchPlanLabel(count: number): string {
-  return STAND_UP_POUCH_PLAN_LABELS[count as StandUpPouchPlanDays] || `${count} Count`;
+  return `${count} Count`; // Dynamic label based on actual count
 }
 
 export function isValidSachetsPlan(days: number): boolean {
@@ -95,7 +92,8 @@ export function isValidSachetsPlan(days: number): boolean {
 }
 
 export function isValidStandUpPouchPlan(count: number): boolean {
-  return STAND_UP_POUCH_PLANS.includes(count as StandUpPouchPlanDays);
+  // All counts are now valid for stand-up pouch - validation happens at product level
+  return count > 0; // Only validate that it's a positive number
 }
 
 /**
@@ -114,9 +112,5 @@ export const SACHETS_PLANS_CONFIG = SACHETS_SUBSCRIPTION_PLANS.map((days) => ({
   isSubscription: true,
 }));
 
-export const STAND_UP_POUCH_PLANS_CONFIG = STAND_UP_POUCH_PLANS.map((count) => ({
-  key: STAND_UP_POUCH_PLAN_KEYS[count],
-  label: STAND_UP_POUCH_PLAN_LABELS[count],
-  count,
-}));
+export const STAND_UP_POUCH_PLANS_CONFIG = []; // Empty = dynamic configuration
 

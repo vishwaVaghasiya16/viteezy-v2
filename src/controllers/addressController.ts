@@ -185,25 +185,65 @@ class AddressController {
         throw new AppError("User not authenticated", 401);
       }
   
-      const { subscriptionId } = req.query;
-  
+      const { subscriptionId, subMemberId } = req.query;
       const userObjectId = new mongoose.Types.ObjectId(userId);
   
       let selectedShippingAddressId: string | null = null;
-  
-      // Run queries in parallel
-      const [addresses, subscription] = await Promise.all([
-        Addresses.find({
+      let addresses;
+      
+      // Check if subMemberId is provided and user is main member
+      if (subMemberId) {
+        // Validate subMemberId format
+        if (!mongoose.Types.ObjectId.isValid(subMemberId as string)) {
+          throw new AppError("Invalid sub-member ID format", 400);
+        }
+        
+        // Check if current user is main member of this sub-member
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(userId, subMemberId as string);
+        
+        if (!validation.allowed || validation.relationshipType !== 'MAIN_MEMBER') {
+          throw new AppError("You can only view addresses of your sub-members", 403);
+        }
+        
+        // Try to get sub-member's addresses first
+        const subMemberAddresses = await Addresses.find({
+          userId: new mongoose.Types.ObjectId(subMemberId as string),
+          isDeleted: false,
+        })
+          .sort({ isDefault: -1, createdAt: -1 })
+          .lean();
+        
+        if (subMemberAddresses.length > 0) {
+          // Sub-member has addresses, use them
+          addresses = subMemberAddresses;
+        } else {
+          // Sub-member has no addresses, fallback to main member's addresses
+          addresses = await Addresses.find({
+            userId: userObjectId,
+            isDeleted: false,
+          })
+            .sort({ isDefault: -1, createdAt: -1 })
+            .lean();
+        }
+      } else {
+        // No subMemberId provided, get current user's addresses
+        addresses = await Addresses.find({
           userId: userObjectId,
           isDeleted: false,
         })
           .sort({ isDefault: -1, createdAt: -1 })
-          .lean(),
+          .lean();
+      }
   
+      // Handle subscription address selection (only for the actual user whose addresses we're showing)
+      let subscriptionUserId = subMemberId ? new mongoose.Types.ObjectId(subMemberId as string) : userObjectId;
+      
+      const [subscription] = await Promise.all([
         subscriptionId
           ? Subscriptions.findOne({
               _id: subscriptionId,
-              userId: userObjectId,
+              userId: subscriptionUserId,
             })
               .select("orderId")
               .lean()
@@ -213,7 +253,7 @@ class AddressController {
       if (subscription?.orderId) {
         const order = await Orders.findOne({
           _id: subscription.orderId,
-          userId: userObjectId,
+          userId: subscriptionUserId,
         })
           .select("shippingAddressId")
           .lean();

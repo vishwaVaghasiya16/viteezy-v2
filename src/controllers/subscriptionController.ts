@@ -139,6 +139,7 @@ class SubscriptionController {
       // Use order items directly (they already have the correct structure)
       const subscriptionItems = order.items.map((item: any) => ({
         productId: new mongoose.Types.ObjectId(item.productId),
+        product_id: item.productId, // Add product_id key
         name: item.name,
         planDays: item.planDays,
         capsuleCount: item.capsuleCount,
@@ -386,6 +387,7 @@ class SubscriptionController {
             ...item,
             name: translatedName,
             productId: translatedProductData || item.productId, // Replace with translated data
+            product_id: item.productId._id || item.productId, // Add product_id key
             // Keep other fields as-is
           };
         });
@@ -533,6 +535,7 @@ class SubscriptionController {
           ...item,
           name: translatedName,
           productId: translatedProductData || item.productId, // Replace with translated data
+          product_id: item.productId._id || item.productId, // Add product_id key
           // Keep other fields as-is
         };
       });

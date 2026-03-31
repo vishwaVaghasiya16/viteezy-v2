@@ -179,11 +179,12 @@ export const createOrderSchema = Joi.object(
         }),
       planDays: Joi.number()
         .integer()
-        .valid(...STAND_UP_POUCH_PLANS)
+        .min(1) // Any positive number is allowed for stand-up pouch
         .optional()
         .messages({
           "number.base": "Plan days must be a number",
-          "any.only": `Plan days must be one of: ${STAND_UP_POUCH_PLANS.join(", ")} for STAND_UP_POUCH`,
+          "number.integer": "Plan days must be an integer",
+          "number.min": "Plan days must be a positive number",
         }),
       // Quantity updates for STAND_UP_POUCH items (required if cart has STAND_UP_POUCH items)
       // Each item can have its own capsuleCount/planDays
@@ -216,11 +217,12 @@ export const createOrderSchema = Joi.object(
               }),
             planDays: Joi.number()
               .integer()
-              .valid(...STAND_UP_POUCH_PLANS)
+              .min(1) // Any positive number is allowed for stand-up pouch
               .optional()
               .messages({
                 "number.base": "Plan days must be a number",
-                "any.only": `Plan days must be one of: ${STAND_UP_POUCH_PLANS.join(", ")}`,
+                "number.integer": "Plan days must be an integer",
+                "number.min": "Plan days must be a positive number",
               }),
           })
         )

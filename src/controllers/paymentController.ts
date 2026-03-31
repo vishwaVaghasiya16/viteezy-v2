@@ -206,8 +206,12 @@ class PaymentController {
         throw new AppError("Payment does not belong to user", 403);
       }
 
-      // Verify order belongs to user
-      if (result.order.userId.toString() !== userId) {
+      // Verify order belongs to user (user can access orders where they are owner, placer, or recipient)
+      if (
+        result.order.userId.toString() !== userId &&
+        (!result.order.orderedBy || result.order.orderedBy.toString() !== userId) &&
+        (!result.order.orderedFor || result.order.orderedFor.toString() !== userId)
+      ) {
         throw new AppError("Order does not belong to user", 403);
       }
 

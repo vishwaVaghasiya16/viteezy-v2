@@ -382,7 +382,7 @@ class CheckoutService {
         if (product.standupPouchPrice) {
           const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
 
-          // count_0 / count_1 structure (count_0 e.g. 30 count, count_1 e.g. 60 count)
+          // count_0 / count_1 structure (dynamic capsule counts based on product configuration)
           if (standupPrice.count_0 || standupPrice.count_1) {
             const plan0Price = standupPrice.count_0;
             if (plan0Price) {
@@ -1389,14 +1389,12 @@ class CheckoutService {
         product.hasStandupPouch &&
         product.standupPouchPrice
       ) {
-        // Standup pouch pricing (one-time only) - uses count_0 / count_1
+        // Standup pouch pricing (one-time only) - uses dynamic count matching
         const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
         if (standupPrice.count_0 || standupPrice.count_1) {
           const countKey = capsuleCount ? getStandUpPouchPlanKey(capsuleCount) : null;
           const selectedPrice =
             (countKey && standupPrice[countKey]) ||
-            (capsuleCount === 60 ? standupPrice.count_0 : null) ||
-            (capsuleCount === 120 ? standupPrice.count_1 : null) ||
             standupPrice.count_0 ||
             standupPrice.count_1;
           if (selectedPrice) {
@@ -1858,7 +1856,7 @@ class CheckoutService {
           }
 
           // Calculate price based on the determined planDays
-          // Match planDays (60 or 120) with count_0 / count_1 in standupPouchPrice
+          // Match planDays dynamically with count_0 / count_1 in standupPouchPrice based on capsuleCount
           if (product && product.standupPouchPrice) {
             const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
             const resolved = resolveStandUpPouchPriceEntry(standupPrice, itemPlanDays);
@@ -2522,8 +2520,40 @@ class CheckoutService {
         }
       }
 
-      // For STAND_UP_POUCH, use dynamic plan configuration (60-count and 120-count plans)
-      const standupPouchPlans = STAND_UP_POUCH_PLANS_CONFIG;
+      // For STAND_UP_POUCH, dynamically generate plans from product configurations
+      const dynamicStandupPouchPlans: Array<{ key: string; count: number; label: string }> = [];
+      
+      // Collect all unique capsule counts from all stand-up pouch products
+      const uniqueCapsuleCounts = new Set<number>();
+      for (const product of transformedProducts) {
+        if (product.hasStandupPouch && product.standupPouchPrice) {
+          const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
+          
+          // Check count_0 and count_1 for capsule counts
+          if (standupPrice.count_0?.capsuleCount) {
+            uniqueCapsuleCounts.add(standupPrice.count_0.capsuleCount);
+          }
+          if (standupPrice.count_1?.capsuleCount) {
+            uniqueCapsuleCounts.add(standupPrice.count_1.capsuleCount);
+          }
+          
+          // Also check simple price object
+          if (standupPrice.capsuleCount) {
+            uniqueCapsuleCounts.add(standupPrice.capsuleCount);
+          }
+        }
+      }
+      
+      // Generate dynamic plans from unique capsule counts
+      for (const count of Array.from(uniqueCapsuleCounts).sort((a, b) => a - b)) {
+        dynamicStandupPouchPlans.push({
+          key: `count_${count}`,
+          count,
+          label: getStandUpPouchPlanLabel(count),
+        });
+      }
+
+      const standupPouchPlans = dynamicStandupPouchPlans;
 
       for (const product of transformedProducts) {
         if (product.hasStandupPouch && product.standupPouchPrice) {

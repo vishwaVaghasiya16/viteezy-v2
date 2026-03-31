@@ -261,6 +261,7 @@ class AdminSubscriptionController {
             : null,
           items: subscription.items.map((item: any) => ({
             productId: item.productId?._id || item.productId,
+            product_id: item.productId?._id || item.productId, // Add product_id key
             product: item.productId
               ? {
                   id: item.productId._id,
@@ -429,6 +430,7 @@ class AdminSubscriptionController {
           : null,
         items: subscription.items.map((item: any) => ({
           productId: item.productId?._id || item.productId,
+          product_id: item.productId?._id || item.productId, // Add product_id key
           product: item.productId
             ? {
                 id: item.productId._id,

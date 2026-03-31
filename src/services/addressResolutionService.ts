@@ -12,6 +12,9 @@ import { logger } from "../utils/logger";
 import { User } from "../models/core";
 import mongoose from "mongoose";
 
+// Export getUserFamilyRole for other services
+export { getUserFamilyRole };
+
 // Cache functions (simplified - no-op for now)
 const getCachedUserAddresses = (userId: string) => null;
 const setCachedUserAddresses = (userId: string, addresses: any) => {};
@@ -137,9 +140,25 @@ class AddressResolutionService {
         };
       }
 
-      // STEP 5: No address found
+      // STEP 5: No address found - provide helpful error message
+      const userRole = await getUserFamilyRole(orderedFor);
+      let errorMessage = "No shipping address found. Please add an address or provide one during checkout.";
+      
+      if (userRole === "SUB_MEMBER") {
+        // Check if main member has any addresses
+        const user = await User.findById(orderedFor).select('parentId').lean();
+        if (user && user.parentId) {
+          const mainMemberAddresses = await this.getUserAddresses(user.parentId.toString());
+          if (mainMemberAddresses.length === 0) {
+            errorMessage = "No shipping address found. Sub-member cannot inherit address because main member has no addresses. Please add an address for the main member or provide a manual address during checkout.";
+          } else {
+            errorMessage = "No shipping address found. Sub-member has no addresses and main member has no default address set. Please set a default address for the main member or provide a manual address during checkout.";
+          }
+        }
+      }
+      
       throw new AppError(
-        "No shipping address found. Please add an address or provide one during checkout.",
+        errorMessage,
         404,
         true,
         "ADDRESS_NOT_FOUND"
@@ -395,20 +414,34 @@ class AddressResolutionService {
 
       const mainMemberId = user.parentId.toString();
 
-      // Get main member's default address
+      // Get main member's default address first
       const mainMemberDefaultAddress = await this.getUserDefaultAddress(mainMemberId);
-      if (!mainMemberDefaultAddress) {
-        logger.info("Main member has no default address", {
-          userId,
+      if (mainMemberDefaultAddress) {
+        return {
           mainMemberId,
-        });
-        return null;
+          address: mainMemberDefaultAddress,
+        };
       }
 
-      return {
+      // If no default address, get any address of main member
+      const mainMemberAddresses = await this.getUserAddresses(mainMemberId);
+      if (mainMemberAddresses.length > 0) {
+        logger.info("Using main member's first available address (no default set)", {
+          userId,
+          mainMemberId,
+          addressCount: mainMemberAddresses.length,
+        });
+        return {
+          mainMemberId,
+          address: mainMemberAddresses[0], // Use first available address
+        };
+      }
+
+      logger.info("Main member has no addresses at all", {
+        userId,
         mainMemberId,
-        address: mainMemberDefaultAddress,
-      };
+      });
+      return null;
 
     } catch (error) {
       logger.error("Failed to get inherited address", {

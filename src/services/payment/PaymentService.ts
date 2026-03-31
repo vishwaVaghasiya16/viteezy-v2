@@ -139,8 +139,12 @@ export class PaymentService {
         throw new AppError("Order not found", 404);
       }
 
-      // Verify order belongs to user
-      if (order.userId.toString() !== data.userId) {
+      // Verify order belongs to user (user can access orders where they are owner, placer, or recipient)
+      if (
+        order.userId.toString() !== data.userId &&
+        (!order.orderedBy || order.orderedBy.toString() !== data.userId) &&
+        (!order.orderedFor || order.orderedFor.toString() !== data.userId)
+      ) {
         throw new AppError("Order does not belong to user", 403);
       }
 
@@ -1266,8 +1270,12 @@ export class PaymentService {
         throw new AppError("Order not found", 404);
       }
 
-      // Verify order belongs to user
-      if (order.userId.toString() !== data.userId) {
+      // Verify order belongs to user (user can access orders where they are owner, placer, or recipient)
+      if (
+        order.userId.toString() !== data.userId &&
+        (!order.orderedBy || order.orderedBy.toString() !== data.userId) &&
+        (!order.orderedFor || order.orderedFor.toString() !== data.userId)
+      ) {
         throw new AppError("Order does not belong to user", 403);
       }
 

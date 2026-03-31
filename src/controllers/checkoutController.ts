@@ -946,7 +946,7 @@ class CheckoutController {
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-  ): Promise<void> {
+  ): Promise<any> {
     try {
       const userId = req.user?._id || req.userId;
       if (!userId) {
@@ -963,7 +963,18 @@ class CheckoutController {
       }
 
       if (!findCart.items || findCart.items.length === 0) {
-        throw new AppError("Cart is empty", 400);
+        return res.status(200).json({
+          success: true,
+          message: "Cart is empty",
+          data: {
+            cartItems: [],
+            subTotal: 0,
+            discountedPrice: 0,
+            taxAmount: 0,
+            grandTotal: 0,
+            isEmpty: true
+          }
+        });
       }
 
       // Extract body parameters

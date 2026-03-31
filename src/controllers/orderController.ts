@@ -346,7 +346,7 @@ class OrderController {
    * @access Private
    */
   createOrder = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<any> => {
       if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
@@ -377,7 +377,9 @@ class OrderController {
         notes,
       } = req.body;
 
-      const userId = new mongoose.Types.ObjectId(req.user._id);
+      const userId = orderedFor 
+        ? new mongoose.Types.ObjectId(orderedFor) 
+        : new mongoose.Types.ObjectId(req.user._id);
 
       // FAMILY PERMISSION VALIDATION
       const targetUserId = orderedFor || req.user._id;
@@ -385,6 +387,21 @@ class OrderController {
       const validation = await validateFamilyRelation(req.user._id, targetUserId);
       if (!validation.allowed) {
         throw new AppError(validation.reason || "Access denied", 403);
+      }
+
+      // AUTO-INHERIT ADDRESS FOR SUB-MEMBERS (if needed)
+      if (validation.relationshipType === 'MAIN_MEMBER' && orderedFor) {
+        // Main member placing order for sub-member
+        const { ensureSubMemberHasAddress } = await import("@/services/addressInheritanceHelper");
+        const addressCheck = await ensureSubMemberHasAddress(orderedFor);
+        
+        if (addressCheck.autoInherited) {
+          logger.info("Address auto-inherited for sub-member during order creation", {
+            orderedBy: req.user._id,
+            orderedFor: orderedFor,
+            inheritedAddressId: addressCheck.addressId
+          });
+        }
       }
 
       // Get user language for feature translation
@@ -446,10 +463,10 @@ class OrderController {
         throw new AppError("Invalid cart ID format", 400);
       }
 
-      // Fetch cart and validate ownership
+      // Fetch cart and validate ownership (cart should belong to the person placing the order)
       const cart = await Carts.findOne({
         _id: new mongoose.Types.ObjectId(cartId),
-        userId: userId,
+        userId: new mongoose.Types.ObjectId(req.user._id), // Cart belongs to the person placing order
         isDeleted: false,
       }).lean();
 
@@ -458,7 +475,18 @@ class OrderController {
       }
 
       if (!cart.items || cart.items.length === 0) {
-        throw new AppError("Cart is empty", 400);
+        return res.status(200).json({
+          success: true,
+          message: "Cart is empty",
+          data: {
+            cartItems: [],
+            subTotal: 0,
+            discountedPrice: 0,
+            taxAmount: 0,
+            grandTotal: 0,
+            isEmpty: true
+          }
+        });
       }
 
       // Separate cart items by variantType
@@ -776,55 +804,58 @@ class OrderController {
             selectedStandUpPouchPlanDays ||
             DEFAULT_STAND_UP_POUCH_PLAN;
           
-          // For STAND_UP_POUCH: planDays from cart is treated as capsuleCount (60 or 120)
+          // For STAND_UP_POUCH: planDays from cart is treated as capsuleCount
           itemCapsuleCount = itemPlanDays;
           const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
 
-          const countKey = getStandUpPouchPlanKey(itemPlanDays);
-          const countData = countKey ? standupPrice[countKey] : null;
-
-          if (countData) {
-            itemAmount = countData.amount || 0;
+          // Dynamic lookup: find pricing by matching capsuleCount
+          let foundPricing: any = null;
+          
+          // Search through all count_* keys to find matching capsule count
+          Object.keys(standupPrice).forEach(key => {
+            if (key.startsWith('count_') && standupPrice[key]) {
+              const pricing = standupPrice[key];
+              if (pricing.capsuleCount === itemPlanDays) {
+                foundPricing = pricing;
+              }
+            }
+          });
+          
+          if (foundPricing) {
+            itemAmount = foundPricing.amount || 0;
+            itemDiscountedPrice = foundPricing.discountedPrice || itemAmount;
+            itemTaxRate = foundPricing.taxRate || 0;
+            itemTotalAmount = foundPricing.totalAmount || foundPricing.discountedPrice || itemAmount;
+            itemCapsuleCount = foundPricing.capsuleCount || itemPlanDays;
+            itemSavingsPercentage = foundPricing.savingsPercentage || undefined;
+            itemFeatures = Array.isArray(foundPricing.features)
+              ? foundPricing.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang)
+                )
+              : [];
+          } else if (standupPrice.amount) {
+            // Fallback to simple price object if count structure doesn't exist
+            itemAmount = standupPrice.amount || 0;
             itemDiscountedPrice =
-              countData.discountedPrice || itemAmount;
-            itemTaxRate = countData.taxRate || 0;
+              standupPrice.discountedPrice || itemAmount;
+            itemTaxRate = standupPrice.taxRate || 0;
             itemTotalAmount =
-              countData.totalAmount ||
-              countData.discountedPrice ||
+              standupPrice.totalAmount ||
+              standupPrice.discountedPrice ||
               itemAmount;
-            itemCapsuleCount = countData.capsuleCount || itemPlanDays;
-            itemSavingsPercentage =
-              countData.savingsPercentage || undefined;
-            itemFeatures = Array.isArray(countData.features)
-              ? countData.features.map((feature: any) =>
+            itemCapsuleCount = itemPlanDays;
+            itemFeatures = Array.isArray(standupPrice.features)
+              ? standupPrice.features.map((feature: any) =>
                   getTranslatedString(feature, userLang)
                 )
               : [];
           } else {
-            // Fallback to simple price object if count structure doesn't exist
-            if (standupPrice.amount) {
-              itemAmount = standupPrice.amount || 0;
-              itemDiscountedPrice =
-                standupPrice.discountedPrice || itemAmount;
-              itemTaxRate = standupPrice.taxRate || 0;
-              itemTotalAmount =
-                standupPrice.totalAmount ||
-                standupPrice.discountedPrice ||
-                itemAmount;
-              itemCapsuleCount = itemPlanDays;
-              itemFeatures = Array.isArray(standupPrice.features)
-                ? standupPrice.features.map((feature: any) =>
-                    getTranslatedString(feature, userLang)
-                  )
-                : [];
-            } else {
-              throw new AppError(
-                `Product ${
-                  product.title?.en || product.slug || product._id
-                } does not have valid pricing for ${itemPlanDays}-count stand-up pouch. Available counts: 60, 120`,
-                400
-              );
-            }
+            throw new AppError(
+              `Product ${
+                product.title?.en || product.slug || product._id
+              } does not have valid pricing for ${itemPlanDays}-count stand-up pouch. Please check product configuration.`,
+              400
+            );
           }
         } else {
           throw new AppError(
@@ -834,7 +865,7 @@ class OrderController {
         }
 
         // Multiply by quantity for total amounts
-          return {
+        return {
           productId: new mongoose.Types.ObjectId(cartItem.productId),
           name:
             product.title?.en || product.title?.nl || product.slug || "Product",
@@ -1141,9 +1172,13 @@ class OrderController {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { status, paymentStatus, startDate, endDate } = req.query;
 
-      // Build filter for user's orders
+      // Build filter for user's orders (include orders where user is either the owner or the recipient)
       const filter: any = {
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Orders for this user
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Orders placed by this user for others
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Orders placed for this user by others
+        ],
         isDeleted: false,
       };
 
@@ -1255,10 +1290,14 @@ class OrderController {
         throw new AppError("Invalid order ID", 400);
       }
 
-      // Get order with populated addresses
+      // Get order with populated addresses (user can access orders where they are owner, placer, or recipient)
       const order = await Orders.findOne({
         _id: new mongoose.Types.ObjectId(orderId),
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Order for this user
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Order placed by this user
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Order placed for this user
+        ],
         isDeleted: false,
       })
         .populate(
@@ -1281,11 +1320,15 @@ class OrderController {
 
       const userLang = await getUserLanguage(req, req.user!._id.toString());
 
-      // Get payment details for this order
+      // Get payment details for this order (user can access payments for orders they can access)
       let paymentData = null;
       const payment = await Payments.findOne({
         orderId: new mongoose.Types.ObjectId(orderId),
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Payment for this user's order
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Payment for order placed by this user
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Payment for order placed for this user
+        ],
         isDeleted: false,
       })
         .select(
