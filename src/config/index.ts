@@ -18,8 +18,9 @@ const DEFAULT_VALUES = {
   PORT: 8050,
   HOST: "0.0.0.0",
   NODE_ENV: "development",
-  MONGODB_URI: "mongodb://localhost:27017/viteezy-phase-2",
-  MONGODB_TEST_URI: "mongodb://localhost:27017/viteezy-phase-2-test",
+  MONGODB_URI:
+    "mongodb+srv://nikunjgoyani5_db_user:hgBCeTxuezJFwW24@viteezy-2.cgdtgex.mongodb.net/viteezy-test",
+  MONGODB_TEST_URI: "mongodb+srv://nikunjgoyani5_db_user:hgBCeTxuezJFwW24@viteezy-2.cgdtgex.mongodb.net/viteezy-test",
   JWT_SECRET: "your-super-secret-jwt-key-here",
   JWT_EXPIRE: "7d",
   JWT_REFRESH_SECRET: "your-refresh-secret-key-here",
