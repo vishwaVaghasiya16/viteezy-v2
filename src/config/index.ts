@@ -6,9 +6,13 @@
  */
 
 import dotenv from "dotenv";
+import path from "path";
 
 // Load environment variables from .env file
 dotenv.config();
+// Fallback for deployments where process cwd is not project root (e.g. PM2/dist)
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 /**
  * Configuration Constants
@@ -34,17 +38,29 @@ const DEFAULT_VALUES = {
   CORS_ORIGIN: "http://localhost:8080,http://localhost:8081,http://129.212.182.93:8080,https://staging-v2.viteezy.com",
   LOG_LEVEL: "info",
   LOG_FILE: "logs/app.log",
-  DIGITALOCEAN_SPACES_ENDPOINT: "",
-  DIGITALOCEAN_SPACES_REGION: "ams3",
-  DIGITALOCEAN_BUCKET_NAME: "",
-  DIGITALOCEAN_ACCESS_KEY: "",
-  DIGITALOCEAN_SPACES_SECRET_KEY: "",
+  DIGITALOCEAN_SPACES_ENDPOINT: "https://blr1.digitaloceanspaces.com",
+  DIGITALOCEAN_SPACES_REGION: "blr1",
+  DIGITALOCEAN_BUCKET_NAME: "guardianshot",
+  DIGITALOCEAN_ACCESS_KEY: "DO009BA7H2LK9BJE49DE",
+  DIGITALOCEAN_SPACES_SECRET_KEY: "Al17VN3dc/J27LtQDAmRhtksBS3aE5Nrg822sXSRboE",
   DO_SPACES_CDN_BASE_URL: "",
   POSTNL_URL: "https://api.postnl.nl/v2/address/benelux",
   POSTNL_TIMEOUT_MS: 5000,
   GOOGLE_CLIENT_ID:
     "137831918294-e52avbjc9i935c7b71tupto5m6jtunj0.apps.googleusercontent.com",
 } as const;
+
+const normalizeEnvString = (value?: string): string => {
+  if (value === undefined || value === null) return "";
+  const trimmed = String(value).trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
 
 /**
  * Application Configuration Object
@@ -172,29 +188,32 @@ export const config = {
    * DigitalOcean Spaces / S3 compatible storage configuration
    */
   spaces: {
-    endpoint:
+    endpoint: normalizeEnvString(
       process.env.DIGITALOCEAN_SPACES_ENDPOINT ||
-      process.env.DIGITALOCEAN_CALLBACK_URL ||
-      DEFAULT_VALUES.DIGITALOCEAN_SPACES_ENDPOINT,
-    region:
+        process.env.DIGITALOCEAN_CALLBACK_URL ||
+        DEFAULT_VALUES.DIGITALOCEAN_SPACES_ENDPOINT
+    ),
+    region: normalizeEnvString(
       process.env.DIGITALOCEAN_SPACES_REGION ||
-      process.env.DIGITALOCEAN_SPACES_REGION ||
-      DEFAULT_VALUES.DIGITALOCEAN_SPACES_REGION,
-    bucket:
+        DEFAULT_VALUES.DIGITALOCEAN_SPACES_REGION
+    ),
+    bucket: normalizeEnvString(
       process.env.DIGITALOCEAN_BUCKET_NAME ||
-      process.env.DIGITALOCEAN_BUCKET_NAME ||
-      DEFAULT_VALUES.DIGITALOCEAN_BUCKET_NAME,
-    accessKeyId:
+        DEFAULT_VALUES.DIGITALOCEAN_BUCKET_NAME
+    ),
+    accessKeyId: normalizeEnvString(
       process.env.DIGITALOCEAN_ACCESS_KEY ||
-      process.env.DIGITALOCEAN_ACCESS_KEY ||
-      DEFAULT_VALUES.DIGITALOCEAN_ACCESS_KEY,
-    secretAccessKey:
+        DEFAULT_VALUES.DIGITALOCEAN_ACCESS_KEY
+    ),
+    secretAccessKey: normalizeEnvString(
       process.env.DIGITALOCEAN_SPACES_SECRET_KEY ||
-      process.env.DIGITALOCEAN_CLIENT_SECRET ||
-      DEFAULT_VALUES.DIGITALOCEAN_SPACES_SECRET_KEY,
-    cdnBaseUrl:
+        process.env.DIGITALOCEAN_CLIENT_SECRET ||
+        DEFAULT_VALUES.DIGITALOCEAN_SPACES_SECRET_KEY
+    ),
+    cdnBaseUrl: normalizeEnvString(
       process.env.DO_SPACES_CDN_BASE_URL ||
-      DEFAULT_VALUES.DO_SPACES_CDN_BASE_URL,
+        DEFAULT_VALUES.DO_SPACES_CDN_BASE_URL
+    ),
   },
   postnl: {
     addressValidationUrl: process.env.POSTNL_URL || DEFAULT_VALUES.POSTNL_URL,

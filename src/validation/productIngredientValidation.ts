@@ -108,6 +108,12 @@ const productsArraySchema = Joi.alternatives()
 export const createProductIngredientSchema = Joi.object(
   withFieldLabels({
     name: i18nStringSchema.label("Ingredient name"),
+    scientificName: Joi.string()
+      .trim()
+      .max(200)
+      .allow("", null)
+      .optional()
+      .label("Scientific name"),
     description: i18nTextSchema.label("Description"),
     products: productsArraySchema.label("Products").default([]),
     isActive: Joi.alternatives()
@@ -211,6 +217,12 @@ export const updateProductIngredientSchema = Joi.object(
       )
       .optional()
       .label("Ingredient name"),
+    scientificName: Joi.string()
+      .trim()
+      .max(200)
+      .allow("", null)
+      .optional()
+      .label("Scientific name"),
     description: i18nTextSchema.label("Description"),
     products: productsArrayUpdateSchema.label("Products"),
     isActive: Joi.alternatives()
