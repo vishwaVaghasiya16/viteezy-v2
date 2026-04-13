@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { Coupons } from "@/models/commerce/coupons.model";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 
 /**
  * Coupon Schedule Job
@@ -120,7 +121,7 @@ const runCouponCheck = async () => {
 };
 
 // Cron schedule; default every 5 minutes
-const cronSchedule = process.env.COUPON_SCHEDULE_JOB_CRON || "*/5 * * * *";
+const cronSchedule = config.jobs.couponCron;
 if (!cron.validate(cronSchedule)) {
   logger.error(`❌ Invalid cron schedule for Coupon job: ${cronSchedule}`);
 } else {

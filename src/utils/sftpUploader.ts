@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { Client, ConnectConfig } from "ssh2";
 import { logger } from "./logger";
+import { config as appConfig } from "@/config";
 
 /**
  * SFTP Uploader Utility
@@ -23,30 +24,30 @@ interface SFTPConfig {
  * Throws if key is not configured or file missing.
  */
 function getSFTPConfig(): SFTPConfig {
-  const config: SFTPConfig = {
-    host: process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net",
-    username: process.env.SFTP_USERNAME || "sftpviteezya",
-    port: parseInt(process.env.SFTP_PORT || "22"),
+  const sftpOptions: SFTPConfig = {
+    host: appConfig.sftp.host,
+    username: appConfig.sftp.username,
+    port: appConfig.sftp.port,
     // Prefer newer RSA algorithms (many gateways e.g. IBM Sterling disable legacy ssh-rsa)
     algorithms: {
       serverHostKey: ["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"],
     },
   };
 
-  const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
+  const privateKeyPath = appConfig.sftp.privateKeyFilename;
   if (privateKeyPath) {
     const resolvedPath = path.isAbsolute(privateKeyPath)
       ? privateKeyPath
       : path.resolve(process.cwd(), privateKeyPath);
     if (fs.existsSync(resolvedPath)) {
       const raw = fs.readFileSync(resolvedPath);
-      config.privateKey = (typeof raw === "string" ? raw : raw.toString("utf8")).trim();
-      return config;
+      sftpOptions.privateKey = (typeof raw === "string" ? raw : raw.toString("utf8")).trim();
+      return sftpOptions;
     }
   }
-  if (process.env.SFTP_PRIVATE_KEY) {
-    config.privateKey = process.env.SFTP_PRIVATE_KEY.trim();
-    return config;
+  if (appConfig.sftp.privateKey) {
+    sftpOptions.privateKey = appConfig.sftp.privateKey.trim();
+    return sftpOptions;
   }
   throw new Error("SFTP private key not configured (set SFTP_PRIVATEKEY_FILENAME or SFTP_PRIVATE_KEY)");
 }
@@ -63,13 +64,13 @@ export function getSFTPKeyDiagnostics(): {
   host: string;
   username: string;
 } {
-  const host = process.env.SFTP_REMOTE_HOST || "sftp-gateway-transfer.a16.cldsvc.net";
-  const username = process.env.SFTP_USERNAME || "sftpviteezya";
-  const privateKeyPath = process.env.SFTP_PRIVATEKEY_FILENAME;
-  const fromEnv = !!process.env.SFTP_PRIVATE_KEY;
+  const host = appConfig.sftp.host;
+  const username = appConfig.sftp.username;
+  const privateKeyPath = appConfig.sftp.privateKeyFilename;
+  const fromEnv = !!appConfig.sftp.privateKey;
 
   if (fromEnv) {
-    const raw = process.env.SFTP_PRIVATE_KEY || "";
+    const raw = appConfig.sftp.privateKey || "";
     const valid = raw.includes("-----BEGIN") && raw.includes("-----END");
     return {
       keyConfigured: true,
@@ -119,7 +120,7 @@ export async function uploadToSFTP(
   remotePath: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const config = getSFTPConfig();
+    const sftpOptions = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -168,7 +169,7 @@ export async function uploadToSFTP(
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config as ConnectConfig);
+      .connect(sftpOptions as ConnectConfig);
   });
 }
 
@@ -180,7 +181,7 @@ export async function downloadFromSFTP(
   localFilePath: string
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const config = getSFTPConfig();
+    const sftpOptions = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -213,7 +214,7 @@ export async function downloadFromSFTP(
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config as ConnectConfig);
+      .connect(sftpOptions as ConnectConfig);
   });
 }
 
@@ -222,7 +223,7 @@ export async function downloadFromSFTP(
  */
 export async function listSFTPFiles(remoteDir: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const config = getSFTPConfig();
+    const sftpOptions = getSFTPConfig();
     const conn = new Client();
 
     conn
@@ -254,6 +255,6 @@ export async function listSFTPFiles(remoteDir: string): Promise<string[]> {
         logger.error(`SFTP connection error: ${err.message}`);
         reject(err);
       })
-      .connect(config as ConnectConfig);
+      .connect(sftpOptions as ConnectConfig);
   });
 }

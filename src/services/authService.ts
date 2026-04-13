@@ -110,39 +110,23 @@ class AuthService {
   private readonly googleOAuthClient: OAuth2Client;
 
   constructor() {
-    this.JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-    this.JWT_REFRESH_SECRET =
-      process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key";
-    this.JWT_EXPIRES_IN = process.env.JWT_EXPIRE || "15m"; // 15 minutes for access token
-    this.JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRE || "7d"; // 7 days for refresh token
-    this.OTP_EXPIRES_IN = parseInt(process.env.OTP_EXPIRES_IN || "5"); // 5 minutes
+    this.JWT_SECRET = config.jwt.secret;
+    this.JWT_REFRESH_SECRET = config.jwt.refreshSecret;
+    this.JWT_EXPIRES_IN = config.jwt.expiresIn;
+    this.JWT_REFRESH_EXPIRES_IN = config.jwt.refreshExpiresIn;
+    this.OTP_EXPIRES_IN = config.auth.otpExpiresInMinutes;
 
-    // Validate JWT_EXPIRES_IN format
     if (!this.isValidExpiresIn(this.JWT_EXPIRES_IN)) {
-      this.JWT_EXPIRES_IN = "15m"; // Default to 15 minutes
+      throw new Error("Invalid JWT_EXPIRE format in configuration");
     }
 
     if (!this.isValidExpiresIn(this.JWT_REFRESH_EXPIRES_IN)) {
-      this.JWT_REFRESH_EXPIRES_IN = "7d"; // Default to 7 days
+      throw new Error("Invalid JWT_REFRESH_EXPIRE format in configuration");
     }
 
-    if (!this.JWT_SECRET || this.JWT_SECRET === "your-secret-key") {
-      console.warn(
-        "Warning: JWT_SECRET is not set. Using default secret key. This is not secure for production!",
-      );
-    }
-
-    if (
-      !this.JWT_REFRESH_SECRET ||
-      this.JWT_REFRESH_SECRET === "your-refresh-secret-key"
-    ) {
-      console.warn(
-        "Warning: JWT_REFRESH_SECRET is not set. Using default secret key. This is not secure for production!",
-      );
-    }
-
-    // Initialize Google OAuth Client
-    this.googleOAuthClient = new OAuth2Client(config.google.clientId);
+    this.googleOAuthClient = new OAuth2Client(
+      config.google.clientId || undefined
+    );
   }
 
   private isValidExpiresIn(value: string): boolean {
@@ -923,13 +907,9 @@ class AuthService {
           passwordResetTokenExpires: resetTokenExpires,
         });
 
-        // Generate reset URL for web/link-based reset
-        // - User-side: FRONTEND_URL (default http://localhost:8080)
-        // - Admin panel: ADMIN_PANEL_URL (default http://localhost:8081)
-        const userFrontendUrl =
-          process.env.FRONTEND_URL || "http://localhost:8080";
+        const userFrontendUrl = config.frontend.url;
         const adminPanelUrl =
-          process.env.ADMIN_PANEL_URL || "http://localhost:8081";
+          config.adminPanel.url || config.frontend.url;
 
         // If the caller explicitly says "admin", always use admin panel URL.
         // Otherwise, fall back to user role (Admin => admin panel) for safety.

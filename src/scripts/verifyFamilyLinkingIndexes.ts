@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { User } from "../models/core";
 import { FamilyMapping } from "../models/core/familyMapping.model";
 import { logger } from "../utils/logger";
+import { config } from "../config";
 
 /**
  * Verify and create required indexes for Family Linking System
@@ -115,7 +116,7 @@ if (require.main === module) {
   const runIndexVerification = async () => {
     try {
       // Connect to MongoDB (assuming connection string is in environment)
-      await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/viteezy');
+      await mongoose.connect(config.database.mongodbUri);
       
       await verifyFamilyLinkingIndexes();
       

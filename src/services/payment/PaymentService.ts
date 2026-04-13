@@ -33,6 +33,7 @@ import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
 import { SubscriptionGatewayService } from "../subscriptionGatewayService";
+import { config } from "@/config";
 
 /**
  * Unified Payment Service
@@ -48,7 +49,7 @@ export class PaymentService {
 
     // Initialize available gateways
     try {
-      if (process.env.STRIPE_SECRET_KEY) {
+      if (config.payments.stripeSecretKey) {
         this.gateways.set(PaymentMethod.STRIPE, new StripeAdapter());
         logger.info("Stripe payment gateway registered");
       }
@@ -57,7 +58,7 @@ export class PaymentService {
     }
 
     try {
-      if (process.env.MOLLIE_API_KEY) {
+      if (config.payments.mollieApiKey) {
         this.gateways.set(PaymentMethod.MOLLIE, new MollieAdapter());
         logger.info("Mollie payment gateway registered");
       }
@@ -245,8 +246,7 @@ export class PaymentService {
             return data.webhookUrl;
           }
           
-          // Get base URL from environment or default to localhost
-          const baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
+          const baseUrl = config.app.baseUrl;
           
           // Skip webhook URL for localhost URLs (Mollie cannot reach them)
           // Only set webhook URL if it's a public URL (not localhost or 127.0.0.1)
@@ -726,6 +726,11 @@ export class PaymentService {
       await payment.save();
       console.log("✅ [PAYMENT SERVICE] Step 7: Payment saved to database");
 
+      // Clear cart whenever payment is COMPLETED for an order (handles duplicate/out-of-order Stripe events).
+      if (result.status === PaymentStatus.COMPLETED && payment.orderId) {
+        await this.tryClearCartForCompletedOrderPayment(payment, "webhook");
+      }
+
       // ========== WEBHOOK FLOW: Update Order & Create Subscription ==========
       // Update order status if payment is completed
       if (
@@ -754,58 +759,6 @@ export class PaymentService {
           logger.info(
             `Order ${order.orderNumber} confirmed via webhook after payment completion`
           );
-
-          // Clear user's cart after successful payment
-          try {
-            const userId = (order.userId as mongoose.Types.ObjectId).toString();
-            console.log(
-              "🛒 [PAYMENT SERVICE] Step 8.0.1: Clearing cart for user",
-              userId
-            );
-            console.log(
-              "🛒 [PAYMENT SERVICE] - Order ID:",
-              order._id,
-              "Order Number:",
-              order.orderNumber
-            );
-            
-            const clearResult = await cartService.clearCart(userId);
-            console.log(
-              "✅ [PAYMENT SERVICE] - Cart cleared successfully after payment:",
-              clearResult.message
-            );
-            logger.info(
-              `Cart cleared for user ${userId} after successful payment for order ${order.orderNumber}`,
-              {
-                userId,
-                orderId: order._id,
-                orderNumber: order.orderNumber,
-                paymentId: payment._id,
-                clearResult,
-              }
-            );
-          } catch (cartError: any) {
-            // Log error but don't fail the entire webhook processing
-            console.error(
-              "❌ [PAYMENT SERVICE] - Failed to clear cart:",
-              cartError.message
-            );
-            console.error(
-              "❌ [PAYMENT SERVICE] - Cart error stack:",
-              cartError.stack
-            );
-            logger.error(
-              `Failed to clear cart after payment: ${cartError.message}`,
-              {
-                userId: (order.userId as mongoose.Types.ObjectId).toString(),
-                orderId: order._id,
-                orderNumber: order.orderNumber,
-                paymentId: payment._id,
-                error: cartError.message,
-                stack: cartError.stack,
-              }
-            );
-          }
 
           // Track coupon usage if a coupon was applied
           if (
@@ -1343,9 +1296,7 @@ export class PaymentService {
         },
         returnUrl: data.returnUrl,
         cancelUrl: data.cancelUrl,
-        webhookUrl: `${
-          process.env.APP_BASE_URL || "http://localhost:8080"
-        }/api/v1/payments/webhook/${data.paymentMethod}`,
+        webhookUrl: `${config.app.baseUrl}/api/v1/payments/webhook/${data.paymentMethod}`,
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
         shippingCountry: orderCountry,
@@ -1407,8 +1358,8 @@ export class PaymentService {
       // In development, optionally create subscription immediately for testing
       // In production, subscription is created via webhook after payment completion
       if (
-        process.env.NODE_ENV === "development" &&
-        process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true"
+        config.server.nodeEnv === "development" &&
+        config.features.autoCreateSubscriptionOnPayment
       ) {
         console.log(
           "🟡 [DEV MODE] Attempting immediate subscription creation for testing..."
@@ -1746,6 +1697,13 @@ export class PaymentService {
         }
       }
 
+      if (result.status === PaymentStatus.COMPLETED && payment.orderId) {
+        await this.tryClearCartForCompletedOrderPayment(
+          payment,
+          "verifyPaymentAndUpdateOrder"
+        );
+      }
+
       return {
         payment,
         order,
@@ -1812,11 +1770,9 @@ export class PaymentService {
       // In production, this should be a publicly accessible URL
       const webhookUrl =
         data.webhookUrl ||
-        (process.env.NODE_ENV === "production"
-          ? `${
-              process.env.APP_BASE_URL || "https://20973d5116e5.ngrok-free.app"
-            }/api/v1/payments/webhook/${data.paymentMethod}`
-          : undefined); // Skip webhook in development for localhost
+        (config.server.nodeEnv === "production"
+          ? `${config.app.baseUrl}/api/v1/payments/webhook/${data.paymentMethod}`
+          : undefined);
 
       const paymentIntentData: PaymentIntentData = {
         amount: Math.round(data.amount.value * 100),
@@ -1973,6 +1929,51 @@ export class PaymentService {
 
   private toMinorUnits(amount: number): number {
     return Math.round(amount * 100);
+  }
+
+  /**
+   * Clear shopper cart after a completed order payment. Idempotent — safe on duplicate webhooks.
+   */
+  private async tryClearCartForCompletedOrderPayment(
+    payment: { orderId?: unknown },
+    context: string
+  ): Promise<void> {
+    const oid = payment?.orderId;
+    if (!oid) {
+      return;
+    }
+    const orderId =
+      typeof oid === "object" &&
+      oid !== null &&
+      "_id" in (oid as Record<string, unknown>)
+        ? String((oid as { _id: unknown })._id)
+        : String(oid);
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return;
+    }
+
+    const order = await Orders.findById(orderId)
+      .select("userId orderNumber")
+      .lean();
+    if (!order?.userId) {
+      return;
+    }
+
+    const userId = String(order.userId);
+    try {
+      await cartService.clearCart(userId);
+      logger.info(`Cart cleared after completed payment (${context})`, {
+        userId,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error(`Cart clear failed (${context}): ${msg}`, {
+        userId,
+        orderId,
+      });
+    }
   }
 
   private async handleOrderConfirmation(

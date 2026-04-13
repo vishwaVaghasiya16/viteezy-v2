@@ -12,6 +12,7 @@ import {
   MembershipStatus, 
   MembershipInterval 
 } from "@/models/enums";
+import { config } from "@/config";
 
 // Fixed TypeScript compilation errors
 
@@ -273,7 +274,7 @@ class MembershipController {
       };
 
       // Set redirect URLs to /products for membership payments (clean URLs without query params)
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const frontendUrl = config.frontend.url;
       const membershipReturnUrl = `${frontendUrl}/products`;
       const membershipCancelUrl = `${frontendUrl}/products`;
 

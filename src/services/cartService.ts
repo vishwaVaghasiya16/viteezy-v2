@@ -1954,8 +1954,11 @@ class CartService {
     const result = await Carts.findOneAndUpdate(
       {
         userId: new mongoose.Types.ObjectId(userId),
-        cartType: "NORMAL",
         isDeleted: false,
+        $or: [
+          { cartType: "NORMAL" },
+          { cartType: { $exists: false } },
+        ],
       },
       {
         $set: {

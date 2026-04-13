@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { Orders } from "@/models/commerce";
 import { OrderStatus } from "@/models/enums";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 import * as fs from "fs";
 import * as path from "path";
 import { emailService } from "@/services/emailService";
@@ -50,7 +51,7 @@ export class PharmacistJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  private readonly CSV_FOLDER = process.env.PHARMACIST_CSV_FOLDER || "/data/csv";
+  private readonly CSV_FOLDER = config.pharmacist.csvFolder;
   private readonly CSV_FILE_EXTENSION = ".csv";
   private readonly ONE_MONTH = 1;
   private readonly THREE_MONTHS = 3;
@@ -483,9 +484,7 @@ export class PharmacistJob {
 
     logger.info(`Found ${files.length} CSV files to send to pharmacist`);
 
-    // Get pharmacist email from environment
-    const pharmacistEmail =
-      process.env.PHARMACIST_EMAIL || "pharmacist@viteezy.com";
+    const pharmacistEmail = config.pharmacist.email;
 
     // Prepare file paths
     const filePaths = files.map((file) => path.join(this.CSV_FOLDER, file));
@@ -496,10 +495,10 @@ export class PharmacistJob {
       await emailService.sendPharmacistRequestEmail({
         to: pharmacistEmail,
         files: filePaths,
-        subject: process.env.PHARMACIST_CSV_SUBJECT || "Pharmacist Order CSV Files",
+        subject: config.pharmacist.csvSubject,
       });
 
-      logger.info(`Sent ${files.length} CSV files to pharmacist at ${pharmacistEmail}`);
+      logger.info(`Sent ${files.length} CSV files to pharmacist`);
     } catch (error: any) {
       logger.error(`Failed to email CSV files to pharmacist: ${error.message}`, {
         error: error.message,
@@ -563,8 +562,7 @@ export const pharmacistJob = new PharmacistJob();
 // Schedule the job to run every 5 minutes
 // Cron format: minute hour day month day-of-week
 // "*/5 * * * *" = every 5 minutes
-const cronSchedule =
-  process.env.PHARMACIST_JOB_SCHEDULE || "*/5 * * * *";
+const cronSchedule = config.jobs.pharmacistCron;
 
 cron.schedule(cronSchedule, async () => {
   try {

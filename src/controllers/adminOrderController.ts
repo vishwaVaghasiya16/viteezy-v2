@@ -24,6 +24,7 @@ import { getTranslatedString } from "@/utils/translationUtils";
 import { getUserLanguageCode } from "@/utils/translationUtils";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 import { getStandUpPouchPlanKey, getNormalizedStandupPouchPrice } from "../config/planConfig";
+import { config } from "@/config";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -1249,7 +1250,7 @@ class AdminOrderController {
         }
 
         // Always generate payment link (even if cart creation failed)
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+        const frontendUrl = config.frontend.url;
         if (cartId) {
           paymentLink = `${frontendUrl}/checkout?orderId=${order._id}&cartId=${cartId}`;
         } else {
@@ -1333,7 +1334,7 @@ class AdminOrderController {
 
     // Ensure paymentLink is always provided for pending payment orders
     if (!paymentLink) {
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const frontendUrl = config.frontend.url;
       paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
       logger.warn(
         `Payment link was null, generated fallback link: ${paymentLink}`,

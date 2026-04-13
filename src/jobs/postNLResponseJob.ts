@@ -8,6 +8,7 @@ import * as path from "path";
 import { downloadFromSFTP, listSFTPFiles } from "@/utils/sftpUploader";
 import { parseXML } from "@/utils/xmlParser";
 import { Addresses } from "@/models/core/addresses.model";
+import { config } from "@/config";
 
 interface DeliveryOrderResponse {
   orderNo: string;
@@ -35,10 +36,7 @@ export class PostNLResponseJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  // Use path.join for cross-platform compatibility (Windows/Linux)
-  private readonly XML_FOLDER = process.env.POSTNL_RESPONSE_XML_FOLDER 
-    ? path.resolve(process.env.POSTNL_RESPONSE_XML_FOLDER)
-    : path.join(process.cwd(), "data", "xml", "responses");
+  private readonly XML_FOLDER = config.postnl.responseXmlFolder;
   private readonly SFTP_RESPONSE_DIR = "/Shipment/";
 
   /**
@@ -295,7 +293,7 @@ export class PostNLResponseJob {
 export const postNLResponseJob = new PostNLResponseJob();
 
 // Schedule: every 5 minutes (override via POSTNL_RESPONSE_JOB_SCHEDULE)
-const cronSchedule = process.env.POSTNL_RESPONSE_JOB_SCHEDULE || "*/5 * * * *";
+const cronSchedule = config.jobs.postnlResponseCron;
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

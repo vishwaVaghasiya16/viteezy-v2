@@ -13,13 +13,14 @@ import {
 import { PaymentMethod, PaymentStatus } from "../../../models/enums";
 import { logger } from "../../../utils/logger";
 import { AppError } from "../../../utils/AppError";
+import { config } from "@/config";
 
 export class MollieAdapter implements IPaymentGateway {
   private mollieClient: ReturnType<typeof createMollieClient>;
   private baseUrl: string;
 
   constructor() {
-    const apiKey = process.env.MOLLIE_API_KEY;
+    const apiKey = config.payments.mollieApiKey;
     if (!apiKey) {
       throw new AppError("MOLLIE_API_KEY is required", 500);
     }
@@ -32,7 +33,7 @@ export class MollieAdapter implements IPaymentGateway {
     }
 
     this.mollieClient = createMollieClient({ apiKey });
-    this.baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
+    this.baseUrl = config.app.baseUrl;
 
     logger.info("Mollie payment gateway initialized");
   }

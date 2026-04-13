@@ -8,6 +8,7 @@ import { getUserLanguageCode } from "@/utils/translationUtils";
 import { logger } from "@/utils/logger";
 import { sendPickupPointSms } from "@/services/smsService";
 import axios from "axios";
+import { config } from "@/config";
 
 /**
  * PostNL Status Sync Job
@@ -39,11 +40,9 @@ export class PostNLStatusSyncJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  private readonly POSTNL_API_URL =
-    process.env.POSTNL_API_URL || "https://api.postnl.nl";
-  private readonly POSTNL_SHIPMENT_API_KEY =
-    process.env.POSTNL_SHIPMENT_API_KEY || "";
-  private readonly CUSTOMER_NUMBER = process.env.POSTNL_CUSTOMER_NUMBER || "10825993";
+  private readonly POSTNL_API_URL = config.postnl.apiUrl;
+  private readonly POSTNL_SHIPMENT_API_KEY = config.postnl.shipmentApiKey;
+  private readonly CUSTOMER_NUMBER = config.postnl.customerNumber;
 
   /**
    * Sync shipment statuses from PostNL
@@ -366,7 +365,7 @@ export class PostNLStatusSyncJob {
 export const postNLStatusSyncJob = new PostNLStatusSyncJob();
 
 // Schedule: every 30 minutes (override via POSTNL_STATUS_SYNC_SCHEDULE)
-const cronSchedule = process.env.POSTNL_STATUS_SYNC_SCHEDULE || "*/30 * * * *";
+const cronSchedule = config.jobs.postnlStatusSyncCron;
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

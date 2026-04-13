@@ -7,6 +7,7 @@
 import mongoose from "mongoose";
 import { verifyFamilyLinkingIndexes } from "./verifyFamilyLinkingIndexes";
 import { logger } from "../utils/logger";
+import { config } from "../config";
 
 /**
  * Initialize all Family Linking safety features
@@ -46,10 +47,8 @@ if (require.main === module) {
   const runSafetyInit = async () => {
     try {
       // Connect to MongoDB
-      const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/viteezy';
-      logger.info(`Connecting to MongoDB: ${mongoUri}`);
-      
-      await mongoose.connect(mongoUri);
+      logger.info("Connecting to MongoDB");
+      await mongoose.connect(config.database.mongodbUri);
       logger.info("✅ Connected to MongoDB successfully");
       
       await initFamilyLinkingSafety();

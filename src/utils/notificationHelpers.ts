@@ -5,6 +5,7 @@ import {
   NotificationType,
 } from "@/models/enums";
 import { logger } from "./logger";
+import { config } from "@/config";
 
 /**
  * Notification Helper Utilities
@@ -26,7 +27,7 @@ function buildRedirectUrl(
   type: "order" | "product" | "subscription" | "membership" | "support" | "delivery" | "payment",
   query: Record<string, string>
 ): string {
-  const baseUrl = process.env.FRONTEND_URL || "https://app.viteezy.com";
+  const baseUrl = config.frontend.url;
   
   switch (type) {
     case "order":

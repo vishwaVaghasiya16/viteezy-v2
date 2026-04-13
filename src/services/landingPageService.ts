@@ -15,6 +15,7 @@ import { cartService } from "./cartService";
 import { transformProductForLanguage } from "./productEnrichmentService";
 import { translationService } from "./translationService";
 import { prepareDataForTranslation } from "../utils/translationUtils";
+import { config } from "@/config";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
@@ -892,7 +893,7 @@ class LandingPageService {
       .sort({ createdAt: -1 })
       .lean();
     const t1 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(`[Landing Page] DB: LandingPages.findOne took ${t1 - t0}ms`);
     }
 
@@ -913,7 +914,7 @@ class LandingPageService {
     const withTiming = (label: string, p: Promise<any>) => {
       const start = Date.now();
       return p.finally(() => {
-        if (process.env.NODE_ENV !== "test") {
+        if (config.server.nodeEnv !== "test") {
           logger.info(`[Landing Page] DB: ${label} took ${Date.now() - start}ms`);
         }
       });
@@ -981,7 +982,7 @@ class LandingPageService {
           : Promise.resolve([]),
       ]);
     const t2 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] DB: Promise.all(categories,blogs,faqs,testimonials) took ${t2 - t1}ms`
       );
@@ -1455,7 +1456,7 @@ class LandingPageService {
     processedLandingPage.sectionOrder = sections.map((s) => s.name);
 
     const t3 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] Sections build (testimonials/ingredients/wishlist) took ${t3 - t2}ms`
       );
@@ -1468,7 +1469,7 @@ class LandingPageService {
     );
 
     const t4 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] transformToLanguage took ${t4 - t3}ms | total ${t4 - t0}ms`
       );

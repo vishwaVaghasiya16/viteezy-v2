@@ -8,6 +8,7 @@ import { buildXML } from "@/utils/xmlBuilder";
 import { uploadToSFTP } from "@/utils/sftpUploader";
 import { Addresses } from "@/models/core/addresses.model";
 import { User } from "@/models/core/users.model";
+import { config } from "@/config";
 
 /**
  * PostNL Fulfilment Job
@@ -29,10 +30,7 @@ export class PostNLFulfilmentJob {
   private totalSuccess: number = 0;
   private totalFailed: number = 0;
 
-  // Use path.join for cross-platform compatibility (Windows/Linux)
-  private readonly XML_FOLDER = process.env.POSTNL_XML_FOLDER 
-    ? path.resolve(process.env.POSTNL_XML_FOLDER)
-    : path.join(process.cwd(), "data", "xml");
+  private readonly XML_FOLDER = config.postnl.fulfilmentXmlFolder;
   private readonly XML_FILE_EXTENSION = ".xml";
   private readonly SHIPPING_NL = "03085";
   private readonly SHIPPING_BE = "04946";
@@ -324,8 +322,7 @@ export class PostNLFulfilmentJob {
 export const postNLFulfilmentJob = new PostNLFulfilmentJob();
 
 // Schedule: every 5 minutes (override via POSTNL_FULFILMENT_JOB_SCHEDULE)
-const cronSchedule =
-  process.env.POSTNL_FULFILMENT_JOB_SCHEDULE || "*/5 * * * *";
+const cronSchedule = config.jobs.postnlFulfilmentCron;
 
 // Validate cron schedule
 if (!cron.validate(cronSchedule)) {

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getCustomTranslation } from "../utils/translationDictionary";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 import { I18nStringType, I18nTextType, SupportedLanguage, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from "@/models/common.model";
 
 /**
@@ -13,8 +14,8 @@ class TranslationService {
   private baseUrl: string = "https://translation.googleapis.com/language/translate/v2";
 
   constructor() {
-    this.apiKey = process.env.GOOGLE_TRANSLATE_API_KEY || null;
-    this.enabled = process.env.TRANSLATION_ENABLED === "true" && !!this.apiKey;
+    this.apiKey = config.translation.googleApiKey || null;
+    this.enabled = config.translation.enabled;
 
     if (!this.enabled) {
       logger.warn("Translation service is disabled. Set TRANSLATION_ENABLED=true and GOOGLE_TRANSLATE_API_KEY in .env");

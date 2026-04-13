@@ -13,6 +13,7 @@ import { PaymentMethod, PaymentStatus } from "../../../models/enums";
 import { logger } from "../../../utils/logger";
 import { AppError } from "../../../utils/AppError";
 import { AuthSessions } from "../../../models/index.model";
+import { config } from "@/config";
 
 export class StripeAdapter implements IPaymentGateway {
   private stripe: Stripe;
@@ -21,7 +22,7 @@ export class StripeAdapter implements IPaymentGateway {
   private defaultCancelUrl: string;
 
   constructor() {
-    const apiKey = process.env.STRIPE_SECRET_KEY;
+    const apiKey = config.payments.stripeSecretKey;
     if (!apiKey) {
       throw new AppError("STRIPE_SECRET_KEY is required", 500);
     }
@@ -30,8 +31,8 @@ export class StripeAdapter implements IPaymentGateway {
       apiVersion: "2025-10-29.clover",
     });
 
-    this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    this.webhookSecret = config.payments.stripeWebhookSecret;
+    const frontendUrl = config.frontend.url;
     this.defaultSuccessUrl = `${frontendUrl}/orderConfirmed/success`;
     this.defaultCancelUrl = `${frontendUrl}/orderConfirmed/cancel`;
 
@@ -595,19 +596,22 @@ export class StripeAdapter implements IPaymentGateway {
     userId: string,
     skipQueryParams: boolean = false
   ): Promise<string> {
-    const base = returnUrl || this.defaultSuccessUrl;
-    // For membership payments, return clean URL without query params
     if (skipQueryParams) {
-      return base;
+      return returnUrl || this.defaultSuccessUrl;
     }
 
-    // Build base query params
+    // Redirect straight to FE (FRONTEND_URL). Stripe replaces {CHECKOUT_SESSION_ID} on redirect.
+    const frontendBase = config.frontend.url.replace(/\/$/, "");
+    const base = `${frontendBase}/orderConfirmed/success`;
+    logger.info("[STRIPE_CHECKOUT] success_url (frontend)", {
+      successUrlBase: base,
+      orderId,
+    });
+
     const queryParams: Record<string, string> = {
       orderId,
-      session_id: "{CHECKOUT_SESSION_ID}",
     };
 
-    // Generate and add user token for order payments
     if (userId) {
       try {
         const userToken = await this.generateUserToken(userId);
@@ -618,11 +622,13 @@ export class StripeAdapter implements IPaymentGateway {
         logger.warn(
           `Failed to generate token for user ${userId} in success URL: ${error.message}`
         );
-        // Continue without token if generation fails
       }
     }
 
-    return this.appendQueryParams(base, queryParams);
+    const withParams = this.appendQueryParams(base, queryParams);
+    const sep = withParams.includes("?") ? "&" : "?";
+    // Literal braces — do not URL-encode or Stripe will not substitute the session id.
+    return `${withParams}${sep}session_id={CHECKOUT_SESSION_ID}`;
   }
 
   private buildCancelUrl(
@@ -663,10 +669,6 @@ export class StripeAdapter implements IPaymentGateway {
         return null;
       }
 
-      // Generate JWT token
-      const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-      const JWT_EXPIRES_IN = process.env.JWT_EXPIRE || "15m";
-
       const payload = {
         userId: userId,
         sessionId: activeSession.sessionId,
@@ -674,10 +676,10 @@ export class StripeAdapter implements IPaymentGateway {
       };
 
       const options: SignOptions = {
-        expiresIn: JWT_EXPIRES_IN as any,
+        expiresIn: config.jwt.expiresIn as any,
       };
 
-      const token = jwt.sign(payload, JWT_SECRET, options);
+      const token = jwt.sign(payload, config.jwt.secret, options);
       logger.info(`Generated token for user ${userId} for payment redirect`);
       return token;
     } catch (error: any) {

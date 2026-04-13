@@ -3,6 +3,7 @@ import { logger } from "../utils/logger";
 import { AddressSnapshotType } from "@/models/common.model";
 import * as fs from "fs";
 import * as path from "path";
+import { config } from "@/config";
 
 interface EmailOptions {
   to: string;
@@ -39,10 +40,9 @@ class EmailService {
   private fromName: string;
 
   constructor() {
-    // Check if Brevo API key is available
-    const apiKey = process.env.BREVO_API_KEY;
-    this.fromEmail = process.env.BREVO_FROM_EMAIL || "noreply@viteezy.com";
-    this.fromName = process.env.BREVO_FROM_NAME || "Viteezy";
+    const apiKey = config.brevo.apiKey;
+    this.fromEmail = config.brevo.fromEmail;
+    this.fromName = config.brevo.fromName;
 
     // Warn about Gmail addresses causing DMARC issues
     if (
@@ -490,7 +490,7 @@ class EmailService {
    */
   private async sendEmail(options: EmailOptions): Promise<void> {
     try {
-      const apiKey = process.env.BREVO_API_KEY;
+      const apiKey = config.brevo.apiKey;
       if (!apiKey) {
         throw new Error("Brevo API key not configured");
       }
@@ -582,9 +582,7 @@ class EmailService {
             "Brevo API key is invalid, expired, or revoked. Please check your BREVO_API_KEY in .env file.";
           logger.error("Brevo Authentication Error:", {
             hint: "Verify your API key at https://app.brevo.com/settings/api-keys",
-            apiKeyPrefix:
-              process.env.BREVO_API_KEY?.substring(0, 10) + "..." ||
-              "not set",
+            brevoApiKeyConfigured: !!config.brevo.apiKey,
           });
         }
       } else if (error?.response?.status === 403) {
@@ -1681,7 +1679,7 @@ This is an automated message, please do not reply to this email.
           <p>If the payment continues to fail, your subscription may be cancelled.</p>
 
           <p style="margin-top: 30px;">
-            <a href="${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions" 
+            <a href="${config.frontend.url}/subscriptions" 
                style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
               Update Payment Method
             </a>
@@ -1732,7 +1730,7 @@ What happens next?
 
 If the payment continues to fail, your subscription may be cancelled.
 
-Update your payment method: ${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions
+Update your payment method: ${config.frontend.url}/subscriptions
 
 If you have any questions, please contact our support team.
 
@@ -2150,7 +2148,7 @@ This is an automated message, please do not reply to this email.
         };
       });
 
-      const apiKey = process.env.BREVO_API_KEY;
+      const apiKey = config.brevo.apiKey;
       if (!apiKey) {
         throw new Error("Brevo API key not configured");
       }

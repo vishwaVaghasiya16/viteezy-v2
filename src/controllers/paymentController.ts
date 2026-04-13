@@ -9,6 +9,7 @@ import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import mongoose from "mongoose";
 import { Payments } from "@/models/commerce/payments.model";
 import { AuthSessions } from "@/models/core";
+import { config } from "@/config";
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -19,6 +20,62 @@ interface RawBodyRequest extends Request {
   rawBody?: Buffer;
 }
 class PaymentController {
+  /** Frontend order flow failure page — error must be URL-encoded. */
+  private redirectOrderConfirmedFailed(res: Response, error: string): void {
+    const base = config.frontend.url.replace(/\/$/, "");
+    res.redirect(
+      `${base}/orderConfirmed/failed?error=${encodeURIComponent(error)}`
+    );
+  }
+
+  /** userId from query, or from access JWT in `token` (Stripe return URLs). */
+  private getUserIdFromPaymentReturnQuery(req: Request): string | undefined {
+    const raw = (req.query.userId || req.query.user_id) as string | undefined;
+    if (raw && mongoose.Types.ObjectId.isValid(raw)) {
+      return raw;
+    }
+    const token = req.query.token as string | undefined;
+    if (!token || typeof token !== "string") {
+      return undefined;
+    }
+    try {
+      const decoded = jwt.verify(token, config.jwt.secret) as {
+        userId?: string;
+        type?: string;
+      };
+      if (
+        decoded?.type === "access" &&
+        decoded.userId &&
+        mongoose.Types.ObjectId.isValid(decoded.userId)
+      ) {
+        return decoded.userId;
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  /** Real Stripe Checkout session ids only (not the literal placeholder). */
+  private normalizeStripeSessionId(
+    raw: string | undefined
+  ): string | undefined {
+    if (!raw || typeof raw !== "string") {
+      return undefined;
+    }
+    const t = decodeURIComponent(raw).trim();
+    if (!t || t === "{CHECKOUT_SESSION_ID}") {
+      return undefined;
+    }
+    if (t.includes("{CHECKOUT_SESSION_ID}") || t.includes("CHECKOUT_SESSION_ID")) {
+      return undefined;
+    }
+    if (!t.startsWith("cs_")) {
+      return undefined;
+    }
+    return t;
+  }
+
   /**
    * Get available payment methods
    */
@@ -539,126 +596,82 @@ class PaymentController {
         console.log("🟢 [PAYMENT RETURN] Query params:", req.query);
         console.log("🟢 [PAYMENT RETURN] URL:", req.url);
 
-        // Mollie sends payment ID as 'id' query parameter
-        // Also check for payment_id, paymentId for compatibility
+        const gatewayParam = (
+          (req.query.gateway as string) || ""
+        ).toLowerCase();
+
         const molliePaymentId =
           (req.query.id as string) ||
           (req.query.payment_id as string) ||
           (req.query.paymentId as string);
 
-        // Get orderId and userId from query params (we include these in redirect URL)
+        const stripeSessionId = this.normalizeStripeSessionId(
+          req.query.session_id as string
+        );
+
         const orderId = (req.query.orderId || req.query.order_id) as string;
-        const userId = (req.query.userId || req.query.user_id) as string;
+        const userIdFromQuery = (req.query.userId ||
+          req.query.user_id) as string;
+        const resolvedUserId =
+          this.getUserIdFromPaymentReturnQuery(req) || userIdFromQuery;
         const membershipIdParam = (req.query.membershipId ||
           req.query.membership_id) as string;
 
         console.log(
-          "🟢 [PAYMENT RETURN] - Mollie Payment ID (id param):",
+          "🟢 [PAYMENT RETURN] - Gateway:",
+          gatewayParam || "(unset)"
+        );
+        console.log(
+          "🟢 [PAYMENT RETURN] - Mollie / generic id param:",
           molliePaymentId
         );
+        console.log(
+          "🟢 [PAYMENT RETURN] - Stripe session_id (resolved):",
+          stripeSessionId || "(none or placeholder)"
+        );
         console.log("🟢 [PAYMENT RETURN] - Order ID:", orderId);
-        console.log("🟢 [PAYMENT RETURN] - User ID:", userId);
+        console.log(
+          "🟢 [PAYMENT RETURN] - User ID (query or JWT):",
+          resolvedUserId
+        );
         console.log("🟢 [PAYMENT RETURN] - Membership ID:", membershipIdParam);
 
-        // If no Mollie payment ID, try to find payment by orderId and userId
+        const paymentMethodsForFallback =
+          gatewayParam === "stripe"
+            ? [PaymentMethod.STRIPE]
+            : gatewayParam === "mollie"
+              ? [PaymentMethod.MOLLIE]
+              : [PaymentMethod.STRIPE, PaymentMethod.MOLLIE];
+
         let payment;
-        if (!molliePaymentId) {
-          console.warn(
-            "⚠️ [PAYMENT RETURN] - Mollie payment ID not found in query"
-          );
-          console.warn(
-            "⚠️ [PAYMENT RETURN] - Trying to find payment by orderId/membershipId and userId"
-          );
 
-          const orderObjectId =
-            orderId && mongoose.Types.ObjectId.isValid(orderId)
-              ? new mongoose.Types.ObjectId(orderId)
-              : null;
-          const userObjectId =
-            userId && mongoose.Types.ObjectId.isValid(userId)
-              ? new mongoose.Types.ObjectId(userId)
-              : null;
-
-          if (orderObjectId && userObjectId) {
-            try {
-              // Find most recent payment for this order and user
-              const foundPayment = await Payments.findOne({
-                orderId: orderObjectId,
-                userId: userObjectId,
-                paymentMethod: PaymentMethod.MOLLIE,
-              })
-                .sort({ createdAt: -1 })
-                .exec();
-
-              if (foundPayment) {
-                console.log(
-                  "✅ [PAYMENT RETURN] - Payment found by orderId/userId:",
-                  foundPayment._id
-                );
-                payment = foundPayment;
-              }
-            } catch (error) {
-              console.error(
-                "❌ [PAYMENT RETURN] - Error finding payment by orderId/userId:",
-                error
-              );
-            }
-          }
-
-          // If still not found, try membership payments (orderId can actually be membershipId for membership purchases)
-          const membershipLookupId = membershipIdParam || orderId || undefined;
-          const membershipObjectId =
-            membershipLookupId &&
-            mongoose.Types.ObjectId.isValid(membershipLookupId)
-              ? new mongoose.Types.ObjectId(membershipLookupId)
-              : null;
-
-          if (!payment && membershipObjectId) {
-            try {
-              const membershipPayment = await Payments.findOne({
-                membershipId: membershipObjectId,
-                ...(userObjectId ? { userId: userObjectId } : {}),
-                paymentMethod: PaymentMethod.MOLLIE,
-              })
-                .sort({ createdAt: -1 })
-                .exec();
-
-              if (membershipPayment) {
-                console.log(
-                  "✅ [PAYMENT RETURN] - Payment found by membershipId:",
-                  membershipPayment._id
-                );
-                payment = membershipPayment;
-              }
-            } catch (error) {
-              console.error(
-                "❌ [PAYMENT RETURN] - Error finding payment by membershipId:",
-                error
-              );
-            }
-          }
-
-          if (!payment) {
-            console.error(
-              "❌ [PAYMENT RETURN] - Payment ID not found and cannot find payment by orderId/membershipId"
+        if (stripeSessionId) {
+          try {
+            console.log(
+              "🟢 [PAYMENT RETURN] - Looking up payment by Stripe session:",
+              stripeSessionId
             );
-            console.error(
-              "❌ [PAYMENT RETURN] - Available query params:",
-              Object.keys(req.query)
+            payment = await paymentService.getPaymentByGatewayTransactionId(
+              stripeSessionId,
+              PaymentMethod.STRIPE
             );
-            const frontendUrl =
-              process.env.FRONTEND_URL || "http://localhost:8080";
-            return res.redirect(
-              `${frontendUrl}/orderConfirmed/failed?error=Payment ID not found`
+            console.log("✅ [PAYMENT RETURN] - Payment found:", payment._id);
+          } catch (error) {
+            console.error(
+              "❌ [PAYMENT RETURN] - Stripe session lookup failed:",
+              error
+            );
+            logger.warn(
+              `Payment not found for Stripe session: ${stripeSessionId}`,
+              error
             );
           }
         }
 
-        // If we don't have payment yet, find it by gateway transaction ID
         if (!payment && molliePaymentId) {
           try {
             console.log(
-              "🟢 [PAYMENT RETURN] - Looking up payment with gateway ID:",
+              "🟢 [PAYMENT RETURN] - Looking up payment with Mollie gateway ID:",
               molliePaymentId
             );
             payment = await paymentService.getPaymentByGatewayTransactionId(
@@ -668,37 +681,124 @@ class PaymentController {
             console.log("✅ [PAYMENT RETURN] - Payment found:", payment._id);
           } catch (error) {
             console.error(
-              "❌ [PAYMENT RETURN] - Payment lookup failed:",
+              "❌ [PAYMENT RETURN] - Mollie payment lookup failed:",
               error
             );
             logger.warn(
               `Payment not found for gateway transaction: ${molliePaymentId}`,
               error
             );
-            const frontendUrl =
-              process.env.FRONTEND_URL || "http://localhost:8080";
-            return res.redirect(
-              `${frontendUrl}/orderConfirmed/failed?error=Payment not found for ID: ${molliePaymentId}`
+            this.redirectOrderConfirmedFailed(
+              res,
+              `Payment not found for ID: ${molliePaymentId}`
             );
+            return;
           }
         }
 
-        // Verify payment status with gateway
-        // This ensures database is updated even if webhook didn't fire
+        const orderObjectId =
+          orderId && mongoose.Types.ObjectId.isValid(orderId)
+            ? new mongoose.Types.ObjectId(orderId)
+            : null;
+        const userObjectId =
+          resolvedUserId && mongoose.Types.ObjectId.isValid(resolvedUserId)
+            ? new mongoose.Types.ObjectId(resolvedUserId)
+            : null;
+
+        if (!payment && orderObjectId && userObjectId) {
+          console.warn(
+            "⚠️ [PAYMENT RETURN] - Finding payment by orderId + userId (Stripe/Mollie)"
+          );
+          for (const pm of paymentMethodsForFallback) {
+            try {
+              const foundPayment = await Payments.findOne({
+                orderId: orderObjectId,
+                userId: userObjectId,
+                paymentMethod: pm,
+              })
+                .sort({ createdAt: -1 })
+                .exec();
+              if (foundPayment) {
+                console.log(
+                  "✅ [PAYMENT RETURN] - Payment found by orderId/userId:",
+                  foundPayment._id,
+                  pm
+                );
+                payment = foundPayment;
+                break;
+              }
+            } catch (error) {
+              console.error(
+                "❌ [PAYMENT RETURN] - Error finding payment by orderId/userId:",
+                error
+              );
+            }
+          }
+        }
+
+        const membershipLookupId = membershipIdParam || orderId || undefined;
+        const membershipObjectId =
+          membershipLookupId &&
+          mongoose.Types.ObjectId.isValid(membershipLookupId)
+            ? new mongoose.Types.ObjectId(membershipLookupId)
+            : null;
+
+        if (!payment && membershipObjectId) {
+          for (const pm of paymentMethodsForFallback) {
+            try {
+              const membershipPayment = await Payments.findOne({
+                membershipId: membershipObjectId,
+                ...(userObjectId ? { userId: userObjectId } : {}),
+                paymentMethod: pm,
+              })
+                .sort({ createdAt: -1 })
+                .exec();
+              if (membershipPayment) {
+                console.log(
+                  "✅ [PAYMENT RETURN] - Payment found by membershipId:",
+                  membershipPayment._id,
+                  pm
+                );
+                payment = membershipPayment;
+                break;
+              }
+            } catch (error) {
+              console.error(
+                "❌ [PAYMENT RETURN] - Error finding payment by membershipId:",
+                error
+              );
+            }
+          }
+        }
+
+        if (!payment) {
+          console.error(
+            "❌ [PAYMENT RETURN] - Payment not found (check Stripe session_id after real checkout, JWT token, and FRONTEND_URL)"
+          );
+          console.error(
+            "❌ [PAYMENT RETURN] - Available query params:",
+            Object.keys(req.query)
+          );
+          this.redirectOrderConfirmedFailed(res, "Payment ID not found");
+          return;
+        }
+
         console.log(
-          "🟢 [PAYMENT RETURN] - Verifying payment status with Mollie"
+          "🟢 [PAYMENT RETURN] - Verifying payment status with gateway"
         );
         const gatewayIdToVerify =
-          molliePaymentId || payment?.gatewayTransactionId;
+          stripeSessionId ||
+          molliePaymentId ||
+          payment.gatewayTransactionId;
         if (!gatewayIdToVerify) {
           console.error(
             "❌ [PAYMENT RETURN] - No gateway ID available for verification"
           );
-          const frontendUrl =
-            process.env.FRONTEND_URL || "http://localhost:8080";
-          return res.redirect(
-            `${frontendUrl}/orderConfirmed/failed?error=Payment gateway ID not found`
+          this.redirectOrderConfirmedFailed(
+            res,
+            "Payment gateway ID not found"
           );
+          return;
         }
 
         // Use appropriate verification flow based on payment type (order vs membership)
@@ -780,17 +880,15 @@ class PaymentController {
         }
 
         // Determine redirect URL based on payment type
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+        const frontendUrl = config.frontend.url;
         let redirectUrl = `${frontendUrl}/orderConfirmed/return`;
 
+        // Do not use orderId here — product checkout always has orderId in the return URL.
         const resolvedMembershipId =
-          membershipIdParam ||
-          orderId ||
-          payment.membershipId?.toString() ||
-          null;
+          membershipIdParam || payment.membershipId?.toString() || null;
 
         if (verifiedPayment.status === PaymentStatus.COMPLETED) {
-          if (resolvedMembershipId || payment.membershipId) {
+          if (resolvedMembershipId) {
             // Redirect membership payments to clean /products URL (no query params)
             redirectUrl = `${frontendUrl}/products`;
           } else { // This is an order payment
@@ -816,11 +914,11 @@ class PaymentController {
                     type: "access",
                   };
                   const options: SignOptions = {
-                    expiresIn: (process.env.JWT_EXPIRE || "15m") as any, // Use configured expiry
+                    expiresIn: config.jwt.expiresIn as any,
                   };
                   userToken = jwt.sign(
                     payload,
-                    process.env.JWT_SECRET || "your-secret-key",
+                    config.jwt.secret,
                     options
                   );
                   logger.info(
@@ -859,16 +957,18 @@ class PaymentController {
             }
           }
         } else if (verifiedPayment.status === PaymentStatus.FAILED) {
-          if (resolvedMembershipId || payment.membershipId) {
+          if (resolvedMembershipId) {
             // Redirect membership payments to clean /products URL (no query params)
             redirectUrl = `${frontendUrl}/products`;
           } else {
             redirectUrl = `${frontendUrl}/orderConfirmed/failed?paymentId=${
               payment._id
-            }&error=${verifiedPayment.failureReason || "Payment failed"}`;
+            }&error=${encodeURIComponent(
+              verifiedPayment.failureReason || "Payment failed"
+            )}`;
           }
         } else {
-          if (resolvedMembershipId || payment.membershipId) {
+          if (resolvedMembershipId) {
             // Redirect membership payments to clean /products URL (no query params)
             redirectUrl = `${frontendUrl}/products`;
           } else {
@@ -883,11 +983,9 @@ class PaymentController {
         res.redirect(redirectUrl);
       } catch (error) {
         logger.error("Payment return handling error:", error);
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
-        res.redirect(
-          `${frontendUrl}/orderConfirmed/failed?error=${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
+        this.redirectOrderConfirmedFailed(
+          res,
+          error instanceof Error ? error.message : "Unknown error"
         );
       }
     }

@@ -17,7 +17,6 @@ import morgan from "morgan";
 import compression from "compression";
 // Rate limiting disabled - commented out as per request
 // import rateLimit from "express-rate-limit";
-import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
 
@@ -31,9 +30,6 @@ import { localeMiddleware } from "@/middleware/locale";
 import { logger } from "@/utils/logger";
 import apiRoutes from "@/routes";
 import { swaggerSpec } from "@/docs/swagger";
-
-// Load environment variables from .env file
-dotenv.config();
 
 /**
  * Application Constants
@@ -95,11 +91,13 @@ app.use(
  * Set BEHIND_PROXY=true in .env if running behind nginx, load balancer, etc.
  * In production behind a proxy, set to 1 to trust the first proxy (more secure than true)
  */
-if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
-  // Set to 1 to trust only the first proxy (more secure than true)
-  // For multiple proxies, set TRUST_PROXY to the number of proxies
-  const proxyCount = process.env.TRUST_PROXY
-    ? parseInt(process.env.TRUST_PROXY, 10)
+if (
+  config.proxy.behindProxy ||
+  config.proxy.trustProxy === "true" ||
+  /^\d+$/.test(config.proxy.trustProxy)
+) {
+  const proxyCount = config.proxy.trustProxy
+    ? parseInt(config.proxy.trustProxy, 10)
     : 1;
   app.set("trust proxy", isNaN(proxyCount) ? 1 : proxyCount);
   console.log(`ℹ️ Trust proxy enabled: ${app.get("trust proxy")}`);

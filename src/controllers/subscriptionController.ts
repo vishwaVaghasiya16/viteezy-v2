@@ -26,6 +26,7 @@ import { cartService } from "@/services/cartService";
 import { translateProductsForUser } from "@/services/productTranslationCommonService";
 import { getSachetsPlanKey } from "@/config/planConfig";
 import { SubscriptionChanges } from "@/models/commerce/subscriptionChanges.model";
+import { config } from "@/config";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -1316,7 +1317,7 @@ class SubscriptionController {
       });
 
       // Create payment for the order
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const frontendUrl = config.frontend.url;
       const returnUrl = `${frontendUrl}/subscriptions/${subscriptionId}?payment=success`;
       const cancelUrl = `${frontendUrl}/subscriptions/${subscriptionId}?payment=cancelled`;
 

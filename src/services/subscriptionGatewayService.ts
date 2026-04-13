@@ -15,6 +15,7 @@ import { PaymentMethod, SubscriptionStatus, PaymentStatus } from "@/models/enums
 import { logger } from "@/utils/logger";
 import { AppError } from "@/utils/AppError";
 import { emailService } from "@/services/emailService";
+import { config } from "@/config";
 
 interface OrderItem {
   productId: string;
@@ -59,16 +60,18 @@ export class SubscriptionGatewayService {
 
   constructor() {
     // Initialize Stripe
-    if (process.env.STRIPE_SECRET_KEY) {
-      this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    if (config.payments.stripeSecretKey) {
+      this.stripe = new Stripe(config.payments.stripeSecretKey, {
         apiVersion: "2025-10-29.clover",
       });
       logger.info("Stripe subscription gateway initialized");
     }
 
     // Initialize Mollie
-    if (process.env.MOLLIE_API_KEY) {
-      this.mollieClient = createMollieClient({ apiKey: process.env.MOLLIE_API_KEY });
+    if (config.payments.mollieApiKey) {
+      this.mollieClient = createMollieClient({
+        apiKey: config.payments.mollieApiKey,
+      });
       logger.info("Mollie subscription gateway initialized");
     }
   }

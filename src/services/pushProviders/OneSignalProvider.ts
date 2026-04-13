@@ -6,6 +6,7 @@
  */
 
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 import {
   IPushProvider,
   DevicePlatform,
@@ -66,8 +67,8 @@ export class OneSignalProvider implements IPushProvider {
   private initialized: boolean = false;
 
   constructor() {
-    this.appId = process.env.ONESIGNAL_APP_ID || "";
-    this.apiKey = process.env.ONESIGNAL_REST_API_KEY || "";
+    this.appId = config.push.oneSignalAppId;
+    this.apiKey = config.push.oneSignalRestApiKey;
     this.initialize();
   }
 
@@ -86,9 +87,8 @@ export class OneSignalProvider implements IPushProvider {
 
     this.initialized = true;
     logger.info("OneSignal provider initialized successfully for mobile app", {
-      appId: this.appId,
-      apiKeySet: !!this.apiKey,
-      apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 10) + "..." : "not set",
+      appIdConfigured: !!this.appId,
+      apiKeyConfigured: !!this.apiKey,
     });
   }
 
