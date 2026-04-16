@@ -50,7 +50,7 @@ router.post(
 );
 
 router.get(
-  "/:id/history",
+  "/history",
   authenticate,
   reminderController.getReminderHistory
 );

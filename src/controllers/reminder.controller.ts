@@ -77,17 +77,15 @@ export const toggleReminderStatus = asyncHandler(
 );
 
 /**
- * GET /api/reminders/:id/history
+ * GET /api/reminders/history
  */
 export const getReminderHistory = asyncHandler(
   async (req: any, res: Response) => {
-    const { id } = req.params;
     const userId = req.userId;
 
     const { page, limit, skip } = getPaginationOptions(req);
 
     const history = await ReminderHistory.find({
-      reminderId: id,
       userId
     })
       .sort({ createdAt: -1 })
@@ -96,7 +94,6 @@ export const getReminderHistory = asyncHandler(
       .lean();
 
     const total = await ReminderHistory.countDocuments({
-      reminderId: id,
       userId
     });
 
@@ -106,6 +103,7 @@ export const getReminderHistory = asyncHandler(
       success: true,
       message: "Reminder history retrieved successfully",
       data: history.map(h => ({
+        reminderId: h.reminderId,
         eventType: h.eventType,
         message: h.message,
         createdAt: h.createdAt,
