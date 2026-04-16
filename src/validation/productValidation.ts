@@ -542,12 +542,43 @@ const specificationSchemaForUpdate = Joi.object({
 export const createProductSchema = Joi.object({
   title: titleSchema,
   slug: slugSchema.optional(),
-  description: descriptionSchema,
-  productImage: productImageSchema,
-  shortDescription: shortDescriptionSchema,
-  galleryImages: galleryImagesSchema,
-  benefits: benefitsSchema,
-  ingredients: ingredientsSchema,
+  description: descriptionSchema.optional(),
+  productImage: productImageSchema.optional(),
+  shortDescription: shortDescriptionSchema.optional(),
+  galleryImages: galleryImagesSchema.optional(),
+  benefits: benefitsSchema.optional(),
+  ingredients: ingredientsSchema.optional(),
+  ingredientCompositions: Joi.array()
+    .items(
+      Joi.object({
+        ingredient: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/).messages({
+          "string.pattern.base": "Invalid ingredient ID format",
+          "any.required": "Ingredient ID is required",
+        }),
+        quantity: Joi.number().min(0).required().messages({
+          "number.base": "Quantity must be a number",
+          "number.min": "Quantity cannot be negative",
+          "any.required": "Quantity is required",
+        }),
+        driPercentage: Joi.alternatives()
+          .try(
+            Joi.number().min(0).messages({
+              "number.base": "DRI percentage must be a number",
+              "number.min": "DRI percentage cannot be negative",
+            }),
+            Joi.string().valid("*", "**").messages({
+              "any.only": "DRI percentage string must be '*' or '**'",
+            })
+          )
+          .required().messages({
+            "any.required": "DRI percentage is required",
+          }),
+      })
+    )
+    .optional()
+    .messages({
+      "array.base": "Ingredient compositions must be an array of composition objects",
+    }),
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,

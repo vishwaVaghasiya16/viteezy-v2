@@ -364,4 +364,12 @@ ProductSchema.index({
   slug: "text",
 });
 
+// Virtual field for ingredient compositions
+ProductSchema.virtual("ingredientCompositions", {
+  ref: "ingredient_compositions",
+  localField: "_id",
+  foreignField: "product",
+  match: { isDeleted: false },
+});
+
 export const Products = mongoose.model<IProduct>("products", ProductSchema);

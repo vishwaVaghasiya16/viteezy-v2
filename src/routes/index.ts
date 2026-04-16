@@ -64,6 +64,7 @@ import adminContactRoutes from "./adminContactRoutes";
 import adminDeliveryPostponementRoutes from "./adminDeliveryPostponementRoutes";
 import adminFamilyRoutes from "./adminFamilyRoutes";
 import reminderRoutes from "./reminder.route";
+import ingredientCompositionRoutes from "./ingredientCompositionRoutes";
 
 const router = Router();
 
@@ -136,5 +137,6 @@ router.use("/admin/contacts", adminContactRoutes);
 router.use("/admin/postponements", adminDeliveryPostponementRoutes);
 router.use("/admin/families", adminFamilyRoutes);
 router.use("/reminders", reminderRoutes);
+router.use("/ingredient-compositions", ingredientCompositionRoutes);
 
 export default router;

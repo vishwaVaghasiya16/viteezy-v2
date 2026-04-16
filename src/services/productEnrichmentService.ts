@@ -80,6 +80,28 @@ export const transformProductForLanguage = (
     variantsValue = product.variants;
   }
 
+  // Map ingredient composition values by ingredientId so they can be merged into ingredients.
+  const compositionByIngredientId = new Map<
+    string,
+    { quantity?: number; driPercentage?: number | string }
+  >();
+  if (
+    Array.isArray(product.ingredientCompositions) &&
+    product.ingredientCompositions.length > 0
+  ) {
+    product.ingredientCompositions.forEach((composition: any) => {
+      const ingredientId =
+        typeof composition?.ingredient === "object"
+          ? composition.ingredient?._id?.toString?.()
+          : composition?.ingredient?.toString?.();
+      if (!ingredientId) return;
+      compositionByIngredientId.set(ingredientId, {
+        quantity: composition?.quantity,
+        driPercentage: composition?.driPercentage,
+      });
+    });
+  }
+
   // Transform shortDescription
   const transformedShortDescription = product.shortDescription
     ? getTranslatedString(product.shortDescription, lang)
@@ -198,6 +220,7 @@ export const transformProductForLanguage = (
               return ingredient && typeof ingredient === 'object' && ingredient._id;
             })
             .map((ingredient: any) => ({
+              ...(compositionByIngredientId.get(ingredient._id?.toString?.()) || {}),
               _id: ingredient._id,
               name: getTranslatedString(ingredient.name, lang),
               description: getTranslatedText(ingredient.description, lang),
