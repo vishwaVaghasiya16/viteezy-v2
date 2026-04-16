@@ -17,6 +17,7 @@ const JSON_FIELDS = [
   "comparisonSection",
   "specification",
   "faqs", // Optional array of { question, answer }, max 15
+  "ingredientCompositions", // Array of { ingredient, quantity, driPercentage }
 ];
 
 const toBoolean = (value: any): boolean | undefined => {

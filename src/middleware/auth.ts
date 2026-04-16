@@ -66,6 +66,13 @@ const extractUserData = (user: any): object => {
     language: user.language,
     lastLogin: user.lastLogin,
     createdAt: user.createdAt,
+    // Membership fields
+    isMember: user.isMember,
+    membershipStatus: user.membershipStatus,
+    membershipPlanId: user.membershipPlanId,
+    membershipExpiresAt: user.membershipExpiresAt,
+    membershipActivatedAt: user.membershipActivatedAt,
+    memberId: user.memberId,
   };
 };
 

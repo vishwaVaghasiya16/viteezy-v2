@@ -2,8 +2,9 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductCategory } from "../models/commerce/categories.model";
-import { Orders } from "../models/commerce/orders.model";
 import { ProductFAQs } from "../models/commerce/productFaqs.model";
+import { IngredientComposition } from "../models/commerce/ingredientComposition.model";
+import { IngredientCompositionService } from "./ingredientComposition.service";
 import {
   ProductStatus,
   ProductVariant,
@@ -38,6 +39,11 @@ interface CreateProductData {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  ingredientCompositions?: Array<{
+    ingredient: string;
+    quantity: number;
+    driPercentage: number | string;
+  }>;
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -128,6 +134,7 @@ interface CreateProductData {
     answer: string | I18nTextType;
   }>;
   createdBy?: mongoose.Types.ObjectId;
+  updatedBy?: mongoose.Types.ObjectId;
 }
 
 interface UpdateProductData {
@@ -137,6 +144,11 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
+  ingredientCompositions?: Array<{
+    ingredient: string;
+    quantity: number;
+    driPercentage: number | string;
+  }>;
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
@@ -485,6 +497,31 @@ class ProductService {
         logger.info(`[Create Product] Successfully updated ingredient documents with product ID`);
       } catch (error: any) {
         logger.error(`[Create Product] Failed to update ingredient documents: ${error.message}`, error);
+        // Don't throw error, just log it - product is already created
+      }
+    }
+
+    // Handle ingredient compositions if provided
+    const ingredientCompositions = data.ingredientCompositions || [];
+    if (ingredientCompositions.length > 0 && product._id) {
+      logger.info(`[Create Product] Creating ${ingredientCompositions.length} ingredient compositions for product ${product._id}`);
+      try {
+        const compositionsData = ingredientCompositions.map(comp => ({
+          product: product._id,
+          ingredient: comp.ingredient,
+          quantity: comp.quantity,
+          driPercentage: comp.driPercentage,
+          createdBy: data.createdBy
+        }));
+        
+        await IngredientCompositionService.bulkUpdateCompositions(
+          product._id.toString(),
+          compositionsData,
+          data.createdBy?.toString()
+        );
+        logger.info(`[Create Product] Successfully created ingredient compositions for product ${product._id}`);
+      } catch (error: any) {
+        logger.error(`[Create Product] Failed to create ingredient compositions: ${error.message}`, error);
         // Don't throw error, just log it - product is already created
       }
     }
@@ -1162,7 +1199,10 @@ class ProductService {
       }
     );
 
-    return { products: productsWithVariants, total };
+    const productsWithIngredientCompositions =
+      await this.attachIngredientCompositionsToProducts(productsWithVariants);
+
+    return { products: productsWithIngredientCompositions, total };
   }
 
   /**
@@ -1270,8 +1310,13 @@ class ProductService {
       allProducts = [...allProducts, ...recentWithIngredients];
     }
 
+    const productsWithIngredientCompositions =
+      await this.attachIngredientCompositionsToProducts(
+        allProducts.slice(0, MAX_PRODUCTS)
+      );
+
     return {
-      products: allProducts.slice(0, MAX_PRODUCTS), // Ensure max 10 products
+      products: productsWithIngredientCompositions, // Ensure max 10 products
       isFeatured: hasFeatured,
     };
   }
@@ -1365,6 +1410,10 @@ class ProductService {
       ? ingredientDetails 
       : (linkedProductIngredients.length > 0 ? linkedProductIngredients : []);
 
+    const ingredientCompositions = await this.getIngredientCompositionsByProductId(
+      productId
+    );
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
@@ -1372,6 +1421,7 @@ class ProductService {
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
+      ingredientCompositions,
     });
 
     // Add variants array to product
@@ -1447,6 +1497,10 @@ class ProductService {
       sortOrder: faq.sortOrder ?? 0,
     }));
 
+    const ingredientCompositions = await this.getIngredientCompositionsByProductId(
+      product._id.toString()
+    );
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
@@ -1454,6 +1508,7 @@ class ProductService {
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
+      ingredientCompositions,
     });
 
     // Add variants array to product
@@ -1750,6 +1805,30 @@ class ProductService {
         } catch (error: any) {
           logger.error(`[Update Product] Failed to add product ID to ingredients: ${error.message}`, error);
         }
+      }
+    }
+
+    // Handle ingredient compositions if provided
+    if (data.ingredientCompositions !== undefined) {
+      logger.info(`[Update Product] Updating ingredient compositions for product ${productId}`);
+      try {
+        const compositionsData = data.ingredientCompositions.map((comp: any) => ({
+          product: new mongoose.Types.ObjectId(productId),
+          ingredient: comp.ingredient,
+          quantity: comp.quantity,
+          driPercentage: comp.driPercentage,
+          updatedBy: data.updatedBy
+        }));
+        
+        await IngredientCompositionService.bulkUpdateCompositions(
+          productId,
+          compositionsData,
+          data.updatedBy?.toString()
+        );
+        logger.info(`[Update Product] Successfully updated ingredient compositions for product ${productId}`);
+      } catch (error: any) {
+        logger.error(`[Update Product] Failed to update ingredient compositions: ${error.message}`, error);
+        // Don't throw error, just log it - product update will continue
       }
     }
 
@@ -2247,6 +2326,74 @@ class ProductService {
     }
 
     return result;
+  }
+
+  /**
+   * Get ingredient compositions for a single product.
+   */
+  private async getIngredientCompositionsByProductId(
+    productId: string
+  ): Promise<any[]> {
+    const compositions = await IngredientComposition.find({
+      product: new mongoose.Types.ObjectId(productId),
+      isDeleted: false,
+    })
+      .populate("ingredient", "_id name description image slug")
+      .select("_id product ingredient quantity driPercentage")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    return compositions;
+  }
+
+  /**
+   * Attach ingredient compositions to a list of products.
+   */
+  private async attachIngredientCompositionsToProducts(
+    products: any[]
+  ): Promise<any[]> {
+    if (!products || products.length === 0) {
+      return products;
+    }
+
+    const productIds = products
+      .map((product) => product?._id)
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    if (productIds.length === 0) {
+      return products.map((product) => ({
+        ...product,
+        ingredientCompositions: [],
+      }));
+    }
+
+    const compositions = await IngredientComposition.find({
+      product: { $in: productIds },
+      isDeleted: false,
+    })
+      .populate("ingredient", "_id name description image slug")
+      .select("_id product ingredient quantity driPercentage")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const compositionMap = new Map<string, any[]>();
+
+    for (const composition of compositions) {
+      const key = composition.product?.toString();
+      if (!key) continue;
+      const existing = compositionMap.get(key) || [];
+      existing.push(composition);
+      compositionMap.set(key, existing);
+    }
+
+    return products.map((product) => {
+      const key = product?._id?.toString();
+      return {
+        ...product,
+        ingredientCompositions: key ? compositionMap.get(key) || [] : [],
+      };
+    });
   }
 
   /**

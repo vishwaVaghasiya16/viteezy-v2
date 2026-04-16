@@ -156,6 +156,13 @@ class MembershipController {
           metadata?: Record<string, any>;
           beneficiaryUserId?: string;
         };
+      console.log("🟢 [MEMBERSHIP BUY] Request received", {
+        userId: req.user._id,
+        planId,
+        paymentMethod,
+        beneficiaryUserId: beneficiaryUserId || null,
+        hasReturnUrl: !!returnUrl,
+      });
 
       const plan = await MembershipPlans.findOne({
         _id: new mongoose.Types.ObjectId(planId),
@@ -164,12 +171,28 @@ class MembershipController {
       }).lean();
 
       if (!plan) {
+        console.log("❌ [MEMBERSHIP BUY] Plan not found", {
+          userId: req.user._id,
+          planId,
+        });
         throw new AppError("Membership plan not found", 404);
       }
+      console.log("✅ [MEMBERSHIP BUY] Plan validated", {
+        planId: plan._id?.toString?.() || planId,
+        planName: plan.name,
+        amount: plan.price?.amount,
+        currency: plan.price?.currency,
+      });
 
       const activeMembership =
         await membershipService.getActiveMembershipForUser(req.user._id);
       if (activeMembership) {
+        console.log("❌ [MEMBERSHIP BUY] Active membership already exists", {
+          userId: req.user._id,
+          activeMembershipId: activeMembership._id?.toString?.(),
+          activeStatus: activeMembership.status,
+          activeExpiresAt: activeMembership.expiresAt,
+        });
         throw new AppError(
           "You already have an active membership. Please cancel or wait until it expires before purchasing a new plan.",
           400
@@ -199,6 +222,10 @@ class MembershipController {
           .lean();
 
         if (!referral || !referral.childUserId) {
+          console.log("❌ [MEMBERSHIP BUY] Beneficiary validation failed", {
+            userId: req.user._id,
+            beneficiaryUserId,
+          });
           throw new AppError(
             "Selected member is not linked to your account",
             403
@@ -207,6 +234,10 @@ class MembershipController {
 
         const child = referral.childUserId as any;
         if (child.isActive === false) {
+          console.log("❌ [MEMBERSHIP BUY] Beneficiary inactive", {
+            userId: req.user._id,
+            beneficiaryUserId,
+          });
           throw new AppError("Selected member account is inactive", 400);
         }
 
@@ -219,6 +250,15 @@ class MembershipController {
         };
       }
 
+      const { getUserFamilyRole } = await import("@/services/familyValidationService");
+      const userRole = await getUserFamilyRole(req.user._id);
+      console.log("ℹ️ [MEMBERSHIP BUY] Purchase context resolved", {
+        purchaserUserId: req.user._id,
+        purchaserRole: userRole,
+        targetUserId,
+        isForBeneficiary: !!beneficiaryInfo,
+      });
+
       const membership = await membershipService.createPendingMembership({
         userId: targetUserId,
         plan,
@@ -230,29 +270,19 @@ class MembershipController {
               ? req.user._id
               : undefined,
           beneficiaryUserId: beneficiaryInfo?.userId,
+          purchasedByRole: userRole,
+          familyBenefitsShareable: userRole === "MAIN_MEMBER",
         },
         purchasedByUserId:
           beneficiaryInfo && beneficiaryInfo.userId !== req.user._id
             ? req.user._id
             : undefined,
       });
-
-      // FAMILY BENEFIT MARKING
-      const { getUserFamilyRole } = await import("@/services/familyValidationService");
-      const userRole = await getUserFamilyRole(req.user._id);
-      if (userRole === 'MAIN_MEMBER') {
-        await Memberships.updateOne(
-          { _id: membership._id },
-          { 
-            $set: { 
-              'benefits.$[elem].familyShareable': true 
-            }
-          },
-          { 
-            arrayFilters: [{ 'elem.type': { $in: ['FREE_SHIPPING', 'DISCOUNT'] } }]
-          }
-        );
-      }
+      console.log("✅ [MEMBERSHIP BUY] Pending membership created", {
+        membershipId: membership._id?.toString?.(),
+        membershipStatus: membership.status,
+        targetUserId,
+      });
 
       const membershipId = (
         membership._id as mongoose.Types.ObjectId
@@ -273,16 +303,27 @@ class MembershipController {
             : req.user?.firstName || req.user?.lastName || ""),
       };
 
-      // Set redirect URLs to /products for membership payments (clean URLs without query params)
+      // Route gateway success callback through backend return handler so
+      // membership verification + activation happen immediately after payment.
       const frontendUrl = config.frontend.url;
-      const membershipReturnUrl = `${frontendUrl}/products`;
+      const paymentReturnBaseUrl = `${config.app.baseUrl}/api/v1/payments/return`;
+      const membershipReturnUrl =
+        `${paymentReturnBaseUrl}?gateway=${encodeURIComponent(paymentMethod)}` +
+        `&membershipId=${encodeURIComponent(membershipId)}` +
+        `&userId=${encodeURIComponent(req.user._id)}`;
       const membershipCancelUrl = `${frontendUrl}/products`;
+      console.log("ℹ️ [MEMBERSHIP BUY] Return URL prepared", {
+        membershipId,
+        paymentMethod,
+        membershipReturnUrl,
+      });
 
       // Get email from authenticated user token
       const customerEmail = req.user?.email;
 
-      const paymentResponse =
-        await paymentService.createMembershipPaymentIntent({
+      let paymentResponse;
+      try {
+        paymentResponse = await paymentService.createMembershipPaymentIntent({
           membershipId,
           userId: req.user._id,
           paymentMethod,
@@ -296,6 +337,29 @@ class MembershipController {
           cancelUrl: membershipCancelUrl,
           customerEmail,
         });
+        console.log("✅ [MEMBERSHIP BUY] Payment intent created", {
+          membershipId,
+          paymentId: paymentResponse.payment?._id?.toString?.(),
+          paymentStatus: paymentResponse.payment?.status,
+          gatewayTransactionId:
+            paymentResponse.payment?.gatewayTransactionId || null,
+          hasRedirectUrl: !!paymentResponse.result?.redirectUrl,
+          hasClientSecret: !!paymentResponse.result?.clientSecret,
+        });
+      } catch (error: any) {
+        console.error("❌ [MEMBERSHIP BUY] Payment intent creation failed", {
+          membershipId,
+          purchaserUserId: req.user._id,
+          targetUserId,
+          paymentMethod,
+          amount,
+          currency,
+          errorMessage: error?.message,
+          errorName: error?.name,
+          stack: error?.stack,
+        });
+        throw error;
+      }
 
       res.status(201).json({
         success: true,
