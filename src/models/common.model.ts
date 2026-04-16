@@ -52,6 +52,7 @@ export interface AddressSnapshotType {
   state?: string;
   zip?: string;
   country?: string;
+  email?: string;
 }
 
 export interface PriceType {
@@ -117,6 +118,7 @@ export const SeoSchema = new Schema<SeoType>(
 export const AddressSnapshotSchema = new Schema<AddressSnapshotType>(
   {
     name: String,
+    email: String,
     phone: String,
     line1: String,
     line2: String,
@@ -132,7 +134,7 @@ export const PriceSchema = new Schema<PriceType>(
   {
     currency: {
       type: String,
-      default: "EUR",
+      default: "USD",
       enum: CURRENCY_VALUES,
       uppercase: true,
     },

@@ -17,6 +17,9 @@ export enum UserRole {
   USER = "User",
   ADMIN = "Admin",
   MODERATOR = "Moderator",
+  MAIN_MEMBER = "MAIN_MEMBER",
+  SUB_MEMBER = "SUB_MEMBER",
+  INDEPENDENT = "INDEPENDENT",
 }
 
 // User Status
@@ -105,6 +108,7 @@ export enum PaymentMethod {
 export enum OrderPlanType {
   ONE_TIME = "One-Time",
   SUBSCRIPTION = "Subscription",
+  MIXED = "Mixed", // Contains both one-time and subscription products
 }
 
 // Shipment Status
@@ -310,6 +314,7 @@ export enum SubscriptionStatus {
   ACTIVE = "Active",
   PAUSED = "Paused",
   CANCELLED = "Cancelled",
+  PENDING_CANCELLATION = "Pending-Cancellation",
   EXPIRED = "Expired",
   SUSPENDED = "Suspended",
   PAST_DUE = "Past Due", // Payment failed but subscription still active
@@ -355,12 +360,31 @@ export enum NotificationCategory {
   FAMILY = "Family",
   SUPPORT = "Support",
   GENERAL = "General",
+  REMINDER = "Reminder",
 }
 
 // Notification Types
 export enum NotificationType {
   NORMAL = "Normal",
   REDIRECTION = "Redirection",
+}
+
+// Reminder History Event Types
+export enum ReminderHistoryEventType {
+  CREATED = "CREATED",
+  TIME_UPDATED = "TIME_UPDATED",
+  DATE_FREQUENCY_CHANGED = "DATE_FREQUENCY_CHANGED",
+  MESSAGE_UPDATED = "MESSAGE_UPDATED",
+  ENABLED = "ENABLED",
+  DISABLED = "DISABLED",
+  DELETED = "DELETED",
+  MULTIPLE_ADDED = "MULTIPLE_ADDED",
+}
+
+// Reminder Triggered By
+export enum ReminderTriggeredBy {
+  USER = "USER",
+  SYSTEM = "SYSTEM",
 }
 
 // Export all enum values as arrays for Mongoose schemas
@@ -415,3 +439,5 @@ export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
 export const DEVICE_TYPE_VALUES = Object.values(DeviceType);
 export const NOTIFICATION_CATEGORY_VALUES = Object.values(NotificationCategory);
 export const NOTIFICATION_TYPE_VALUES = Object.values(NotificationType);
+export const REMINDER_HISTORY_EVENT_TYPE_VALUES = Object.values(ReminderHistoryEventType);
+export const REMINDER_TRIGGERED_BY_VALUES = Object.values(ReminderTriggeredBy);

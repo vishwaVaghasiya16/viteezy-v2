@@ -4,6 +4,7 @@ import {
   PAYMENT_METHOD_VALUES,
   MEMBERSHIP_INTERVAL_VALUES,
   MEMBERSHIP_STATUS_VALUES,
+  PAYMENT_STATUS_VALUES,
 } from "@/models/enums";
 import { withFieldLabels } from "./helpers";
 
@@ -78,6 +79,70 @@ export const getMembershipsQuerySchema = Joi.object(
  */
 export const cancelMembershipSchema = Joi.object(
   withFieldLabels({
-    cancellationReason: Joi.string().trim().max(500).optional().label("Cancellation reason"),
+    reason: Joi.string().trim().max(500).optional().label("Cancellation reason"),
+    feedback: Joi.string().trim().max(1000).optional().label("Feedback"),
   })
 ).label("CancelMembershipPayload");
+
+/**
+ * Get Membership Transactions Query Validation Schema
+ */
+export const getMembershipTransactionsQuerySchema = Joi.object(
+  withFieldLabels({
+    page: Joi.number().integer().min(1).optional().default(1).label("Page"),
+    limit: Joi.number()
+      .integer()
+      .min(1)
+      .max(100)
+      .optional()
+      .default(10)
+      .label("Limit"),
+    status: Joi.string()
+      .valid(...PAYMENT_STATUS_VALUES)
+      .optional()
+      .label("Payment status")
+      .messages({
+        "any.only": "Payment status must be one of [Pending, Processing, Completed, Failed, Cancelled, Refunded]"
+      })
+      .custom((value, helpers) => {
+        if (!value) return value;
+        // Case-insensitive matching
+        const matchedValue = PAYMENT_STATUS_VALUES.find(
+          (validValue) => validValue.toLowerCase() === value.toLowerCase()
+        );
+        if (matchedValue) {
+          return matchedValue; // Return the correct case value
+        }
+        return helpers.error("any.only");
+      }),
+    paymentMethod: Joi.string()
+      .valid(...PAYMENT_METHOD_VALUES)
+      .optional()
+      .label("Payment method")
+      .messages({
+        "any.only": "Payment method must be one of [Stripe, Mollie, Paypal, Bank Transfer]"
+      })
+      .custom((value, helpers) => {
+        if (!value) return value;
+        // Case-insensitive matching
+        const matchedValue = PAYMENT_METHOD_VALUES.find(
+          (validValue) => validValue.toLowerCase() === value.toLowerCase()
+        );
+        if (matchedValue) {
+          return matchedValue; // Return the correct case value
+        }
+        return helpers.error("any.only");
+      }),
+    sortBy: Joi.string()
+      .valid("createdAt", "processedAt", "amount", "status")
+      .optional()
+      .default("createdAt")
+      .label("Sort by"),
+    sortOrder: Joi.string()
+      .valid("asc", "desc")
+      .optional()
+      .default("desc")
+      .label("Sort order"),
+    search: Joi.string().trim().max(100).optional().label("Search query"),
+  })
+).label("MembershipTransactionsQuery");

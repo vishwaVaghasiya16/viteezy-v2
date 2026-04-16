@@ -18,34 +18,59 @@ import {
 export interface IOrder extends Document {
   orderNumber: string;
   userId: mongoose.Types.ObjectId;
+  orderedBy?: mongoose.Types.ObjectId; // Who placed the order (for family orders)
+  orderedFor?: mongoose.Types.ObjectId; // Whose profile the order is for
+  relationshipType?: "SELF" | "FAMILY"; // Relationship between orderedBy and orderedFor
   status: OrderStatus;
   planType: OrderPlanType;
-  isOneTime: boolean; // Whether this is a one-time purchase or subscription
-  variantType?: ProductVariant; // Variant type selected by user (SACHETS or STAND_UP_POUCH)
-  selectedPlanDays?: number; // Selected plan days (30, 60, 90, 180 for subscription)
+  orderType?: "NORMAL" | "SUBSCRIPTION_INITIAL" | "SUBSCRIPTION_RENEWAL";
+  subscriptionId?: mongoose.Types.ObjectId | null;
   items: Array<{
     productId: mongoose.Types.ObjectId;
     name: string;
-    planDays?: number; // Plan days for this specific item
-    capsuleCount?: number; // Capsule count for this specific item
+    variantType: ProductVariant; // Variant type for this item (SACHETS or STAND_UP_POUCH)
+    quantity?: number; // Quantity for STAND_UP_POUCH items (default: 1)
+    planDays?: number; // Plan days for this specific item (SACHETS subscription)
+    capsuleCount?: number; // Capsule count for this specific item (STAND_UP_POUCH)
     // Additional pricing and plan details
-    amount: number; // Original amount
-    discountedPrice: number; // Discounted price
-    taxRate: number; // Tax rate
-    totalAmount: number; // Total amount
+    amount: number; // Original amount per unit
+    discountedPrice: number; // Discounted price per unit
+    taxRate: number; // Tax rate per unit
+    totalAmount: number; // Total amount (amount * quantity)
     durationDays?: number; // Duration in days (for subscription plans)
     savingsPercentage?: number; // Savings percentage
     features?: string[]; // Plan features
   }>;
-  // Pricing stored as numbers with separate currency field
-  subTotal: number; // Sum of all product amounts
-  discountedPrice: number; // Discounted price after plan discounts
-  couponDiscountAmount: number; // Coupon discount amount
-  membershipDiscountAmount: number; // Membership discount amount
-  subscriptionPlanDiscountAmount: number; // Subscription plan discount (e.g., 90-day 15% discount)
-  taxAmount: number; // Tax amount
-  grandTotal: number; // Final total after all discounts and tax
-  currency: string; // Currency code (e.g., "EUR")
+  // Pricing breakdown by variant type
+  pricing?: {
+    sachets?: {
+      subTotal: number;
+      discountedPrice: number;
+      membershipDiscountAmount: number;
+      subscriptionPlanDiscountAmount: number;
+      taxAmount: number;
+      total: number;
+      currency: string;
+    };
+    standUpPouch?: {
+      subTotal: number;
+      discountedPrice: number;
+      membershipDiscountAmount: number;
+      taxAmount: number;
+      total: number;
+      currency: string;
+    };
+    overall: {
+      subTotal: number;
+      discountedPrice: number;
+      couponDiscountAmount: number;
+      membershipDiscountAmount: number;
+      subscriptionPlanDiscountAmount: number;
+      taxAmount: number;
+      grandTotal: number;
+      currency: string;
+    };
+  };
   shippingAddressId: mongoose.Types.ObjectId; // Reference to Address model
   billingAddressId?: mongoose.Types.ObjectId; // Reference to Address model
   paymentMethod: string;
@@ -74,6 +99,23 @@ const OrderSchema = new Schema<IOrder>(
       ref: "User",
       default: null,
     },
+    orderedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    orderedFor: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    relationshipType: {
+      type: String,
+      enum: ["SELF", "FAMILY"],
+      default: null,
+    },
     status: {
       type: String,
       enum: ORDER_STATUS_VALUES,
@@ -84,17 +126,14 @@ const OrderSchema = new Schema<IOrder>(
       enum: ORDER_PLAN_TYPE_VALUES,
       default: OrderPlanType.ONE_TIME,
     },
-    isOneTime: {
-      type: Boolean,
-      required: true,
-    },
-    variantType: {
+    orderType: {
       type: String,
-      enum: Object.values(ProductVariant),
-      default: null,
+      enum: ["NORMAL", "SUBSCRIPTION_INITIAL", "SUBSCRIPTION_RENEWAL"],
+      default: "NORMAL",
     },
-    selectedPlanDays: {
-      type: Number,
+    subscriptionId: {
+      type: Schema.Types.ObjectId,
+      ref: "subscriptions",
       default: null,
     },
     items: [
@@ -115,6 +154,16 @@ const OrderSchema = new Schema<IOrder>(
         capsuleCount: {
           type: Number,
           default: null,
+        },
+        variantType: {
+          type: String,
+          enum: Object.values(ProductVariant),
+          required: true,
+        },
+        quantity: {
+          type: Number,
+          default: 1,
+          min: 1,
         },
         // Additional pricing and plan details
         amount: {
@@ -147,39 +196,46 @@ const OrderSchema = new Schema<IOrder>(
         },
       },
     ],
-    // Pricing stored as numbers with separate currency field
-    subTotal: {
-      type: Number,
-      default: 0,
-    },
-    discountedPrice: {
-      type: Number,
-      default: 0,
-    },
-    couponDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    membershipDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    subscriptionPlanDiscountAmount: {
-      type: Number,
-      default: 0,
-    },
-    taxAmount: {
-      type: Number,
-      default: 0,
-    },
-    grandTotal: {
-      type: Number,
-      default: 0,
-    },
-    currency: {
-      type: String,
-      default: "EUR",
-      trim: true,
+    pricing: {
+      type: {
+        sachets: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            total: { type: Number, default: 0 },
+            currency: { type: String, default: "USD" },
+          },
+          required: false,
+        },
+        standUpPouch: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            total: { type: Number, default: 0 },
+            currency: { type: String, default: "USD" },
+          },
+          required: false,
+        },
+        overall: {
+          type: {
+            subTotal: { type: Number, default: 0 },
+            discountedPrice: { type: Number, default: 0 },
+            couponDiscountAmount: { type: Number, default: 0 },
+            membershipDiscountAmount: { type: Number, default: 0 },
+            subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+            taxAmount: { type: Number, default: 0 },
+            grandTotal: { type: Number, default: 0 },
+            currency: { type: String, default: "USD" },
+          },
+          required: true,
+        },
+      },
+      required: false,
     },
     shippingAddressId: {
       type: Schema.Types.ObjectId,

@@ -281,10 +281,15 @@ export const updateCouponStatusSchema = Joi.object(
 // Query schemas for coupon listing and usage logs
 export const getCouponsQuerySchema = paginationQuerySchema.keys(
   withFieldLabels({
+    status: Joi.string()
+      .valid("active", "inactive", "all", "expired")
+      .optional()
+      .label("Coupon status"),
     type: Joi.string()
       .valid(...COUPON_TYPE_VALUES)
       .optional()
       .label("Coupon type"),
+    search: Joi.string().trim().optional().label("Search query"),
     expiryDateFrom: Joi.date().iso().optional().label("Expiry date from"),
     expiryDateTo: Joi.date().iso().optional().label("Expiry date to"),
   })
@@ -292,6 +297,11 @@ export const getCouponsQuerySchema = paginationQuerySchema.keys(
 
 export const getCouponUsageLogsQuerySchema = paginationQuerySchema.keys(
   withFieldLabels({
+    status: Joi.string()
+      .valid("active", "inactive", "all", "expired")
+      .optional()
+      .label("Coupon status"),
+    search: Joi.string().trim().optional().label("Search query"),
     couponId: Joi.string()
       .custom((value, helpers) => {
         if (!mongoose.Types.ObjectId.isValid(value)) {

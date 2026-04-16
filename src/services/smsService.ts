@@ -8,11 +8,11 @@
 
 import { logger } from "@/utils/logger";
 import type { SupportedLanguage } from "@/models/common.model";
+import { config } from "@/config";
 
-const INFOBIP_URL =
-  process.env.INFOBIP_URL || "https://dmdlzg.api.infobip.com";
-const INFOBIP_API_KEY = process.env.INFOBIP_API_KEY || "";
-const SMS_FROM = process.env.SMS_FROM || "Viteezy";
+const INFOBIP_URL = config.infobip.url;
+const INFOBIP_API_KEY = config.infobip.apiKey;
+const SMS_FROM = config.sms.from;
 
 /** E.164-ish: ensure number has country code for Infobip (V1 uses libphonenumber) */
 function normalizePhone(phone: string, countryCode: string): string {
@@ -65,9 +65,13 @@ export interface SendPickupSmsParams {
 export async function sendPickupPointSms(params: SendPickupSmsParams): Promise<boolean> {
   const { toPhone, countryCode, firstName, trackingUrl, language = "en" } = params;
 
-  if (!INFOBIP_API_KEY || INFOBIP_API_KEY.trim() === "") {
+  if (
+    !INFOBIP_API_KEY?.trim() ||
+    !INFOBIP_URL?.trim() ||
+    !SMS_FROM?.trim()
+  ) {
     logger.warn(
-      "SMS skipped: INFOBIP_API_KEY not set. Set INFOBIP_URL and INFOBIP_API_KEY in .env for pickup notifications."
+      "SMS skipped: set INFOBIP_URL, INFOBIP_API_KEY, and SMS_FROM to enable pickup notifications."
     );
     return false;
   }

@@ -129,6 +129,7 @@ class ProductIngredientController {
           { "name.de": regex },
           { "name.fr": regex },
           { "name.es": regex },
+          { scientificName: regex },
           { "description.en": regex },
           { "description.nl": regex },
           { "description.de": regex },

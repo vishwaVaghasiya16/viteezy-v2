@@ -194,6 +194,9 @@ export const loginSchema = Joi.object(
     email: emailSchema,
     password: passwordSchema,
     deviceInfo: deviceInfoSchema,
+    type: Joi.string().valid("admin").optional().label("Type").messages({
+      "any.only": "Type must be 'admin' if provided",
+    }),
   })
 ).label("LoginPayload");
 
@@ -250,6 +253,9 @@ export const forgotPasswordSchema = Joi.object(
       .messages({
         "any.only": 'Client must be either "user" or "admin"',
       }),
+    type: Joi.string().valid("admin").optional().label("Type").messages({
+      "any.only": "Type must be 'admin' if provided",
+    }),
   })
 ).label("ForgotPasswordPayload");
 

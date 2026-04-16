@@ -117,6 +117,113 @@ export const getAllOrdersQuerySchema = paginationQuerySchema.keys(
   })
 ).label("GetAllOrdersQuery");
 
+// Manual Order Creation Schema
+const orderItemSchema = Joi.object({
+  productId: Joi.string()
+    .pattern(objectIdRegex)
+    .required()
+    .messages({
+      "string.pattern.base": "Invalid product ID format",
+      "any.required": "Product ID is required",
+    })
+    .label("Product ID"),
+  variantType: Joi.string()
+    .valid("SACHETS", "STAND_UP_POUCH")
+    .required()
+    .label("Variant Type"),
+  quantity: Joi.number().integer().min(1).optional().default(1).label("Quantity"),
+  planDays: Joi.number()
+    .integer()
+    .valid(30, 60, 90, 180)
+    .optional()
+    .label("Plan Days"),
+  capsuleCount: Joi.number()
+    .integer()
+    .valid(30, 60)
+    .optional()
+    .label("Capsule Count"),
+});
+
+export const createManualOrderSchema = Joi.object(
+  withFieldLabels({
+    userId: Joi.string()
+      .pattern(objectIdRegex)
+      .required()
+      .messages({
+        "string.pattern.base": "Invalid user ID format",
+        "any.required": "User ID is required",
+      })
+      .label("User ID"),
+    orderType: Joi.string()
+      .valid("already_paid", "pending_payment")
+      .required()
+      .label("Order Type"),
+    items: Joi.array()
+      .items(orderItemSchema)
+      .min(1)
+      .required()
+      .label("Order Items"),
+    shippingAddressId: Joi.string()
+      .pattern(objectIdRegex)
+      .required()
+      .messages({
+        "string.pattern.base": "Invalid shipping address ID format",
+        "any.required": "Shipping address ID is required",
+      })
+      .label("Shipping Address ID"),
+    billingAddressId: Joi.string()
+      .pattern(objectIdRegex)
+      .optional()
+      .messages({
+        "string.pattern.base": "Invalid billing address ID format",
+      })
+      .label("Billing Address ID"),
+    subTotal: Joi.number().min(0).required().label("Sub Total"),
+    discountedPrice: Joi.number().min(0).required().label("Discounted Price"),
+    couponDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Coupon Discount Amount"),
+    membershipDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Membership Discount Amount"),
+    subscriptionPlanDiscountAmount: Joi.number()
+      .min(0)
+      .default(0)
+      .label("Subscription Plan Discount Amount"),
+    taxAmount: Joi.number().min(0).default(0).label("Tax Amount"),
+    grandTotal: Joi.number().min(0).required().label("Grand Total"),
+    currency: Joi.string()
+      .trim()
+      .uppercase()
+      .min(3)
+      .max(5)
+      .default("USD")
+      .label("Currency"),
+    couponCode: Joi.string().trim().uppercase().optional().label("Coupon Code"),
+    paymentMethod: Joi.string()
+      .trim()
+      .optional()
+      .allow(null, "")
+      .label("Payment Method"),
+    notes: Joi.string().trim().optional().allow(null, "").label("Notes"),
+    planType: Joi.string()
+      .valid(...ORDER_PLAN_TYPE_VALUES)
+      .required()
+      .label("Plan Type"),
+    isOneTime: Joi.boolean().required().label("Is One Time"),
+    variantType: Joi.string()
+      .valid("SACHETS", "STAND_UP_POUCH")
+      .optional()
+      .label("Variant Type"),
+    selectedPlanDays: Joi.number()
+      .integer()
+      .valid(30, 60, 90, 180)
+      .optional()
+      .label("Selected Plan Days"),
+  })
+).label("CreateManualOrderPayload");
 /**
  * Schema for partial refund request
  * Admin can refund specific products from an order

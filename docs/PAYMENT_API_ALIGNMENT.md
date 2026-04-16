@@ -188,7 +188,7 @@ curl -X POST http://localhost:8080/api/v1/payments/create \
     "paymentMethod": "STRIPE",
     "amount": {
       "value": 99.99,
-      "currency": "EUR"
+      "currency": "USD"
     },
     "returnUrl": "https://yourapp.com/payment/return"
   }'

@@ -58,6 +58,7 @@ export interface IUser extends Document {
   isSubMember?: boolean; // Indicates if this is a family/sub-member
   parentMemberId?: Schema.Types.ObjectId; // Reference to parent/main member
   relationshipToParent?: string; // e.g., "Child", "Spouse", "Parent", "Sibling", "Other"
+  parentId?: Schema.Types.ObjectId; // Parent user ID for sub-members
   // Soft delete fields
   isDeleted?: boolean;
   deletedAt?: Date;
@@ -266,6 +267,11 @@ const userSchema = new Schema<IUser>(
       ref: "User",
       default: null,
     },
+    parentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
     relationshipToParent: {
       type: String,
       enum: ["Child", "Spouse", "Parent", "Sibling", "Other"],
@@ -322,6 +328,38 @@ userSchema.methods.comparePassword = async function (
 ): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+// Pre-save hook for memberId generation
+userSchema.pre('save', async function(next) {
+  if (this.isNew && !this.memberId) {
+    try {
+      // Inline memberId generation to avoid circular dependency
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      while (attempts < maxAttempts) {
+        let result = 'MEM-';
+        for (let i = 0; i < 7; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        
+        const existing = await User.findOne({ memberId: result });
+        if (!existing) {
+          this.memberId = result;
+          return next();
+        }
+        
+        attempts++;
+      }
+      
+      throw new Error('Failed to generate unique member ID');
+    } catch (error) {
+      return next(error as Error);
+    }
+  }
+  next();
+});
 
 // Remove password from JSON output
 userSchema.methods.toJSON = function () {

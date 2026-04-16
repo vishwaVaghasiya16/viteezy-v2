@@ -64,7 +64,7 @@ router.get("/stats", adminCouponController.getCouponStats);
  * @access Admin
  * @query {Number} [page] - Page number (default: 1)
  * @query {Number} [limit] - Items per page (default: 10)
- * @query {String} [status] - Filter by coupon status: "active", "inactive", or "all"
+ * @query {String} [status] - Filter by coupon status: "active", "inactive", "expired", or "all"
  * @query {String} [search] - Search by coupon code or name
  * @query {String} [expiryDateFrom] - Filter by coupon expiry date from (ISO date string)
  * @query {String} [expiryDateTo] - Filter by coupon expiry date to (ISO date string)
@@ -85,7 +85,7 @@ router.get(
  * @access Admin
  * @query {Number} [page] - Page number (default: 1)
  * @query {Number} [limit] - Items per page (default: 10)
- * @query {String} [status] - Filter by status: "active", "inactive", or "all"
+ * @query {String} [status] - Filter by status: "active", "inactive", "expired", or "all"
  * @query {String} [type] - Filter by discount type
  * @query {String} [search] - Search by code or name
  * @query {String} [expiryDateFrom] - Filter by expiry date from (ISO date string)

@@ -13,6 +13,7 @@ import {
 export interface IProductIngredient extends Document {
   products: mongoose.Types.ObjectId[];
   name: I18nStringType;
+  scientificName?: string;
   description?: I18nTextType; // HTML content
   image?: MediaType;
   isActive: boolean;
@@ -38,6 +39,12 @@ const ProductIngredientSchema = new Schema<IProductIngredient>(
       type: I18nString,
       default: () => ({}),
       required: true,
+    },
+    scientificName: {
+      type: String,
+      trim: true,
+      default: null,
+      maxlength: 200,
     },
     description: {
       type: I18nText,

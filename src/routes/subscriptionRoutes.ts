@@ -9,9 +9,17 @@ import {
   createSubscriptionSchema,
   updateSubscriptionSchema,
   getSubscriptionDetailsParamsSchema,
+  getSubscriptionDetailsQuerySchema,
   getSubscriptionsQuerySchema,
   getSubscriptionTransactionHistoryQuerySchema,
   pauseSubscriptionSchema,
+  cancelSubscriptionSchema,
+  getSubscriptionActivityQuerySchema,
+  getSubscriptionProductsStatusQuerySchema,
+  addProductsToSubscriptionSchema,
+  removeProductsFromSubscriptionSchema,
+  changeSubscriptionShippingAddressSchema,
+  testSubscriptionRenewalSchema,
 } from "@/validation/subscriptionValidation";
 import { subscriptionController } from "@/controllers/subscriptionController";
 
@@ -54,6 +62,7 @@ router.get(
 router.get(
   "/:subscriptionId",
   validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionDetailsQuerySchema),
   subscriptionController.getSubscriptionDetails
 );
 
@@ -105,7 +114,15 @@ router.post(
 router.post(
   "/:subscriptionId/cancel",
   validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(cancelSubscriptionSchema),
   subscriptionController.cancelSubscription
+);
+
+router.get(
+  "/:subscriptionId/activity",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionActivityQuerySchema),
+  subscriptionController.getSubscriptionActivity
 );
 
 /**
@@ -114,5 +131,115 @@ router.post(
  * @access  Private
  */
 router.get("/widget/overview", subscriptionController.getSubscriptionWidget);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/products
+ * @desc    Add products to active subscription
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to add
+ */
+router.post(
+  "/:subscriptionId/products",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(addProductsToSubscriptionSchema),
+  subscriptionController.addProductsToSubscription
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/products/remove
+ * @desc    Remove products from active subscription
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to remove
+ */
+router.post(
+  "/:subscriptionId/products/remove",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(removeProductsFromSubscriptionSchema),
+  subscriptionController.removeProductsFromSubscription
+);
+
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/addresses
+ * @desc    Get all shipping addresses for a subscription
+ * @access  Private
+ * @params  subscriptionId
+ */
+router.get(
+  "/:subscriptionId/addresses",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.getSubscriptionAddresses
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/change-shipping-address
+ * @desc    Change shipping address for a subscription (used for future renewals)
+ * @access  Private
+ * @params  subscriptionId
+ * @body    shippingAddressId - New shipping address ID belonging to the user
+ */
+router.post(
+  "/:subscriptionId/change-shipping-address",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(changeSubscriptionShippingAddressSchema),
+  subscriptionController.changeSubscriptionShippingAddress
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/test-renew
+ * @desc    Trigger a fast test renewal for a subscription using existing renewal flow
+ * @access  Private
+ * @params  subscriptionId
+ * @body    delayMinutes (optional) - if > 0, only sets nextBillingDate in future
+ */
+router.post(
+  "/:subscriptionId/test-renew",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateJoi(testSubscriptionRenewalSchema),
+  subscriptionController.testSubscriptionRenewal
+);
+
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/products
+ * @desc    Get products that are part of a subscription
+ * @access  Private
+ * @params  subscriptionId
+ */
+router.get(
+  "/:subscriptionId/products",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  subscriptionController.getSubscriptionProducts
+);
+
+/**
+ * @route   GET /api/subscriptions/:subscriptionId/products/status
+ * @desc    Get products with flags: in subscription plan & in user's cart (with filters)
+ * @access  Private
+ * @params  subscriptionId
+ * @query   inSubscription (optional, true|false), inCart (optional, true|false)
+ */
+router.get(
+  "/:subscriptionId/products/status",
+  validateParams(getSubscriptionDetailsParamsSchema),
+  validateQuery(getSubscriptionProductsStatusQuerySchema),
+  subscriptionController.getSubscriptionProductsWithStatus
+);
+
+/**
+ * @route   POST /api/subscriptions/:subscriptionId/plan-change/cart
+ * @desc    Prepare user's cart for subscription change:
+ *          - Only if subscription is ACTIVE
+ *          - Only within 10 days before subscriptionEndDate
+ *          - Adds given products to cart as SACHETS with subscription-change flag
+ * @access  Private
+ * @params  subscriptionId
+ * @body    productIds - Array of product IDs to add
+ */
+// router.post(
+//   "/:subscriptionId/plan-change/cart",
+//   validateParams(getSubscriptionDetailsParamsSchema),
+//   subscriptionController.prepareSubscriptionChangeCart
+// );
 
 export default router;

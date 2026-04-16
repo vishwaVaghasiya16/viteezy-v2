@@ -13,6 +13,9 @@ import { Wishlists } from "../models/commerce/wishlists.model";
 import { User } from "../models/core/users.model";
 import { cartService } from "./cartService";
 import { transformProductForLanguage } from "./productEnrichmentService";
+import { translationService } from "./translationService";
+import { prepareDataForTranslation } from "../utils/translationUtils";
+import { config } from "@/config";
 
 type SupportedLanguage = "en" | "nl" | "de" | "fr" | "es";
 
@@ -110,8 +113,27 @@ const transformI18nStringArray = (
   return i18nArray.map((item) => getTranslatedString(item, lang));
 };
 
+/**
+ * Convert input to I18n format - handles both string and multi-language object
+ */
+const convertToI18n = (
+  input: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string } | undefined
+): { en?: string; nl?: string; de?: string; fr?: string; es?: string } | undefined => {
+  if (!input) return undefined;
+  
+  if (typeof input === "string") {
+    return { en: input };
+  }
+  
+  if (typeof input === "object" && !Array.isArray(input)) {
+    return input;
+  }
+  
+  return { en: String(input) };
+};
+
 interface PrimaryCTAInput {
-  label: string;
+  label: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   image?: string;
   link?: string;
   order?: number;
@@ -119,13 +141,13 @@ interface PrimaryCTAInput {
 
 interface MembershipBenefitInput {
   icon?: string;
-  title: string;
-  description?: string;
+  title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+  description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   order?: number;
 }
 
 interface CommunityMetricInput {
-  label: string;
+  label: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
   value: string | number;
   order?: number;
 }
@@ -140,109 +162,109 @@ interface CreateLandingPageData {
     imageUrl?: string;
     videoUrl?: string;
     backgroundImage?: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
-    highlightedText?: string[];
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    highlightedText?: (string | { en?: string; nl?: string; de?: string; fr?: string; es?: string })[];
     primaryCTA?: PrimaryCTAInput[];
     isEnabled?: boolean;
     order?: number;
   };
   membershipSection?: {
     backgroundImage: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     benefits?: MembershipBenefitInput[];
     isEnabled?: boolean;
     order?: number;
   };
   howItWorksSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     stepsCount?: number;
     steps: Array<{
       image: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   productCategorySection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
   communitySection?: {
     backgroundImage?: string;
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     metrics?: CommunityMetricInput[];
     isEnabled?: boolean;
     order?: number;
   };
   missionSection?: {
     backgroundImage: string;
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   featuresSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
-    subTitle?: string;
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     features: Array<{
       icon: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   designedByScienceSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     steps: Array<{
       image: string;
-      title: string; // Simple string for now
-      description?: string; // Simple string for now
+      title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   testimonialsSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     testimonialIds?: (mongoose.Types.ObjectId | string)[];
     isEnabled?: boolean;
     order?: number;
   };
   customerResultsSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   blogSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   faqSection?: {
-    title: string; // Simple string for now
-    description?: string; // Simple string for now
+    title: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     faqs: Array<{
-      question: string; // Simple string for now
-      answer?: string; // Simple string for now
+      question: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      answer?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
@@ -262,110 +284,110 @@ interface UpdateLandingPageData {
     imageUrl?: string;
     videoUrl?: string;
     backgroundImage?: string;
-    title?: string;
-    description?: string;
-    subTitle?: string;
-    highlightedText?: string[];
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    highlightedText?: (string | { en?: string; nl?: string; de?: string; fr?: string; es?: string })[];
     primaryCTA?: PrimaryCTAInput[];
     isEnabled?: boolean;
     order?: number;
   };
   membershipSection?: {
     backgroundImage?: string;
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     benefits?: MembershipBenefitInput[];
     isEnabled?: boolean;
     order?: number;
   };
   howItWorksSection?: {
-    title?: string;
-    subTitle?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     stepsCount?: number;
     steps?: Array<{
       image?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   productCategorySection?: {
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     // productCategoryIds removed - categories are fetched dynamically in GET APIs
     isEnabled?: boolean;
     order?: number;
   };
   communitySection?: {
     backgroundImage?: string;
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     metrics?: CommunityMetricInput[];
     isEnabled?: boolean;
     order?: number;
   };
   missionSection?: {
     backgroundImage?: string;
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   featuresSection?: {
-    title?: string;
-    description?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     features?: Array<{
       icon?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   designedByScienceSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     steps?: Array<{
       image?: string;
-      title?: string;
-      description?: string;
+      title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
     order?: number;
   };
   testimonialsSection?: {
-    title?: string;
-    subTitle?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    subTitle?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     testimonialIds?: (mongoose.Types.ObjectId | string)[];
     isEnabled?: boolean;
     order?: number;
   };
   customerResultsSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   blogSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     isEnabled?: boolean;
     order?: number;
   };
   faqSection?: {
-    title?: string;
-    description?: string;
+    title?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+    description?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
     faqs?: Array<{
-      question?: string;
-      answer?: string;
+      question?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
+      answer?: string | { en?: string; nl?: string; de?: string; fr?: string; es?: string };
       order?: number;
     }>;
     isEnabled?: boolean;
@@ -377,7 +399,7 @@ interface UpdateLandingPageData {
 
 class LandingPageService {
   /**
-   * Create new landing page
+   * Create new landing page with automatic multi-language translation
    */
   async createLandingPage(
     data: CreateLandingPageData
@@ -394,366 +416,287 @@ class LandingPageService {
       );
     }
 
-    // Convert simple strings to I18n format for database
+    logger.info(`[Landing Page Service] Creating landing page with automatic translation`);
+
+    // Define all I18n string and text fields for translation
+    const i18nStringFields = [
+      "heroSection.title",
+      "heroSection.subTitle",
+      "heroSection.highlightedText",
+      "heroSection.primaryCTA",
+      "membershipSection.title",
+      "membershipSection.subTitle",
+      "membershipSection.benefits",
+      "howItWorksSection.title",
+      "howItWorksSection.subTitle",
+      "howItWorksSection.steps",
+      "productCategorySection.title",
+      "productCategorySection.subTitle",
+      "communitySection.title",
+      "communitySection.subTitle",
+      "communitySection.metrics",
+      "missionSection.title",
+      "featuresSection.title",
+      "featuresSection.subTitle",
+      "featuresSection.features",
+      "designedByScienceSection.title",
+      "designedByScienceSection.steps",
+      "testimonialsSection.title",
+      "testimonialsSection.subTitle",
+      "customerResultsSection.title",
+      "blogSection.title",
+      "faqSection.title"
+    ];
+
+    const i18nTextFields = [
+      "heroSection.description",
+      "membershipSection.description",
+      "membershipSection.benefits",
+      "howItWorksSection.steps",
+      "productCategorySection.description",
+      "communitySection.subTitle",
+      "missionSection.description",
+      "featuresSection.description",
+      "featuresSection.features",
+      "designedByScienceSection.description",
+      "designedByScienceSection.steps",
+      "customerResultsSection.description",
+      "blogSection.description",
+      "faqSection.description"
+    ];
+
+    // Translate data to all supported languages
+    const translatedData = await prepareDataForTranslation(data, i18nStringFields, i18nTextFields);
+
+    // Convert input to I18n format for database (now with translations)
     const landingPageData: any = {
       heroSection: {
-        ...data.heroSection,
-        imageUrl: data.heroSection.imageUrl,
-        videoUrl: data.heroSection.videoUrl,
-        backgroundImage: data.heroSection.backgroundImage,
-        title:
-          typeof data.heroSection.title === "string"
-            ? { en: data.heroSection.title }
-            : data.heroSection.title,
-        description: data.heroSection.description
-          ? typeof data.heroSection.description === "string"
-            ? { en: data.heroSection.description }
-            : data.heroSection.description
+        ...translatedData.heroSection,
+        imageUrl: translatedData.heroSection.imageUrl,
+        videoUrl: translatedData.heroSection.videoUrl,
+        backgroundImage: translatedData.heroSection.backgroundImage,
+        title: convertToI18n(translatedData.heroSection.title),
+        description: convertToI18n(translatedData.heroSection.description),
+        subTitle: convertToI18n(translatedData.heroSection.subTitle),
+        highlightedText: Array.isArray(translatedData.heroSection.highlightedText)
+          ? translatedData.heroSection.highlightedText.map((text: any) => convertToI18n(text))
           : undefined,
-        // subTitle removed from create API
-        highlightedText: Array.isArray(data.heroSection.highlightedText)
-          ? data.heroSection.highlightedText.map((text) =>
-              typeof text === "string" ? { en: text } : text
-            )
-          : undefined,
-        primaryCTA: Array.isArray(data.heroSection.primaryCTA)
-          ? data.heroSection.primaryCTA.map((cta) => ({
-              label:
-                typeof cta.label === "string"
-                  ? { en: cta.label }
-                  : (cta as any).label,
+        primaryCTA: Array.isArray(translatedData.heroSection.primaryCTA)
+          ? translatedData.heroSection.primaryCTA.map((cta: any) => ({
+              label: convertToI18n(cta.label),
               image: cta.image,
               link: cta.link,
               order: cta.order ?? 0,
             }))
           : undefined,
         isEnabled:
-          data.heroSection.isEnabled !== undefined
-            ? data.heroSection.isEnabled
+          translatedData.heroSection.isEnabled !== undefined
+            ? translatedData.heroSection.isEnabled
             : true,
-        order: data.heroSection.order ?? 0,
-        media: data.heroSection.media
+        order: translatedData.heroSection.order ?? 0,
+        media: translatedData.heroSection.media
           ? {
-              ...data.heroSection.media,
+              ...translatedData.heroSection.media,
             }
           : undefined,
       },
-      isActive: data.isActive ?? true,
-      createdBy: data.createdBy,
+      isActive: translatedData.isActive ?? true,
+      createdBy: translatedData.createdBy,
     };
 
     // Convert membership section strings to I18n format
-    if (data.membershipSection) {
+    if (translatedData.membershipSection) {
       landingPageData.membershipSection = {
-        backgroundImage: data.membershipSection.backgroundImage,
-        title:
-          typeof data.membershipSection.title === "string"
-            ? { en: data.membershipSection.title }
-            : data.membershipSection.title,
-        description: data.membershipSection.description
-          ? typeof data.membershipSection.description === "string"
-            ? { en: data.membershipSection.description }
-            : data.membershipSection.description
-          : undefined,
-        subTitle: data.membershipSection.subTitle
-          ? typeof data.membershipSection.subTitle === "string"
-            ? { en: data.membershipSection.subTitle }
-            : data.membershipSection.subTitle
-          : undefined,
-        benefits: Array.isArray(data.membershipSection.benefits)
-          ? data.membershipSection.benefits.map((benefit) => ({
+        backgroundImage: translatedData.membershipSection.backgroundImage,
+        title: convertToI18n(translatedData.membershipSection.title),
+        description: convertToI18n(translatedData.membershipSection.description),
+        subTitle: convertToI18n(translatedData.membershipSection.subTitle),
+        benefits: Array.isArray(translatedData.membershipSection.benefits)
+          ? translatedData.membershipSection.benefits.map((benefit: any) => ({
               icon: benefit.icon,
-              title:
-                typeof benefit.title === "string"
-                  ? { en: benefit.title }
-                  : (benefit as any).title,
-              description: benefit.description
-                ? typeof benefit.description === "string"
-                  ? { en: benefit.description }
-                  : (benefit as any).description
-                : undefined,
+              title: convertToI18n(benefit.title),
+              description: convertToI18n(benefit.description),
               order: benefit.order ?? 0,
             }))
           : undefined,
         isEnabled:
-          data.membershipSection.isEnabled !== undefined
-            ? data.membershipSection.isEnabled
+          translatedData.membershipSection.isEnabled !== undefined
+            ? translatedData.membershipSection.isEnabled
             : true,
-        order: data.membershipSection.order ?? 0,
+        order: translatedData.membershipSection.order ?? 0,
       };
     }
 
     // Convert how it works section strings to I18n format
-    if (data.howItWorksSection && data.howItWorksSection.steps) {
+    if (translatedData.howItWorksSection && translatedData.howItWorksSection.steps) {
       landingPageData.howItWorksSection = {
-        title: data.howItWorksSection.title
-          ? typeof data.howItWorksSection.title === "string"
-            ? { en: data.howItWorksSection.title }
-            : (data.howItWorksSection as any).title
-          : undefined,
-        subTitle: data.howItWorksSection.subTitle
-          ? typeof data.howItWorksSection.subTitle === "string"
-            ? { en: data.howItWorksSection.subTitle }
-            : (data.howItWorksSection as any).subTitle
-          : undefined,
+        title: convertToI18n(translatedData.howItWorksSection.title),
+        subTitle: convertToI18n(translatedData.howItWorksSection.subTitle),
         stepsCount:
-          data.howItWorksSection.stepsCount ??
-          data.howItWorksSection.steps.length,
-        steps: data.howItWorksSection.steps.map((step) => ({
+          translatedData.howItWorksSection.stepsCount ??
+          translatedData.howItWorksSection.steps.length,
+        steps: translatedData.howItWorksSection.steps.map((step: any) => ({
           image: step.image,
-          title:
-            typeof step.title === "string" ? { en: step.title } : step.title,
-          description: step.description
-            ? typeof step.description === "string"
-              ? { en: step.description }
-              : step.description
-            : undefined,
+          title: convertToI18n(step.title),
+          description: convertToI18n(step.description),
           order: step.order || 0,
         })),
         isEnabled:
-          data.howItWorksSection.isEnabled !== undefined
-            ? data.howItWorksSection.isEnabled
+          translatedData.howItWorksSection.isEnabled !== undefined
+            ? translatedData.howItWorksSection.isEnabled
             : true,
-        order: data.howItWorksSection.order ?? 0,
+        order: translatedData.howItWorksSection.order ?? 0,
       };
     }
 
     // Convert product category section strings to I18n format
-    if (data.productCategorySection) {
+    if (translatedData.productCategorySection) {
       const productCategoryIds =
-        Array.isArray((data.productCategorySection as any).productCategoryIds) &&
-        (data.productCategorySection as any).productCategoryIds.length > 0
-          ? (data.productCategorySection as any).productCategoryIds.map(
+        Array.isArray((translatedData.productCategorySection as any).productCategoryIds) &&
+        (translatedData.productCategorySection as any).productCategoryIds.length > 0
+          ? (translatedData.productCategorySection as any).productCategoryIds.map(
               (id: string) => new mongoose.Types.ObjectId(id)
             )
           : undefined;
       landingPageData.productCategorySection = {
-        title:
-          typeof data.productCategorySection.title === "string"
-            ? { en: data.productCategorySection.title }
-            : data.productCategorySection.title,
-        description: data.productCategorySection.description
-          ? typeof data.productCategorySection.description === "string"
-            ? { en: data.productCategorySection.description }
-            : data.productCategorySection.description
-          : undefined,
-        subTitle: data.productCategorySection.subTitle
-          ? typeof data.productCategorySection.subTitle === "string"
-            ? { en: data.productCategorySection.subTitle }
-            : (data.productCategorySection as any).subTitle
-          : undefined,
+        title: convertToI18n(translatedData.productCategorySection.title),
+        description: convertToI18n(translatedData.productCategorySection.description),
+        subTitle: convertToI18n(translatedData.productCategorySection.subTitle),
         ...(productCategoryIds && { productCategoryIds }),
         isEnabled:
-          data.productCategorySection.isEnabled !== undefined
-            ? data.productCategorySection.isEnabled
+          translatedData.productCategorySection.isEnabled !== undefined
+            ? translatedData.productCategorySection.isEnabled
             : true,
-        order: data.productCategorySection.order ?? 0,
+        order: translatedData.productCategorySection.order ?? 0,
       };
     }
 
     // Community / Social Proof section
-    if (data.communitySection) {
+    if (translatedData.communitySection) {
       landingPageData.communitySection = {
-        backgroundImage: data.communitySection.backgroundImage,
-        title: data.communitySection.title
-          ? typeof data.communitySection.title === "string"
-            ? { en: data.communitySection.title }
-            : (data.communitySection as any).title
-          : undefined,
-        subTitle: data.communitySection.subTitle
-          ? typeof data.communitySection.subTitle === "string"
-            ? { en: data.communitySection.subTitle }
-            : (data.communitySection as any).subTitle
-          : undefined,
-        metrics: Array.isArray(data.communitySection.metrics)
-          ? data.communitySection.metrics.map((metric) => ({
-              label:
-                typeof metric.label === "string"
-                  ? { en: metric.label }
-                  : (metric as any).label,
+        backgroundImage: translatedData.communitySection.backgroundImage,
+        title: convertToI18n(translatedData.communitySection.title),
+        subTitle: convertToI18n(translatedData.communitySection.subTitle),
+        metrics: Array.isArray(translatedData.communitySection.metrics)
+          ? translatedData.communitySection.metrics.map((metric: any) => ({
+              label: convertToI18n(metric.label),
               value: metric.value,
               order: metric.order ?? 0,
             }))
           : undefined,
         isEnabled:
-          data.communitySection.isEnabled !== undefined
-            ? data.communitySection.isEnabled
+          translatedData.communitySection.isEnabled !== undefined
+            ? translatedData.communitySection.isEnabled
             : true,
-        order: data.communitySection.order ?? 0,
+        order: translatedData.communitySection.order ?? 0,
       };
     }
 
     // Convert mission section strings to I18n format
-    if (data.missionSection) {
+    if (translatedData.missionSection) {
       landingPageData.missionSection = {
-        backgroundImage: data.missionSection.backgroundImage,
-        title:
-          typeof data.missionSection.title === "string"
-            ? { en: data.missionSection.title }
-            : data.missionSection.title,
-        description: data.missionSection.description
-          ? typeof data.missionSection.description === "string"
-            ? { en: data.missionSection.description }
-            : data.missionSection.description
-          : undefined,
+        backgroundImage: translatedData.missionSection.backgroundImage,
+        title: convertToI18n(translatedData.missionSection.title),
+        description: convertToI18n(translatedData.missionSection.description),
         isEnabled:
-          data.missionSection.isEnabled !== undefined
-            ? data.missionSection.isEnabled
+          translatedData.missionSection.isEnabled !== undefined
+            ? translatedData.missionSection.isEnabled
             : true,
-        order: data.missionSection.order ?? 0,
+        order: translatedData.missionSection.order ?? 0,
       };
     }
 
     // Convert features section strings to I18n format
-    if (data.featuresSection && data.featuresSection.features) {
+    if (translatedData.featuresSection && translatedData.featuresSection.features) {
       landingPageData.featuresSection = {
-        title:
-          typeof data.featuresSection.title === "string"
-            ? { en: data.featuresSection.title }
-            : data.featuresSection.title,
-        description: data.featuresSection.description
-          ? typeof data.featuresSection.description === "string"
-            ? { en: data.featuresSection.description }
-            : data.featuresSection.description
-          : undefined,
-        subTitle: data.featuresSection.subTitle
-          ? typeof data.featuresSection.subTitle === "string"
-            ? { en: data.featuresSection.subTitle }
-            : (data.featuresSection as any).subTitle
-          : undefined,
-        features: data.featuresSection.features.map((feature) => ({
+        title: convertToI18n(translatedData.featuresSection.title),
+        description: convertToI18n(translatedData.featuresSection.description),
+        subTitle: convertToI18n(translatedData.featuresSection.subTitle),
+        features: translatedData.featuresSection.features.map((feature: any) => ({
           icon: feature.icon,
-          title:
-            typeof feature.title === "string"
-              ? { en: feature.title }
-              : feature.title,
-          description: feature.description
-            ? typeof feature.description === "string"
-              ? { en: feature.description }
-              : feature.description
-            : undefined,
+          title: convertToI18n(feature.title),
+          description: convertToI18n(feature.description),
           order: feature.order || 0,
         })),
         isEnabled:
-          data.featuresSection.isEnabled !== undefined
-            ? data.featuresSection.isEnabled
+          translatedData.featuresSection.isEnabled !== undefined
+            ? translatedData.featuresSection.isEnabled
             : true,
-        order: data.featuresSection.order ?? 0,
+        order: translatedData.featuresSection.order ?? 0,
       };
     }
 
     // Convert designed by science section strings to I18n format
-    if (data.designedByScienceSection && data.designedByScienceSection.steps) {
+    if (translatedData.designedByScienceSection && translatedData.designedByScienceSection.steps) {
       landingPageData.designedByScienceSection = {
-        title:
-          typeof data.designedByScienceSection.title === "string"
-            ? { en: data.designedByScienceSection.title }
-            : data.designedByScienceSection.title,
-        description: data.designedByScienceSection.description
-          ? typeof data.designedByScienceSection.description === "string"
-            ? { en: data.designedByScienceSection.description }
-            : data.designedByScienceSection.description
-          : undefined,
-        steps: data.designedByScienceSection.steps.map((step) => ({
+        title: convertToI18n(translatedData.designedByScienceSection.title),
+        description: convertToI18n(translatedData.designedByScienceSection.description),
+        steps: translatedData.designedByScienceSection.steps.map((step: any) => ({
           image: step.image,
-          title:
-            typeof step.title === "string" ? { en: step.title } : step.title,
-          description: step.description
-            ? typeof step.description === "string"
-              ? { en: step.description }
-              : step.description
-            : undefined,
+          title: convertToI18n(step.title),
+          description: convertToI18n(step.description),
           order: step.order || 0,
         })),
         isEnabled:
-          data.designedByScienceSection.isEnabled !== undefined
-            ? data.designedByScienceSection.isEnabled
+          translatedData.designedByScienceSection.isEnabled !== undefined
+            ? translatedData.designedByScienceSection.isEnabled
             : true,
-        order: data.designedByScienceSection.order ?? 0,
+        order: translatedData.designedByScienceSection.order ?? 0,
       };
     }
 
     // Testimonials Section
-    if (data.testimonialsSection) {
+    if (translatedData.testimonialsSection) {
       landingPageData.testimonialsSection = {
-        title: data.testimonialsSection.title
-          ? typeof data.testimonialsSection.title === "string"
-            ? { en: data.testimonialsSection.title }
-            : (data.testimonialsSection as any).title
-          : undefined,
-        subTitle: data.testimonialsSection.subTitle
-          ? typeof data.testimonialsSection.subTitle === "string"
-            ? { en: data.testimonialsSection.subTitle }
-            : (data.testimonialsSection as any).subTitle
-          : undefined,
+        title: convertToI18n(translatedData.testimonialsSection.title),
+        subTitle: convertToI18n(translatedData.testimonialsSection.subTitle),
         // Testimonials are not stored here, they will be fetched dynamically from ProductTestimonials model
         isEnabled:
-          data.testimonialsSection.isEnabled !== undefined
-            ? data.testimonialsSection.isEnabled
+          translatedData.testimonialsSection.isEnabled !== undefined
+            ? translatedData.testimonialsSection.isEnabled
             : true,
-        order: data.testimonialsSection.order ?? 0,
+        order: translatedData.testimonialsSection.order ?? 0,
       };
     }
 
     // Convert customer results section strings to I18n format
-    if (data.customerResultsSection) {
+    if (translatedData.customerResultsSection) {
       landingPageData.customerResultsSection = {
-        title:
-          typeof data.customerResultsSection.title === "string"
-            ? { en: data.customerResultsSection.title }
-            : data.customerResultsSection.title,
-        description: data.customerResultsSection.description
-          ? typeof data.customerResultsSection.description === "string"
-            ? { en: data.customerResultsSection.description }
-            : data.customerResultsSection.description
-          : undefined,
+        title: convertToI18n(translatedData.customerResultsSection.title),
+        description: convertToI18n(translatedData.customerResultsSection.description),
         isEnabled:
-          data.customerResultsSection.isEnabled !== undefined
-            ? data.customerResultsSection.isEnabled
+          translatedData.customerResultsSection.isEnabled !== undefined
+            ? translatedData.customerResultsSection.isEnabled
             : true,
-        order: data.customerResultsSection.order ?? 0,
+        order: translatedData.customerResultsSection.order ?? 0,
       };
     }
 
     // Convert blog section strings to I18n format
-    if (data.blogSection) {
+    if (translatedData.blogSection) {
       landingPageData.blogSection = {
-        title:
-          typeof data.blogSection.title === "string"
-            ? { en: data.blogSection.title }
-            : data.blogSection.title,
-        description: data.blogSection.description
-          ? typeof data.blogSection.description === "string"
-            ? { en: data.blogSection.description }
-            : data.blogSection.description
-          : undefined,
+        title: convertToI18n(translatedData.blogSection.title),
+        description: convertToI18n(translatedData.blogSection.description),
         isEnabled:
-          data.blogSection.isEnabled !== undefined
-            ? data.blogSection.isEnabled
+          translatedData.blogSection.isEnabled !== undefined
+            ? translatedData.blogSection.isEnabled
             : true,
-        order: data.blogSection.order ?? 0,
+        order: translatedData.blogSection.order ?? 0,
       };
     }
 
     // Convert FAQ section strings to I18n format
     // FAQs will be fetched dynamically from FAQs model (latest 8)
-    if (data.faqSection) {
+    if (translatedData.faqSection) {
       landingPageData.faqSection = {
-        title:
-          typeof data.faqSection.title === "string"
-            ? { en: data.faqSection.title }
-            : data.faqSection.title,
-        description: data.faqSection.description
-          ? typeof data.faqSection.description === "string"
-            ? { en: data.faqSection.description }
-            : data.faqSection.description
-          : undefined,
+        title: convertToI18n(translatedData.faqSection.title),
+        description: convertToI18n(translatedData.faqSection.description),
         // FAQs are not stored here, they will be fetched dynamically from FAQs model
         isEnabled:
-          data.faqSection.isEnabled !== undefined
-            ? data.faqSection.isEnabled
+          translatedData.faqSection.isEnabled !== undefined
+            ? translatedData.faqSection.isEnabled
             : true,
-        order: data.faqSection.order ?? 0,
+        order: translatedData.faqSection.order ?? 0,
       };
     }
 
@@ -950,7 +893,7 @@ class LandingPageService {
       .sort({ createdAt: -1 })
       .lean();
     const t1 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(`[Landing Page] DB: LandingPages.findOne took ${t1 - t0}ms`);
     }
 
@@ -971,7 +914,7 @@ class LandingPageService {
     const withTiming = (label: string, p: Promise<any>) => {
       const start = Date.now();
       return p.finally(() => {
-        if (process.env.NODE_ENV !== "test") {
+        if (config.server.nodeEnv !== "test") {
           logger.info(`[Landing Page] DB: ${label} took ${Date.now() - start}ms`);
         }
       });
@@ -1039,7 +982,7 @@ class LandingPageService {
           : Promise.resolve([]),
       ]);
     const t2 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] DB: Promise.all(categories,blogs,faqs,testimonials) took ${t2 - t1}ms`
       );
@@ -1380,7 +1323,7 @@ class LandingPageService {
       const authorIds = (blogsResult as any[])
         .map((b) => b.authorId)
         .filter((id) => id && mongoose.Types.ObjectId.isValid(id));
-      const uniqueAuthorIds = [...new Set(authorIds.map((id: any) => id.toString()))];
+      const uniqueAuthorIds = Array.from(new Set(authorIds.map((id: any) => id.toString())));
       let authorMap = new Map<string, { firstName?: string; lastName?: string }>();
       if (uniqueAuthorIds.length > 0) {
         const authors = await User.find({
@@ -1513,7 +1456,7 @@ class LandingPageService {
     processedLandingPage.sectionOrder = sections.map((s) => s.name);
 
     const t3 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] Sections build (testimonials/ingredients/wishlist) took ${t3 - t2}ms`
       );
@@ -1526,7 +1469,7 @@ class LandingPageService {
     );
 
     const t4 = Date.now();
-    if (process.env.NODE_ENV !== "test") {
+    if (config.server.nodeEnv !== "test") {
       logger.info(
         `[Landing Page] transformToLanguage took ${t4 - t3}ms | total ${t4 - t0}ms`
       );
@@ -1816,7 +1759,7 @@ class LandingPageService {
   }
 
   /**
-   * Update landing page
+   * Update landing page with automatic multi-language translation
    */
   async updateLandingPage(
     landingPageId: string,
@@ -1831,10 +1774,62 @@ class LandingPageService {
       throw new AppError("Landing page not found", 404);
     }
 
+    logger.info(`[Landing Page Service] Updating landing page with automatic translation: ${landingPageId}`);
+
+    // Define all I18n string and text fields for translation (same as create)
+    const i18nStringFields = [
+      "heroSection.title",
+      "heroSection.subTitle",
+      "heroSection.highlightedText",
+      "heroSection.primaryCTA",
+      "membershipSection.title",
+      "membershipSection.subTitle",
+      "membershipSection.benefits",
+      "howItWorksSection.title",
+      "howItWorksSection.subTitle",
+      "howItWorksSection.steps",
+      "productCategorySection.title",
+      "productCategorySection.subTitle",
+      "communitySection.title",
+      "communitySection.subTitle",
+      "communitySection.metrics",
+      "missionSection.title",
+      "featuresSection.title",
+      "featuresSection.subTitle",
+      "featuresSection.features",
+      "designedByScienceSection.title",
+      "designedByScienceSection.steps",
+      "testimonialsSection.title",
+      "testimonialsSection.subTitle",
+      "customerResultsSection.title",
+      "blogSection.title",
+      "faqSection.title"
+    ];
+
+    const i18nTextFields = [
+      "heroSection.description",
+      "membershipSection.description",
+      "membershipSection.benefits",
+      "howItWorksSection.steps",
+      "productCategorySection.description",
+      "communitySection.subTitle",
+      "missionSection.description",
+      "featuresSection.description",
+      "featuresSection.features",
+      "designedByScienceSection.description",
+      "designedByScienceSection.steps",
+      "customerResultsSection.description",
+      "blogSection.description",
+      "faqSection.description"
+    ];
+
+    // Translate data to all supported languages
+    const translatedData = await prepareDataForTranslation(data, i18nStringFields, i18nTextFields);
+
     // Update fields
     // Rule: Non-image fields that are NOT in request -> empty/remove
     // Image fields that are NOT in request -> preserve existing
-    if (data.heroSection) {
+    if (data.heroSection && translatedData.heroSection) {
       // Image fields: only update if explicitly provided
       if (data.heroSection.media !== undefined) {
         if (data.heroSection.media) {
@@ -1859,52 +1854,34 @@ class LandingPageService {
         (landingPage.heroSection as any).backgroundImage = data.heroSection.backgroundImage ?? "";
       }
       
-      // Non-image fields: update if provided, else empty
+      // Non-image fields: update if provided, else empty (now using translated data)
       if (data.heroSection.title !== undefined) {
-        if (data.heroSection.title) {
-          const existingTitle = landingPage.heroSection.title as any;
-          const titleObj =
-            existingTitle &&
-            typeof existingTitle === "object" &&
-            !Array.isArray(existingTitle)
-              ? (existingTitle as Record<string, any>)
-              : {};
-          (landingPage.heroSection.title as any) =
-            typeof data.heroSection.title === "string"
-              ? { ...titleObj, en: data.heroSection.title }
-              : {
-                  ...titleObj,
-                  ...(data.heroSection.title as Record<string, any>),
-                };
+        if (translatedData.heroSection.title) {
+          const convertedTitle = convertToI18n(translatedData.heroSection.title);
+          (landingPage.heroSection.title as any) = convertedTitle || {};
         } else {
           (landingPage.heroSection.title as any) = {};
         }
       }
       if (data.heroSection.description !== undefined) {
-        if (data.heroSection.description) {
-          const existingDesc = landingPage.heroSection.description as any;
-          const descObj =
-            existingDesc &&
-            typeof existingDesc === "object" &&
-            !Array.isArray(existingDesc)
-              ? (existingDesc as Record<string, any>)
-              : {};
-          (landingPage.heroSection.description as any) =
-            typeof data.heroSection.description === "string"
-              ? { ...descObj, en: data.heroSection.description }
-              : {
-                  ...descObj,
-                  ...(data.heroSection.description as Record<string, any>),
-                };
+        if (translatedData.heroSection.description) {
+          const convertedDesc = convertToI18n(translatedData.heroSection.description);
+          (landingPage.heroSection.description as any) = convertedDesc || {};
         } else {
           (landingPage.heroSection.description as any) = {};
         }
       }
+      if (data.heroSection.subTitle !== undefined) {
+        if (translatedData.heroSection.subTitle) {
+          const convertedSubTitle = convertToI18n(translatedData.heroSection.subTitle);
+          (landingPage.heroSection.subTitle as any) = convertedSubTitle || {};
+        } else {
+          (landingPage.heroSection.subTitle as any) = {};
+        }
+      }
       if (data.heroSection.highlightedText !== undefined) {
-        (landingPage.heroSection.highlightedText as any) = Array.isArray(data.heroSection.highlightedText)
-          ? data.heroSection.highlightedText.map((text: any) =>
-              typeof text === "string" ? { en: text } : text
-            )
+        (landingPage.heroSection.highlightedText as any) = Array.isArray(translatedData.heroSection.highlightedText)
+          ? translatedData.heroSection.highlightedText.map((text: any) => convertToI18n(text))
           : [];
       }
       if (data.heroSection.isEnabled !== undefined) {
@@ -1914,24 +1891,25 @@ class LandingPageService {
         (landingPage.heroSection as any).order = data.heroSection.order;
       }
       
-      // Primary CTA: update if provided, preserve images if not provided
+      // Primary CTA: update if provided, preserve images if not provided (using translated data)
       if (Array.isArray(data.heroSection.primaryCTA)) {
         const existingCTA = (landingPage.heroSection as any).primaryCTA || [];
         const maxLen = Math.max(existingCTA.length, data.heroSection.primaryCTA.length, 3);
         const updatedCTA: any[] = [];
         for (let index = 0; index < maxLen; index++) {
           const cta = data.heroSection.primaryCTA[index];
+          const translatedCTA = translatedData.heroSection.primaryCTA?.[index];
           const existing = existingCTA[index] || {};
           if (cta === undefined) {
             updatedCTA.push(existing);
             continue;
           }
-          // Non-image fields: update if provided, else empty
+          // Non-image fields: update if provided, else empty (using translated data)
           const label =
             cta.label !== undefined
-              ? typeof cta.label === "string"
-                ? { en: cta.label }
-                : (cta as any).label ?? {}
+              ? translatedCTA?.label
+                ? convertToI18n(translatedCTA.label)
+                : {}
               : {};
           const link = cta.link !== undefined ? cta.link : "";
           const order = cta.order !== undefined ? cta.order : index;

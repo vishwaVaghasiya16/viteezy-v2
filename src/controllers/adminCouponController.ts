@@ -339,7 +339,7 @@ class AdminCouponController {
 
       const totalDiscountCurrent = totalDiscountAmountCurrentMonth[0]?.total || 0;
       const totalDiscountLast = totalDiscountAmountLastMonth[0]?.total || 0;
-      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "EUR";
+      const currency = totalDiscountAmountCurrentMonth[0]?.currency || "USD";
 
       res.apiSuccess(
         {
@@ -380,25 +380,47 @@ class AdminCouponController {
     async (req: Request, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { status, search, type, expiryDateFrom, expiryDateTo } = req.query as {
-        status?: "active" | "inactive" | "all";
+        status?: "active" | "inactive" | "all" | "expired";
         search?: string;
         type?: CouponType;
         expiryDateFrom?: string;
         expiryDateTo?: string;
       };
 
+      console.log('🔍 [COUPON FILTER] Request received:', {
+        status,
+        search,
+        type,
+        expiryDateFrom,
+        expiryDateTo,
+        page,
+        limit
+      });
+
       const filter: Record<string, any> = {
         isDeleted: false,
       };
 
+      const now = new Date();
+      console.log('📅 [COUPON FILTER] Current time for comparison:', now.toISOString());
+
+      // Status filter with proper validUntil-based expired logic
       if (status === "active") {
         filter.isActive = true;
+        filter.validUntil = { $gt: now }; // Not expired
+        console.log('✅ [COUPON FILTER] Active filter applied:', { isActive: true, validUntil: { $gt: now } });
       } else if (status === "inactive") {
         filter.isActive = false;
+        console.log('🟡 [COUPON FILTER] Inactive filter applied:', { isActive: false });
+      } else if (status === "expired") {
+        // Expired: ALL coupons (active or inactive) where validUntil is in the past
+        filter.validUntil = { $lte: now }; // Expired based on validUntil, regardless of isActive
+        console.log('🔴 [COUPON FILTER] Expired filter applied:', { validUntil: { $lte: now }, note: "Includes both active and inactive expired coupons" });
       }
 
       if (type) {
         filter.type = type;
+        console.log('🏷️ [COUPON FILTER] Type filter applied:', { type });
       }
 
       if (search) {
@@ -407,27 +429,33 @@ class AdminCouponController {
           { "name.en": { $regex: search, $options: "i" } },
           { "name.nl": { $regex: search, $options: "i" } },
         ];
+        console.log('🔎 [COUPON FILTER] Search filter applied:', { search });
       }
 
       // Filter by expiry date range
       if (expiryDateFrom || expiryDateTo) {
-        filter.validUntil = {};
         if (expiryDateFrom) {
           const fromDate = new Date(expiryDateFrom);
           fromDate.setHours(0, 0, 0, 0);
-          filter.validUntil.$gte = fromDate;
+          filter.validUntil = { ...filter.validUntil, $gte: fromDate };
+          console.log('📅 [COUPON FILTER] Expiry date FROM filter:', { $gte: fromDate });
         }
         if (expiryDateTo) {
           const toDate = new Date(expiryDateTo);
           toDate.setHours(23, 59, 59, 999);
-          filter.validUntil.$lte = toDate;
+          filter.validUntil = { ...filter.validUntil, $lte: toDate };
+          console.log('📅 [COUPON FILTER] Expiry date TO filter:', { $lte: toDate });
         }
       }
+
+      console.log('🔍 [COUPON FILTER] Final filter object:', JSON.stringify(filter, null, 2));
 
       const sortOptions: Record<string, 1 | -1> = {
         createdAt: -1,
         ...((sort as Record<string, 1 | -1>) || {}),
       };
+
+      console.log('📊 [COUPON FILTER] Executing database query...');
 
       const [coupons, total] = await Promise.all([
         Coupons.find(filter)
@@ -441,8 +469,25 @@ class AdminCouponController {
         Coupons.countDocuments(filter),
       ]);
 
+      console.log('📈 [COUPON FILTER] Query results:', {
+        totalFound: total,
+        returnedCount: coupons.length,
+        status: status || 'all'
+      });
+
+      // Log details of found coupons for debugging
+      if (coupons.length > 0) {
+        console.log('📋 [COUPON FILTER] Found coupons details:');
+        coupons.forEach((coupon, index) => {
+          console.log(`  ${index + 1}. ${coupon.code} - Active: ${coupon.isActive}, ValidUntil: ${coupon.validUntil || 'Not set'}, Type: ${coupon.type}`);
+        });
+      } else {
+        console.log('⚠️ [COUPON FILTER] No coupons found with current filter');
+      }
+
       const pagination = getPaginationMeta(page, limit, total);
 
+      console.log('✅ [COUPON FILTER] Response sent successfully');
       res.apiPaginated(coupons, pagination, "Coupons retrieved");
     }
   );
@@ -676,7 +721,7 @@ class AdminCouponController {
     async (req: Request, res: Response): Promise<void> => {
       const { page, limit, skip } = getPaginationOptions(req);
       const { status, search, expiryDateFrom, expiryDateTo, couponId } = req.query as {
-        status?: "active" | "inactive" | "all";
+        status?: "active" | "inactive" | "all" | "expired";
         search?: string;
         expiryDateFrom?: string;
         expiryDateTo?: string;
@@ -710,11 +755,14 @@ class AdminCouponController {
       // Build coupon filter - only apply if filters are provided
       const couponFilters: any[] = [];
 
-      // Filter by status if provided
+      // Filter by status if provided (based on validUntil)
       if (status === "active") {
         couponFilters.push({
           $or: [
-            { "coupon.isActive": true },
+            { 
+              "coupon.isActive": true, 
+              "coupon.validUntil": { $gt: new Date() } 
+            },
             { coupon: { $exists: false } },
             { coupon: null },
           ],
@@ -727,6 +775,18 @@ class AdminCouponController {
             { coupon: null },
           ],
         });
+      } else if (status === "expired") {
+        // Expired: ALL coupons (active or inactive) where validUntil is in the past
+        couponFilters.push({
+          $or: [
+            { 
+              "coupon.validUntil": { $lte: new Date() } 
+            },
+            { coupon: { $exists: false } },
+            { coupon: null },
+          ],
+        });
+        console.log('🔴 [USAGE LOGS] Expired filter applied: All coupons with validUntil in past');
       }
 
       // Filter by expiry date if provided

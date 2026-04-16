@@ -77,7 +77,7 @@ const ReferralSchema = new Schema<IReferral>(
       currency: {
         type: String,
         required: true,
-        default: "EUR",
+        default: "USD",
       },
     },
     minOrderAmount: {
@@ -89,7 +89,7 @@ const ReferralSchema = new Schema<IReferral>(
       currency: {
         type: String,
         required: true,
-        default: "EUR",
+        default: "USD",
       },
     },
     referredDiscountApplied: {
@@ -107,7 +107,7 @@ const ReferralSchema = new Schema<IReferral>(
       },
       currency: {
         type: String,
-        default: "EUR",
+        default: "USD",
       },
     },
     ...SoftDelete,

@@ -56,12 +56,26 @@ export const getPostponementHistoryQuerySchema = Joi.object(
 
 /**
  * Admin: list all postponement requests query
+ * Filters: status, plan (cycleDays), currentDate, requestedDate, search
  */
 export const adminListPostponementsQuerySchema = Joi.object(
   withFieldLabels({
     status: Joi.string()
       .valid(...POSTPONEMENT_STATUS_VALUES)
       .optional(),
+    plan: Joi.string()
+      .valid("30", "60", "90", "180")
+      .optional()
+      .messages({
+        "any.only": "Plan must be 30, 60, 90, or 180 (cycle days)",
+      }),
+    currentDate: Joi.date().iso().optional().messages({
+      "date.format": "Current date must be a valid ISO date",
+    }),
+    requestedDate: Joi.date().iso().optional().messages({
+      "date.format": "Requested date must be a valid ISO date",
+    }),
+    search: Joi.string().trim().max(200).allow("").optional(),
     page: Joi.number().integer().min(1).optional(),
     limit: Joi.number().integer().min(1).max(100).optional(),
   })
@@ -98,3 +112,15 @@ export const adminPostponementIdParamsSchema = Joi.object(
     id: objectIdSchema.required(),
   })
 ).label("AdminPostponementIdParams");
+
+/**
+ * Admin: update approved delivery date (only when postponement is already approved)
+ */
+export const adminUpdateApprovedDateSchema = Joi.object(
+  withFieldLabels({
+    approvedDeliveryDate: Joi.date().iso().required().messages({
+      "date.format": "approvedDeliveryDate must be a valid ISO date",
+      "any.required": "approvedDeliveryDate is required",
+    }),
+  })
+).label("AdminUpdateApprovedDatePayload");

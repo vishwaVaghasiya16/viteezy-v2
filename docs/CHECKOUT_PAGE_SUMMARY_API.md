@@ -60,7 +60,7 @@ Content-Type: application/json
           "variant": "SACHETS",
           "quantity": 2,
           "basePlanPrice": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 89.99,
             "discountedPrice": 76.49,
             "planType": "90 Day Plan"
@@ -114,7 +114,7 @@ Content-Type: application/json
       "totalDiscountAmount": 58.15,
       "savePercentage": 15,
       "grandTotal": 246.8,
-      "currency": "EUR"
+      "currency": "USD"
     },
     "coupon": {
       "code": "SAVE15",

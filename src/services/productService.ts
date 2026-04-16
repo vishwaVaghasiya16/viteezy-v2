@@ -2,8 +2,9 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { ProductCategory } from "../models/commerce/categories.model";
-import { Orders } from "../models/commerce/orders.model";
 import { ProductFAQs } from "../models/commerce/productFaqs.model";
+import { IngredientComposition } from "../models/commerce/ingredientComposition.model";
+import { IngredientCompositionService } from "./ingredientComposition.service";
 import {
   ProductStatus,
   ProductVariant,
@@ -38,6 +39,11 @@ interface CreateProductData {
   productImage: string;
   benefits: string[];
   ingredients: string[];
+  ingredientCompositions?: Array<{
+    ingredient: string;
+    quantity: number;
+    driPercentage: number | string;
+  }>;
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo: string;
@@ -101,25 +107,13 @@ interface CreateProductData {
       features?: string[];
       icon?: string;
     };
-    oneTime: {
-      count30: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-      count60: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-    };
   };
   standupPouchPrice?: {
-    currency: string;
-    amount: number;
-    taxRate: number;
+    currency?: string;
+    amount?: number;
+    taxRate?: number;
+    count_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Add Product screen
@@ -140,6 +134,7 @@ interface CreateProductData {
     answer: string | I18nTextType;
   }>;
   createdBy?: mongoose.Types.ObjectId;
+  updatedBy?: mongoose.Types.ObjectId;
 }
 
 interface UpdateProductData {
@@ -149,6 +144,11 @@ interface UpdateProductData {
   productImage?: string;
   benefits?: string[];
   ingredients?: string[];
+  ingredientCompositions?: Array<{
+    ingredient: string;
+    quantity: number;
+    driPercentage: number | string;
+  }>;
   categories?: string[];
   healthGoals?: string[];
   nutritionInfo?: string;
@@ -212,25 +212,13 @@ interface UpdateProductData {
       features?: string[];
       icon?: string;
     };
-    oneTime: {
-      count30: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-      count60: {
-        currency: string;
-        amount: number;
-        taxRate: number;
-        capsuleCount?: number;
-      };
-    };
   };
   standupPouchPrice?: {
-    currency: string;
-    amount: number;
-    taxRate: number;
+    currency?: string;
+    amount?: number;
+    taxRate?: number;
+    count_0?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
+    count_1?: { currency: string; amount: number; taxRate: number; capsuleCount?: number; discountedPrice?: number; features?: any[] };
   };
   standupPouchImages?: string[];
   // New fields for admin Edit Product screen
@@ -319,14 +307,6 @@ class ProductService {
       }
     }
 
-    // Process oneTime
-    if (sachetPrices.oneTime) {
-      processed.oneTime = {
-        count30: this.processPriceObject(sachetPrices.oneTime.count30),
-        count60: this.processPriceObject(sachetPrices.oneTime.count60),
-      };
-    }
-
     return processed;
   }
 
@@ -338,11 +318,11 @@ class ProductService {
       return standupPouchPrice;
     }
 
-    // If it has count30 and count60 structure
-    if (standupPouchPrice.count30 || standupPouchPrice.count60) {
+    // If it has count_0 / count_1 structure
+    if (standupPouchPrice.count_0 || standupPouchPrice.count_1) {
       return {
-        count30: this.processPriceObject(standupPouchPrice.count30),
-        count60: this.processPriceObject(standupPouchPrice.count60),
+        count_0: standupPouchPrice.count_0 ? this.processPriceObject(standupPouchPrice.count_0) : undefined,
+        count_1: standupPouchPrice.count_1 ? this.processPriceObject(standupPouchPrice.count_1) : undefined,
       };
     }
 
@@ -449,7 +429,7 @@ class ProductService {
           ? thirtyDaysPrice.discountedPrice
           : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
-        currency: thirtyDaysPrice.currency || "EUR",
+        currency: thirtyDaysPrice.currency || "USD",
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
@@ -460,23 +440,11 @@ class ProductService {
       logger.warn(`[Create Product] No price provided and cannot derive from sachetPrices`);
     }
 
-    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
-    let normalizedStandupPouchPrice = standupPouchPrice;
-    if (
-      standupPouchPrice &&
-      typeof standupPouchPrice === "object" &&
-      "oneTime" in standupPouchPrice
-    ) {
-      logger.info(`[Create Product] Normalizing standupPouchPrice (unwrapping oneTime wrapper)`);
-      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
-      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
-    }
-
-    // Process standupPouchPrice: calculate savingsPercentage and totalAmount
-    let processedStandupPouchPrice = normalizedStandupPouchPrice;
-    if (normalizedStandupPouchPrice) {
+    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (count_0 / count_1)
+    let processedStandupPouchPrice = standupPouchPrice;
+    if (standupPouchPrice) {
       logger.info(`[Create Product] Processing standupPouchPrice`);
-      processedStandupPouchPrice = this.processStandupPouchPrice(normalizedStandupPouchPrice);
+      processedStandupPouchPrice = this.processStandupPouchPrice(standupPouchPrice);
       logger.debug(`[Create Product] Standup pouch price processed successfully`);
     }
 
@@ -529,6 +497,31 @@ class ProductService {
         logger.info(`[Create Product] Successfully updated ingredient documents with product ID`);
       } catch (error: any) {
         logger.error(`[Create Product] Failed to update ingredient documents: ${error.message}`, error);
+        // Don't throw error, just log it - product is already created
+      }
+    }
+
+    // Handle ingredient compositions if provided
+    const ingredientCompositions = data.ingredientCompositions || [];
+    if (ingredientCompositions.length > 0 && product._id) {
+      logger.info(`[Create Product] Creating ${ingredientCompositions.length} ingredient compositions for product ${product._id}`);
+      try {
+        const compositionsData = ingredientCompositions.map(comp => ({
+          product: product._id,
+          ingredient: comp.ingredient,
+          quantity: comp.quantity,
+          driPercentage: comp.driPercentage,
+          createdBy: data.createdBy
+        }));
+        
+        await IngredientCompositionService.bulkUpdateCompositions(
+          product._id.toString(),
+          compositionsData,
+          data.createdBy?.toString()
+        );
+        logger.info(`[Create Product] Successfully created ingredient compositions for product ${product._id}`);
+      } catch (error: any) {
+        logger.error(`[Create Product] Failed to create ingredient compositions: ${error.message}`, error);
         // Don't throw error, just log it - product is already created
       }
     }
@@ -655,9 +648,12 @@ class ProductService {
 
     // If we have names, look them up (case-insensitive)
     if (names.length > 0) {
+      console.log(`[DEBUG] Looking up ingredients by names: ${names.join(', ')}`);
       const caseInsensitiveRegex = names.map(
-        (name) => new RegExp(`^${name}$`, "i")
+        (name) => new RegExp(name, "i") // Remove ^ and $ for partial match
       );
+      console.log(`[DEBUG] Generated regex patterns:`, caseInsensitiveRegex.map(r => r.toString()));
+      
       const ingredients = await ProductIngredients.find({
         $or: [
           { "name.en": { $in: caseInsensitiveRegex } },
@@ -669,13 +665,16 @@ class ProductService {
         isDeleted: { $ne: true },
         isActive: true,
       })
-        .select("_id")
+        .select("_id name")
         .lean();
+
+      console.log(`[DEBUG] Found ingredients:`, ingredients.map(ing => ({ id: ing._id, name: ing.name })));
 
       const foundIds = ingredients.map((ing: any) => ing._id.toString());
       ids.push(...foundIds);
     }
 
+    console.log(`[DEBUG] Final resolved ingredient IDs: ${ids.join(', ')}`);
     return ids;
   }
 
@@ -689,7 +688,7 @@ class ProductService {
     sort: Record<string, 1 | -1>,
     filters: {
       search?: string;
-      status?: ProductStatus;
+      status?: boolean;
       variant?: ProductVariant;
       hasStandupPouch?: boolean;
       categories?: string[];
@@ -717,12 +716,19 @@ class ProductService {
       isDeleted: false,
     };
 
-    // If includeInactive (admin), skip status filter; else if status provided use it, else only active
-    if (!includeInactive) {
+    // If includeInactive (admin), apply status filter if provided; else if status provided use it, else only active
+    if (includeInactive) {
+      // Admin mode: include inactive products, but still apply status filter if provided
+      if (status !== undefined) {
+        matchStage.status = status;
+      }
+      // If no status provided, don't filter by status (return all active and inactive)
+    } else {
+      // Public mode: always filter by status
       if (status !== undefined) {
         matchStage.status = status;
       } else {
-        matchStage.status = true;
+        matchStage.status = true; // Default to active only for public
       }
     }
 
@@ -769,11 +775,13 @@ class ProductService {
       };
     }
 
-    // Resolve ingredients from names to string IDs
-    let ingredientIds: string[] = [];
+    // Resolve ingredients from names to ObjectIds
+    let ingredientIds: mongoose.Types.ObjectId[] = [];
     if (ingredients?.length) {
-      ingredientIds = await this.resolveIngredientIds(ingredients);
-      if (ingredientIds.length > 0) {
+      const resolvedIds = await this.resolveIngredientIds(ingredients);
+      if (resolvedIds.length > 0) {
+        // Convert string IDs to ObjectIds to match product model
+        ingredientIds = resolvedIds.map(id => new mongoose.Types.ObjectId(id));
         matchStage.ingredients = { $all: ingredientIds };
       } else {
         // If no ingredients found, return empty result
@@ -1191,7 +1199,10 @@ class ProductService {
       }
     );
 
-    return { products: productsWithVariants, total };
+    const productsWithIngredientCompositions =
+      await this.attachIngredientCompositionsToProducts(productsWithVariants);
+
+    return { products: productsWithIngredientCompositions, total };
   }
 
   /**
@@ -1299,8 +1310,13 @@ class ProductService {
       allProducts = [...allProducts, ...recentWithIngredients];
     }
 
+    const productsWithIngredientCompositions =
+      await this.attachIngredientCompositionsToProducts(
+        allProducts.slice(0, MAX_PRODUCTS)
+      );
+
     return {
-      products: allProducts.slice(0, MAX_PRODUCTS), // Ensure max 10 products
+      products: productsWithIngredientCompositions, // Ensure max 10 products
       isFeatured: hasFeatured,
     };
   }
@@ -1394,6 +1410,10 @@ class ProductService {
       ? ingredientDetails 
       : (linkedProductIngredients.length > 0 ? linkedProductIngredients : []);
 
+    const ingredientCompositions = await this.getIngredientCompositionsByProductId(
+      productId
+    );
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
@@ -1401,6 +1421,7 @@ class ProductService {
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
+      ingredientCompositions,
     });
 
     // Add variants array to product
@@ -1476,6 +1497,10 @@ class ProductService {
       sortOrder: faq.sortOrder ?? 0,
     }));
 
+    const ingredientCompositions = await this.getIngredientCompositionsByProductId(
+      product._id.toString()
+    );
+
     // Calculate monthly amount for subscription prices if totalAmount is provided
     const enrichedProduct = this.calculateMonthlyAmounts({
       ...product,
@@ -1483,6 +1508,7 @@ class ProductService {
       variants: variants || [],
       productIngredientDetails: linkedProductIngredients || [],
       faqs: productFAQs || [], // Add FAQs to product
+      ingredientCompositions,
     });
 
     // Add variants array to product
@@ -1511,6 +1537,17 @@ class ProductService {
     if (!existingProduct) {
       throw new AppError("Product not found", 404);
     }
+
+    logger.info("[Update Product] Incoming update payload (high level)", {
+      productId,
+      hasSpecification: (data as any).specification !== undefined,
+      specificationFromRequest: (data as any).specification,
+    });
+
+    logger.info("[Update Product] Existing product specification before merge", {
+      productId,
+      existingSpecification: (existingProduct as any).specification,
+    });
 
     // Check if slug is being changed and if new slug already exists
     if (slug && slug !== existingProduct.slug) {
@@ -1543,22 +1580,11 @@ class ProductService {
         ? this.processSachetPrices(sachetPrices)
         : sachetPrices;
 
-    // Normalize standupPouchPrice: if it has oneTime wrapper, unwrap it for storage
-    let normalizedStandupPouchPrice = standupPouchPrice;
-    if (
-      standupPouchPrice &&
-      typeof standupPouchPrice === "object" &&
-      "oneTime" in standupPouchPrice
-    ) {
-      // If structure is { oneTime: { count30, count60 } }, unwrap it to { count30, count60 }
-      normalizedStandupPouchPrice = (standupPouchPrice as any).oneTime;
-    }
-
-    // Process standupPouchPrice: calculate savingsPercentage and totalAmount (if being updated)
+    // Process standupPouchPrice: count_0 / count_1 (if being updated)
     const processedStandupPouchPrice =
-      normalizedStandupPouchPrice !== undefined
-        ? this.processStandupPouchPrice(normalizedStandupPouchPrice)
-        : normalizedStandupPouchPrice;
+      standupPouchPrice !== undefined
+        ? this.processStandupPouchPrice(standupPouchPrice)
+        : standupPouchPrice;
 
     // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
@@ -1573,7 +1599,7 @@ class ProductService {
           ? thirtyDaysPrice.discountedPrice
           : thirtyDaysPrice.amount || thirtyDaysPrice.totalAmount || 0;
       finalPrice = {
-        currency: thirtyDaysPrice.currency || "EUR",
+        currency: thirtyDaysPrice.currency || "USD",
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
@@ -1648,18 +1674,75 @@ class ProductService {
 
     // Merge specification with existing so partial update does not wipe other fields
     if ((data as any).specification !== undefined) {
+      // Ensure we always work with plain JS objects (no Mongoose subdocument metadata)
+      const rawExistingSpec: any = (existingProduct as any).specification;
       const existingSpec: Record<string, any> =
-        existingProduct.specification && typeof existingProduct.specification === "object"
-          ? { ...(existingProduct.specification as Record<string, any>) }
+        rawExistingSpec && typeof rawExistingSpec === "object"
+          ? typeof rawExistingSpec.toObject === "function"
+            ? rawExistingSpec.toObject()
+            : JSON.parse(JSON.stringify(rawExistingSpec))
           : {};
-      const incoming = (data as any).specification as Record<string, any>;
-      const mergedSpec = { ...existingSpec };
-      Object.keys(incoming).forEach((k) => {
-        if (incoming[k] !== undefined) {
-          (mergedSpec as Record<string, any>)[k] = incoming[k];
+
+      const incomingSpec = (data as any).specification as Record<string, any>;
+      const mergedSpec: Record<string, any> = { ...existingSpec };
+
+      Object.keys(incomingSpec).forEach((key) => {
+        const value = incomingSpec[key];
+
+        // Deep-merge specification.items so that:
+        // - Titles/descriptions can be updated
+        // - Image fields (image, imageMobile) are only replaced when a new value is provided
+        if (key === "items" && Array.isArray(value)) {
+          const existingItems = Array.isArray(existingSpec.items)
+            ? existingSpec.items
+            : [];
+          const incomingItems = value;
+          const mergedItems: any[] = [];
+          const maxLen = Math.max(existingItems.length, incomingItems.length);
+
+          for (let i = 0; i < maxLen; i++) {
+            const existingItem = existingItems[i] || {};
+            const incomingItem = incomingItems[i];
+
+            if (incomingItem === undefined || incomingItem === null) {
+              if (Object.keys(existingItem).length > 0) {
+                mergedItems[i] = existingItem;
+              }
+              continue;
+            }
+
+            const mergedItem: Record<string, any> = { ...existingItem };
+
+            Object.keys(incomingItem).forEach((itemKey) => {
+              const itemVal = (incomingItem as Record<string, any>)[itemKey];
+              // Ignore undefined/null/empty-string so existing values (including images) are preserved
+              if (itemVal !== undefined && itemVal !== null && itemVal !== "") {
+                mergedItem[itemKey] = itemVal;
+              }
+            });
+
+            mergedItems[i] = mergedItem;
+          }
+
+          mergedSpec.items = mergedItems.filter(
+            (item) => item && Object.keys(item).length > 0
+          );
+        } else {
+          // For other top-level specification fields:
+          // - Only overwrite when a non-empty value is provided
+          //   (prevents accidental clearing of bg_image or main_title with null/empty)
+          if (value !== undefined && value !== null && value !== "") {
+            mergedSpec[key] = value;
+          }
         }
       });
+
       updateData.specification = mergedSpec;
+
+      logger.info("[Update Product] Merged specification to be saved", {
+        productId,
+        mergedSpecification: mergedSpec,
+      });
     }
 
     // Handle processed sachetPrices if provided
@@ -1725,6 +1808,37 @@ class ProductService {
       }
     }
 
+    // Handle ingredient compositions if provided
+    if (data.ingredientCompositions !== undefined) {
+      logger.info(`[Update Product] Updating ingredient compositions for product ${productId}`);
+      try {
+        const compositionsData = data.ingredientCompositions.map((comp: any) => ({
+          product: new mongoose.Types.ObjectId(productId),
+          ingredient: comp.ingredient,
+          quantity: comp.quantity,
+          driPercentage: comp.driPercentage,
+          updatedBy: data.updatedBy
+        }));
+        
+        await IngredientCompositionService.bulkUpdateCompositions(
+          productId,
+          compositionsData,
+          data.updatedBy?.toString()
+        );
+        logger.info(`[Update Product] Successfully updated ingredient compositions for product ${productId}`);
+      } catch (error: any) {
+        logger.error(`[Update Product] Failed to update ingredient compositions: ${error.message}`, error);
+        // Don't throw error, just log it - product update will continue
+      }
+    }
+
+    if (updateData.specification) {
+      logger.info("[Update Product] updateData.specification before save", {
+        productId,
+        specification: updateData.specification,
+      });
+    }
+
     // Update product with only provided fields
     await Products.findByIdAndUpdate(productId, updateData, {
       new: true,
@@ -1782,6 +1896,11 @@ class ProductService {
     if (!updatedProduct) {
       throw new AppError("Product not found", 404);
     }
+
+    logger.info("[Update Product] Updated product specification from DB", {
+      productId,
+      updatedSpecification: (updatedProduct as any).specification,
+    });
 
     // Get ingredient details and replace ingredients array with populated data
     const ingredientDetails = await ProductIngredients.find({
@@ -2183,33 +2302,98 @@ class ProductService {
         }
       });
 
-      // Process oneTime if exists
-      if (sachetPrices.oneTime) {
-        sachetPrices.oneTime = {
-          count30: { ...sachetPrices.oneTime.count30 }, // Preserve discountedPrice
-          count60: { ...sachetPrices.oneTime.count60 }, // Preserve discountedPrice
-        };
-      }
-
       result.sachetPrices = sachetPrices;
     }
 
-    // Preserve standupPouchPrice with discountedPrice
+    // Preserve standupPouchPrice with discountedPrice (count_0 / count_1). Backward compat: map count30/count60 to count_0/count_1.
     if (product.standupPouchPrice) {
-      if (
-        product.standupPouchPrice.count30 ||
-        product.standupPouchPrice.count60
-      ) {
+      const sp = product.standupPouchPrice as any;
+      const hasNew = sp.count_0 || sp.count_1;
+      const hasOld = sp.count30 || sp.count60;
+      if (hasNew) {
         result.standupPouchPrice = {
-          count30: { ...product.standupPouchPrice.count30 }, // Preserve discountedPrice
-          count60: { ...product.standupPouchPrice.count60 }, // Preserve discountedPrice
+          count_0: sp.count_0 ? { ...sp.count_0 } : undefined,
+          count_1: sp.count_1 ? { ...sp.count_1 } : undefined,
+        };
+      } else if (hasOld) {
+        result.standupPouchPrice = {
+          count_0: sp.count30 ? { ...sp.count30 } : undefined,
+          count_1: sp.count60 ? { ...sp.count60 } : undefined,
         };
       } else {
-        result.standupPouchPrice = { ...product.standupPouchPrice }; // Preserve discountedPrice
+        result.standupPouchPrice = { ...sp };
       }
     }
 
     return result;
+  }
+
+  /**
+   * Get ingredient compositions for a single product.
+   */
+  private async getIngredientCompositionsByProductId(
+    productId: string
+  ): Promise<any[]> {
+    const compositions = await IngredientComposition.find({
+      product: new mongoose.Types.ObjectId(productId),
+      isDeleted: false,
+    })
+      .populate("ingredient", "_id name description image slug")
+      .select("_id product ingredient quantity driPercentage")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    return compositions;
+  }
+
+  /**
+   * Attach ingredient compositions to a list of products.
+   */
+  private async attachIngredientCompositionsToProducts(
+    products: any[]
+  ): Promise<any[]> {
+    if (!products || products.length === 0) {
+      return products;
+    }
+
+    const productIds = products
+      .map((product) => product?._id)
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    if (productIds.length === 0) {
+      return products.map((product) => ({
+        ...product,
+        ingredientCompositions: [],
+      }));
+    }
+
+    const compositions = await IngredientComposition.find({
+      product: { $in: productIds },
+      isDeleted: false,
+    })
+      .populate("ingredient", "_id name description image slug")
+      .select("_id product ingredient quantity driPercentage")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const compositionMap = new Map<string, any[]>();
+
+    for (const composition of compositions) {
+      const key = composition.product?.toString();
+      if (!key) continue;
+      const existing = compositionMap.get(key) || [];
+      existing.push(composition);
+      compositionMap.set(key, existing);
+    }
+
+    return products.map((product) => {
+      const key = product?._id?.toString();
+      return {
+        ...product,
+        ingredientCompositions: key ? compositionMap.get(key) || [] : [],
+      };
+    });
   }
 
   /**

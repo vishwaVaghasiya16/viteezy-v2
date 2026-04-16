@@ -5,6 +5,7 @@ import {
   NotificationType,
 } from "@/models/enums";
 import { logger } from "./logger";
+import { config } from "@/config";
 
 /**
  * Notification Helper Utilities
@@ -26,7 +27,7 @@ function buildRedirectUrl(
   type: "order" | "product" | "subscription" | "membership" | "support" | "delivery" | "payment",
   query: Record<string, string>
 ): string {
-  const baseUrl = process.env.FRONTEND_URL || "https://app.viteezy.com";
+  const baseUrl = config.frontend.url;
   
   switch (type) {
     case "order":
@@ -826,6 +827,38 @@ export const subscriptionNotifications = {
   },
 
   /**
+   * Subscription updated (products added to existing subscription)
+   * Route: /subscription, Query: { subscriptionId }
+   * This notification is sent when products are added to an existing active subscription
+   */
+  async subscriptionUpdated(
+    userId: string | mongoose.Types.ObjectId,
+    subscriptionId: string,
+    subscriptionNumber?: string,
+    createdBy?: string | mongoose.Types.ObjectId
+  ): Promise<void> {
+    validateNotificationPayload(NotificationType.REDIRECTION, NotificationCategory.MEMBERSHIP, { subscriptionId });
+    const { appRoute, query } = buildMobileAppRoute("subscription", { subscriptionId });
+    
+    const message = subscriptionNumber
+      ? `New products have been added to your subscription ${subscriptionNumber}.`
+      : "New products have been added to your subscription.";
+    
+    await notificationService.createNotification({
+      userId,
+      category: NotificationCategory.MEMBERSHIP,
+      type: NotificationType.REDIRECTION,
+      title: "Subscription Updated",
+      message,
+      redirectUrl: buildRedirectUrl("subscription", { subscriptionId }),
+      appRoute,
+      query,
+      data: { subscriptionId, subscriptionNumber },
+      createdBy,
+    });
+  },
+
+  /**
    * Upcoming subscription delivery
    * Route: /dashboard, Query: {}
    */
@@ -1248,6 +1281,33 @@ export const systemNotifications = {
   },
 };
 
+export const reminderNotificationService = {
+  
+  async sendReminderNotification(
+    userId: string | mongoose.Types.ObjectId,
+    note: string,
+    createdBy?: string | mongoose.Types.ObjectId
+  ): Promise<void> {
+
+    const title = "Reminder";
+    const message = note || "You have a reminder";
+
+    const { appRoute, query } = buildMobileAppRoute("dashboard");
+
+    await notificationService.createNotification({
+      userId,
+      category: NotificationCategory.REMINDER,
+      type: NotificationType.NORMAL,
+      title,
+      message,
+      appRoute,
+      query,
+      createdBy,
+    });
+  }
+
+};
+
 /**
  * Export all notification helpers
  */
@@ -1261,5 +1321,6 @@ export const notificationHelpers = {
   family: familyNotifications,
   support: supportNotifications,
   system: systemNotifications,
+  reminder: reminderNotificationService,
 };
 

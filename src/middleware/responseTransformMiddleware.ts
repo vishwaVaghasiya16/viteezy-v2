@@ -7,6 +7,7 @@ import {
 import { User } from "@/models/core";
 import { SupportedLanguage, DEFAULT_LANGUAGE } from "@/models/common.model";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 
 /**
  * Authenticated Request Interface
@@ -206,7 +207,7 @@ const getUserLanguage = async (
         req.userLanguage = lang; // Cache it
 
         // Log for debugging
-        if (process.env.NODE_ENV === "development") {
+        if (config.server.nodeEnv === "development") {
           logger.debug("User language detected", {
             userId: userId.toString(),
             userLanguage: user.language,
@@ -217,7 +218,7 @@ const getUserLanguage = async (
         return lang;
       } else {
         // Log if user found but no language set
-        if (process.env.NODE_ENV === "development") {
+        if (config.server.nodeEnv === "development") {
           logger.debug("User found but no language set", {
             userId: userId.toString(),
             hasUser: !!user,
@@ -227,7 +228,7 @@ const getUserLanguage = async (
       }
     } catch (error: any) {
       // If user fetch fails, continue with default
-      if (process.env.NODE_ENV === "development") {
+      if (config.server.nodeEnv === "development") {
         logger.error("Failed to fetch user language", {
           userId: userId.toString(),
           error: error.message,
@@ -236,7 +237,7 @@ const getUserLanguage = async (
     }
   } else {
     // Log if no user ID found
-    if (process.env.NODE_ENV === "development") {
+    if (config.server.nodeEnv === "development") {
       logger.debug("No user ID found in request", {
         hasUser: !!req.user,
         userId: req.user?._id || req.user?.id || null,
@@ -274,7 +275,7 @@ export const transformResponseMiddleware = (modelName: string) => {
       const detectedLang = await getUserLanguage(req);
 
       // Log for debugging
-      if (process.env.NODE_ENV === "development") {
+      if (config.server.nodeEnv === "development") {
         logger.debug("Language detected for transformation", {
           model: modelName,
           language: detectedLang,
@@ -284,7 +285,7 @@ export const transformResponseMiddleware = (modelName: string) => {
     } catch (error: any) {
       // If language fetch fails, continue with default
       req.userLanguage = DEFAULT_LANGUAGE;
-      if (process.env.NODE_ENV === "development") {
+      if (config.server.nodeEnv === "development") {
         logger.error("Failed to detect user language", {
           error: error.message,
           model: modelName,
@@ -307,7 +308,7 @@ export const transformResponseMiddleware = (modelName: string) => {
           const lang = req.userLanguage || DEFAULT_LANGUAGE;
 
           // Log for debugging
-          if (process.env.NODE_ENV === "development") {
+          if (config.server.nodeEnv === "development") {
             logger.debug("Transforming response with status().json()", {
               model: modelName,
               language: lang,
@@ -395,7 +396,7 @@ export const transformResponseMiddleware = (modelName: string) => {
               };
 
               // Log for debugging
-              if (process.env.NODE_ENV === "development") {
+              if (config.server.nodeEnv === "development") {
                 logger.debug("Transforming blogBanners", {
                   count: transformed.data.blogBanners.length,
                   lang,
@@ -423,7 +424,7 @@ export const transformResponseMiddleware = (modelName: string) => {
 
               // Log after transformation
               if (
-                process.env.NODE_ENV === "development" &&
+                config.server.nodeEnv === "development" &&
                 transformed.data.blogBanners[0]
               ) {
                 logger.debug("After transformation blogBanners", {
@@ -2565,7 +2566,7 @@ export const transformResponseData = async (
   const transformed = transformI18nObject(data, lang, i18nString, i18nText);
 
   // Log for debugging (remove in production)
-  if (process.env.NODE_ENV === "development") {
+  if (config.server.nodeEnv === "development") {
     logger.debug(`Transformed ${modelName} data for language: ${lang}`, {
       model: modelName,
       language: lang,

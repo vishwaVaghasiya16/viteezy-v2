@@ -60,7 +60,7 @@ curl -X POST http://localhost:8080/api/v1/payments/intent \
   ```json
   "amount": {
     "value": 99.99,
-    "currency": "EUR"
+    "currency": "USD"
   }
   ```
 - `returnUrl` - URL to redirect after successful payment
@@ -85,7 +85,7 @@ Both APIs return the same format:
       "status": "PENDING",
       "amount": {
         "amount": 99.99,
-        "currency": "EUR",
+        "currency": "USD",
         "taxRate": 0.21
       },
       "paymentMethod": "MOLLIE",
@@ -98,7 +98,7 @@ Both APIs return the same format:
       "paymentStatus": "PENDING",
       "total": {
         "amount": 99.99,
-        "currency": "EUR"
+        "currency": "USD"
       }
     },
     "gateway": {
@@ -439,7 +439,7 @@ const response = await fetch("/api/v1/payments/create", {
     paymentMethod: "STRIPE",
     amount: {
       value: 49.99,
-      currency: "EUR",
+      currency: "USD",
     },
     description: "Partial payment",
     returnUrl: window.location.origin + "/payment/success",

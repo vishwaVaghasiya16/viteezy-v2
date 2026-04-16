@@ -13,13 +13,14 @@ import {
 import { PaymentMethod, PaymentStatus } from "../../../models/enums";
 import { logger } from "../../../utils/logger";
 import { AppError } from "../../../utils/AppError";
+import { config } from "@/config";
 
 export class MollieAdapter implements IPaymentGateway {
   private mollieClient: ReturnType<typeof createMollieClient>;
   private baseUrl: string;
 
   constructor() {
-    const apiKey = process.env.MOLLIE_API_KEY;
+    const apiKey = config.payments.mollieApiKey;
     if (!apiKey) {
       throw new AppError("MOLLIE_API_KEY is required", 500);
     }
@@ -32,7 +33,7 @@ export class MollieAdapter implements IPaymentGateway {
     }
 
     this.mollieClient = createMollieClient({ apiKey });
-    this.baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
+    this.baseUrl = config.app.baseUrl;
 
     logger.info("Mollie payment gateway initialized");
   }
@@ -43,11 +44,26 @@ export class MollieAdapter implements IPaymentGateway {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
+      // Validate amount
+      if (!data.amount || data.amount <= 0) {
+        throw new AppError(
+          `Invalid payment amount: ${data.amount}. Amount must be greater than 0`,
+          400
+        );
+      }
+      
+      // Convert from minor units (cents) to major units (euros)
+      const amountInMajorUnits = data.amount / 100;
+      
+      logger.info(
+        `Mollie: Creating payment for order ${data.orderId}: ${amountInMajorUnits} ${data.currency} (${data.amount} minor units)`
+      );
+      
       // Build payment data object
       const paymentData: any = {
         amount: {
           currency: data.currency,
-          value: (data.amount / 100).toFixed(2), // Mollie expects amount in major currency units
+          value: amountInMajorUnits.toFixed(2), // Mollie expects amount in major currency units
         },
         description: data.description || `Order ${data.orderId}`,
         metadata: {

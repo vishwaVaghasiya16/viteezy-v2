@@ -52,7 +52,7 @@ export async function generateMemberId(): Promise<string> {
  * Validate member ID format
  */
 export function isValidMemberIdFormat(memberId: string): boolean {
-  const pattern = /^MEM-[A-Z0-9]{8}$/;
+  const pattern = /^MEM-[A-Z0-9]{8}$/; // Uppercase letters and numbers 0-9
   return pattern.test(memberId);
 }
 

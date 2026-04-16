@@ -180,7 +180,7 @@ class AdminProductIngredientController {
   createIngredient = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const requesterId = req.user?._id;
-      const { name, description, products, isActive } = req.body;
+      const { name, scientificName, description, products, isActive } = req.body;
 
       if (!name || !name.en) {
         throw new AppError("Name (English) is required", 400);
@@ -230,6 +230,7 @@ class AdminProductIngredientController {
 
       const ingredient = await ProductIngredients.create({
         name: name || {},
+        scientificName: scientificName?.trim() || null,
         description: description || {},
         products: productIds, // Will be empty array if no products provided
         image: transformedImage,
@@ -296,6 +297,7 @@ class AdminProductIngredientController {
           { "name.de": regex },
           { "name.fr": regex },
           { "name.es": regex },
+          { scientificName: regex },
           { "description.en": regex },
           { "description.nl": regex },
           { "description.de": regex },
@@ -351,7 +353,7 @@ class AdminProductIngredientController {
             {
               path: "ingredients",
               model: "product_ingredients",
-              select: "name description image",
+              select: "name scientificName description image",
             },
             {
               path: "categories",
@@ -392,7 +394,7 @@ class AdminProductIngredientController {
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
       const requesterId = req.user?._id;
-      let { name, description, products, isActive } = req.body;
+      let { name, scientificName, description, products, isActive } = req.body;
 
       const existing = await ProductIngredients.findOne({
         _id: id,
@@ -539,6 +541,12 @@ class AdminProductIngredientController {
             updateData[`description.${lang}`] = String(val).trim();
           }
         });
+      }
+      if (scientificName !== undefined) {
+        updateData.scientificName =
+          typeof scientificName === "string" && scientificName.trim()
+            ? scientificName.trim()
+            : null;
       }
       if (products !== undefined) updateData.products = productIds;
       if (isActive !== undefined) updateData.isActive = isActive;

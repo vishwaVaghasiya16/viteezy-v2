@@ -6,6 +6,7 @@ import { Orders, DeliveryPostponements, Subscriptions } from "@/models/commerce"
 import { OrderPlanType, PostponementStatus } from "@/models/enums";
 import { emailService } from "@/services/emailService";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -103,14 +104,6 @@ class DeliveryPostponementController {
 
       if (!order) {
         throw new AppError("Order not found", 404);
-      }
-
-      // Validate that it's a subscription order
-      if (order.planType !== OrderPlanType.SUBSCRIPTION) {
-        throw new AppError(
-          "Delivery postponement is only available for subscription orders",
-          400
-        );
       }
 
       // Get subscription details from order metadata
@@ -374,9 +367,13 @@ class DeliveryPostponementController {
     user: { email?: string; firstName?: string; lastName?: string }
   ): Promise<void> {
     const adminEmail =
-      process.env.ADMIN_EMAIL ||
-      process.env.SENDGRID_FROM_EMAIL ||
-      "admin@viteezy.com";
+      config.admin.email || config.admin.sendgridFromEmailFallback;
+    if (!adminEmail) {
+      logger.warn(
+        "Admin delivery postponement email skipped: set ADMIN_EMAIL or SENDGRID_FROM_EMAIL"
+      );
+      return;
+    }
     const fullName =
       user.firstName && user.lastName
         ? `${user.firstName} ${user.lastName}`.trim()

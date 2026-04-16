@@ -70,7 +70,7 @@ export const getSubscriptionPriceFromProduct = (
   }
 
   return {
-    currency: subscriptionPrice.currency || "EUR",
+    currency: subscriptionPrice.currency || "USD",
     amount: amount,
     taxRate: subscriptionPrice.taxRate || 0,
   };

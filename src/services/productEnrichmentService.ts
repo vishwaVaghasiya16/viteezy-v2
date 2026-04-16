@@ -80,6 +80,28 @@ export const transformProductForLanguage = (
     variantsValue = product.variants;
   }
 
+  // Map ingredient composition values by ingredientId so they can be merged into ingredients.
+  const compositionByIngredientId = new Map<
+    string,
+    { quantity?: number; driPercentage?: number | string }
+  >();
+  if (
+    Array.isArray(product.ingredientCompositions) &&
+    product.ingredientCompositions.length > 0
+  ) {
+    product.ingredientCompositions.forEach((composition: any) => {
+      const ingredientId =
+        typeof composition?.ingredient === "object"
+          ? composition.ingredient?._id?.toString?.()
+          : composition?.ingredient?.toString?.();
+      if (!ingredientId) return;
+      compositionByIngredientId.set(ingredientId, {
+        quantity: composition?.quantity,
+        driPercentage: composition?.driPercentage,
+      });
+    });
+  }
+
   // Transform shortDescription
   const transformedShortDescription = product.shortDescription
     ? getTranslatedString(product.shortDescription, lang)
@@ -149,50 +171,26 @@ export const transformProductForLanguage = (
       }
     });
 
-    // Transform features in oneTime options
-    if (transformedSachetPrices.oneTime) {
-      transformedSachetPrices.oneTime = { ...transformedSachetPrices.oneTime };
-
-      if (transformedSachetPrices.oneTime.count30?.features) {
-        transformedSachetPrices.oneTime.count30 = {
-          ...transformedSachetPrices.oneTime.count30,
-          features: transformedSachetPrices.oneTime.count30.features.map(
-            (feature: any) => getTranslatedString(feature, lang)
-          ),
-        };
-      }
-
-      if (transformedSachetPrices.oneTime.count60?.features) {
-        transformedSachetPrices.oneTime.count60 = {
-          ...transformedSachetPrices.oneTime.count60,
-          features: transformedSachetPrices.oneTime.count60.features.map(
-            (feature: any) => getTranslatedString(feature, lang)
-          ),
-        };
-      }
-    }
   }
 
-  // Transform standupPouchPrice features
+  // Transform standupPouchPrice features (count_0 / count_1)
   let transformedStandupPouchPrice = product.standupPouchPrice;
   if (product.standupPouchPrice) {
-    // Check if it's the count30/count60 structure
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
-      transformedStandupPouchPrice = { ...product.standupPouchPrice };
-
-      if (transformedStandupPouchPrice.count30?.features) {
-        transformedStandupPouchPrice.count30 = {
-          ...transformedStandupPouchPrice.count30,
-          features: transformedStandupPouchPrice.count30.features.map(
+    const sp = product.standupPouchPrice as any;
+    if (sp.count_0 || sp.count_1) {
+      transformedStandupPouchPrice = { ...sp };
+      if ((transformedStandupPouchPrice as any).count_0?.features) {
+        (transformedStandupPouchPrice as any).count_0 = {
+          ...(transformedStandupPouchPrice as any).count_0,
+          features: (transformedStandupPouchPrice as any).count_0.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
       }
-
-      if (transformedStandupPouchPrice.count60?.features) {
-        transformedStandupPouchPrice.count60 = {
-          ...transformedStandupPouchPrice.count60,
-          features: transformedStandupPouchPrice.count60.features.map(
+      if ((transformedStandupPouchPrice as any).count_1?.features) {
+        (transformedStandupPouchPrice as any).count_1 = {
+          ...(transformedStandupPouchPrice as any).count_1,
+          features: (transformedStandupPouchPrice as any).count_1.features.map(
             (feature: any) => getTranslatedString(feature, lang)
           ),
         };
@@ -222,6 +220,7 @@ export const transformProductForLanguage = (
               return ingredient && typeof ingredient === 'object' && ingredient._id;
             })
             .map((ingredient: any) => ({
+              ...(compositionByIngredientId.get(ingredient._id?.toString?.()) || {}),
               _id: ingredient._id,
               name: getTranslatedString(ingredient.name, lang),
               description: getTranslatedText(ingredient.description, lang),
@@ -323,24 +322,23 @@ const calculateMonthlyAmounts = (product: any): any => {
       }
     });
 
-    if (sachetPrices.oneTime) {
-      sachetPrices.oneTime = {
-        count30: { ...sachetPrices.oneTime.count30 },
-        count60: { ...sachetPrices.oneTime.count60 },
-      };
-    }
-
     result.sachetPrices = sachetPrices;
   }
 
   if (product.standupPouchPrice) {
-    if (product.standupPouchPrice.count30 || product.standupPouchPrice.count60) {
+    const sp = product.standupPouchPrice as any;
+    if (sp.count_0 || sp.count_1) {
       result.standupPouchPrice = {
-        count30: { ...product.standupPouchPrice.count30 },
-        count60: { ...product.standupPouchPrice.count60 },
+        count_0: sp.count_0 ? { ...sp.count_0 } : undefined,
+        count_1: sp.count_1 ? { ...sp.count_1 } : undefined,
+      };
+    } else if (sp.count30 || sp.count60) {
+      result.standupPouchPrice = {
+        count_0: sp.count30 ? { ...sp.count30 } : undefined,
+        count_1: sp.count60 ? { ...sp.count60 } : undefined,
       };
     } else {
-      result.standupPouchPrice = { ...product.standupPouchPrice };
+      result.standupPouchPrice = { ...sp };
     }
   }
 

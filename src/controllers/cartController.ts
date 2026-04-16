@@ -76,11 +76,23 @@ export class CartController {
 
       const userLang = await getUserLanguage(req, userId);
       const includeSuggested = req.query.includeSuggested !== "false"; // Default true
-      const result = await cartService.getCart(
-        userId,
-        includeSuggested,
-        userLang
-      );
+      const typeParam = (req.query.type as string) || "NORMAL";
+      const normalizedType =
+        typeParam === "SUBSCRIPTION_UPDATE" ? "SUBSCRIPTION_UPDATE" : "NORMAL";
+      const subscriptionId =
+        (req.query.subscriptionId as string) || (req.query.sub as string);
+
+      if (normalizedType === "SUBSCRIPTION_UPDATE" && !subscriptionId) {
+        throw new AppError(
+          "subscriptionId is required for SUBSCRIPTION_UPDATE cart",
+          400
+        );
+      }
+
+      const result = await cartService.getCart(userId, includeSuggested, userLang, {
+        type: normalizedType as any,
+        subscriptionId,
+      });
 
       res.status(200).json({
         success: true,
@@ -110,9 +122,25 @@ export class CartController {
       if (!userId) {
         throw new AppError("User authentication required", 401);
       }
-      const items: Array<{ productId: string; variantType: ProductVariant }> =
-        [];
-      const { productId, variantType } = req.body;
+      const items: Array<{
+        productId: string;
+        variantType: ProductVariant;
+        quantity?: number;
+        isOneTime?: boolean;
+        planDays?: number;
+      }> = [];
+      const { productId, variantType, quantity, isOneTime, planDays, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || req.user._id;
 
       if (productId || variantType) {
         if (!productId || !variantType) {
@@ -121,6 +149,9 @@ export class CartController {
         items.push({
           productId,
           variantType: variantType as ProductVariant,
+          quantity: quantity ? Number(quantity) : undefined,
+          isOneTime: isOneTime !== undefined ? Boolean(isOneTime) : undefined,
+          planDays: planDays !== undefined ? Number(planDays) : undefined,
         });
       }
 
@@ -128,14 +159,19 @@ export class CartController {
       Object.keys(req.body || {}).forEach((key) => {
         const productMatch = key.match(/^productId_(\d+)$/);
         const variantMatch = key.match(/^variantType_(\d+)$/);
+        const quantityMatch = key.match(/^quantity_(\d+)$/);
         if (productMatch) indexSet.add(Number(productMatch[1]));
         if (variantMatch) indexSet.add(Number(variantMatch[1]));
+        if (quantityMatch) indexSet.add(Number(quantityMatch[1]));
       });
 
       const sortedIndexes = Array.from(indexSet).sort((a, b) => a - b);
       sortedIndexes.forEach((index) => {
         const indexedProductId = req.body[`productId_${index}`];
         const indexedVariantType = req.body[`variantType_${index}`];
+        const indexedQuantity = req.body[`quantity_${index}`];
+        const indexedIsOneTime = req.body[`isOneTime_${index}`];
+        const indexedPlanDays = req.body[`planDays_${index}`];
         if (!indexedProductId || !indexedVariantType) {
           throw new AppError(
             `productId_${index} and variantType_${index} are required`,
@@ -145,6 +181,9 @@ export class CartController {
         items.push({
           productId: indexedProductId,
           variantType: indexedVariantType as ProductVariant,
+          quantity: indexedQuantity ? Number(indexedQuantity) : undefined,
+          isOneTime: indexedIsOneTime !== undefined ? Boolean(indexedIsOneTime) : undefined,
+          planDays: indexedPlanDays !== undefined ? Number(indexedPlanDays) : undefined,
         });
       });
 
@@ -152,15 +191,40 @@ export class CartController {
         throw new AppError("productId and variantType are required", 400);
       }
 
+      // Validate quantity rules
+      for (const item of items) {
+        if (item.variantType === ProductVariant.SACHETS) {
+          if (item.quantity !== undefined) {
+            throw new AppError(
+              "quantity is not allowed for SACHETS products (subscription-based)",
+              400
+            );
+          }
+        } else if (item.variantType === ProductVariant.STAND_UP_POUCH) {
+          if (item.quantity !== undefined && item.quantity < 1) {
+            throw new AppError(
+              "STAND_UP_POUCH products require a quantity of at least 1",
+              400
+            );
+          }
+        }
+      }
+
       const firstItem = items[0] as {
         productId: string;
         variantType: ProductVariant;
+        quantity?: number;
+        isOneTime?: boolean;
+        planDays?: number;
       };
       let result = await cartService.addItem(userId, firstItem);
       for (let i = 1; i < items.length; i += 1) {
         const nextItem = items[i] as {
           productId: string;
           variantType: ProductVariant;
+          quantity?: number;
+          isOneTime?: boolean;
+          planDays?: number;
         };
         result = await cartService.addItem(userId, nextItem);
       }
@@ -191,14 +255,50 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId } = req.body;
+      const { productId, variantType, quantity, isOneTime, planDays, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
       }
 
-      const result = await cartService.updateItem(userId, {
+      if (!variantType) {
+        throw new AppError("variantType is required", 400);
+      }
+
+      // Validate quantity rules
+      if (variantType === ProductVariant.SACHETS) {
+        if (quantity !== undefined) {
+          throw new AppError(
+            "quantity is not allowed for SACHETS products (subscription-based)",
+            400
+          );
+        }
+      } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+        if (quantity !== undefined && quantity < 1) {
+          throw new AppError(
+            "STAND_UP_POUCH products require a quantity of at least 1",
+            400
+          );
+        }
+      }
+
+      const result = await cartService.updateItem(targetUserId, {
         productId,
+        variantType: variantType as ProductVariant,
+        quantity: quantity ? Number(quantity) : undefined,
+        isOneTime: isOneTime !== undefined ? Boolean(isOneTime) : undefined,
+        planDays: planDays !== undefined ? Number(planDays) : undefined,
       });
 
       res.status(200).json({
@@ -227,14 +327,26 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const { productId } = req.body;
+      const { productId, variantType, for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
 
       if (!productId) {
         throw new AppError("productId is required", 400);
       }
 
-      const result = await cartService.removeItem(userId, {
+      const result = await cartService.removeItem(targetUserId, {
         productId,
+        variantType: variantType as ProductVariant | undefined,
       });
 
       res.status(200).json({
@@ -263,7 +375,20 @@ export class CartController {
         throw new AppError("User authentication required", 401);
       }
 
-      const result = await cartService.clearCart(userId);
+      const { for_user } = req.body;
+
+      // FAMILY PERMISSION VALIDATION
+      if (for_user && for_user !== req.user._id) {
+        const { validateFamilyRelation } = await import("@/services/familyValidationService");
+        const validation = await validateFamilyRelation(req.user._id, for_user);
+        if (!validation.allowed) {
+          throw new AppError(validation.reason || "Access denied", 403);
+        }
+      }
+
+      const targetUserId = for_user || userId;
+
+      const result = await cartService.clearCart(targetUserId);
 
       res.status(200).json({
         success: true,

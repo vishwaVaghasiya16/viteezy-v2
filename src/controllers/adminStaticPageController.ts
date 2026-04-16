@@ -53,7 +53,7 @@ const SYSTEM_PAGES: Array<{
   {
     systemPageType: SystemPageType.LANDING_PAGE,
     slug: "landing-page",
-    route: "/admin/dashboard",
+    route: "/admin/landing-page",
   },
   {
     systemPageType: SystemPageType.MEMBERSHIP,
@@ -278,44 +278,30 @@ class AdminStaticPageController {
         ];
       }
 
-      // Get system pages separately (always show first, ignore status filter)
-      const systemPagesFilter = {
-        ...baseFilter,
-        isSystemPage: true,
-      };
-
-      // Get regular pages (apply status filter if provided)
-      const regularPagesFilter: Record<string, any> = {
-        ...baseFilter,
-        $or: [
-          { isSystemPage: { $exists: false } },
-          { isSystemPage: false },
-        ],
-      };
-
+      // Apply status filter to both system and regular pages if provided
       if (status) {
-        regularPagesFilter.status = status;
+        baseFilter.status = status;
       }
 
       const sortOptions: Record<string, 1 | -1> = {
+        isSystemPage: -1, // System pages first (true = 1, false = 0, so -1 puts false first, then we'll reorder)
         createdAt: -1,
         ...((sort as Record<string, 1 | -1>) || {}),
       };
 
-      // Fetch system pages and regular pages
-      const [systemPagesFromDb, regularPages, systemPagesCount, regularPagesCount] =
-        await Promise.all([
-          StaticPages.find(systemPagesFilter)
-            .sort({ systemPageType: 1 }) // Sort by system page type order
-            .lean(),
-          StaticPages.find(regularPagesFilter)
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(limit)
-            .lean(),
-          StaticPages.countDocuments(systemPagesFilter),
-          StaticPages.countDocuments(regularPagesFilter),
-        ]);
+      // Fetch all pages with filters applied
+      const [allPages, total] = await Promise.all([
+        StaticPages.find(baseFilter)
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        StaticPages.countDocuments(baseFilter),
+      ]);
+
+      // Separate system pages and regular pages for processing
+      const systemPagesFromDb = allPages.filter(page => page.isSystemPage);
+      const regularPages = allPages.filter(page => !page.isSystemPage);
 
       // Fetch actual data from database for each system page and merge
       const systemPages = await Promise.all(
@@ -342,18 +328,17 @@ class AdminStaticPageController {
       // Ensure regular pages have isSystemPage: false explicitly set
       const regularPagesWithFlag = regularPages.map((page) => ({
         ...page,
-        isSystemPage: page.isSystemPage || false,
-        systemPageType: page.systemPageType || undefined,
+        isSystemPage: false,
+        systemPageType: undefined,
         route: page.route || null,
       }));      
 
       // Combine: system pages first, then regular pages
-      const allPages = [...systemPages, ...regularPagesWithFlag];
-      const total = systemPagesCount + regularPagesCount;
+      const combinedPages = [...systemPages, ...regularPagesWithFlag];
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(allPages, pagination, "Static pages retrieved");
+      res.apiPaginated(combinedPages, pagination, "Static pages retrieved");
     }
   );
 

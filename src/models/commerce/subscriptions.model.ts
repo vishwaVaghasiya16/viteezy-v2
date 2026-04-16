@@ -9,6 +9,20 @@ import {
   ORDER_PLAN_TYPE_VALUES,
 } from "../enums";
 
+export interface ISubscriptionActivity {
+  action: "pause" | "cancel" | "resume" | "status-update";
+  performedBy?: mongoose.Types.ObjectId;
+  performedByRole?: "User" | "Admin" | "System";
+  reason?: string;
+  fromStatus?: SubscriptionStatus;
+  toStatus?: SubscriptionStatus;
+  planCycleDays?: number;
+  planPriceTotal?: number;
+  planCurrency?: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
+}
+
 export interface ISubscription extends Document {
   subscriptionNumber: string;
   userId: mongoose.Types.ObjectId;
@@ -42,6 +56,7 @@ export interface ISubscription extends Document {
   cancelledAt?: Date;
   cancelledBy?: mongoose.Types.ObjectId; // User or admin who cancelled
   cancellationReason?: string;
+  scheduledCancellationDate?: Date; // Date when subscription will be automatically cancelled
   // Pause/Resume
   pausedAt?: Date;
   pausedUntil?: Date; // Resume date if paused temporarily
@@ -49,6 +64,7 @@ export interface ISubscription extends Document {
   isAutoRenew: boolean; // Auto-renew subscription until cancelled or paused
   renewalCount: number; // Number of times subscription has been renewed
   // Gateway Integration
+  gateway?: "stripe" | "mollie";
   gatewaySubscriptionId?: string; // Stripe/Mollie subscription ID
   gatewayCustomerId?: string; // Stripe/Mollie customer ID
   gatewayPaymentMethodId?: string; // Saved payment method ID
@@ -56,8 +72,20 @@ export interface ISubscription extends Document {
   retryCount?: number; // Number of payment retry attempts
   lastRetryDate?: Date; // Last payment retry date
   nextRetryDate?: Date; // Next payment retry date
+  // Pricing breakdown for SACHETS items only
+  pricing?: {
+    subTotal: number;
+    discountedPrice: number;
+    membershipDiscountAmount: number;
+    subscriptionPlanDiscountAmount: number;
+    taxAmount: number;
+    total: number;
+    currency: string;
+  };
   // Metadata
+  activePlanSnapshot?: any;
   metadata?: Record<string, any>;
+  activityLog?: ISubscriptionActivity[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -202,6 +230,10 @@ const SubscriptionSchema = new Schema<ISubscription>(
       maxlength: 500,
       default: null,
     },
+    scheduledCancellationDate: {
+      type: Date,
+      default: null,
+    },
     pausedAt: {
       type: Date,
       default: null,
@@ -221,6 +253,11 @@ const SubscriptionSchema = new Schema<ISubscription>(
       min: 0,
     },
     // Gateway Integration
+    gateway: {
+      type: String,
+      enum: ["stripe", "mollie"],
+      default: null,
+    },
     gatewaySubscriptionId: {
       type: String,
       trim: true,
@@ -256,10 +293,82 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: Date,
       default: null,
     },
+    pricing: {
+      type: {
+        subTotal: { type: Number, default: 0 },
+        discountedPrice: { type: Number, default: 0 },
+        membershipDiscountAmount: { type: Number, default: 0 },
+        subscriptionPlanDiscountAmount: { type: Number, default: 0 },
+        taxAmount: { type: Number, default: 0 },
+        total: { type: Number, default: 0 },
+        currency: { type: String, default: "USD" },
+      },
+      required: false,
+    },
+    activePlanSnapshot: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
     metadata: {
       type: Schema.Types.Mixed,
       default: () => ({}),
     },
+    activityLog: [
+      {
+        action: {
+          type: String,
+          enum: ["pause", "cancel", "resume", "status-update"],
+          required: true,
+        },
+        performedBy: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        performedByRole: {
+          type: String,
+          enum: ["User", "Admin", "System"],
+          default: "User",
+        },
+        reason: {
+          type: String,
+          trim: true,
+          maxlength: 500,
+          default: null,
+        },
+        fromStatus: {
+          type: String,
+          enum: SUBSCRIPTION_STATUS_VALUES,
+          default: null,
+        },
+        toStatus: {
+          type: String,
+          enum: SUBSCRIPTION_STATUS_VALUES,
+          default: null,
+        },
+        planCycleDays: {
+          type: Number,
+          enum: SUBSCRIPTION_CYCLE_VALUES,
+          default: null,
+        },
+        planPriceTotal: {
+          type: Number,
+          default: null,
+        },
+        planCurrency: {
+          type: String,
+          default: null,
+        },
+        metadata: {
+          type: Schema.Types.Mixed,
+          default: () => ({}),
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     ...SoftDelete,
     ...AuditSchema.obj,
   },

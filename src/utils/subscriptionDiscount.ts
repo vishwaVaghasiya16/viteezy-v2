@@ -48,7 +48,7 @@ export const calculate90DaySubscriptionDiscount = (
  */
 export const createSubscriptionPlanDiscountPrice = (
   discountAmount: number,
-  currency: string = "EUR"
+  currency: string = "USD"
 ): PriceType => {
   const roundAmount = (value: number): number =>
     Math.round((value + Number.EPSILON) * 100) / 100;
@@ -71,7 +71,7 @@ export const createSubscriptionPlanDiscountPrice = (
 export const apply90DaySubscriptionDiscountToOrder = (
   subtotal: number,
   subscriptionCycleDays: number,
-  currency: string = "EUR"
+  currency: string = "USD"
 ): PriceType => {
   const discountResult = calculate90DaySubscriptionDiscount(
     subtotal,

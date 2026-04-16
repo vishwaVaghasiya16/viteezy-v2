@@ -16,7 +16,6 @@ import morgan from "morgan";
 import compression from "compression";
 // Rate limiting disabled - commented out as per request
 // import rateLimit from "express-rate-limit";
-import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { createProxyMiddleware, Options } from "http-proxy-middleware";
 
@@ -30,9 +29,6 @@ import { localeMiddleware } from "@/middleware/locale";
 import { logger } from "@/utils/logger";
 import apiRoutes from "@/routes";
 import { swaggerSpec } from "@/docs/swagger";
-
-// Load environment variables from .env file
-dotenv.config();
 
 /**
  * Application Constants
@@ -94,11 +90,13 @@ app.use(
  * Set BEHIND_PROXY=true in .env if running behind nginx, load balancer, etc.
  * In production behind a proxy, set to 1 to trust the first proxy (more secure than true)
  */
-if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
-  // Set to 1 to trust only the first proxy (more secure than true)
-  // For multiple proxies, set TRUST_PROXY to the number of proxies
-  const proxyCount = process.env.TRUST_PROXY
-    ? parseInt(process.env.TRUST_PROXY, 10)
+if (
+  config.proxy.behindProxy ||
+  config.proxy.trustProxy === "true" ||
+  /^\d+$/.test(config.proxy.trustProxy)
+) {
+  const proxyCount = config.proxy.trustProxy
+    ? parseInt(config.proxy.trustProxy, 10)
     : 1;
   app.set("trust proxy", isNaN(proxyCount) ? 1 : proxyCount);
   console.log(`ℹ️ Trust proxy enabled: ${app.get("trust proxy")}`);
@@ -127,6 +125,7 @@ if (process.env.BEHIND_PROXY === "true" || process.env.TRUST_PROXY === "true") {
  */
 import { paymentController } from "@/controllers/paymentController";
 import { PaymentMethod } from "@/models/enums";
+import moment from "moment";
 
 // Register webhook routes with raw body parser (BEFORE JSON parser)
 // Add logging middleware to track incoming requests
@@ -566,6 +565,25 @@ const startServer = async (): Promise<void> => {
       // Don't fail server startup if job initialization fails
     }
 
+    // Initialize subscription cancellation cron job
+    // This import will trigger the cron schedule defined in the file
+    try {
+      await import("@/jobs/subscriptionCancellationJob");
+      logger.info("✅ Subscription cancellation cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize subscription cancellation job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize coupon schedule cron job
+    try {
+      await import("@/jobs/couponScheduleJob");
+      logger.info("✅ Coupon schedule cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(`⚠️ Failed to initialize coupon schedule job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
     // Initialize packing slip PDF generation cron job
     try {
       await import("@/jobs/packingSlipPdfJob");
@@ -609,6 +627,22 @@ const startServer = async (): Promise<void> => {
       logger.info("✅ PostNL Status Sync job cron job initialized");
     } catch (jobError: any) {
       logger.warn(`⚠️ Failed to initialize PostNL Status Sync job: ${jobError.message}`);
+      // Don't fail server startup if job initialization fails
+    }
+
+    // Initialize Reminder Notification cron job
+    try {
+      const currentTime = moment().format("hh:mm A");
+      console.log({ currentTime });
+      const { startReminderScheduler } = await import(
+        "@/services/reminderScheduler.service"
+      );
+      await startReminderScheduler();
+      logger.info("✅ Reminder Notification cron job initialized");
+    } catch (jobError: any) {
+      logger.warn(
+        `⚠️ Failed to initialize Reminder Notification cron job: ${jobError.message}`
+      );
       // Don't fail server startup if job initialization fails
     }
 

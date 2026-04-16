@@ -7,15 +7,33 @@
 import { Router } from "express";
 import { AddressController } from "@/controllers/addressController";
 import { authenticate } from "@/middleware/auth";
-import { validateJoi, validateParams } from "@/middleware/joiValidation";
+import { validateJoi, validateParams, validateQuery } from "@/middleware/joiValidation";
 import {
   addAddressSchema,
   updateAddressSchema,
   addressIdSchema,
   setDefaultAddressSchema,
 } from "@/validation/addressValidation";
+import Joi from "joi";
+import mongoose from "mongoose";
 
 const router = Router();
+
+// Query parameter validation for getAllAddresses
+const getAllAddressesQuerySchema = Joi.object({
+  subscriptionId: Joi.string().optional(),
+  subMemberId: Joi.string()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error("any.invalid");
+      }
+      return value;
+    })
+    .optional()
+    .messages({
+      "any.invalid": "Invalid sub-member ID format",
+    }),
+});
 
 /**
  * Private Routes (Authentication Required)
@@ -31,7 +49,12 @@ router.post(
 );
 
 // Get all addresses for authenticated user
-router.get("/", authenticate, AddressController.getAllAddresses);
+router.get(
+  "/", 
+  authenticate, 
+  validateQuery(getAllAddressesQuerySchema),
+  AddressController.getAllAddresses
+);
 
 // Get address by ID
 router.get(

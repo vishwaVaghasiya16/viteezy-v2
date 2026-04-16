@@ -131,6 +131,28 @@ const transformProductForLanguage = (
     variantsValue = product.variants;
   }
 
+  // Map ingredient composition values by ingredientId so they can be merged into ingredients.
+  const compositionByIngredientId = new Map<
+    string,
+    { quantity?: number; driPercentage?: number | string }
+  >();
+  if (
+    Array.isArray(product.ingredientCompositions) &&
+    product.ingredientCompositions.length > 0
+  ) {
+    product.ingredientCompositions.forEach((composition: any) => {
+      const ingredientId =
+        typeof composition?.ingredient === "object"
+          ? composition.ingredient?._id?.toString?.()
+          : composition?.ingredient?.toString?.();
+      if (!ingredientId) return;
+      compositionByIngredientId.set(ingredientId, {
+        quantity: composition?.quantity,
+        driPercentage: composition?.driPercentage,
+      });
+    });
+  }
+
   return {
     ...productWithoutVariants,
     title: getTranslatedString(product.title, lang),
@@ -148,6 +170,7 @@ const transformProductForLanguage = (
               return ingredient && typeof ingredient === 'object' && ingredient._id;
             })
             .map((ingredient: any) => ({
+              ...(compositionByIngredientId.get(ingredient._id?.toString?.()) || {}),
               _id: ingredient._id,
               name: getTranslatedString(ingredient.name, lang),
               description: getTranslatedText(ingredient.description, lang),
@@ -304,7 +327,7 @@ export class ProductController {
         sort,
         {
           search: searchTerm,
-          status: status as any,
+          status: status !== undefined ? status === "true" : undefined,
           variant: variant as any,
           hasStandupPouch:
             hasStandupPouch !== undefined
@@ -318,7 +341,7 @@ export class ProductController {
       );
 
       // Get user ID if authenticated (optional) - for wishlist/cart
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Get target language from user's token/profile, default to English
       const targetLanguage: SupportedLanguage = getUserLanguage(req);
@@ -405,12 +428,9 @@ export class ProductController {
             enrichedProduct.isMember = false;
           }
 
-          // Add is_liked field if user is authenticated
-          if (userId) {
-            enrichedProduct.is_liked = userWishlistProductIds.has(
-              transformedProduct._id.toString()
-            );
-          }
+          // Add is_liked field (always present, false for unauthenticated users)
+          const productId = transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(productId) : false;
 
           // Add isInCart field if user is authenticated
           if (userId) {
@@ -488,7 +508,7 @@ export class ProductController {
         sort,
         {
           search: searchTerm,
-          status: status as any,
+          status: status !== undefined ? status === "true" : undefined,
           variant: variant as any,
           hasStandupPouch:
             hasStandupPouch !== undefined
@@ -614,12 +634,9 @@ export class ProductController {
             enrichedProduct.isMember = false;
           }
 
-          // Add is_liked field if user is authenticated
-          if (userId) {
-            enrichedProduct.is_liked = userWishlistProductIds.has(
-              transformedProduct._id.toString()
-            );
-          }
+          // Add is_liked field (always present, false for unauthenticated users)
+          const productId = transformedProduct._id?.toString?.() || transformedProduct._id || "";
+          enrichedProduct.is_liked = userId ? userWishlistProductIds.has(productId) : false;
 
           return enrichedProduct;
         })
@@ -697,7 +714,7 @@ export class ProductController {
       const result = await productService.getProductById(id);
 
       // Get user ID if authenticated (optional)
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Translate product using common service (automatically detects language from token)
       const transformedProduct = await translateProductForUser(result.product, req);
@@ -762,13 +779,15 @@ export class ProductController {
         enrichedProduct.isMember = false;
       }
 
-      // Add is_liked field if user is authenticated
+      // Add is_liked field (always present, false for unauthenticated users)
       if (userId) {
         const isInWishlist = await Wishlists.exists({
           userId: new mongoose.Types.ObjectId(userId),
           productId: new mongoose.Types.ObjectId(id),
         });
         enrichedProduct.is_liked = !!isInWishlist;
+      } else {
+        enrichedProduct.is_liked = false;
       }
 
       // Add isInCart field if user is authenticated
@@ -816,7 +835,7 @@ export class ProductController {
       const result = await productService.getProductBySlug(slug);
 
       // Get user ID if authenticated (optional)
-      const userId = req.user?._id || req.userId;
+      const userId = req.user?.id || req.user?._id || req.userId;
 
       // Translate product using common service (automatically detects language from token)
       const transformedProduct = await translateProductForUser(result.product, req);
@@ -872,13 +891,15 @@ export class ProductController {
         enrichedProduct.isMember = false;
       }
 
-      // Add is_liked field if user is authenticated
+      // Add is_liked field (always present, false for unauthenticated users)
       if (userId) {
         const isInWishlist = await Wishlists.exists({
           userId: new mongoose.Types.ObjectId(userId),
           productId: transformedProduct._id,
         });
         enrichedProduct.is_liked = !!isInWishlist;
+      } else {
+        enrichedProduct.is_liked = false;
       }
 
       // Add isInCart field if user is authenticated

@@ -30,7 +30,72 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+// Helper function to extract language-specific value from multi-language objects
+const getLanguageValue = (value: any, userLanguage: string = 'en'): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'object' && value !== null) {
+    // Try to get the user's preferred language first
+    if (value[userLanguage]) {
+      return value[userLanguage];
+    }
+    // Fallback to English if user's language is not available
+    if (value.en) {
+      return value.en;
+    }
+    // If English is not available, return the first available language
+    const availableLanguages = Object.keys(value);
+    if (availableLanguages.length > 0) {
+      return value[availableLanguages[0]];
+    }
+  }
+  return value || '';
+};
+
 class AdminSubscriptionController {
+  /**
+   * Calculate total from subscription items
+   */
+  private calculateFromItems(items: any[]): number {
+    if (!items || items.length === 0) return 0;
+    return items.reduce((total: number, item: any) => total + (item.totalAmount || 0), 0);
+  }
+
+  /**
+   * Build overall pricing object from subscription items
+   */
+  private buildOverallFromItems(items: any): any {
+    if (!items || items.length === 0) {
+      return {
+        subTotal: 0,
+        discountedPrice: 0,
+        membershipDiscountAmount: 0,
+        subscriptionPlanDiscountAmount: 0,
+        taxAmount: 0,
+        total: 0,
+        grandTotal: 0,
+        currency: "USD",
+      };
+    }
+
+    const subTotal = items.reduce((total: number, item: any) => total + (item.amount || 0), 0);
+    const discountedPrice = items.reduce((total: number, item: any) => total + (item.discountedPrice || 0), 0);
+    const totalAmount = items.reduce((total: number, item: any) => total + (item.totalAmount || 0), 0);
+    const totalDiscount = subTotal - discountedPrice;
+    const taxAmount = 0; // Assuming no tax for now
+
+    return {
+      subTotal: Math.round(subTotal * 100) / 100,
+      discountedPrice: Math.round(discountedPrice * 100) / 100,
+      membershipDiscountAmount: 0,
+      subscriptionPlanDiscountAmount: Math.round(totalDiscount * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      total: Math.round(totalAmount * 100) / 100,
+      grandTotal: Math.round(totalAmount * 100) / 100,
+      currency: "USD",
+    };
+  }
   /**
    * Get all subscriptions with pagination and filters
    * @route GET /api/v1/admin/subscriptions
@@ -44,7 +109,7 @@ class AdminSubscriptionController {
    * @query {String} [userId] - Filter by user ID
    */
   getAllSubscriptions = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const {
         search,
@@ -150,6 +215,10 @@ class AdminSubscriptionController {
       // Get total count
       const total = await Subscriptions.countDocuments(filter);
 
+      // Get admin user's language preference
+      const adminUser = await User.findById(req.user?._id).select('language').lean();
+      const adminLanguage = adminUser?.language || 'en';
+
       // Get subscriptions with pagination
       const subscriptions = await Subscriptions.find(filter)
         .populate("userId", "firstName lastName email")
@@ -192,10 +261,11 @@ class AdminSubscriptionController {
             : null,
           items: subscription.items.map((item: any) => ({
             productId: item.productId?._id || item.productId,
+            product_id: item.productId?._id || item.productId, // Add product_id key
             product: item.productId
               ? {
                   id: item.productId._id,
-                  title: item.productId.title,
+                  title: getLanguageValue(item.productId.title, adminLanguage),
                   slug: item.productId.slug,
                 }
               : null,
@@ -237,8 +307,12 @@ class AdminSubscriptionController {
    * @access Admin
    */
   getSubscriptionById = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
+
+      // Get admin user's language preference
+      const adminUser = await User.findById(req.user?._id).select('language').lean();
+      const adminLanguage = adminUser?.language || 'en';
 
       const subscription = await Subscriptions.findOne({
         _id: id,
@@ -246,13 +320,19 @@ class AdminSubscriptionController {
       })
         .populate("userId", "firstName lastName email phone")
         .populate("items.productId", "title slug description media")
-        .populate("orderId", "orderNumber paymentStatus paymentMethod grandTotal currency")
+        .populate("orderId", "orderNumber paymentStatus paymentMethod overall")
         .populate("cancelledBy", "firstName lastName email")
         .lean();
 
       if (!subscription) {
         throw new AppError("Subscription not found", 404);
       }
+
+      // Debug logging - detailed
+      console.log('🔍 [DEBUG] Subscription userId:', JSON.stringify(subscription.userId, null, 2));
+      console.log('🔍 [DEBUG] Subscription orderId:', JSON.stringify(subscription.orderId, null, 2));
+      console.log('🔍 [DEBUG] Subscription items:', JSON.stringify(subscription.items, null, 2));
+      console.log('🔍 [DEBUG] Full subscription object:', JSON.stringify(subscription, null, 2));
 
       // Get payment/transaction logs for this subscription
       // Get payments linked to subscription (renewal payments)
@@ -300,8 +380,33 @@ class AdminSubscriptionController {
       );
 
       const user = subscription.userId as any;
-      const isPopulatedUser =
-        user && typeof user === "object" && user.firstName !== undefined;
+      
+      // Handle both populated and non-populated user data
+      const isPopulatedUser = user && typeof user === "object" && user.firstName !== undefined;
+      
+      // If user is not populated, fetch user data
+      let userData = null;
+      if (isPopulatedUser) {
+        userData = {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        };
+      } else if (user) {
+        // User is ObjectId, fetch user data
+        const userDoc = await User.findById(user).select('firstName lastName email phone').lean();
+        userData = userDoc ? {
+          id: userDoc._id,
+          firstName: userDoc.firstName,
+          lastName: userDoc.lastName,
+          email: userDoc.email,
+          phone: userDoc.phone,
+          fullName: `${userDoc.firstName || ''} ${userDoc.lastName || ''}`.trim(),
+        } : null;
+      }
 
       const transformedSubscription = {
         id: subscription._id,
@@ -311,34 +416,27 @@ class AdminSubscriptionController {
         cycleDays: subscription.cycleDays,
         subscriptionStartDate: subscription.subscriptionStartDate,
         subscriptionEndDate: subscription.subscriptionEndDate,
-        user: isPopulatedUser
-          ? {
-              id: user._id,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              email: user.email,
-              phone: user.phone,
-              fullName: `${user.firstName} ${user.lastName}`.trim(),
-            }
-          : null,
+        user: userData,
         order: subscription.orderId
           ? {
               id: orderId,
               orderNumber: (subscription.orderId as any).orderNumber || null,
               paymentStatus: (subscription.orderId as any).paymentStatus || null,
               paymentMethod: (subscription.orderId as any).paymentMethod || null,
-              grandTotal: (subscription.orderId as any).grandTotal ?? null,
-              currency: (subscription.orderId as any).currency ?? null,
+              grandTotal: (subscription.orderId as any).overall?.grandTotal ?? (subscription.orderId as any).grandTotal ?? this.calculateFromItems(subscription.items),
+              currency: (subscription.orderId as any).overall?.currency ?? (subscription.orderId as any).currency ?? "USD",
+              overall: (subscription.orderId as any).overall || this.buildOverallFromItems(subscription.items) || null,
             }
           : null,
         items: subscription.items.map((item: any) => ({
           productId: item.productId?._id || item.productId,
+          product_id: item.productId?._id || item.productId, // Add product_id key
           product: item.productId
             ? {
                 id: item.productId._id,
-                title: item.productId.title,
+                title: getLanguageValue(item.productId.title, adminLanguage),
                 slug: item.productId.slug,
-                description: item.productId.description,
+                description: getLanguageValue(item.productId.description, adminLanguage),
                 media: item.productId.media,
               }
             : null,
@@ -473,6 +571,8 @@ class AdminSubscriptionController {
    * @body {Boolean} cancelAtEndDate - Cancel at end date (toggle)
    * @body {Boolean} cancelImmediately - Cancel immediately (toggle)
    * @body {String} cancellationReason - Cancellation reason (required)
+   * @body {String} [customReason] - Custom cancellation reason (required if cancellationReason is "Other")
+   * @body {Date} [scheduledCancellationDate] - Specific date to cancel subscription (ISO date string)
    */
   cancelSubscription = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -482,6 +582,7 @@ class AdminSubscriptionController {
         cancelImmediately,
         cancellationReason,
         customReason,
+        scheduledCancellationDate,
       } = req.body;
 
       const adminId = req.user?._id
@@ -499,9 +600,13 @@ class AdminSubscriptionController {
         throw new AppError("Subscription not found", 404);
       }
 
-      // Check if already cancelled
+      // Check if already cancelled or pending cancellation
       if (subscription.status === SubscriptionStatus.CANCELLED) {
         throw new AppError("Subscription is already cancelled", 400);
+      }
+
+      if (subscription.status === SubscriptionStatus.PENDING_CANCELLATION) {
+        throw new AppError("Subscription is already pending cancellation", 400);
       }
 
       const user = subscription.userId as any;
@@ -515,20 +620,76 @@ class AdminSubscriptionController {
           ? customReason.trim()
           : cancellationReason;
 
-      // Update subscription
-      const updateData: any = {
-        status: SubscriptionStatus.CANCELLED,
-        cancelledBy: adminId,
-        cancellationReason: finalCancellationReason,
-      };
+      let updateData: any;
+      let responseMessage: string;
 
       if (cancelImmediately) {
-        updateData.cancelledAt = new Date();
-        updateData.subscriptionEndDate = new Date();
+        // Cancel immediately
+        updateData = {
+          status: SubscriptionStatus.CANCELLED,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          cancelledAt: new Date(),
+          subscriptionEndDate: new Date(),
+          scheduledCancellationDate: null, // Clear scheduled date if any
+        };
+        responseMessage = "cancelled immediately";
+      } else if (scheduledCancellationDate) {
+        // Cancel on specific future date
+        const cancellationDate = new Date(scheduledCancellationDate);
+        const now = new Date();
+
+        if (cancellationDate <= now) {
+          throw new AppError("Scheduled cancellation date must be in the future", 400);
+        }
+
+        updateData = {
+          status: SubscriptionStatus.PENDING_CANCELLATION,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          scheduledCancellationDate: cancellationDate,
+        };
+        responseMessage = `scheduled for cancellation on ${cancellationDate.toISOString().split('T')[0]}`;
       } else if (cancelAtEndDate) {
-        // Cancel at end date - set cancelledAt to subscriptionEndDate
-        updateData.cancelledAt = subscription.subscriptionEndDate || new Date();
-        // Keep subscriptionEndDate as is
+        // Cancel at subscription end date
+        const endDate = subscription.subscriptionEndDate || new Date();
+        
+        if (endDate <= new Date()) {
+          // If end date is in the past or today, cancel immediately
+          updateData = {
+            status: SubscriptionStatus.CANCELLED,
+            cancelledBy: adminId,
+            cancellationReason: finalCancellationReason,
+            cancelledAt: new Date(),
+            subscriptionEndDate: endDate,
+            scheduledCancellationDate: null,
+          };
+          responseMessage = "cancelled immediately (subscription end date already passed)";
+        } else {
+          // Schedule for end date
+          updateData = {
+            status: SubscriptionStatus.PENDING_CANCELLATION,
+            cancelledBy: adminId,
+            cancellationReason: finalCancellationReason,
+            scheduledCancellationDate: endDate,
+          };
+          responseMessage = `scheduled for cancellation on ${endDate.toISOString().split('T')[0]}`;
+        }
+      } else if (cancelImmediately === false) {
+        // When cancelImmediately is explicitly false, always set to PENDING_CANCELLATION
+        const endDate = subscription.subscriptionEndDate || new Date();
+        
+        // Always set to PENDING_CANCELLATION when cancelImmediately is false
+        // The automated job will handle the transition to CANCELLED when end date is reached
+        updateData = {
+          status: SubscriptionStatus.PENDING_CANCELLATION,
+          cancelledBy: adminId,
+          cancellationReason: finalCancellationReason,
+          scheduledCancellationDate: endDate, // Use subscription end date
+        };
+        responseMessage = `scheduled for cancellation on ${endDate.toISOString().split('T')[0]}`;
+      } else {
+        throw new AppError("Either cancelImmediately, cancelAtEndDate, or scheduledCancellationDate must be provided", 400);
       }
 
       await Subscriptions.updateOne({ _id: id }, updateData);
@@ -544,6 +705,7 @@ class AdminSubscriptionController {
             cancellationReason: finalCancellationReason,
             cancelledAt: updateData.cancelledAt,
             cancelledImmediately: cancelImmediately,
+            scheduledCancellationDate: updateData.scheduledCancellationDate,
           }
         );
 
@@ -559,12 +721,12 @@ class AdminSubscriptionController {
       }
 
       logger.info(
-        `Subscription ${subscription.subscriptionNumber} cancelled by admin ${adminId}`
+        `Subscription ${subscription.subscriptionNumber} ${responseMessage} by admin ${adminId}`
       );
 
       res.apiSuccess(
         null,
-        `Subscription ${cancelImmediately ? "cancelled immediately" : "scheduled for cancellation at end date"} successfully`
+        `Subscription ${responseMessage} successfully`
       );
     }
   );
@@ -766,9 +928,6 @@ class AdminSubscriptionController {
         orderNumber: `TEST-${Date.now()}`,
         userId: new mongoose.Types.ObjectId(userId),
         planType: OrderPlanType.SUBSCRIPTION,
-        isOneTime: false,
-        variantType: "SACHETS",
-        selectedPlanDays: cycleDays,
         items: [
           {
             productId: new mongoose.Types.ObjectId(), // Dummy product ID
@@ -788,7 +947,7 @@ class AdminSubscriptionController {
         discountedPrice: 39.99,
         taxAmount: 8.39,
         grandTotal: 48.39,
-        currency: "EUR",
+        currency: "USD",
         shippingAddressId: new mongoose.Types.ObjectId(), // Dummy address
         billingAddressId: new mongoose.Types.ObjectId(), // Dummy address
         paymentMethod: PaymentMethod.STRIPE,
@@ -808,10 +967,10 @@ class AdminSubscriptionController {
         status: PaymentStatus.COMPLETED,
         amount: {
           amount: 48.39,
-          currency: "EUR",
+          currency: "USD",
           taxRate: 0.21,
         },
-        currency: "EUR",
+        currency: "USD",
         gatewayTransactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
         gatewaySessionId: `TEST_SESSION_${Date.now()}_${testOrder._id}`,
         transactionId: `TEST_TXN_${Date.now()}_${testOrder._id}`,
@@ -856,14 +1015,14 @@ class AdminSubscriptionController {
 
       // Create gateway subscription (Stripe/Mollie) for auto-renewal
       const { subscriptionGatewayService } = await import("@/services/subscriptionGatewayService");
-      const totalAmount = testOrder.grandTotal * 100; // Convert to cents
+      const totalAmount = (testOrder.pricing?.overall?.grandTotal || 0) * 100; // Convert to cents
       
       const gatewayResult = await subscriptionGatewayService.createSubscription({
         userId: userId,
         orderId: (testOrder._id as mongoose.Types.ObjectId).toString(),
         paymentMethod: PaymentMethod.STRIPE, // Use Stripe for test
         amount: totalAmount,
-        currency: testOrder.currency,
+        currency: testOrder.pricing?.overall?.currency || "USD",
         cycleDays: cycleDays,
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
@@ -952,8 +1111,8 @@ class AdminSubscriptionController {
           paymentId: testPayment._id as mongoose.Types.ObjectId,
           orderId: testOrder._id as mongoose.Types.ObjectId,
           amount: {
-            amount: testOrder.grandTotal,
-            currency: testOrder.currency,
+            amount: testOrder.pricing?.overall?.grandTotal || 0,
+            currency: testOrder.pricing?.overall?.currency || "USD",
             taxRate: testOrder.items[0]?.taxRate || 0.21,
           },
           status: PaymentStatus.COMPLETED,

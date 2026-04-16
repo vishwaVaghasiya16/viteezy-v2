@@ -81,11 +81,23 @@ class BlogController {
       };
 
       if (category) {
-        if (mongoose.Types.ObjectId.isValid(category as string)) {
-          filter.categoryId = new mongoose.Types.ObjectId(category as string);
+        // Decode URL-encoded category parameter and convert to slug format
+        const decodedCategory = decodeURIComponent(category as string);
+        const categorySlug = decodedCategory
+          .toString()
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, "-") // Replace spaces with hyphens
+          .replace(/[^\w\-]+/g, "") // Remove all non-word characters except hyphens
+          .replace(/\-\-+/g, "-") // Replace multiple hyphens with single hyphen
+          .replace(/^-+/, "") // Remove leading hyphens
+          .replace(/-+$/, ""); // Remove trailing hyphens
+        
+        if (mongoose.Types.ObjectId.isValid(categorySlug)) {
+          filter.categoryId = new mongoose.Types.ObjectId(categorySlug);
         } else {
           const categoryDoc = await BlogCategories.findOne({
-            slug: category,
+            slug: categorySlug,
             isDeleted: false,
           });
           if (categoryDoc) {

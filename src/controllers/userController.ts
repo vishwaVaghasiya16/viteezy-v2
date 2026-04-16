@@ -563,7 +563,7 @@ class UserController {
             payment.gatewaySessionId ||
             null,
           amount: payment.amount?.amount ?? null,
-          currency: payment.amount?.currency || payment.currency || "EUR",
+          currency: payment.amount?.currency || payment.currency || "USD",
           taxRate: payment.amount?.taxRate ?? null,
           processedAt: payment.processedAt || payment.createdAt,
           orderId: payment.orderId,
@@ -608,6 +608,288 @@ class UserController {
         getPaginationMeta(page, limit, total),
         "Transaction history retrieved"
       );
+    }
+  );
+
+  leaveFamily = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        const userId = req.user._id;
+        const user = await User.findById(userId).session(session);
+        
+        if (!user?.parentId) {
+          await session.abortTransaction();
+          throw new AppError("User is not in a family", 400);
+        }
+        
+        // Remove inherited membership benefits
+        const { Memberships } = await import("@/models/commerce");
+        await Memberships.deleteMany({ 
+          userId, 
+          inherited: true 
+        }).session(session);
+        
+        // Reset cart context (do NOT delete)
+        const { Carts } = await import("@/models/commerce");
+        await Carts.updateMany(
+          { userId, for_user: { $ne: userId } },
+          { $set: { for_user: userId } }
+        ).session(session);
+        
+        // Remove parentId and reset isSubMember
+        await User.updateOne(
+          { _id: userId },
+          { 
+            $unset: { 
+              parentId: 1,
+              parentMemberId: 1  // Also unset parentMemberId
+            },
+            $set: { 
+              isSubMember: false  // Reset isSubMember to false
+            }
+          }
+        ).session(session);
+        
+        await session.commitTransaction();
+        
+        res.apiSuccess(
+          null,
+          "Left family successfully"
+        );
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    }
+  );
+
+  leaveFamilyAsMainMember = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      
+      try {
+        const userId = req.user._id;
+        
+        // Get sub-members BEFORE removing parentId
+        const subMembers = await User.find({ parentId: userId }).session(session);
+        
+        // Make all sub-members independent
+        await User.updateMany(
+          { parentId: userId },
+          { 
+            $unset: { 
+              parentId: 1,
+              parentMemberId: 1  // Also unset parentMemberId
+            },
+            $set: { 
+              isSubMember: false  // Reset isSubMember to false
+            }
+          }
+        ).session(session);
+        
+        // Remove inherited benefits from all sub-members
+        const { Memberships } = await import("@/models/commerce");
+        const { Carts } = await import("@/models/commerce");
+        
+        for (const subMember of subMembers) {
+          await Memberships.deleteMany({ 
+            userId: subMember._id, 
+            inherited: true 
+          }).session(session);
+          
+          // Reset cart context
+          await Carts.updateMany(
+            { userId: subMember._id, for_user: { $ne: subMember._id } },
+            { $set: { for_user: subMember._id } }
+          ).session(session);
+        }
+        
+        await session.commitTransaction();
+        
+        res.apiSuccess(
+          null,
+          "Family dissolved successfully"
+        );
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    }
+  );
+
+  // ============================================================================
+  // FAMILY MANAGEMENT METHODS
+  // ============================================================================
+
+  /**
+   * Link to family using member ID
+   */
+  linkByMemberId = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { memberId, relationshipToParent } = req.body;
+      const { findUserByMemberId } = await import("@/utils/memberIdGenerator");
+      const { validateSubMemberLinking: validateFamilyLinking } = await import("@/services/familyValidationService");
+
+      // Find main member by member ID
+      const mainMember = await findUserByMemberId(memberId);
+      if (!mainMember) {
+        throw new AppError("Invalid member ID", 404);
+      }
+
+      // Validate linking rules
+      const validation = await validateFamilyLinking(mainMember._id, req.user._id);
+      if (!validation.allowed) {
+        throw new AppError(validation.reason || "Cannot link to family", 400);
+      }
+
+      // Update user to become sub-member
+      await User.findByIdAndUpdate(req.user._id, {
+        isSubMember: true,        // ✅ Set isSubMember to true
+        parentMemberId: mainMember._id,  // ✅ Also set parentMemberId for consistency
+        parentId: mainMember._id,
+        relationshipToParent: relationshipToParent || "Other"
+      });
+
+      res.apiSuccess(null, "Successfully linked to family");
+    }
+  );
+
+  /**
+   * Get family information
+   */
+  getFamilyInfo = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const user = await User.findById(req.user._id).select('parentId').lean();
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      let familyInfo: any = {
+        role: 'INDEPENDENT',
+        members: []
+      };
+
+      if (user.parentId) {
+        // User is a sub-member
+        const mainMember = await User.findById(user.parentId).select('-password').lean();
+        const subMembers = await User.find({ parentId: user.parentId }).select('-password').lean();
+
+        familyInfo = {
+          role: 'SUB_MEMBER',
+          mainMember,
+          subMembers: subMembers.filter(m => m._id.toString() !== req.user._id),
+          self: subMembers.find(m => m._id.toString() === req.user._id)
+        };
+      } else {
+        // User is main member or independent
+        const subMembers = await User.find({ parentId: req.user._id }).select('-password').lean();
+        
+        familyInfo = {
+          role: subMembers.length > 0 ? 'MAIN_MEMBER' : 'INDEPENDENT',
+          subMembers,
+          mainMember: await User.findById(req.user._id).select('-password').lean()
+        };
+      }
+
+      res.apiSuccess(familyInfo, "Family information retrieved successfully");
+    }
+  );
+
+  /**
+   * Get sub-members for main member
+   */
+  getMySubMembers = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const subMembers = await User.find({ parentId: req.user._id })
+        .select('-password')
+        .lean();
+
+      res.apiSuccess({ subMembers }, "Sub-members retrieved successfully");
+    }
+  );
+
+  /**
+   * Remove sub-member
+   */
+  removeSubMember = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { subMemberId } = req.params;
+      
+      // Validate sub-member belongs to this user
+      const subMember = await User.findOne({ 
+        _id: subMemberId, 
+        parentId: req.user._id 
+      });
+
+      if (!subMember) {
+        throw new AppError("Sub-member not found", 404);
+      }
+
+      // Remove family relationship
+      await User.findByIdAndUpdate(subMemberId, {
+        $unset: { 
+          parentId: 1, 
+          parentMemberId: 1,  // Also unset parentMemberId
+          relationshipToParent: 1 
+        },
+        $set: { 
+          isSubMember: false  // Reset isSubMember to false
+        }
+      });
+
+      // Reset cart context for sub-member
+      const { Carts } = await import("@/models/commerce");
+      await Carts.updateMany(
+        { userId: subMemberId, for_user: { $ne: subMemberId } },
+        { $set: { for_user: subMemberId } }
+      );
+
+      res.apiSuccess(null, "Sub-member removed successfully");
+    }
+  );
+
+  /**
+   * Verify member ID exists
+   */
+  verifyMemberId = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { memberId } = req.params;
+      const { findUserByMemberId } = await import("@/utils/memberIdGenerator");
+
+      const user = await findUserByMemberId(memberId);
+      
+      if (!user) {
+        throw new AppError("Member ID not found", 404);
+      }
+
+      res.apiSuccess({
+        memberId: user.memberId,
+        name: `${user.firstName} ${user.lastName}`.trim()
+      }, "Member ID verified successfully");
     }
   );
 }

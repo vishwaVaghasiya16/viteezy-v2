@@ -57,7 +57,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 24.99,
             "taxRate": 21
         },
@@ -65,7 +65,7 @@
         "hasStandupPouch": true,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 19.99,
                 "taxRate": 21,
                 "totalAmount": 59.97,
@@ -78,7 +78,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 113.94,
@@ -91,7 +91,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 161.91,
@@ -104,7 +104,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 305.82,
@@ -118,13 +118,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 24.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 44.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -132,7 +132,7 @@
             }
         },
         "standupPouchPrice": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 29.99,
             "taxRate": 21
         },
@@ -203,7 +203,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 29.99,
             "taxRate": 21
         },
@@ -211,7 +211,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 24.99,
                 "taxRate": 21,
                 "totalAmount": 74.97,
@@ -224,7 +224,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 23.99,
                 "taxRate": 21,
                 "totalAmount": 143.94,
@@ -237,7 +237,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 22.99,
                 "taxRate": 21,
                 "totalAmount": 206.91,
@@ -250,7 +250,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 21.99,
                 "taxRate": 21,
                 "totalAmount": 395.82,
@@ -264,13 +264,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 29.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 54.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -341,7 +341,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 19.99,
             "taxRate": 21
         },
@@ -349,7 +349,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 50.97,
@@ -362,7 +362,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 15.99,
                 "taxRate": 21,
                 "totalAmount": 95.94,
@@ -375,7 +375,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 134.91,
@@ -388,7 +388,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 251.82,
@@ -402,13 +402,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 19.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 34.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -479,7 +479,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 14.99,
             "taxRate": 21
         },
@@ -487,7 +487,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 12.99,
                 "taxRate": 21,
                 "totalAmount": 38.97,
@@ -500,7 +500,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 11.99,
                 "taxRate": 21,
                 "totalAmount": 71.94,
@@ -513,7 +513,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 10.99,
                 "taxRate": 21,
                 "totalAmount": 98.91,
@@ -526,7 +526,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 9.99,
                 "taxRate": 21,
                 "totalAmount": 179.82,
@@ -540,13 +540,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 14.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 26.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -617,7 +617,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 16.99,
             "taxRate": 21
         },
@@ -625,7 +625,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 44.97,
@@ -638,7 +638,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 83.94,
@@ -651,7 +651,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 12.99,
                 "taxRate": 21,
                 "totalAmount": 116.91,
@@ -664,7 +664,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 11.99,
                 "taxRate": 21,
                 "totalAmount": 215.82,
@@ -678,13 +678,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 16.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 29.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -755,7 +755,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 34.99,
             "taxRate": 21
         },
@@ -763,7 +763,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 29.99,
                 "taxRate": 21,
                 "totalAmount": 89.97,
@@ -776,7 +776,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 27.99,
                 "taxRate": 21,
                 "totalAmount": 167.94,
@@ -789,7 +789,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 25.99,
                 "taxRate": 21,
                 "totalAmount": 233.91,
@@ -802,7 +802,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 23.99,
                 "taxRate": 21,
                 "totalAmount": 431.82,
@@ -816,13 +816,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 34.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 64.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -893,7 +893,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 18.99,
             "taxRate": 21
         },
@@ -901,7 +901,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 50.97,
@@ -914,7 +914,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 15.99,
                 "taxRate": 21,
                 "totalAmount": 95.94,
@@ -927,7 +927,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 134.91,
@@ -940,7 +940,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 251.82,
@@ -954,13 +954,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 18.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 33.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1031,7 +1031,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 22.99,
             "taxRate": 21
         },
@@ -1039,7 +1039,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 19.99,
                 "taxRate": 21,
                 "totalAmount": 59.97,
@@ -1052,7 +1052,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 113.94,
@@ -1065,7 +1065,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 161.91,
@@ -1078,7 +1078,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 305.82,
@@ -1092,13 +1092,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 22.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 41.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1169,7 +1169,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 26.99,
             "taxRate": 21
         },
@@ -1177,7 +1177,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 23.99,
                 "taxRate": 21,
                 "totalAmount": 71.97,
@@ -1190,7 +1190,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 22.99,
                 "taxRate": 21,
                 "totalAmount": 137.94,
@@ -1203,7 +1203,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 21.99,
                 "taxRate": 21,
                 "totalAmount": 197.91,
@@ -1216,7 +1216,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 20.99,
                 "taxRate": 21,
                 "totalAmount": 377.82,
@@ -1230,13 +1230,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 26.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 49.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1307,7 +1307,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 32.99,
             "taxRate": 21
         },
@@ -1315,7 +1315,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 28.99,
                 "taxRate": 21,
                 "totalAmount": 86.97,
@@ -1328,7 +1328,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 27.99,
                 "taxRate": 21,
                 "totalAmount": 167.94,
@@ -1341,7 +1341,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 26.99,
                 "taxRate": 21,
                 "totalAmount": 242.91,
@@ -1354,7 +1354,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 25.99,
                 "taxRate": 21,
                 "totalAmount": 467.82,
@@ -1368,13 +1368,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 32.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 59.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1444,7 +1444,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 24.99,
             "taxRate": 21
         },
@@ -1452,7 +1452,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 21.99,
                 "taxRate": 21,
                 "totalAmount": 65.97,
@@ -1465,7 +1465,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 20.99,
                 "taxRate": 21,
                 "totalAmount": 125.94,
@@ -1478,7 +1478,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 19.99,
                 "taxRate": 21,
                 "totalAmount": 179.91,
@@ -1491,7 +1491,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 341.82,
@@ -1505,13 +1505,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 24.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 44.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1581,7 +1581,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 21.99,
             "taxRate": 21
         },
@@ -1589,7 +1589,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 19.99,
                 "taxRate": 21,
                 "totalAmount": 59.97,
@@ -1602,7 +1602,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 113.94,
@@ -1615,7 +1615,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 161.91,
@@ -1628,7 +1628,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 305.82,
@@ -1642,13 +1642,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 21.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 39.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1716,7 +1716,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 12.99,
             "taxRate": 21
         },
@@ -1724,7 +1724,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 11.99,
                 "taxRate": 21,
                 "totalAmount": 35.97,
@@ -1737,7 +1737,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 10.99,
                 "taxRate": 21,
                 "totalAmount": 65.94,
@@ -1750,7 +1750,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 9.99,
                 "taxRate": 21,
                 "totalAmount": 89.91,
@@ -1763,7 +1763,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 8.99,
                 "taxRate": 21,
                 "totalAmount": 161.82,
@@ -1777,13 +1777,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 12.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 22.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -1852,14 +1852,14 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 39.99,
             "taxRate": 21
         },
         "variant": "STAND_UP_POUCH",
         "hasStandupPouch": true,
         "standupPouchPrice": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 39.99,
             "taxRate": 21
         },
@@ -1927,7 +1927,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 19.99,
             "taxRate": 21
         },
@@ -1935,7 +1935,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 53.97,
@@ -1948,7 +1948,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 101.94,
@@ -1961,7 +1961,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 15.99,
                 "taxRate": 21,
                 "totalAmount": 143.91,
@@ -1974,7 +1974,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 269.82,
@@ -1988,13 +1988,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 19.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 35.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2069,7 +2069,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 16.99,
             "taxRate": 21
         },
@@ -2077,7 +2077,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 44.97,
@@ -2090,7 +2090,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 83.94,
@@ -2103,7 +2103,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 12.99,
                 "taxRate": 21,
                 "totalAmount": 116.91,
@@ -2116,7 +2116,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 11.99,
                 "taxRate": 21,
                 "totalAmount": 215.82,
@@ -2130,13 +2130,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 16.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 29.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2206,7 +2206,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 15.99,
             "taxRate": 21
         },
@@ -2214,7 +2214,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 41.97,
@@ -2227,7 +2227,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 12.99,
                 "taxRate": 21,
                 "totalAmount": 77.94,
@@ -2240,7 +2240,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 11.99,
                 "taxRate": 21,
                 "totalAmount": 107.91,
@@ -2253,7 +2253,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 10.99,
                 "taxRate": 21,
                 "totalAmount": 197.82,
@@ -2267,13 +2267,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 15.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 28.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2344,7 +2344,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 18.99,
             "taxRate": 21
         },
@@ -2352,7 +2352,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 50.97,
@@ -2365,7 +2365,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 15.99,
                 "taxRate": 21,
                 "totalAmount": 95.94,
@@ -2378,7 +2378,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 14.99,
                 "taxRate": 21,
                 "totalAmount": 134.91,
@@ -2391,7 +2391,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 13.99,
                 "taxRate": 21,
                 "totalAmount": 251.82,
@@ -2405,13 +2405,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 18.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 33.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2481,7 +2481,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 23.99,
             "taxRate": 21
         },
@@ -2489,7 +2489,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 20.99,
                 "taxRate": 21,
                 "totalAmount": 62.97,
@@ -2502,7 +2502,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 19.99,
                 "taxRate": 21,
                 "totalAmount": 119.94,
@@ -2515,7 +2515,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 170.91,
@@ -2528,7 +2528,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 323.82,
@@ -2542,13 +2542,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 23.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 42.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2618,7 +2618,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 27.99,
             "taxRate": 21
         },
@@ -2626,7 +2626,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 24.99,
                 "taxRate": 21,
                 "totalAmount": 74.97,
@@ -2639,7 +2639,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 23.99,
                 "taxRate": 21,
                 "totalAmount": 143.94,
@@ -2652,7 +2652,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 22.99,
                 "taxRate": 21,
                 "totalAmount": 206.91,
@@ -2665,7 +2665,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 21.99,
                 "taxRate": 21,
                 "totalAmount": 395.82,
@@ -2679,13 +2679,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 27.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 49.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2756,7 +2756,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 20.99,
             "taxRate": 21
         },
@@ -2764,7 +2764,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 18.99,
                 "taxRate": 21,
                 "totalAmount": 56.97,
@@ -2777,7 +2777,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 17.99,
                 "taxRate": 21,
                 "totalAmount": 107.94,
@@ -2790,7 +2790,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 16.99,
                 "taxRate": 21,
                 "totalAmount": 152.91,
@@ -2803,7 +2803,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 15.99,
                 "taxRate": 21,
                 "totalAmount": 287.82,
@@ -2817,13 +2817,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 20.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 37.99,
                     "taxRate": 21,
                     "capsuleCount": 60
@@ -2894,7 +2894,7 @@
         },
         "status": true,
         "price": {
-            "currency": "EUR",
+            "currency": "USD",
             "amount": 35.99,
             "taxRate": 21
         },
@@ -2902,7 +2902,7 @@
         "hasStandupPouch": false,
         "sachetPrices": {
             "thirtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 31.99,
                 "taxRate": 21,
                 "totalAmount": 95.97,
@@ -2915,7 +2915,7 @@
                 ]
             },
             "sixtyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 30.99,
                 "taxRate": 21,
                 "totalAmount": 185.94,
@@ -2928,7 +2928,7 @@
                 ]
             },
             "ninetyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 29.99,
                 "taxRate": 21,
                 "totalAmount": 269.91,
@@ -2941,7 +2941,7 @@
                 ]
             },
             "oneEightyDays": {
-                "currency": "EUR",
+                "currency": "USD",
                 "amount": 28.99,
                 "taxRate": 21,
                 "totalAmount": 521.82,
@@ -2955,13 +2955,13 @@
             },
             "oneTime": {
                 "count30": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 35.99,
                     "taxRate": 21,
                     "capsuleCount": 30
                 },
                 "count60": {
-                    "currency": "EUR",
+                    "currency": "USD",
                     "amount": 64.99,
                     "taxRate": 21,
                     "capsuleCount": 60

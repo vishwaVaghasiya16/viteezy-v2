@@ -131,6 +131,21 @@ class AdminBlogController {
         }
       }
 
+      // Ensure SEO.metaSlug is unique when provided
+      let normalizedMetaSlug: string | null = null;
+      if (seo?.metaSlug) {
+        normalizedMetaSlug = String(seo.metaSlug).trim().toLowerCase();
+        if (normalizedMetaSlug) {
+          const slugExists = await Blogs.exists({
+            "seo.metaSlug": normalizedMetaSlug,
+            isDeleted: false,
+          });
+          if (slugExists) {
+            throw new AppError("Meta slug already exists", 400);
+          }
+        }
+      }
+
       let authorObjectId: mongoose.Types.ObjectId | null = null;
       if (authorId) {
         authorObjectId = ensureObjectId(authorId, "author");
@@ -160,7 +175,10 @@ class AdminBlogController {
         title,
         description: desc,
         excerpt: excerptValue,
-        seo: seo || {},
+        seo: {
+          ...(seo || {}),
+          metaSlug: normalizedMetaSlug ?? (seo?.metaSlug ?? null),
+        },
         coverImage: coverImageUrl ?? null,
         isActive,
         authorId: authorObjectId,
@@ -331,7 +349,38 @@ class AdminBlogController {
         }
       }
       if (excerpt && Object.keys(excerpt).length > 0) blog.excerpt = excerpt;
-      if (seo) blog.seo = seo;
+      // If SEO provided, validate metaSlug uniqueness and merge safely
+      if (seo) {
+        const incomingSlug =
+          seo.metaSlug && typeof seo.metaSlug === "string"
+            ? seo.metaSlug.trim().toLowerCase()
+            : null;
+
+        if (incomingSlug) {
+          const duplicate = await Blogs.findOne({
+            "seo.metaSlug": incomingSlug,
+            _id: { $ne: blog._id },
+            isDeleted: false,
+          }).lean();
+          if (duplicate) {
+            throw new AppError("Meta slug already exists", 400);
+          }
+        }
+
+        blog.seo = {
+          ...(blog.seo || {}),
+          metaSlug:
+            seo.metaSlug !== undefined
+              ? incomingSlug
+              : blog.seo?.metaSlug ?? null,
+          metaTitle:
+            seo.metaTitle !== undefined ? seo.metaTitle : blog.seo?.metaTitle,
+          metaDescription:
+            seo.metaDescription !== undefined
+              ? seo.metaDescription
+              : blog.seo?.metaDescription,
+        };
+      }
       if (isActive !== undefined) blog.isActive = isActive;
 
       let nextCoverImage = blog.coverImage ?? null;

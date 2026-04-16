@@ -70,7 +70,7 @@ class AuthController {
    * Login user
    */
   login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { email, password, deviceInfo } = req.body;
+    const { email, password, deviceInfo, type } = req.body;
 
     if (!deviceInfo) {
       throw new AppError("deviceInfo is required for login", 400);
@@ -80,6 +80,7 @@ class AuthController {
       email,
       password,
       deviceInfo,
+      type, // Pass type parameter
     });
 
     res.apiSuccess(
@@ -138,13 +139,13 @@ class AuthController {
    */
   forgotPassword = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const { email, deviceInfo, client } = req.body;
+      const { email, deviceInfo, client, type } = req.body;
 
       if (!deviceInfo) {
         throw new AppError("deviceInfo is required", 400);
       }
 
-      const result = await authService.forgotPassword(email, deviceInfo, client);
+      const result = await authService.forgotPassword(email, deviceInfo, client, type);
 
       res.apiSuccess(null, result.message);
     }
@@ -451,6 +452,26 @@ class AuthController {
         age,
         relationshipToParent,
       } = req.body;
+
+      // VALIDATION 1: Check if user already in family
+      const existingUser = await User.findOne({ email });
+      if (existingUser && existingUser.parentId) {
+        throw new AppError("User is already in a family", 400);
+      }
+      
+      // VALIDATION 2: Check if main member is actually main member
+      const mainMember = await User.findById(userId);
+      if (mainMember?.parentId) {
+        throw new AppError("Cannot add family member to a sub-member", 400);
+      }
+      
+      // VALIDATION 3: Check max sub-member limit
+      const subMemberCount = await User.countDocuments({ parentId: userId });
+      const maxSubMembers = 10;
+      
+      if (subMemberCount >= maxSubMembers) {
+        throw new AppError(`Maximum sub-member limit (${maxSubMembers}) reached`, 400);
+      }
 
       const result = await authService.registerFamilyMember({
         parentMemberId: userId,

@@ -62,29 +62,29 @@ class AdminUserController {
       const limitNum = parseInt(limit, 10) || 10;
       const skip = (pageNum - 1) * limitNum;
 
-      // Build query
-      const query: any = {};
+      // Build query for non-search filters
+      const baseQuery: any = {};
 
       // Exclude deleted users by default
-      query.isDeleted = { $ne: true };
+      baseQuery.isDeleted = { $ne: true };
 
       // Filter by active status
       if (isActive !== undefined) {
         const value: string | boolean = isActive;
-        query.isActive = value === "true" || value === true || value === "1";
+        baseQuery.isActive = value === "true" || value === true || value === "1";
       }
 
       // Filter by registration date
       if (registrationDate) {
-        // Parse the date string (YYYY-MM-DD format)
+        // Parse date string (YYYY-MM-DD format)
         const date = new Date(registrationDate);
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
-        
+
         // Filter by registeredAt or createdAt (fallback)
-        query.$or = [
+        baseQuery.$or = [
           {
             registeredAt: {
               $gte: startOfDay,
@@ -101,38 +101,66 @@ class AdminUserController {
         ];
       }
 
-      // Search functionality - only by name or email
+      // Get all users first (for userType filtering)
+      let allUsers;
+
+      // If search is provided, use aggregation pipeline for combined name search
       if (search) {
-        // If registrationDate filter exists, we need to combine $or conditions
-        if (query.$or) {
-          const registrationDateOr = query.$or;
-          query.$and = [
-            { $or: registrationDateOr },
-            {
+        const searchPipeline: any[] = [
+          {
+            $match: baseQuery
+          },
+          {
+            $addFields: {
+              fullName: { $concat: ["$firstName", " ", "$lastName"] }
+            }
+          },
+          {
+            $match: {
               $or: [
                 { firstName: { $regex: search, $options: "i" } },
                 { lastName: { $regex: search, $options: "i" } },
                 { email: { $regex: search, $options: "i" } },
-              ],
-            },
-          ];
-          delete query.$or;
-        } else {
-          query.$or = [
-            { firstName: { $regex: search, $options: "i" } },
-            { lastName: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-          ];
-        }
-      }
+                { fullName: { $regex: search, $options: "i" } }
+              ]
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              firstName: 1,
+              lastName: 1,
+              email: 1,
+              phone: 1,
+              countryCode: 1,
+              memberId: 1,
+              registeredAt: 1,
+              createdAt: 1,
+              isActive: 1,
+              lastLogin: 1
+            }
+          },
+          { $sort: { createdAt: -1 } }
+        ];
 
-      // Get all users first (for userType filtering)
-      let allUsers = await User.find(query)
-        .select(
-          "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
-        )
-        .sort({ createdAt: -1 })
-        .lean();
+        // Add pagination stages if needed
+        if (skip > 0) {
+          searchPipeline.push({ $skip: skip });
+        }
+        if (limitNum > 0) {
+          searchPipeline.push({ $limit: limitNum });
+        }
+
+        allUsers = await User.aggregate(searchPipeline);
+      } else {
+        // Normal query without search
+        allUsers = await User.find(baseQuery)
+          .select(
+            "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+          )
+          .sort({ createdAt: -1 })
+          .lean();
+      }
 
       // Get order counts for all users
       const userIds = allUsers.map((user) => user._id);
@@ -246,14 +274,25 @@ class AdminUserController {
           {
             $match: {
               userId,
-              paymentStatus: PaymentStatus.COMPLETED, // Only count completed/paid orders
+              paymentStatus: { $in: [PaymentStatus.COMPLETED, PaymentStatus.PROCESSING] }, // Include completed and processing orders
             },
+          },
+          {
+            $addFields: {
+              // Try to get grandTotal from pricing, fallback to sum of item totals
+              orderTotal: {
+                $ifNull: [
+                  "$pricing.overall.grandTotal",
+                  { $sum: "$items.totalAmount" } // Fallback: sum of all item totals
+                ]
+              }
+            }
           },
           {
             $group: {
               _id: null,
-              totalSpent: { $sum: "$grandTotal" },
-              currency: { $first: "$currency" },
+              totalSpent: { $sum: "$orderTotal" },
+              currency: { $first: { $ifNull: ["$pricing.overall.currency", "USD"] } },
             },
           },
         ]),
@@ -294,7 +333,7 @@ class AdminUserController {
           isActive: true,
           isDeleted: { $ne: true },
         })
-          .populate("childUserId", "name email phone countryCode profileImage")
+          .populate("childUserId", "firstName lastName email phone countryCode profileImage")
           .select("childUserId registeredAt")
           .sort({ registeredAt: -1 })
           .lean(),
@@ -315,9 +354,9 @@ class AdminUserController {
         totalSpentResult.length > 0
           ? {
               amount: totalSpentResult[0].totalSpent || 0,
-              currency: totalSpentResult[0].currency || "EUR",
+              currency: totalSpentResult[0].currency || "USD",
             }
-          : { amount: 0, currency: "EUR" };
+          : { amount: 0, currency: "USD" };
 
       // Format subscriptions
       const subscriptionDetails = subscriptions.map((sub) => ({
@@ -352,6 +391,8 @@ class AdminUserController {
         const childUser = referral.childUserId;
         return {
           profileImage: childUser?.profileImage || null,
+          firstName: childUser?.firstName || null,
+          lastName: childUser?.lastName || null,
           email: childUser?.email || null,
           phone: childUser?.phone || null,
           countryCode: childUser?.countryCode || null,
@@ -394,7 +435,7 @@ class AdminUserController {
               discountedPrice: item.discountedPrice || 0,
               taxRate: item.taxRate || 0,
               totalAmount: item.totalAmount || 0,
-              currency: order.currency || "EUR",
+              currency: order.pricing?.overall?.currency || "USD",
             },
           };
         });
@@ -404,7 +445,11 @@ class AdminUserController {
           orderNumber: order.orderNumber,
           paymentMethod: paymentMethod, // Mollie, Stripe, etc.
           orderCreatedDate: order.createdAt,
-          orderTotalAmount: order.grandTotal || null,
+          orderTotalAmount: order.pricing?.overall?.grandTotal || 
+                           order.grandTotal || 
+                           (order.items && order.items.length > 0 
+                            ? order.items.reduce((sum: number, item: any) => sum + (item.totalAmount || 0), 0)
+                            : 0),
           items: orderItems,
           paymentStatus: order.paymentStatus,
         };

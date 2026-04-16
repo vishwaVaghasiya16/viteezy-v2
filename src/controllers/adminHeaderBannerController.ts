@@ -261,7 +261,9 @@ class AdminHeaderBannerController {
         limit?: string;
         search?: string;
         deviceType?: string;
-        isActive?: string;
+        // After Joi validation, this will typically be a boolean,
+        // but we also accept string for safety.
+        isActive?: boolean | string;
       };
 
       const pageNum = parseInt(page, 10) || 1;
@@ -280,7 +282,12 @@ class AdminHeaderBannerController {
 
       // Filter by active status
       if (isActive !== undefined) {
-        query.isActive = isActive === "true";
+        if (typeof isActive === "boolean") {
+          query.isActive = isActive;
+        } else {
+          // Fallback if it ever comes as a string (e.g. from manual query building)
+          query.isActive = isActive.toLowerCase() === "true";
+        }
       }
 
       // Search functionality - by text in any language

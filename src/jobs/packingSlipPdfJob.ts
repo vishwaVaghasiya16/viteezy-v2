@@ -4,6 +4,7 @@ import { Payments } from "@/models/commerce";
 import { OrderStatus, PaymentStatus } from "@/models/enums";
 import { logger } from "@/utils/logger";
 import axios from "axios";
+import { config } from "@/config";
 
 /**
  * Packing Slip PDF Generation Job
@@ -26,9 +27,7 @@ export class PackingSlipPdfJob {
   /**
    * Python PDF API URL - should be configurable via environment variable
    */
-  private readonly PDF_API_URL: string =
-    process.env.PDF_GENERATION_API_URL ||
-    "https://staging-v2.viteezy.com/py/api/v1/generate-pdf";
+  private readonly PDF_API_URL: string = config.pdf.generationApiUrl;
 
   /**
    * Process orders that need PDF generation
@@ -40,6 +39,13 @@ export class PackingSlipPdfJob {
   }> {
     if (this.isRunning) {
       logger.warn("Packing slip PDF job is already running, skipping...");
+      return { processed: 0, success: 0, failed: 0 };
+    }
+
+    if (!this.PDF_API_URL.trim()) {
+      logger.warn(
+        "Packing slip PDF job skipped: PDF_GENERATION_API_URL is not configured"
+      );
       return { processed: 0, success: 0, failed: 0 };
     }
 
@@ -182,7 +188,7 @@ export class PackingSlipPdfJob {
 export const packingSlipPdfJob = new PackingSlipPdfJob();
 
 // Packing slip PDF cron schedule (default: every 5 minutes)
-const packingSlipCronSchedule = process.env.PACKING_SLIP_PDF_JOB_SCHEDULE || "*/5 * * * *";
+const packingSlipCronSchedule = config.jobs.packingSlipCron;
 cron.schedule(packingSlipCronSchedule, async () => {
   try {
     await packingSlipPdfJob.processOrders();

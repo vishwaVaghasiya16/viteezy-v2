@@ -1,5 +1,6 @@
 import { subscriptionAutoRenewalService } from "@/services/subscriptionAutoRenewalService";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 import cron from "node-cron";
 
 /**
@@ -89,9 +90,10 @@ export const subscriptionRenewalJob = new SubscriptionRenewalJob();
 
 // Initialize cron job when this module is imported
 // Schedule: Run daily at 2 AM in production; every hour in development
-const cronSchedule = process.env.NODE_ENV === "production" 
-  ? "0 2 * * *"   // Daily at 2 AM in production
-  : "0 * * * *";  // Every hour in development (override via SUBSCRIPTION_RENEWAL_CRON if needed)
+const cronSchedule =
+  config.server.nodeEnv === "production"
+    ? config.jobs.subscriptionRenewalCronProduction
+    : config.jobs.subscriptionRenewalCronNonProduction;
 
 // Initialize and start the cron job
 const cronTask = cron.schedule(cronSchedule, async () => {
@@ -111,6 +113,8 @@ const cronTask = cron.schedule(cronSchedule, async () => {
 // Start the cron task (it starts automatically, but we can explicitly start it)
 cronTask.start();
 
-logger.info(`✅ Subscription renewal cron job scheduled: ${cronSchedule} (${process.env.NODE_ENV || "development"} mode)`);
+logger.info(
+  `✅ Subscription renewal cron job scheduled: ${cronSchedule} (${config.server.nodeEnv} mode)`
+);
 logger.info(`📅 Cron job is ${cronTask.getStatus() === "scheduled" ? "active" : "inactive"}`);
 

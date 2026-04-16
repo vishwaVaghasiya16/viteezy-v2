@@ -20,7 +20,7 @@ import {
 } from "../../models/enums";
 import { Payments } from "../../models/commerce/payments.model";
 import { Orders } from "../../models/commerce/orders.model";
-import { Subscriptions } from "../../models/commerce/subscriptions.model";
+import { Subscriptions, ISubscription } from "../../models/commerce/subscriptions.model";
 import { Memberships } from "../../models/commerce/memberships.model";
 import { Coupons } from "../../models/commerce/coupons.model";
 import { User } from "../../models/index.model";
@@ -32,6 +32,8 @@ import { emailService } from "../emailService";
 import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
+import { SubscriptionGatewayService } from "../subscriptionGatewayService";
+import { config } from "@/config";
 
 /**
  * Unified Payment Service
@@ -39,13 +41,15 @@ import { AddressSnapshotType } from "../../models/common.model";
  */
 export class PaymentService {
   private gateways: Map<PaymentMethod, IPaymentGateway>;
+  private subscriptionGatewayService: SubscriptionGatewayService;
 
   constructor() {
     this.gateways = new Map();
+    this.subscriptionGatewayService = new SubscriptionGatewayService();
 
     // Initialize available gateways
     try {
-      if (process.env.STRIPE_SECRET_KEY) {
+      if (config.payments.stripeSecretKey) {
         this.gateways.set(PaymentMethod.STRIPE, new StripeAdapter());
         logger.info("Stripe payment gateway registered");
       }
@@ -54,7 +58,7 @@ export class PaymentService {
     }
 
     try {
-      if (process.env.MOLLIE_API_KEY) {
+      if (config.payments.mollieApiKey) {
         this.gateways.set(PaymentMethod.MOLLIE, new MollieAdapter());
         logger.info("Mollie payment gateway registered");
       }
@@ -136,8 +140,12 @@ export class PaymentService {
         throw new AppError("Order not found", 404);
       }
 
-      // Verify order belongs to user
-      if (order.userId.toString() !== data.userId) {
+      // Verify order belongs to user (user can access orders where they are owner, placer, or recipient)
+      if (
+        order.userId.toString() !== data.userId &&
+        (!order.orderedBy || order.orderedBy.toString() !== data.userId) &&
+        (!order.orderedFor || order.orderedFor.toString() !== data.userId)
+      ) {
         throw new AppError("Order does not belong to user", 403);
       }
 
@@ -175,9 +183,39 @@ export class PaymentService {
 
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
+      const overallPricing = order?.pricing?.overall;
+      
+      if (!overallPricing || !overallPricing.grandTotal || overallPricing.grandTotal <= 0) {
+        throw new AppError(
+          `Order ${order.orderNumber} does not have valid pricing. Please ensure the order has a valid grandTotal in pricing.overall`,
+          400
+        );
+      }
+      
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(
-        data.amount?.value || order.grandTotal
+      
+      // Use provided amount if available, otherwise use order's grandTotal
+      // Validate that provided amount matches order total (allow small rounding differences)
+      const finalAmount = data.amount?.value || overallPricing.grandTotal;
+      const amountDifference = Math.abs(finalAmount - overallPricing.grandTotal);
+      
+      if (data.amount?.value && amountDifference > 0.01) {
+        logger.warn(
+          `Amount mismatch: Provided ${data.amount.value} but order total is ${overallPricing.grandTotal} for order ${order.orderNumber}`
+        );
+      }
+      
+      if (finalAmount <= 0) {
+        throw new AppError(
+          `Invalid payment amount: ${finalAmount}. Order total is ${overallPricing.grandTotal}`,
+          400
+        );
+      }
+      
+      const amountInMinorUnits = this.toMinorUnits(finalAmount);
+      
+      logger.info(
+        `Creating payment for order ${order.orderNumber}: Amount=${finalAmount} ${overallPricing.currency}, MinorUnits=${amountInMinorUnits}`
       );
 
       // Convert populated addresses to AddressSnapshotType format
@@ -191,7 +229,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: data.amount?.currency || order.currency,
+        currency: data.amount?.currency || overallPricing.currency,
         orderId: orderId,
         userId: data.userId,
         description: data.description || `Order ${order.orderNumber}`,
@@ -208,8 +246,7 @@ export class PaymentService {
             return data.webhookUrl;
           }
           
-          // Get base URL from environment or default to localhost
-          const baseUrl = process.env.APP_BASE_URL || "http://localhost:8080";
+          const baseUrl = config.app.baseUrl;
           
           // Skip webhook URL for localhost URLs (Mollie cannot reach them)
           // Only set webhook URL if it's a public URL (not localhost or 127.0.0.1)
@@ -250,11 +287,14 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: data.amount?.value || order.grandTotal,
-          currency: data.amount?.currency || order.currency,
-          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
+          amount: data.amount?.value || overallPricing.grandTotal,
+          currency: data.amount?.currency || overallPricing.currency,
+          taxRate:
+            overallPricing.subTotal > 0
+              ? overallPricing.taxAmount / overallPricing.subTotal
+              : 0,
         },
-        currency: data.amount?.currency || order.currency,
+        currency: data.amount?.currency || overallPricing.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -281,84 +321,98 @@ export class PaymentService {
 
       // ========== AUTO-CREATE SUBSCRIPTION ON PAYMENT SUCCESS ==========
       // Create subscription automatically when:
-      // 1. AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT env variable is "true"
-      // 2. Payment status is COMPLETED (payment successful) - check both result.status and payment.status
-      // 3. Order's planType is SUBSCRIPTION
-      if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
+      // 1. Payment status is COMPLETED (payment successful) - check both result.status and payment.status
+      // 2. Order's planType is SUBSCRIPTION
+      console.log(
+        "🟢 [SUBSCRIPTION] Checking for subscription auto-creation after payment creation..."
+      );
+      console.log(
+        `🟢 [SUBSCRIPTION] Gateway Result Status: ${result.status}, Payment Status: ${payment.status}, Order PlanType: ${order.planType}`
+      );
+
+      // Only create subscription if payment is COMPLETED and order is SUBSCRIPTION type
+      // Check both result.status (from gateway) and payment.status (saved in DB)
+      const isPaymentCompleted =
+        result.status === PaymentStatus.COMPLETED ||
+        payment.status === PaymentStatus.COMPLETED;
+
+      // Check if order is eligible for subscription creation
+      // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
+      const isEligibleForSubscription = 
+        (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
+
+      if (isPaymentCompleted && isEligibleForSubscription) {
         console.log(
-          "🟢 [SUBSCRIPTION] Checking for subscription auto-creation after payment creation..."
+          "✅ [SUBSCRIPTION] Payment is COMPLETED and order is SUBSCRIPTION type. Creating subscription..."
         );
-        console.log(
-          `🟢 [SUBSCRIPTION] Gateway Result Status: ${result.status}, Payment Status: ${payment.status}, Order PlanType: ${order.planType}`
-        );
+        try {
+          const freshOrder = await Orders.findById(order._id)
+            .select(
+              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+            )
+            .lean();
 
-        // Only create subscription if payment is COMPLETED and order is SUBSCRIPTION type
-        // Check both result.status (from gateway) and payment.status (saved in DB)
-        const isPaymentCompleted =
-          result.status === PaymentStatus.COMPLETED ||
-          payment.status === PaymentStatus.COMPLETED;
-
-        if (isPaymentCompleted && order.planType === OrderPlanType.SUBSCRIPTION) {
-          console.log(
-            "✅ [SUBSCRIPTION] Payment is COMPLETED and order is SUBSCRIPTION type. Creating subscription..."
-          );
-          try {
-            const freshOrder = await Orders.findById(order._id)
-              .select(
-                "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-              )
-              .lean();
-
-            if (freshOrder) {
-              const paymentData = payment.toObject
-                ? payment.toObject()
-                : payment;
-              const subscription = await this.createSubscriptionFromOrder(
-                freshOrder,
-                paymentData
+          // Log order items for debugging
+          if (freshOrder?.items) {
+            console.log(
+              `🟢 [SUBSCRIPTION] Order has ${freshOrder.items.length} item(s)`
+            );
+            freshOrder.items.forEach((item: any, index: number) => {
+              console.log(
+                `   Item ${index + 1}: variantType=${item.variantType}, name=${item.name || "N/A"}`
               );
+            });
+          }
 
-              if (subscription) {
-                console.log(
-                  "✅ [SUBSCRIPTION] Subscription created successfully:",
-                  subscription.subscriptionNumber
-                );
-                logger.info(
-                  `Subscription ${subscription.subscriptionNumber} created automatically for order ${order.orderNumber} (payment completed)`
-                );
-              } else {
-                console.log(
-                  "ℹ️ [SUBSCRIPTION] Subscription not created (order not eligible or already exists)"
-                );
-                logger.info(
-                  `Subscription not created for order ${order.orderNumber} (not eligible or already exists)`
-                );
-              }
+          if (freshOrder) {
+            const paymentData = payment.toObject
+              ? payment.toObject()
+              : payment;
+            const subscription = await this.createSubscriptionFromOrder(
+              freshOrder,
+              paymentData
+            );
+
+            if (subscription) {
+              console.log(
+                "✅ [SUBSCRIPTION] Subscription created successfully:",
+                subscription.subscriptionNumber
+              );
+              logger.info(
+                `Subscription ${subscription.subscriptionNumber} created automatically for order ${order.orderNumber} (payment completed)`
+              );
             } else {
-              console.warn(
-                "⚠️ [SUBSCRIPTION] Could not fetch fresh order for subscription creation"
+              console.log(
+                "ℹ️ [SUBSCRIPTION] Subscription not created (order not eligible or already exists)"
               );
-              logger.warn(
-                `Could not fetch fresh order ${order._id} for subscription creation`
+              logger.info(
+                `Subscription not created for order ${order.orderNumber} (not eligible or already exists)`
               );
             }
-          } catch (subError: any) {
-            console.error(
-              "❌ [SUBSCRIPTION] Subscription creation failed:",
-              subError.message
+          } else {
+            console.warn(
+              "⚠️ [SUBSCRIPTION] Could not fetch fresh order for subscription creation"
             );
-            console.error("❌ [SUBSCRIPTION] Stack:", subError.stack);
-            logger.error(
-              `Failed to create subscription for order ${order.orderNumber}: ${subError.message}`,
-              subError
+            logger.warn(
+              `Could not fetch fresh order ${order._id} for subscription creation`
             );
-            // Don't throw error - subscription creation failure shouldn't break payment flow
           }
-        } else {
-          console.log(
-            `ℹ️ [SUBSCRIPTION] Subscription not created: Payment status is ${payment.status} (needs COMPLETED) or Order planType is ${order.planType} (needs SUBSCRIPTION)`
+        } catch (subError: any) {
+          console.error(
+            "❌ [SUBSCRIPTION] Subscription creation failed:",
+            subError.message
           );
+          console.error("❌ [SUBSCRIPTION] Stack:", subError.stack);
+          logger.error(
+            `Failed to create subscription for order ${order.orderNumber}: ${subError.message}`,
+            subError
+          );
+          // Don't throw error - subscription creation failure shouldn't break payment flow
         }
+      } else {
+        console.log(
+          `ℹ️ [SUBSCRIPTION] Subscription not created: Payment status is ${payment.status} (needs COMPLETED) or Order planType is ${order.planType} (needs SUBSCRIPTION)`
+        );
       }
 
       return {
@@ -672,6 +726,11 @@ export class PaymentService {
       await payment.save();
       console.log("✅ [PAYMENT SERVICE] Step 7: Payment saved to database");
 
+      // Clear cart whenever payment is COMPLETED for an order (handles duplicate/out-of-order Stripe events).
+      if (result.status === PaymentStatus.COMPLETED && payment.orderId) {
+        await this.tryClearCartForCompletedOrderPayment(payment, "webhook");
+      }
+
       // ========== WEBHOOK FLOW: Update Order & Create Subscription ==========
       // Update order status if payment is completed
       if (
@@ -701,60 +760,11 @@ export class PaymentService {
             `Order ${order.orderNumber} confirmed via webhook after payment completion`
           );
 
-          // Clear user's cart after successful payment
-          try {
-            const userId = (order.userId as mongoose.Types.ObjectId).toString();
-            console.log(
-              "🛒 [PAYMENT SERVICE] Step 8.0.1: Clearing cart for user",
-              userId
-            );
-            console.log(
-              "🛒 [PAYMENT SERVICE] - Order ID:",
-              order._id,
-              "Order Number:",
-              order.orderNumber
-            );
-            
-            const clearResult = await cartService.clearCart(userId);
-            console.log(
-              "✅ [PAYMENT SERVICE] - Cart cleared successfully after payment:",
-              clearResult.message
-            );
-            logger.info(
-              `Cart cleared for user ${userId} after successful payment for order ${order.orderNumber}`,
-              {
-                userId,
-                orderId: order._id,
-                orderNumber: order.orderNumber,
-                paymentId: payment._id,
-                clearResult,
-              }
-            );
-          } catch (cartError: any) {
-            // Log error but don't fail the entire webhook processing
-            console.error(
-              "❌ [PAYMENT SERVICE] - Failed to clear cart:",
-              cartError.message
-            );
-            console.error(
-              "❌ [PAYMENT SERVICE] - Cart error stack:",
-              cartError.stack
-            );
-            logger.error(
-              `Failed to clear cart after payment: ${cartError.message}`,
-              {
-                userId: (order.userId as mongoose.Types.ObjectId).toString(),
-                orderId: order._id,
-                orderNumber: order.orderNumber,
-                paymentId: payment._id,
-                error: cartError.message,
-                stack: cartError.stack,
-              }
-            );
-          }
-
           // Track coupon usage if a coupon was applied
-          if (order.couponCode && order.couponDiscountAmount > 0) {
+          if (
+            order.couponCode &&
+            (order.pricing?.overall?.couponDiscountAmount || 0) > 0
+          ) {
             console.log("🟢 [PAYMENT SERVICE] Step 8.1: Tracking coupon usage");
             try {
               // Check if it's a referral code first
@@ -788,8 +798,8 @@ export class PaymentService {
                     userId: order.userId as mongoose.Types.ObjectId,
                     orderId: order._id as mongoose.Types.ObjectId,
                     discountAmount: {
-                      amount: order.couponDiscountAmount,
-                      currency: order.currency,
+                      amount: order.pricing?.overall?.couponDiscountAmount || 0,
+                      currency: order.pricing?.overall?.currency || "USD",
                       taxRate: 0,
                     },
                     couponCode: order.couponCode,
@@ -839,7 +849,6 @@ export class PaymentService {
 
           // ========== SUBSCRIPTION CREATION LOGIC ==========
           // Auto-create subscription when payment status becomes COMPLETED (via webhook)
-          // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
           // Conditions:
           // 1. Order must be a subscription order (isOneTime = false OR planType = SUBSCRIPTION)
           // 2. Order must be for SACHETS variant
@@ -848,64 +857,74 @@ export class PaymentService {
           console.log(
             "🟢 [PAYMENT SERVICE] Step 10: Checking for subscription auto-creation (webhook - payment completed)"
           );
+          console.log(
+            `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
+          );
 
-          if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
+          // Check if order is eligible for subscription creation
+          // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
+          const isEligibleForSubscription = 
+            (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
+
+          if (isEligibleForSubscription) {
+            // Refresh order from database to ensure we have latest data with all fields
+          const freshOrder = await Orders.findById(order._id)
+            .select(
+              "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+            )
+            .lean();
+
+          // Log order items for debugging mixed orders
+          if (freshOrder?.items) {
             console.log(
-              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
+              `🟢 [SUBSCRIPTION] Order has ${freshOrder.items.length} item(s)`
             );
+            freshOrder.items.forEach((item: any, index: number) => {
+              console.log(
+                `   Item ${index + 1}: variantType=${item.variantType || "N/A"}, name=${item.name || "N/A"}`
+              );
+            });
+          }
 
-            if (order.planType === OrderPlanType.SUBSCRIPTION) {
-              // Refresh order from database to ensure we have latest data with all fields
-              const freshOrder = await Orders.findById(order._id)
-                .select(
-                  "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-                )
-                .lean();
+          if (freshOrder) {
+              // Convert payment to plain object if it's a mongoose document
+              const paymentData = payment.toObject
+                ? payment.toObject()
+                : payment;
+              console.log(
+                "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (webhook - payment completed)..."
+              );
 
-              if (freshOrder) {
-                // Convert payment to plain object if it's a mongoose document
-                const paymentData = payment.toObject
-                  ? payment.toObject()
-                  : payment;
+              // Call the reusable subscription creation function
+              const subscription = await this.createSubscriptionFromOrder(
+                freshOrder,
+                paymentData
+              );
+
+              if (subscription) {
                 console.log(
-                  "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (webhook - payment completed)..."
+                  "✅ [PAYMENT SERVICE] - Subscription created:",
+                  subscription.subscriptionNumber
                 );
-
-                // Call the reusable subscription creation function
-                const subscription = await this.createSubscriptionFromOrder(
-                  freshOrder,
-                  paymentData
+                logger.info(
+                  `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (webhook - payment completed)`
                 );
-
-                if (subscription) {
-                  console.log(
-                    "✅ [PAYMENT SERVICE] - Subscription created:",
-                    subscription.subscriptionNumber
-                  );
-                  logger.info(
-                    `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (webhook - payment completed)`
-                  );
-                } else {
-                  console.log(
-                    "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
-                  );
-                }
               } else {
-                console.warn(
-                  "⚠️ [PAYMENT SERVICE] - Could not fetch fresh order for subscription creation"
-                );
-                logger.warn(
-                  `Could not fetch fresh order ${order._id} for subscription creation`
+                console.log(
+                  "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
                 );
               }
             } else {
-              console.log(
-                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
+              console.warn(
+                "⚠️ [PAYMENT SERVICE] - Could not fetch fresh order for subscription creation"
+              );
+              logger.warn(
+                `Could not fetch fresh order ${order._id} for subscription creation`
               );
             }
           } else {
             console.log(
-              "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
+              `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
             );
           }
         } else {
@@ -1204,8 +1223,12 @@ export class PaymentService {
         throw new AppError("Order not found", 404);
       }
 
-      // Verify order belongs to user
-      if (order.userId.toString() !== data.userId) {
+      // Verify order belongs to user (user can access orders where they are owner, placer, or recipient)
+      if (
+        order.userId.toString() !== data.userId &&
+        (!order.orderedBy || order.orderedBy.toString() !== data.userId) &&
+        (!order.orderedFor || order.orderedFor.toString() !== data.userId)
+      ) {
         throw new AppError("Order does not belong to user", 403);
       }
 
@@ -1243,8 +1266,14 @@ export class PaymentService {
 
       // Get order ID
       const orderId = (order._id as mongoose.Types.ObjectId).toString();
+      const overallPricing = order?.pricing?.overall || {
+        subTotal: 0,
+        taxAmount: 0,
+        grandTotal: 0,
+        currency: "USD",
+      };
       const lineItems = this.buildOrderCheckoutLineItems(order);
-      const amountInMinorUnits = this.toMinorUnits(order.grandTotal);
+      const amountInMinorUnits = this.toMinorUnits(overallPricing.grandTotal);
 
       // Convert populated addresses to AddressSnapshotType format
       const shippingAddress = order.shippingAddressId
@@ -1257,7 +1286,7 @@ export class PaymentService {
       // Create payment intent data
       const paymentIntentData: PaymentIntentData = {
         amount: amountInMinorUnits,
-        currency: order.currency,
+        currency: overallPricing.currency,
         orderId: orderId,
         userId: data.userId,
         description: `Order ${order.orderNumber}`,
@@ -1267,9 +1296,7 @@ export class PaymentService {
         },
         returnUrl: data.returnUrl,
         cancelUrl: data.cancelUrl,
-        webhookUrl: `${
-          process.env.APP_BASE_URL || "http://localhost:8080"
-        }/api/v1/payments/webhook/${data.paymentMethod}`,
+        webhookUrl: `${config.app.baseUrl}/api/v1/payments/webhook/${data.paymentMethod}`,
         customerEmail: user.email,
         customerName: `${user.firstName} ${user.lastName}`.trim(),
         shippingCountry: orderCountry,
@@ -1295,11 +1322,14 @@ export class PaymentService {
         paymentMethod: data.paymentMethod,
         status: result.status,
         amount: {
-          amount: order.grandTotal,
-          currency: order.currency,
-          taxRate: order.subTotal > 0 ? order.taxAmount / order.subTotal : 0,
+          amount: overallPricing.grandTotal,
+          currency: overallPricing.currency,
+          taxRate:
+            overallPricing.subTotal > 0
+              ? overallPricing.taxAmount / overallPricing.subTotal
+              : 0,
         },
-        currency: order.currency,
+        currency: overallPricing.currency,
         gatewayTransactionId: result.gatewayTransactionId,
         gatewaySessionId: result.sessionId,
         gatewayResponse: result.gatewayResponse,
@@ -1328,8 +1358,8 @@ export class PaymentService {
       // In development, optionally create subscription immediately for testing
       // In production, subscription is created via webhook after payment completion
       if (
-        process.env.NODE_ENV === "development" &&
-        process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true"
+        config.server.nodeEnv === "development" &&
+        config.features.autoCreateSubscriptionOnPayment
       ) {
         console.log(
           "🟡 [DEV MODE] Attempting immediate subscription creation for testing..."
@@ -1340,6 +1370,18 @@ export class PaymentService {
               "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
             )
             .lean();
+
+          // Log order items for debugging
+          if (freshOrder?.items) {
+            console.log(
+              `🟢 [SUBSCRIPTION] Order has ${freshOrder.items.length} item(s)`
+            );
+            freshOrder.items.forEach((item: any, index: number) => {
+              console.log(
+                `   Item ${index + 1}: variantType=${item.variantType}, name=${item.name || "N/A"}`
+              );
+            });
+          }
 
           if (freshOrder) {
             const paymentData = payment.toObject ? payment.toObject() : payment;
@@ -1475,7 +1517,9 @@ export class PaymentService {
                   String(order._id),
                   order.orderNumber,
                   typeof payment.amount === 'object' ? payment.amount.amount : payment.amount,
-                  typeof payment.amount === 'object' ? payment.amount.currency : (payment.currency || order.currency),
+                  typeof payment.amount === 'object'
+                    ? payment.amount.currency
+                    : (payment.currency || order.pricing?.overall?.currency || "USD"),
                   order.userId
                 ),
                 orderNotifications.orderConfirmed(
@@ -1492,63 +1536,62 @@ export class PaymentService {
 
             // ========== SUBSCRIPTION CREATION LOGIC ==========
             // Auto-create subscription when payment status becomes COMPLETED
-            // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
-            if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
-              console.log(
-                "🟢 [PAYMENT SERVICE] Payment status is COMPLETED. Checking for subscription creation..."
-              );
-              console.log(
-                `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
-              );
+            // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
+            console.log(
+              "🟢 [PAYMENT SERVICE] Payment status is COMPLETED. Checking for subscription creation..."
+            );
+            console.log(
+              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
+            );
 
-              if (order.planType === OrderPlanType.SUBSCRIPTION) {
-                // Refresh order from database to ensure we have latest data with all fields
-                const freshOrder = await Orders.findById(order._id)
-                  .select(
-                    "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-                  )
-                  .lean();
-                if (freshOrder) {
-                  // Convert payment to plain object if it's a mongoose document
-                  const paymentData = payment.toObject
-                    ? payment.toObject()
-                    : payment;
+            // Check if order is eligible for subscription creation
+            const isEligibleForSubscription = 
+              (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED) &&
+              order.isOneTime === false;
+
+            if (isEligibleForSubscription) {
+              // Refresh order from database to ensure we have latest data with all fields
+              const freshOrder = await Orders.findById(order._id)
+                .select(
+                  "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+                )
+                .lean();
+              if (freshOrder) {
+                // Convert payment to plain object if it's a mongoose document
+                const paymentData = payment.toObject
+                  ? payment.toObject()
+                  : payment;
+                console.log(
+                  "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed)..."
+                );
+
+                // Call the reusable subscription creation function
+                const subscription = await this.createSubscriptionFromOrder(
+                  freshOrder,
+                  paymentData
+                );
+
+                if (subscription) {
                   console.log(
-                    "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed)..."
+                    "✅ [PAYMENT SERVICE] - Subscription created:",
+                    subscription.subscriptionNumber
                   );
-
-                  // Call the reusable subscription creation function
-                  const subscription = await this.createSubscriptionFromOrder(
-                    freshOrder,
-                    paymentData
+                  logger.info(
+                    `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
                   );
-
-                  if (subscription) {
-                    console.log(
-                      "✅ [PAYMENT SERVICE] - Subscription created:",
-                      subscription.subscriptionNumber
-                    );
-                    logger.info(
-                      `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
-                    );
-                  } else {
-                    console.log(
-                      "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
-                    );
-                  }
                 } else {
-                  logger.warn(
-                    `Could not fetch fresh order ${order._id} for subscription creation`
+                  console.log(
+                    "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
                   );
                 }
               } else {
-                console.log(
-                  `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
+                logger.warn(
+                  `Could not fetch fresh order ${order._id} for subscription creation`
                 );
               }
             } else {
               console.log(
-                "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
+                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
               );
             }
           } else if (previousOrderPaymentStatus !== PaymentStatus.COMPLETED) {
@@ -1560,62 +1603,61 @@ export class PaymentService {
 
             // ========== SUBSCRIPTION CREATION LOGIC ==========
             // Auto-create subscription when payment status becomes COMPLETED
-            // Only create if AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is "true" and order planType is SUBSCRIPTION
-            if (process.env.AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT === "true") {
-              console.log(
-                "🟢 [PAYMENT SERVICE] Payment status updated to COMPLETED. Checking for subscription creation..."
-              );
-              console.log(
-                `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
-              );
+            // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
+            console.log(
+              "🟢 [PAYMENT SERVICE] Payment status updated to COMPLETED. Checking for subscription creation..."
+            );
+            console.log(
+              `🟢 [PAYMENT SERVICE] Order PlanType: ${order.planType}`
+            );
 
-              if (order.planType === OrderPlanType.SUBSCRIPTION) {
-                const freshOrder = await Orders.findById(order._id)
-                  .select(
-                    "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
-                  )
-                  .lean();
-                if (freshOrder) {
-                  // Convert payment to plain object if it's a mongoose document
-                  const paymentData = payment.toObject
-                    ? payment.toObject()
-                    : payment;
+            // Check if order is eligible for subscription creation
+            const isEligibleForSubscription = 
+              (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED) &&
+              order.isOneTime === false;
+
+            if (isEligibleForSubscription) {
+              const freshOrder = await Orders.findById(order._id)
+                .select(
+                  "orderNumber userId status planType isOneTime variantType selectedPlanDays items createdAt"
+                )
+                .lean();
+              if (freshOrder) {
+                // Convert payment to plain object if it's a mongoose document
+                const paymentData = payment.toObject
+                  ? payment.toObject()
+                  : payment;
+                console.log(
+                  "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed, order already confirmed)..."
+                );
+
+                // Call the reusable subscription creation function
+                const subscription = await this.createSubscriptionFromOrder(
+                  freshOrder,
+                  paymentData
+                );
+
+                if (subscription) {
                   console.log(
-                    "🟢 [PAYMENT SERVICE] - Calling createSubscriptionFromOrder (payment completed, order already confirmed)..."
+                    "✅ [PAYMENT SERVICE] - Subscription created:",
+                    subscription.subscriptionNumber
                   );
-
-                  // Call the reusable subscription creation function
-                  const subscription = await this.createSubscriptionFromOrder(
-                    freshOrder,
-                    paymentData
+                  logger.info(
+                    `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
                   );
-
-                  if (subscription) {
-                    console.log(
-                      "✅ [PAYMENT SERVICE] - Subscription created:",
-                      subscription.subscriptionNumber
-                    );
-                    logger.info(
-                      `Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber} (payment completed)`
-                    );
-                  } else {
-                    console.log(
-                      "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
-                    );
-                  }
                 } else {
-                  logger.warn(
-                    `Could not fetch fresh order ${order._id} for subscription creation`
+                  console.log(
+                    "ℹ️ [PAYMENT SERVICE] - Subscription not created (order not eligible or already exists)"
                   );
                 }
               } else {
-                console.log(
-                  `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION)`
+                logger.warn(
+                  `Could not fetch fresh order ${order._id} for subscription creation`
                 );
               }
             } else {
               console.log(
-                "ℹ️ [PAYMENT SERVICE] Subscription auto-creation is disabled (AUTO_CREATE_SUBSCRIPTION_ON_PAYMENT is not 'true')"
+                `ℹ️ [PAYMENT SERVICE] Subscription not created: Order planType is ${order.planType} (needs SUBSCRIPTION or MIXED)`
               );
             }
           }
@@ -1653,6 +1695,13 @@ export class PaymentService {
             `✅ [PAYMENT SERVICE] - Order ${order.orderNumber} paymentStatus updated to ${order.paymentStatus}`
           );
         }
+      }
+
+      if (result.status === PaymentStatus.COMPLETED && payment.orderId) {
+        await this.tryClearCartForCompletedOrderPayment(
+          payment,
+          "verifyPaymentAndUpdateOrder"
+        );
       }
 
       return {
@@ -1721,11 +1770,9 @@ export class PaymentService {
       // In production, this should be a publicly accessible URL
       const webhookUrl =
         data.webhookUrl ||
-        (process.env.NODE_ENV === "production"
-          ? `${
-              process.env.APP_BASE_URL || "https://20973d5116e5.ngrok-free.app"
-            }/api/v1/payments/webhook/${data.paymentMethod}`
-          : undefined); // Skip webhook in development for localhost
+        (config.server.nodeEnv === "production"
+          ? `${config.app.baseUrl}/api/v1/payments/webhook/${data.paymentMethod}`
+          : undefined);
 
       const paymentIntentData: PaymentIntentData = {
         amount: Math.round(data.amount.value * 100),
@@ -1825,6 +1872,7 @@ export class PaymentService {
       name:
         `${address.firstName || ""} ${address.lastName || ""}`.trim() ||
         undefined,
+      email: address.email || undefined,
       phone: address.phone || undefined,
       line1: line1Parts.join(" ") || address.address || undefined,
       line2: undefined, // No longer used
@@ -1858,11 +1906,21 @@ export class PaymentService {
   }
 
   private buildOrderCheckoutLineItems(order: any): PaymentLineItem[] {
-    const currency = order?.currency || "EUR";
+    const overallPricing = order?.pricing?.overall;
+
+    if (!overallPricing || !overallPricing.grandTotal || overallPricing.grandTotal <= 0) {
+      throw new AppError(
+        `Order ${order?.orderNumber || ""} does not have valid pricing for line items.`,
+        400
+      );
+    }
+
+    const currency = overallPricing.currency || "USD";
+
     return [
       {
         name: `Order ${order?.orderNumber || ""}`.trim(),
-        amount: this.toMinorUnits(order?.grandTotal || 0),
+        amount: this.toMinorUnits(overallPricing.grandTotal),
         currency,
         quantity: 1,
         description: `${order?.items?.length || 0} item(s)`,
@@ -1872,6 +1930,51 @@ export class PaymentService {
 
   private toMinorUnits(amount: number): number {
     return Math.round(amount * 100);
+  }
+
+  /**
+   * Clear shopper cart after a completed order payment. Idempotent — safe on duplicate webhooks.
+   */
+  private async tryClearCartForCompletedOrderPayment(
+    payment: { orderId?: unknown },
+    context: string
+  ): Promise<void> {
+    const oid = payment?.orderId;
+    if (!oid) {
+      return;
+    }
+    const orderId =
+      typeof oid === "object" &&
+      oid !== null &&
+      "_id" in (oid as Record<string, unknown>)
+        ? String((oid as { _id: unknown })._id)
+        : String(oid);
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return;
+    }
+
+    const order = await Orders.findById(orderId)
+      .select("userId orderNumber")
+      .lean();
+    if (!order?.userId) {
+      return;
+    }
+
+    const userId = String(order.userId);
+    try {
+      await cartService.clearCart(userId);
+      logger.info(`Cart cleared after completed payment (${context})`, {
+        userId,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error(`Cart clear failed (${context}): ${msg}`, {
+        userId,
+        orderId,
+      });
+    }
   }
 
   private async handleOrderConfirmation(
@@ -1906,17 +2009,24 @@ export class PaymentService {
       console.log("✅ [EMAIL] - User found:", user.email);
 
       console.log("📧 [EMAIL] Step 2: Preparing email data");
+      const overallPricing = order?.pricing?.overall || {
+        subTotal: 0,
+        discountedPrice: 0,
+        taxAmount: 0,
+        grandTotal: 0,
+        currency: "USD",
+      };
       const items = Array.isArray(order.items)
         ? order.items.map((item: any) => ({
             name: item.name || "Item",
             quantity: 1, // Quantity removed from order items
             unitAmount: item.amount || item.totalAmount || 0,
-            currency: order.currency || "EUR",
+            currency: overallPricing.currency || "USD",
           }))
         : [];
 
       console.log("📧 [EMAIL] - Items count:", items.length);
-      console.log("📧 [EMAIL] - Total amount:", order.grandTotal);
+      console.log("📧 [EMAIL] - Total amount:", overallPricing.grandTotal);
 
       console.log("📧 [EMAIL] Step 3: Sending order confirmation email");
 
@@ -1933,24 +2043,24 @@ export class PaymentService {
         orderDate: order.createdAt,
         paymentMethod: payment?.paymentMethod,
         subtotal: {
-          amount: order.subTotal,
-          currency: order.currency,
+          amount: overallPricing.subTotal,
+          currency: overallPricing.currency,
         },
         tax: {
-          amount: order.taxAmount,
-          currency: order.currency,
+          amount: overallPricing.taxAmount,
+          currency: overallPricing.currency,
         },
         shipping: {
           amount: 0, // Shipping not stored separately in new model
-          currency: order.currency,
+          currency: overallPricing.currency,
         },
         discount: {
-          amount: order.subTotal - order.discountedPrice,
-          currency: order.currency,
+          amount: overallPricing.subTotal - overallPricing.discountedPrice,
+          currency: overallPricing.currency,
         },
         total: {
-          amount: order.grandTotal,
-          currency: order.currency,
+          amount: overallPricing.grandTotal,
+          currency: overallPricing.currency,
         },
         items,
         shippingAddress: shippingAddressSnapshot,
@@ -2003,87 +2113,86 @@ export class PaymentService {
       console.log("🟢 [SUBSCRIPTION] Order ID:", order?._id);
       console.log("🟢 [SUBSCRIPTION] Payment ID:", payment?._id);
 
-      // ========== STEP 1: Validate Order Eligibility ==========
-      console.log("🟢 [SUBSCRIPTION] Step 1: Validating order eligibility...");
+      // ========== STEP 1: Check for SACHETS Items in Order ==========
+      console.log("🟢 [SUBSCRIPTION] Step 1: Checking for SACHETS items in order...");
 
-      // Check if order is eligible for subscription creation
-      // Only create subscription if:
-      // 1. isOneTime is false (subscription order) OR planType is SUBSCRIPTION
-      // 2. variantType is SACHETS
-      // 3. selectedPlanDays is valid (30, 60, 90, or 180)
+      // Check if order has SACHETS items (for mixed orders with both SACHETS and STAND_UP_POUCH, 
+      // we only create subscription for SACHETS items)
+      // This is the primary check - if SACHETS items exist, create subscription for them only
+      const allItems = order.items || [];
+      const sachetItems = allItems.filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS
+      );
+      const standUpPouchItems = allItems.filter(
+        (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+      );
 
-      console.log("🟢 [SUBSCRIPTION] - isOneTime:", order?.isOneTime);
+      console.log("🟢 [SUBSCRIPTION] - Total order items:", allItems.length);
+      console.log("🟢 [SUBSCRIPTION] - SACHETS items found:", sachetItems.length);
+      console.log("🟢 [SUBSCRIPTION] - STAND_UP_POUCH items found:", standUpPouchItems.length);
+      console.log("🟢 [SUBSCRIPTION] - PlanType:", order?.planType);
       console.log("🟢 [SUBSCRIPTION] - planType:", order?.planType);
-      console.log("🟢 [SUBSCRIPTION] - variantType:", order?.variantType);
       console.log(
         "🟢 [SUBSCRIPTION] - selectedPlanDays:",
         order?.selectedPlanDays
       );
 
-      // Check isOneTime - must be explicitly false OR planType must be SUBSCRIPTION
-      const isSubscriptionOrder =
-        order.isOneTime === false ||
-        order.planType === OrderPlanType.SUBSCRIPTION;
+      // Log all items for debugging
+      if (allItems.length > 0) {
+        console.log("🟢 [SUBSCRIPTION] - All order items:");
+        allItems.forEach((item: any, index: number) => {
+          console.log(
+            `   Item ${index + 1}: variantType=${item.variantType || "N/A"}, name=${item.name || "N/A"}, productId=${item.productId || "N/A"}`
+          );
+        });
+      }
 
-      if (!isSubscriptionOrder) {
+      if (sachetItems.length === 0) {
         console.log(
-          `⚠️ [SUBSCRIPTION] - Order is one-time purchase. isOneTime: ${order.isOneTime}, planType: ${order.planType}`
+          `⚠️ [SUBSCRIPTION] - No SACHETS items found in order, skipping subscription creation`
         );
+        if (standUpPouchItems.length > 0) {
+          console.log(
+            `ℹ️ [SUBSCRIPTION] - Order contains ${standUpPouchItems.length} STAND_UP_POUCH item(s), but subscriptions are only created for SACHETS items`
+          );
+        }
         logger.info(
-          `Order ${order.orderNumber} is one-time purchase, skipping subscription creation`
+          `Order ${order.orderNumber} has no SACHETS items, skipping subscription creation`
         );
         await session.abortTransaction();
         return null;
       }
 
-      // Check variantType - must be SACHETS
-      if (!order.variantType || order.variantType !== ProductVariant.SACHETS) {
-        console.log(
-          `⚠️ [SUBSCRIPTION] - variantType is ${order.variantType}, subscription only available for SACHETS`
-        );
-        logger.info(
-          `Order ${order.orderNumber} variantType is ${order.variantType}, subscription only available for SACHETS`
-        );
-        await session.abortTransaction();
-        return null;
-      }
-
-      console.log("✅ [SUBSCRIPTION] - Order is eligible for subscription");
-
-      // ========== STEP 2: Check for Duplicate Subscription ==========
       console.log(
-        "🟢 [SUBSCRIPTION] Step 2: Checking for duplicate subscription..."
+        `✅ [SUBSCRIPTION] - Found ${sachetItems.length} SACHETS item(s) in order. Will create subscription for SACHETS items only (STAND_UP_POUCH items will be excluded from subscription).`
       );
 
-      const existingSubscription = await Subscriptions.findOne({
-        orderId: order._id,
-        isDeleted: false,
-      })
-        .session(session)
-        .lean();
+      // Log SACHETS items details
+      sachetItems.forEach((item: any, index: number) => {
+        console.log(
+          `   [SUBSCRIPTION] SACHETS Item ${index + 1}: ${item.name || item.productId} (Plan Days: ${item.planDays || "N/A"}, Product ID: ${item.productId || "N/A"})`
+        );
+      });
 
-      if (existingSubscription) {
+      // Log STAND_UP_POUCH items that will be excluded
+      if (standUpPouchItems.length > 0) {
         console.log(
-          "⚠️ [SUBSCRIPTION] - Subscription already exists, skipping creation"
+          `ℹ️ [SUBSCRIPTION] - ${standUpPouchItems.length} STAND_UP_POUCH item(s) will be excluded from subscription (subscriptions are only for SACHETS items)`
         );
-        console.log(
-          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
-          existingSubscription._id
-        );
-        logger.info(
-          `Subscription already exists for order ${order.orderNumber}, skipping creation`
-        );
-        await session.abortTransaction();
-        return null;
+        standUpPouchItems.forEach((item: any, index: number) => {
+          console.log(
+            `   [SUBSCRIPTION] STAND_UP_POUCH Item ${index + 1} (excluded): ${item.name || item.productId}`
+          );
+        });
       }
 
-      console.log("✅ [SUBSCRIPTION] - No duplicate found, proceeding...");
+      // ========== STEP 2: Validate Plan Duration ==========
+      console.log("🟢 [SUBSCRIPTION] Step 2: Validating plan duration...");
 
-      // ========== STEP 3: Validate Plan Duration ==========
-      console.log("🟢 [SUBSCRIPTION] Step 3: Validating plan duration...");
-
-      const cycleDays = order.selectedPlanDays;
-      console.log("🟢 [SUBSCRIPTION] - cycleDays from order:", cycleDays);
+      // Get cycleDays from first SACHETS item's planDays
+      const sachetItem = sachetItems.find((item: any) => item.planDays);
+      const cycleDays = sachetItem?.planDays;
+      console.log("🟢 [SUBSCRIPTION] - cycleDays from order items:", cycleDays);
 
       if (!cycleDays || ![30, 60, 90, 180].includes(cycleDays)) {
         console.log(
@@ -2097,6 +2206,69 @@ export class PaymentService {
       }
 
       console.log("✅ [SUBSCRIPTION] - Valid cycleDays:", cycleDays);
+
+      // ========== STEP 3: Check for Existing Active Subscription with Same Cycle Days ==========
+      console.log(
+        "🟢 [SUBSCRIPTION] Step 3: Checking for existing active subscription with same cycle days..."
+      );
+
+      // Check if user already has an active subscription with the same cycleDays
+      const existingActiveSubscription = await Subscriptions.findOne({
+        userId: order.userId,
+        cycleDays: cycleDays,
+        status: SubscriptionStatus.ACTIVE,
+        isDeleted: false,
+      })
+        .session(session)
+        .lean();
+
+      if (existingActiveSubscription) {
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Found existing active subscription with same cycle days"
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
+          existingActiveSubscription._id
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription Number:",
+          existingActiveSubscription.subscriptionNumber
+        );
+        logger.warn(
+          `User already has an active ${cycleDays}-day subscription (${existingActiveSubscription.subscriptionNumber}). Cannot create duplicate subscription. User must cancel existing subscription first.`
+        );
+
+        // Do NOT create subscription or add products - user must cancel existing subscription first
+        await session.abortTransaction();
+        return null;
+      }
+
+      // Check for duplicate subscription for this specific order
+      const existingSubscriptionForOrder = await Subscriptions.findOne({
+        orderId: order._id,
+        isDeleted: false,
+      })
+        .session(session)
+        .lean();
+
+      if (existingSubscriptionForOrder) {
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Subscription already exists for this order, skipping creation"
+        );
+        console.log(
+          "⚠️ [SUBSCRIPTION] - Existing Subscription ID:",
+          existingSubscriptionForOrder._id
+        );
+        logger.info(
+          `Subscription already exists for order ${order.orderNumber}, skipping creation`
+        );
+        await session.abortTransaction();
+        return null;
+      }
+
+      console.log(
+        "✅ [SUBSCRIPTION] - No existing subscription found, creating new subscription..."
+      );
 
       // ========== STEP 4: Calculate Subscription Dates ==========
       console.log(
@@ -2145,10 +2317,11 @@ export class PaymentService {
       console.log("   - nextDeliveryDate:", nextDeliveryDate.toISOString());
       console.log("   - nextBillingDate:", nextBillingDate.toISOString());
 
-      // ========== STEP 5: Map Order Items to Subscription Items ==========
-      console.log("🟢 [SUBSCRIPTION] Step 5: Mapping order items...");
+      // ========== STEP 5: Map SACHETS Order Items to Subscription Items ==========
+      console.log("🟢 [SUBSCRIPTION] Step 5: Mapping SACHETS order items...");
 
-      const subscriptionItems = order.items.map((item: any) => ({
+      // Only include SACHETS items in subscription (filter out STAND_UP_POUCH items)
+      const subscriptionItems = sachetItems.map((item: any) => ({
         productId: new mongoose.Types.ObjectId(item.productId),
         name: item.name,
         planDays: item.planDays,
@@ -2167,6 +2340,65 @@ export class PaymentService {
         subscriptionItems.length
       );
 
+      // ========== STEP 5.5: Calculate SACHETS Pricing ==========
+      console.log("🟢 [SUBSCRIPTION] Step 5.5: Calculating SACHETS pricing...");
+      
+      let sachetsPricing: any = null;
+      
+      // Try to get pricing from order's pricing field (if available)
+      if (order.pricing && order.pricing.sachets) {
+        sachetsPricing = {
+          subTotal: order.pricing.sachets.subTotal || 0,
+          discountedPrice: order.pricing.sachets.discountedPrice || 0,
+          membershipDiscountAmount: order.pricing.sachets.membershipDiscountAmount || 0,
+          subscriptionPlanDiscountAmount: order.pricing.sachets.subscriptionPlanDiscountAmount || 0,
+          taxAmount: order.pricing.sachets.taxAmount || 0,
+          total: order.pricing.sachets.total || 0,
+          currency:
+            order.pricing.sachets.currency ||
+            order.pricing?.overall?.currency ||
+            "USD",
+        };
+        console.log("✅ [SUBSCRIPTION] - Using pricing from order.pricing.sachets");
+      } else {
+        // Calculate pricing from subscription items
+        const sachetSubTotal = subscriptionItems.reduce(
+          (sum: number, item: any) => sum + (item.amount || 0),
+          0
+        );
+        const sachetDiscountedPrice = subscriptionItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice || 0),
+          0
+        );
+        const sachetTaxAmount = subscriptionItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice || 0;
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        
+        // Get membership and subscription plan discounts from order if available
+        const sachetMembershipDiscountAmount = order.pricing?.sachets?.membershipDiscountAmount || 0;
+        const sachetSubscriptionPlanDiscountAmount = order.pricing?.sachets?.subscriptionPlanDiscountAmount || 
+          (order.pricing?.overall?.subscriptionPlanDiscountAmount || 0);
+        
+        const sachetTotal = sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount;
+        
+        sachetsPricing = {
+          subTotal: Math.round(sachetSubTotal * 100) / 100,
+          discountedPrice: Math.round(sachetDiscountedPrice * 100) / 100,
+          membershipDiscountAmount: Math.round(sachetMembershipDiscountAmount * 100) / 100,
+          subscriptionPlanDiscountAmount: Math.round(sachetSubscriptionPlanDiscountAmount * 100) / 100,
+          taxAmount: Math.round(sachetTaxAmount * 100) / 100,
+          total: Math.round(sachetTotal * 100) / 100,
+          currency: order.pricing?.overall?.currency || "USD",
+        };
+        console.log("✅ [SUBSCRIPTION] - Calculated pricing from subscription items");
+      }
+      
+      console.log("🟢 [SUBSCRIPTION] - SACHETS Pricing:", JSON.stringify(sachetsPricing, null, 2));
+
       // ========== STEP 6: Create Subscription ==========
       console.log(
         "🟢 [SUBSCRIPTION] Step 6: Creating subscription in database..."
@@ -2183,6 +2415,7 @@ export class PaymentService {
         subscriptionStartDate,
         subscriptionEndDate,
         items: subscriptionItems,
+        pricing: sachetsPricing,
         initialDeliveryDate,
         nextDeliveryDate,
         nextBillingDate,
@@ -2202,17 +2435,25 @@ export class PaymentService {
         // Only set gatewaySubscriptionId when subscription is created via gateway (Stripe/Mollie)
       };
 
-      const subscription = await Subscriptions.create([subscriptionData], {
+      const subscriptionArray = await Subscriptions.create([subscriptionData], {
         session,
       });
+
+      // Refresh the subscription document to get the updated version without gatewaySubscriptionId
+      const updatedSubscription = await Subscriptions.findById(
+        subscriptionArray[0]._id
+      ).session(session);
+      
+      // Get the subscription document (use updated if available, otherwise use created)
+      const subscription: ISubscription = (updatedSubscription || subscriptionArray[0]) as ISubscription;
 
       console.log("✅ [SUBSCRIPTION] - Subscription created successfully!");
       console.log(
         "✅ [SUBSCRIPTION] - Subscription Number:",
-        subscription[0].subscriptionNumber
+        subscription.subscriptionNumber
       );
-      console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription[0]._id);
-      console.log("✅ [SUBSCRIPTION] - Status:", subscription[0].status);
+      console.log("✅ [SUBSCRIPTION] - Subscription ID:", subscription._id);
+      console.log("✅ [SUBSCRIPTION] - Status:", subscription.status);
 
       // ========== STEP 7: Update Payment with Subscription ID ==========
       console.log("🟢 [SUBSCRIPTION] Step 7: Updating payment with subscriptionId...");
@@ -2228,13 +2469,13 @@ export class PaymentService {
           await Payments.findByIdAndUpdate(
             paymentId,
             { 
-              subscriptionId: subscription[0]._id 
+              subscriptionId: subscription._id 
             },
             { session }
           );
-          console.log("✅ [SUBSCRIPTION] - Payment updated with subscriptionId:", subscription[0]._id);
+          console.log("✅ [SUBSCRIPTION] - Payment updated with subscriptionId:", subscription._id);
           logger.info(
-            `Payment ${paymentId} updated with subscriptionId ${subscription[0]._id} for subscription ${subscription[0].subscriptionNumber}`
+            `Payment ${paymentId} updated with subscriptionId ${subscription._id} for subscription ${subscription.subscriptionNumber}`
           );
         } catch (updateError: any) {
           console.error("⚠️ [SUBSCRIPTION] - Failed to update payment with subscriptionId:", updateError.message);
@@ -2246,7 +2487,187 @@ export class PaymentService {
       } else {
         console.warn("⚠️ [SUBSCRIPTION] - Payment ID not found, cannot update payment with subscriptionId");
         logger.warn(
-          `Payment ID not found in payment object, cannot update payment with subscriptionId for subscription ${subscription[0].subscriptionNumber}`
+          `Payment ID not found in payment object, cannot update payment with subscriptionId for subscription ${subscription.subscriptionNumber}`
+        );
+      }
+
+      // ========== STEP 7.5: Create Stripe Subscription ==========
+      console.log("🟢 [STRIPE SUBSCRIPTION] ========== Creating Stripe Subscription ==========");
+      console.log("🟢 [STRIPE SUBSCRIPTION] Step 7.5: Starting Stripe subscription creation process...");
+      
+      // Get payment method from payment object
+      const paymentMethod = payment.paymentMethod || order.paymentMethod;
+      console.log("🟢 [STRIPE SUBSCRIPTION] - Payment Method:", paymentMethod);
+      
+      // Only create Stripe subscription if payment method is STRIPE
+      if (paymentMethod === PaymentMethod.STRIPE) {
+        console.log("✅ [STRIPE SUBSCRIPTION] - Payment method is STRIPE, proceeding with Stripe subscription creation");
+        try {
+          // Get user details for Stripe customer
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Fetching user details...");
+          const user = await User.findById(order.userId).select("email firstName lastName").lean();
+          if (!user) {
+            throw new AppError("User not found for Stripe subscription creation", 404);
+          }
+          console.log("✅ [STRIPE SUBSCRIPTION] - User found:", user.email);
+
+          // Calculate amount in minor units (cents) from sachetsPricing.total
+          // sachetsPricing.total is in major units (e.g., EUR), convert to cents
+          const amountInCents = Math.round(sachetsPricing.total * 100);
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Subscription Details:");
+          console.log("   📋 User ID:", order.userId.toString());
+          console.log("   📋 User Email:", user.email);
+          console.log("   📋 User Name:", `${user.firstName || ""} ${user.lastName || ""}`.trim() || "N/A");
+          console.log("   📋 Order ID:", order._id.toString());
+          console.log("   📋 Order Number:", order.orderNumber);
+          console.log("   📋 Database Subscription ID:", String(subscription._id));
+          console.log("   📋 Database Subscription Number:", subscription.subscriptionNumber);
+          console.log("   📋 Cycle Days:", cycleDays, "days");
+          console.log("   💰 Amount:", amountInCents, "cents (", sachetsPricing.total, sachetsPricing.currency, ")");
+          console.log("   💰 Currency:", sachetsPricing.currency || "USD");
+          console.log("   🔄 Auto-Renew: Enabled (true)");
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Retrieving payment intent ID from payment...");
+          
+          // Get payment intent ID from payment to retrieve payment method
+          let paymentIntentId: string | undefined;
+          if (payment.gatewayTransactionId) {
+            paymentIntentId = payment.gatewayTransactionId;
+            console.log("   - Payment Intent ID from gatewayTransactionId:", paymentIntentId);
+          } else if (payment.gatewayResponse) {
+            // Try to extract from gatewayResponse
+            const gatewayResponse = payment.gatewayResponse as any;
+            if (gatewayResponse.payment_intent) {
+              paymentIntentId = typeof gatewayResponse.payment_intent === 'string' 
+                ? gatewayResponse.payment_intent 
+                : gatewayResponse.payment_intent.id;
+              console.log("   - Payment Intent ID from gatewayResponse:", paymentIntentId);
+            } else if (gatewayResponse.id && gatewayResponse.object === 'payment_intent') {
+              paymentIntentId = gatewayResponse.id;
+              console.log("   - Payment Intent ID from gatewayResponse.id:", paymentIntentId);
+            }
+          }
+          
+          if (!paymentIntentId) {
+            console.warn("⚠️ [STRIPE SUBSCRIPTION] - Payment Intent ID not found, subscription may be incomplete");
+          }
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Preparing order items for Stripe product creation...");
+          
+          // Map sachets items to format expected by Stripe subscription service
+          const orderItemsForStripe = sachetItems.map((item: any) => ({
+            productId: item.productId?.toString() || "",
+            name: item.name || "Product",
+            planDays: item.planDays || cycleDays,
+            capsuleCount: item.capsuleCount,
+            amount: item.amount || 0,
+            discountedPrice: item.discountedPrice || 0,
+            taxRate: item.taxRate || 0,
+            totalAmount: item.totalAmount || 0,
+            durationDays: item.durationDays,
+            savingsPercentage: item.savingsPercentage,
+            features: item.features || [],
+          }));
+          
+          console.log("   - Number of sachets items:", orderItemsForStripe.length);
+          orderItemsForStripe.forEach((item: any, index: number) => {
+            console.log(`   - Item ${index + 1}: ${item.name} (${item.discountedPrice} ${sachetsPricing.currency || "USD"})`);
+          });
+          
+          console.log("🟢 [STRIPE SUBSCRIPTION] - Calling SubscriptionGatewayService.createSubscription()...");
+          
+          // Create Stripe subscription via SubscriptionGatewayService
+          const stripeSubscriptionResult = await this.subscriptionGatewayService.createSubscription({
+            userId: order.userId.toString(),
+            orderId: order._id.toString(),
+            paymentMethod: PaymentMethod.STRIPE,
+            amount: amountInCents,
+            currency: sachetsPricing.currency || "USD",
+            cycleDays: cycleDays,
+            customerEmail: user.email,
+            customerName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+            paymentIntentId: paymentIntentId,
+            orderItems: orderItemsForStripe, // Pass sachets items for individual product creation
+            metadata: {
+              subscriptionId: String(subscription._id),
+              subscriptionNumber: subscription.subscriptionNumber,
+              orderNumber: order.orderNumber,
+            },
+          });
+
+          console.log("🟢 [STRIPE SUBSCRIPTION] - SubscriptionGatewayService response received");
+          console.log("   - Success:", stripeSubscriptionResult.success);
+          console.log("   - Gateway Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId || "N/A");
+          console.log("   - Gateway Customer ID:", stripeSubscriptionResult.gatewayCustomerId || "N/A");
+          console.log("   - Gateway Payment Method ID:", stripeSubscriptionResult.gatewayPaymentMethodId || "N/A");
+          if (stripeSubscriptionResult.error) {
+            console.log("   - Error:", stripeSubscriptionResult.error);
+          }
+
+          if (stripeSubscriptionResult.success && stripeSubscriptionResult.gatewaySubscriptionId) {
+            console.log("✅ [STRIPE SUBSCRIPTION] - Stripe subscription created successfully!");
+            console.log("   🎯 Stripe Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId);
+            console.log("   🎯 Stripe Customer ID:", stripeSubscriptionResult.gatewayCustomerId);
+            console.log("   🎯 Stripe Payment Method ID:", stripeSubscriptionResult.gatewayPaymentMethodId || "N/A");
+            
+            console.log("🟢 [STRIPE SUBSCRIPTION] - Updating database subscription with Stripe IDs...");
+            
+            // Update database subscription with Stripe subscription ID and customer ID
+            await Subscriptions.findByIdAndUpdate(
+              subscription._id,
+              {
+                gatewaySubscriptionId: stripeSubscriptionResult.gatewaySubscriptionId,
+                gatewayCustomerId: stripeSubscriptionResult.gatewayCustomerId || undefined,
+                gatewayPaymentMethodId: stripeSubscriptionResult.gatewayPaymentMethodId || undefined,
+              },
+              { session }
+            );
+            
+            console.log("✅ [STRIPE SUBSCRIPTION] - Database subscription updated successfully!");
+            console.log("   - Database Subscription ID:", String(subscription._id));
+            console.log("   - Database Subscription Number:", subscription.subscriptionNumber);
+            console.log("   - Linked Stripe Subscription ID:", stripeSubscriptionResult.gatewaySubscriptionId);
+            console.log("   - Linked Stripe Customer ID:", stripeSubscriptionResult.gatewayCustomerId);
+            console.log("✅ [STRIPE SUBSCRIPTION] ============================================");
+            
+            logger.info(
+              `Stripe subscription ${stripeSubscriptionResult.gatewaySubscriptionId} created and linked to database subscription ${subscription.subscriptionNumber}`
+            );
+          } else {
+            console.error("❌ [STRIPE SUBSCRIPTION] - Failed to create Stripe subscription");
+            console.error("   - Error:", stripeSubscriptionResult.error);
+            console.error("   - Database Subscription Number:", subscription.subscriptionNumber);
+            console.error("❌ [STRIPE SUBSCRIPTION] ============================================");
+            
+            logger.warn(
+              `Failed to create Stripe subscription for database subscription ${subscription.subscriptionNumber}: ${stripeSubscriptionResult.error}`
+            );
+            // Don't fail database subscription creation if Stripe subscription fails
+            // The database subscription will still be created without gatewaySubscriptionId
+          }
+        } catch (stripeError: any) {
+          console.error("❌ [STRIPE SUBSCRIPTION] - Exception occurred while creating Stripe subscription");
+          console.error("   - Error Message:", stripeError.message);
+          console.error("   - Error Stack:", stripeError.stack);
+          console.error("   - Database Subscription Number:", subscription.subscriptionNumber);
+          console.error("❌ [STRIPE SUBSCRIPTION] ============================================");
+          
+          logger.error(
+            `Error creating Stripe subscription for database subscription ${subscription.subscriptionNumber}:`,
+            stripeError
+          );
+          // Don't fail database subscription creation if Stripe subscription fails
+          // The database subscription will still be created without gatewaySubscriptionId
+        }
+      } else {
+        console.log("ℹ️ [STRIPE SUBSCRIPTION] - Payment method is not STRIPE, skipping Stripe subscription creation");
+        console.log("   - Payment Method:", paymentMethod);
+        console.log("   - Database Subscription Number:", subscription.subscriptionNumber);
+        console.log("ℹ️ [STRIPE SUBSCRIPTION] ============================================");
+        
+        logger.info(
+          `Payment method is ${paymentMethod}, skipping Stripe subscription creation for subscription ${subscription.subscriptionNumber}`
         );
       }
 
@@ -2261,12 +2682,12 @@ export class PaymentService {
         const { subscriptionNotifications } = await import("@/utils/notificationHelpers");
         await subscriptionNotifications.subscriptionActivated(
           order.userId,
-          String(subscription[0]._id),
-          subscription[0].subscriptionNumber,
+          String(subscription._id),
+          subscription.subscriptionNumber,
           order.userId
         );
         logger.info(
-          `Subscription activated notification sent for subscription: ${subscription[0].subscriptionNumber} (payment successful)`
+          `Subscription activated notification sent for subscription: ${subscription.subscriptionNumber} (payment successful)`
         );
       } catch (error: any) {
         logger.error(`Failed to send subscription activated notification: ${error.message}`);
@@ -2274,14 +2695,14 @@ export class PaymentService {
       }
 
       logger.info(
-        `✅ Subscription ${subscription[0].subscriptionNumber} created for order ${order.orderNumber}`
+        `✅ Subscription ${subscription.subscriptionNumber} created for order ${order.orderNumber}`
       );
 
       console.log(
         "✅ [SUBSCRIPTION] ============================================"
       );
 
-      return subscription[0];
+      return subscription;
     } catch (error: any) {
       // Rollback transaction on error
       await session.abortTransaction();

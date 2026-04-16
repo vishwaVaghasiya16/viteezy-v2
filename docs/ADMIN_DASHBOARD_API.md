@@ -294,7 +294,7 @@ curl -X GET "http://localhost:8080/api/v1/admin/dashboard/top-selling-products?l
         "productImage": "https://example.com/image.jpg",
         "category": "General Health",
         "price": 49.99,
-        "currency": "EUR",
+        "currency": "USD",
         "totalSales": 1204,
         "revenue": 49200.0,
         "status": "inStock"
@@ -305,7 +305,7 @@ curl -X GET "http://localhost:8080/api/v1/admin/dashboard/top-selling-products?l
         "productImage": "https://example.com/image2.jpg",
         "category": "Vitamins",
         "price": 29.99,
-        "currency": "EUR",
+        "currency": "USD",
         "totalSales": 856,
         "revenue": 25674.44,
         "status": "lowStock"

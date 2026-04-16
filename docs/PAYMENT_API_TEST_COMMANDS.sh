@@ -97,7 +97,7 @@ test_create_payment_custom_amount() {
         "paymentMethod": "STRIPE",
         "amount": {
           "value": 99.99,
-          "currency": "EUR"
+          "currency": "USD"
         },
         "description": "Custom payment for testing",
         "returnUrl": "http://localhost:8080/payment/return",

@@ -25,11 +25,28 @@ import {
   getBaseSubtotalForSubscription,
 } from "@/utils/productSubscriptionPrice";
 import { getTranslatedString } from "@/utils/translationUtils";
+import {
+  getStandUpPouchPlanKey,
+  getNormalizedStandupPouchPrice,
+  DEFAULT_STAND_UP_POUCH_PLAN,
+} from "../config/planConfig";
 
 interface AuthenticatedRequest extends Request {
   user?: {
     _id: string;
     language?: string;
+  };
+  orderContext?: {
+    orderedBy: string;
+    orderedFor: string;
+    relationshipType: "SELF" | "FAMILY";
+  };
+  resolvedAddress?: {
+    addressId?: string;
+    address: any;
+    source: "SELF" | "INHERITED" | "MANUAL";
+    inheritedFrom?: string;
+    isManual: boolean;
   };
 }
 
@@ -230,6 +247,7 @@ const validateCouponForOrder = async ({
     const userUsageCount = await Orders.countDocuments({
       userId: new mongoose.Types.ObjectId(userId),
       couponCode: coupon.code,
+      paymentStatus: PaymentStatus.COMPLETED,
       isDeleted: false,
     });
 
@@ -241,7 +259,7 @@ const validateCouponForOrder = async ({
     }
   }
 
-  if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+  if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
     throw new AppError(
       `Minimum order amount of ${coupon.minOrderAmount} is required for this coupon`,
       400
@@ -328,27 +346,30 @@ class OrderController {
    * @access Private
    */
   createOrder = asyncHandler(
-    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    async (req: AuthenticatedRequest, res: Response): Promise<any> => {
       if (!req.user?._id) {
         throw new AppError("User not authenticated", 401);
       }
 
       const {
         cartId,
+        sachets,
+        standUpPouch,
+        orderedFor,
+        // Family management fields
+        orderedBy,
+        relationshipType,
+        addressSource,
+        addressInheritedFrom,
+        addressIsManual,
+        // Legacy fields (for backward compatibility)
         variantType,
         planDurationDays,
         isOneTime,
         capsuleCount,
         shippingAddressId,
         billingAddressId,
-        subTotal,
-        discountedPrice,
-        couponDiscountAmount = 0,
-        membershipDiscountAmount = 0,
-        subscriptionPlanDiscountAmount = 0,
-        taxAmount = 0,
-        grandTotal,
-        currency = "EUR",
+        pricing,
         couponCode,
         membership,
         metadata,
@@ -356,7 +377,32 @@ class OrderController {
         notes,
       } = req.body;
 
-      const userId = new mongoose.Types.ObjectId(req.user._id);
+      const userId = orderedFor 
+        ? new mongoose.Types.ObjectId(orderedFor) 
+        : new mongoose.Types.ObjectId(req.user._id);
+
+      // FAMILY PERMISSION VALIDATION
+      const targetUserId = orderedFor || req.user._id;
+      const { validateFamilyRelation } = await import("@/services/familyValidationService");
+      const validation = await validateFamilyRelation(req.user._id, targetUserId);
+      if (!validation.allowed) {
+        throw new AppError(validation.reason || "Access denied", 403);
+      }
+
+      // AUTO-INHERIT ADDRESS FOR SUB-MEMBERS (if needed)
+      if (validation.relationshipType === 'MAIN_MEMBER' && orderedFor) {
+        // Main member placing order for sub-member
+        const { ensureSubMemberHasAddress } = await import("@/services/addressInheritanceHelper");
+        const addressCheck = await ensureSubMemberHasAddress(orderedFor);
+        
+        if (addressCheck.autoInherited) {
+          logger.info("Address auto-inherited for sub-member during order creation", {
+            orderedBy: req.user._id,
+            orderedFor: orderedFor,
+            inheritedAddressId: addressCheck.addressId
+          });
+        }
+      }
 
       // Get user language for feature translation
       const userLang = await getUserLanguage(req, req.user._id.toString());
@@ -417,10 +463,10 @@ class OrderController {
         throw new AppError("Invalid cart ID format", 400);
       }
 
-      // Fetch cart and validate ownership
+      // Fetch cart and validate ownership (cart should belong to the person placing the order)
       const cart = await Carts.findOne({
         _id: new mongoose.Types.ObjectId(cartId),
-        userId: userId,
+        userId: new mongoose.Types.ObjectId(req.user._id), // Cart belongs to the person placing order
         isDeleted: false,
       }).lean();
 
@@ -429,84 +475,145 @@ class OrderController {
       }
 
       if (!cart.items || cart.items.length === 0) {
-        throw new AppError("Cart is empty", 400);
+        return res.status(200).json({
+          success: true,
+          message: "Cart is empty",
+          data: {
+            cartItems: [],
+            subTotal: 0,
+            discountedPrice: 0,
+            taxAmount: 0,
+            grandTotal: 0,
+            isEmpty: true
+          }
+        });
       }
 
-      // Validate variantType
-      if (
-        !variantType ||
-        !Object.values(ProductVariant).includes(variantType)
-      ) {
+      // Separate cart items by variantType
+      const sachetItems = cart.items.filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS
+      );
+      const standupPouchItems = cart.items.filter(
+        (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+      );
+
+      if (sachetItems.length === 0 && standupPouchItems.length === 0) {
         throw new AppError(
-          "Valid variantType (SACHETS or STAND_UP_POUCH) is required",
+          "Cart must contain at least one item with a valid variantType",
           400
         );
       }
 
-      // Validate that cart variantType matches order variantType
-      if (cart.variantType) {
-        if (cart.variantType !== variantType) {
-          throw new AppError(
-            `Cart variantType (${cart.variantType}) does not match order variantType (${variantType}). All items in cart must have the same variant type.`,
-            400
-          );
-        }
-      } else {
-        // If cart doesn't have variantType set, it means cart is empty or was created before variantType was added
-        // In this case, we'll use the variantType from the order request
-        // But we should log a warning or handle this edge case
-        logger.warn(
-          `Cart ${cartId} does not have variantType set. Using variantType from order request: ${variantType}`
-        );
-      }
-
-      // Determine planType from isOneTime
-      const planType: OrderPlanType = isOneTime
-        ? OrderPlanType.ONE_TIME
-        : OrderPlanType.SUBSCRIPTION;
-
-      // Validate planDurationDays based on isOneTime
-      if (isOneTime) {
-        // For one-time purchase, planDurationDays must be 30 or 60
-        // if (!planDurationDays || ![30, 60].includes(planDurationDays)) {
-        //   throw new AppError(
-        //     "For one-time purchase, planDurationDays must be 30 or 60",
-        //     400
-        //   );
-        // }
-      } else {
-        // For subscription, planDurationDays must be 30, 60, 90, or 180
-        if (
-          !planDurationDays ||
-          ![30, 60, 90, 180].includes(planDurationDays)
-        ) {
-          throw new AppError(
-            "For subscription plans, planDurationDays must be 30, 60, 90, or 180",
-            400
-          );
-        }
-      }
-
-      // Validate and fetch shipping address
-      if (!shippingAddressId) {
-        throw new AppError("Shipping address ID is required", 400);
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(shippingAddressId)) {
-        throw new AppError("Invalid shipping address ID format", 400);
-      }
-
-      const shippingAddressDoc = await Addresses.findOne({
-        _id: new mongoose.Types.ObjectId(shippingAddressId),
-        userId: userId,
-        isDeleted: false,
-      }).lean();
-
-      if (!shippingAddressDoc) {
+      // Extract plan selection from new structure (similar to checkout page summary)
+      // Validate that required configs are provided based on cart items
+      if (sachetItems.length > 0 && !sachets) {
         throw new AppError(
-          "Shipping address not found or does not belong to user",
-          404
+          "sachets configuration is required when cart contains SACHETS items",
+          400
         );
+      }
+      if (standupPouchItems.length > 0 && !standUpPouch) {
+        throw new AppError(
+          "standUpPouch configuration is required when cart contains STAND_UP_POUCH items",
+          400
+        );
+      }
+
+      // Extract plan selection values (use new structure if provided, fallback to legacy fields)
+      const selectedPlanDays = sachets?.planDurationDays || planDurationDays;
+      // Note: isOneTime is NOT allowed for SACHETS (only subscription plans are supported)
+      const selectedCapsuleCount = standUpPouch?.capsuleCount || capsuleCount || 30;
+      const selectedStandUpPouchPlanDays = standUpPouch?.planDays || selectedCapsuleCount;
+
+      // Create a map of productId -> capsuleCount/planDays from itemQuantities for per-product selection
+      const productPlanDaysMap = new Map<string, number>();
+      if (
+        standUpPouch?.itemQuantities &&
+        standUpPouch.itemQuantities.length > 0
+      ) {
+        for (const itemQty of standUpPouch.itemQuantities) {
+          let planDays: number;
+          if (itemQty.planDays !== undefined) {
+            planDays = itemQty.planDays;
+          } else if (itemQty.capsuleCount !== undefined) {
+            planDays = itemQty.capsuleCount; // capsuleCount maps to planDays
+          } else {
+            planDays = selectedStandUpPouchPlanDays;
+          }
+          productPlanDaysMap.set(itemQty.productId, planDays);
+        }
+      }
+
+      // Validate variant-specific rules
+      // SACHETS: Only subscription plans (30, 60, 90, or 180 days) - one-time plans NOT supported
+      // STAND_UP_POUCH: Always one-time (with quantity)
+      if (sachetItems.length > 0) {
+        // SACHETS subscription only (30, 60, 90, or 180 days)
+        if (!selectedPlanDays || ![30, 60, 90, 180].includes(selectedPlanDays)) {
+          throw new AppError(
+            "For SACHETS, planDurationDays must be 30, 60, 90, or 180 (subscription plans only)",
+            400
+          );
+        }
+      }
+
+      // Determine planType based on order contents
+      let planType: OrderPlanType;
+      if (sachetItems.length > 0 && standupPouchItems.length > 0) {
+        planType = OrderPlanType.MIXED; // Both variants present
+      } else if (sachetItems.length > 0) {
+        planType = OrderPlanType.SUBSCRIPTION; // Only SACHETS (subscription only)
+      } else {
+        planType = OrderPlanType.ONE_TIME; // Only STAND_UP_POUCH (one-time)
+      }
+
+      // Determine isOneTime based on order contents
+      // If order has only STAND_UP_POUCH items, it's one-time (isOneTime = true)
+      // If order has SACHETS items, it's subscription (isOneTime = false) - one-time NOT supported for SACHETS
+      // If order has both, isOneTime = false (because subscriptions are primary)
+      const orderIsOneTime = standupPouchItems.length > 0 && sachetItems.length === 0;
+
+      // Use resolved shipping address from middleware
+      const resolvedAddress = req.resolvedAddress;
+      
+      if (!resolvedAddress) {
+        throw new AppError(
+          "Shipping address resolution failed",
+          500,
+          true,
+          "ADDRESS_RESOLUTION_FAILED"
+        );
+      }
+
+      let shippingAddressDoc;
+      
+      // For manual addresses, use the address object directly
+      if (resolvedAddress.isManual) {
+        shippingAddressDoc = resolvedAddress.address;
+      } else {
+        // For saved addresses, validate the address exists
+        if (!resolvedAddress.addressId) {
+          throw new AppError(
+            "Saved address ID not found in resolved address",
+            500,
+            true,
+            "RESOLVED_ADDRESS_MISSING_ID"
+          );
+        }
+
+        shippingAddressDoc = await Addresses.findOne({
+          _id: new mongoose.Types.ObjectId(resolvedAddress.addressId),
+          isDeleted: false,
+        }).lean();
+
+        if (!shippingAddressDoc) {
+          throw new AppError(
+            "Resolved shipping address not found",
+            404,
+            true,
+            "RESOLVED_ADDRESS_NOT_FOUND"
+          );
+        }
       }
 
       // Validate billing address if provided
@@ -529,40 +636,20 @@ class OrderController {
         }
       }
 
-      // Get product IDs from cart
-      const productObjectIds = cart.items.map(
-        (item: any) => new mongoose.Types.ObjectId(item.productId)
+      // Get product IDs from cart (remove duplicates to allow same product with different variant types)
+      const uniqueProductIds = new Set(
+        cart.items.map((item: any) => item.productId.toString())
+      );
+      const productObjectIds = Array.from(uniqueProductIds).map(
+        (id: string) => new mongoose.Types.ObjectId(id)
       );
 
-      // Use planDurationDays from body (already validated above)
-      const planDays = planDurationDays;
+      // Use planDurationDays from new structure or legacy field (already validated above)
+      const planDays = selectedPlanDays;
 
-      // For SACHETS one-time, use planDurationDays as capsuleCount
-      // For STAND_UP_POUCH, use capsuleCount from body
-      let effectiveCapsuleCount: number | undefined;
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        effectiveCapsuleCount = capsuleCount;
-      } else if (variantType === ProductVariant.SACHETS && isOneTime) {
-        // For SACHETS one-time, planDurationDays represents capsuleCount
-        effectiveCapsuleCount = planDurationDays;
-      }
-
-      // Additional validation: Subscription plans only for SACHETS
-      if (!isOneTime && variantType !== ProductVariant.SACHETS) {
-        throw new AppError(
-          "Subscription plans are only available for SACHETS variant type",
-          400
-        );
-      }
-
-      // Fetch products with pricing information based on variantType and planType
-      let selectFields = "title slug skuRoot categories price variant";
-      if (variantType === ProductVariant.SACHETS) {
-        selectFields += " sachetPrices";
-      }
-      if (variantType === ProductVariant.STAND_UP_POUCH) {
-        selectFields += " standupPouchPrice hasStandupPouch";
-      }
+      // Fetch products with pricing information for both variantTypes
+      const selectFields =
+        "title slug skuRoot categories price variant sachetPrices standupPouchPrice hasStandupPouch";
 
       const products = await Products.find({
         _id: { $in: productObjectIds },
@@ -571,6 +658,7 @@ class OrderController {
         .select(selectFields)
         .lean();
 
+      // Check if all unique products were found (allowing same product with different variant types)
       if (products.length !== productObjectIds.length) {
         throw new AppError("One or more products are unavailable", 400);
       }
@@ -579,8 +667,12 @@ class OrderController {
         products.map((product: any) => [product._id.toString(), product])
       );
 
-      // Use currency from body (already normalized)
-      const normalizedCurrency = currency.toUpperCase();
+      // Pricing is passed in body; store it in DB
+      if (!pricing || !pricing.overall) {
+        throw new AppError("pricing.overall is required", 400);
+      }
+      const normalizedCurrency =
+        (pricing.overall.currency || "USD").toString().toUpperCase();
 
       const categoryIds = new Set<string>();
 
@@ -591,13 +683,17 @@ class OrderController {
         );
       });
 
-      // Build order items with prices calculated from product pricing based on variantType and planType
+      // Build order items with prices calculated from product pricing based on item-level variantType
       const orderItems = cart.items.map((cartItem: any) => {
         const product = productMap.get(cartItem.productId.toString());
 
         if (!product) {
           throw new AppError("Invalid product in cart", 400);
         }
+
+        // Get variantType from cart item
+        const itemVariantType = cartItem.variantType || variantType;
+        const itemQuantity = cartItem.quantity || 1; // Get quantity from cart item
 
         let itemPlanDays: number | undefined;
         let itemCapsuleCount: number | undefined;
@@ -609,8 +705,8 @@ class OrderController {
         let itemSavingsPercentage: number | undefined;
         let itemFeatures: string[] = [];
 
-        // Calculate price based on variantType and planType with proper validations
-        if (variantType === ProductVariant.SACHETS) {
+        // Calculate price based on item-level variantType
+        if (itemVariantType === ProductVariant.SACHETS) {
           if (!product.sachetPrices) {
             throw new AppError(
               `Product ${
@@ -620,13 +716,16 @@ class OrderController {
             );
           }
 
-          if (planType === OrderPlanType.SUBSCRIPTION && planDays) {
-            // Use subscription pricing based on planDays
-            itemPlanDays = planDays;
+          // Use plan selection from request (subscription only for SACHETS)
+          // Note: SACHETS don't store planDays in cart - plan is selected at checkout/order time
+          // Use planDays from request if provided, otherwise use selectedPlanDays from top-level config
+          itemPlanDays = planDays || selectedPlanDays;
+          if (itemPlanDays) {
             let selectedPlan: any = null;
             let planKey = "";
 
-            // Map planDays to sachetPrices field
+            // Note: One-time plans are NOT supported for SACHETS (only subscription plans)
+            // Map planDays to sachetPrices subscription field
             switch (planDays) {
               case 30:
                 selectedPlan = product.sachetPrices.thirtyDays;
@@ -685,69 +784,8 @@ class OrderController {
                   getTranslatedString(feature, userLang)
                 )
               : [];
-          } else {
-            // Use one-time pricing based on effectiveCapsuleCount (which is planDurationDays for SACHETS one-time)
-            itemCapsuleCount = effectiveCapsuleCount || 30; // Default to 30 if not provided
-            const oneTimePlan = product.sachetPrices.oneTime;
-
-            if (!oneTimePlan) {
-              throw new AppError(
-                `Product ${
-                  product.title?.en || product.slug || product._id
-                } does not support one-time purchase for SACHETS variant`,
-                400
-              );
-            }
-
-            if (itemCapsuleCount === 60) {
-              if (!oneTimePlan.count60) {
-                throw new AppError(
-                  `Product ${
-                    product.title?.en || product.slug || product._id
-                  } does not support 60-count one-time purchase. Only 30-count is available.`,
-                  400
-                );
-              }
-              // Extract all pricing details for count60
-              const count60Plan = oneTimePlan.count60;
-              itemAmount = count60Plan.amount || 0;
-              itemDiscountedPrice = count60Plan.discountedPrice || itemAmount;
-              itemTaxRate = count60Plan.taxRate || 0;
-              itemTotalAmount = count60Plan.discountedPrice || itemAmount;
-              itemCapsuleCount = count60Plan.capsuleCount || 60;
-              itemSavingsPercentage =
-                count60Plan.savingsPercentage || undefined;
-              itemFeatures = Array.isArray(count60Plan.features)
-                ? count60Plan.features.map((feature: any) =>
-                    getTranslatedString(feature, userLang)
-                  )
-                : [];
-            } else {
-              if (!oneTimePlan.count30) {
-                throw new AppError(
-                  `Product ${
-                    product.title?.en || product.slug || product._id
-                  } does not support one-time purchase for SACHETS variant`,
-                  400
-                );
-              }
-              // Extract all pricing details for count30
-              const count30Plan = oneTimePlan.count30;
-              itemAmount = count30Plan.amount || 0;
-              itemDiscountedPrice = count30Plan.discountedPrice || itemAmount;
-              itemTaxRate = count30Plan.taxRate || 0;
-              itemTotalAmount = count30Plan.discountedPrice || itemAmount;
-              itemCapsuleCount = count30Plan.capsuleCount || 30;
-              itemSavingsPercentage =
-                count30Plan.savingsPercentage || undefined;
-              itemFeatures = Array.isArray(count30Plan.features)
-                ? count30Plan.features.map((feature: any) =>
-                    getTranslatedString(feature, userLang)
-                  )
-                : [];
-            }
           }
-        } else if (variantType === ProductVariant.STAND_UP_POUCH) {
+        } else if (itemVariantType === ProductVariant.STAND_UP_POUCH) {
           // Validate that product supports stand-up pouch
           if (!product.hasStandupPouch || !product.standupPouchPrice) {
             throw new AppError(
@@ -758,80 +796,66 @@ class OrderController {
             );
           }
 
-          itemCapsuleCount = capsuleCount;
-          const standupPrice = product.standupPouchPrice as any;
+          // Get planDays for this specific product from itemQuantities, cart item, or fallback
+          // Note: For STAND_UP_POUCH, planDays in cart is treated as capsuleCount (60 or 120)
+          const productIdStr = cartItem.productId.toString();
+          const itemPlanDays = productPlanDaysMap.get(productIdStr) ||
+            cartItem.planDays || // For STAND_UP_POUCH: planDays from cart is capsuleCount (60 or 120)
+            selectedStandUpPouchPlanDays ||
+            DEFAULT_STAND_UP_POUCH_PLAN;
+          
+          // For STAND_UP_POUCH: planDays from cart is treated as capsuleCount
+          itemCapsuleCount = itemPlanDays;
+          const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
 
-          if (itemCapsuleCount === 60) {
-            if (!standupPrice.count60) {
-              throw new AppError(
-                `Product ${
-                  product.title?.en || product.slug || product._id
-                } does not support 60-count stand-up pouch. Only 30-count is available.`,
-                400
-              );
+          // Dynamic lookup: find pricing by matching capsuleCount
+          let foundPricing: any = null;
+          
+          // Search through all count_* keys to find matching capsule count
+          Object.keys(standupPrice).forEach(key => {
+            if (key.startsWith('count_') && standupPrice[key]) {
+              const pricing = standupPrice[key];
+              if (pricing.capsuleCount === itemPlanDays) {
+                foundPricing = pricing;
+              }
             }
-            // Extract all pricing details for count60
-            itemAmount = standupPrice.count60.amount || 0;
+          });
+          
+          if (foundPricing) {
+            itemAmount = foundPricing.amount || 0;
+            itemDiscountedPrice = foundPricing.discountedPrice || itemAmount;
+            itemTaxRate = foundPricing.taxRate || 0;
+            itemTotalAmount = foundPricing.totalAmount || foundPricing.discountedPrice || itemAmount;
+            itemCapsuleCount = foundPricing.capsuleCount || itemPlanDays;
+            itemSavingsPercentage = foundPricing.savingsPercentage || undefined;
+            itemFeatures = Array.isArray(foundPricing.features)
+              ? foundPricing.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang)
+                )
+              : [];
+          } else if (standupPrice.amount) {
+            // Fallback to simple price object if count structure doesn't exist
+            itemAmount = standupPrice.amount || 0;
             itemDiscountedPrice =
-              standupPrice.count60.discountedPrice || itemAmount;
-            itemTaxRate = standupPrice.count60.taxRate || 0;
+              standupPrice.discountedPrice || itemAmount;
+            itemTaxRate = standupPrice.taxRate || 0;
             itemTotalAmount =
-              standupPrice.count60.totalAmount ||
-              standupPrice.count60.discountedPrice ||
+              standupPrice.totalAmount ||
+              standupPrice.discountedPrice ||
               itemAmount;
-            itemCapsuleCount = standupPrice.count60.capsuleCount || 60;
-            itemSavingsPercentage =
-              standupPrice.count60.savingsPercentage || undefined;
-            itemFeatures = Array.isArray(standupPrice.count60.features)
-              ? standupPrice.count60.features.map((feature: any) =>
+            itemCapsuleCount = itemPlanDays;
+            itemFeatures = Array.isArray(standupPrice.features)
+              ? standupPrice.features.map((feature: any) =>
                   getTranslatedString(feature, userLang)
                 )
               : [];
           } else {
-            if (!standupPrice.count30) {
-              // Fallback to simple price object if count30 structure doesn't exist
-              if (standupPrice.amount) {
-                itemAmount = standupPrice.amount || 0;
-                itemDiscountedPrice =
-                  standupPrice.discountedPrice || itemAmount;
-                itemTaxRate = standupPrice.taxRate || 0;
-                itemTotalAmount =
-                  standupPrice.totalAmount ||
-                  standupPrice.discountedPrice ||
-                  itemAmount;
-                itemCapsuleCount = 30;
-                itemFeatures = Array.isArray(standupPrice.features)
-                  ? standupPrice.features.map((feature: any) =>
-                      getTranslatedString(feature, userLang)
-                    )
-                  : [];
-              } else {
-                throw new AppError(
-                  `Product ${
-                    product.title?.en || product.slug || product._id
-                  } does not have valid pricing for 30-count stand-up pouch`,
-                  400
-                );
-              }
-            } else {
-              // Extract all pricing details for count30
-              itemAmount = standupPrice.count30.amount || 0;
-              itemDiscountedPrice =
-                standupPrice.count30.discountedPrice || itemAmount;
-              itemTaxRate = standupPrice.count30.taxRate || 0;
-              itemTotalAmount =
-                standupPrice.count30.totalAmount ||
-                standupPrice.count30.discountedPrice ||
-                itemAmount;
-              itemCapsuleCount = standupPrice.count30.capsuleCount || 30;
-              itemSavingsPercentage =
-                standupPrice.count30.savingsPercentage || undefined;
-              itemFeatures = Array.isArray(standupPrice.count30.features)
-                ? standupPrice.count30.features.map((feature: any) =>
-                    getTranslatedString(feature, userLang)
-                  )
-                : [];
-            }
+            throw new AppError(
+              `Product ${
+                product.title?.en || product.slug || product._id
+              } does not have valid pricing for ${itemPlanDays}-count stand-up pouch. Please check product configuration.`,
+              400
+            );
           }
         } else {
           throw new AppError(
@@ -840,32 +864,46 @@ class OrderController {
           );
         }
 
+        // Multiply by quantity for total amounts
         return {
           productId: new mongoose.Types.ObjectId(cartItem.productId),
           name:
             product.title?.en || product.title?.nl || product.slug || "Product",
-          planDays: itemPlanDays,
+          variantType: itemVariantType, // Include variantType in order item
+          quantity: itemQuantity, // Include quantity in order item
+          planDays: itemVariantType === ProductVariant.STAND_UP_POUCH 
+            ? (productPlanDaysMap.get(cartItem.productId.toString()) || cartItem.planDays || selectedStandUpPouchPlanDays || DEFAULT_STAND_UP_POUCH_PLAN) // For STAND_UP_POUCH: planDays from cart is capsuleCount (60 or 120)
+            : itemPlanDays, // For SACHETS: planDays comes from request (not stored in cart)
           capsuleCount: itemCapsuleCount,
-          // Additional pricing and plan details
+          // Additional pricing and plan details (per unit)
           amount: roundAmount(itemAmount),
           discountedPrice: roundAmount(itemDiscountedPrice),
           taxRate: roundAmount(itemTaxRate),
-          totalAmount: roundAmount(itemTotalAmount),
+          totalAmount: roundAmount(itemTotalAmount * itemQuantity), // Total = unit price * quantity
           durationDays: itemDurationDays,
           savingsPercentage: itemSavingsPercentage,
           features: itemFeatures,
         };
       });
 
-      // Validate pricing values from body
-      if (typeof subTotal !== "number" || subTotal < 0) {
-        throw new AppError("Invalid subTotal value", 400);
+      // Validate pricing values from body (minimum sanity check)
+      if (
+        typeof pricing.overall.subTotal !== "number" ||
+        pricing.overall.subTotal < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.subTotal value", 400);
       }
-      if (typeof discountedPrice !== "number" || discountedPrice < 0) {
-        throw new AppError("Invalid discountedPrice value", 400);
+      if (
+        typeof pricing.overall.discountedPrice !== "number" ||
+        pricing.overall.discountedPrice < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.discountedPrice value", 400);
       }
-      if (typeof grandTotal !== "number" || grandTotal < 0) {
-        throw new AppError("Invalid grandTotal value", 400);
+      if (
+        typeof pricing.overall.grandTotal !== "number" ||
+        pricing.overall.grandTotal < 0
+      ) {
+        throw new AppError("Invalid pricing.overall.grandTotal value", 400);
       }
 
       // Normalize coupon code
@@ -880,7 +918,7 @@ class OrderController {
           const couponResult = await validateCouponForOrder({
             couponCode: normalizedCouponCode,
             userId: req.user._id,
-            orderAmount: discountedPrice,
+            orderAmount: pricing.overall.discountedPrice,
             shippingAmount: 0,
             productIds: productObjectIds.map((id: mongoose.Types.ObjectId) =>
               id.toString()
@@ -902,22 +940,45 @@ class OrderController {
 
       // Build plan details from new structure
       const planDetails: Record<string, any> = {
-        planDurationDays,
-        isOneTime,
-        variantType,
+        planType,
+        isOneTime: orderIsOneTime,
       };
 
-      if (variantType === ProductVariant.STAND_UP_POUCH && capsuleCount) {
-        planDetails.capsuleCount = capsuleCount;
-      } else if (variantType === ProductVariant.SACHETS && isOneTime) {
-        // For SACHETS one-time, planDurationDays is the capsuleCount
-        planDetails.capsuleCount = planDurationDays;
+      // Add SACHETS plan details if present (subscription only)
+      if (sachetItems.length > 0 && selectedPlanDays) {
+        planDetails.sachets = {
+          planDurationDays: selectedPlanDays,
+          // Note: isOneTime is NOT allowed for SACHETS (only subscription plans)
+          interval: selectedPlanDays.toString(),
+          cycleDays: selectedPlanDays,
+        };
       }
 
-      if (!isOneTime) {
-        // For subscription plans, add interval
-        planDetails.interval = planDurationDays.toString();
-        planDetails.cycleDays = planDurationDays;
+      // Add STAND_UP_POUCH plan details if present
+      // Store per-product capsuleCount/planDays from itemQuantities
+      if (standupPouchItems.length > 0) {
+        const standUpPouchPlanDetails: any = {};
+        
+        // If itemQuantities provided, store per-product details
+        if (
+          standUpPouch?.itemQuantities &&
+          standUpPouch.itemQuantities.length > 0
+        ) {
+          standUpPouchPlanDetails.itemQuantities = standUpPouch.itemQuantities.map((itemQty: any) => ({
+            productId: itemQty.productId,
+            quantity: itemQty.quantity,
+            capsuleCount: itemQty.capsuleCount || itemQty.planDays || selectedCapsuleCount,
+            planDays: itemQty.planDays || itemQty.capsuleCount || selectedStandUpPouchPlanDays,
+          }));
+        } else {
+          // Fallback to single capsuleCount for backward compatibility
+          standUpPouchPlanDetails.capsuleCount = selectedCapsuleCount;
+          if (selectedStandUpPouchPlanDays) {
+            standUpPouchPlanDetails.planDays = selectedStandUpPouchPlanDays;
+          }
+        }
+        
+        planDetails.standUpPouch = standUpPouchPlanDetails;
       }
 
       const sanitizedPlanDetails = Object.entries(planDetails).reduce(
@@ -937,28 +998,65 @@ class OrderController {
       // Store membership metadata if provided
       const membershipMetadata = membership?.metadata || {};
 
-      // Determine plan type from body
-      const orderPlanType: OrderPlanType = planType as OrderPlanType;
+      // Pricing breakdown is provided by client; store it as-is (normalize currency casing)
+      const pricingBreakdown: any = {
+        ...pricing,
+        overall: {
+          ...pricing.overall,
+          currency: normalizedCurrency,
+        },
+        ...(pricing.sachets
+          ? {
+              sachets: {
+                ...pricing.sachets,
+                currency: (pricing.sachets.currency || normalizedCurrency)
+                  .toString()
+                  .toUpperCase(),
+              },
+            }
+          : {}),
+        ...(pricing.standUpPouch
+          ? {
+              standUpPouch: {
+                ...pricing.standUpPouch,
+                currency: (pricing.standUpPouch.currency || normalizedCurrency)
+                  .toString()
+                  .toUpperCase(),
+              },
+            }
+          : {}),
+      };
+
+      // Prepare address metadata
+      const addressMetadata = {
+        source: req.body.addressSource,
+        inheritedFrom: req.body.addressInheritedFrom,
+        isManual: req.body.addressIsManual,
+      };
+
+      // For manual addresses, we need to create a temporary address ID
+      let finalShippingAddressId;
+      if (resolvedAddress.isManual) {
+        // For manual addresses, create a temporary ID for consistency
+        // In production, you might want to save manual addresses to the database
+        finalShippingAddressId = new mongoose.Types.ObjectId();
+      } else {
+        finalShippingAddressId = new mongoose.Types.ObjectId(resolvedAddress.addressId!);
+      }
 
       const order = await Orders.create({
         orderNumber: generateOrderNumber(),
         userId,
-        planType: orderPlanType,
-        isOneTime,
-        variantType: variantType as ProductVariant,
-        selectedPlanDays: !isOneTime ? planDurationDays : undefined,
+        orderedBy: orderedBy ? new mongoose.Types.ObjectId(orderedBy) : new mongoose.Types.ObjectId(req.user._id),
+        orderedFor: orderedFor ? new mongoose.Types.ObjectId(orderedFor) : new mongoose.Types.ObjectId(req.user._id),
+        relationshipType,
+        addressSource,
+        addressInheritedFrom: addressInheritedFrom ? new mongoose.Types.ObjectId(addressInheritedFrom) : undefined,
+        addressIsManual,
+        planType: planType,
         items: orderItems,
-        subTotal: roundAmount(subTotal),
-        discountedPrice: roundAmount(discountedPrice),
-        couponDiscountAmount: roundAmount(couponDiscountAmount),
-        membershipDiscountAmount: roundAmount(membershipDiscountAmount),
-        subscriptionPlanDiscountAmount: roundAmount(
-          subscriptionPlanDiscountAmount
-        ),
-        taxAmount: roundAmount(taxAmount),
-        grandTotal: roundAmount(grandTotal),
-        currency: normalizedCurrency,
-        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        pricing: pricingBreakdown,
+        shippingAddressId: finalShippingAddressId,
         billingAddressId: billingAddressId
           ? new mongoose.Types.ObjectId(billingAddressId)
           : undefined,
@@ -966,7 +1064,10 @@ class OrderController {
         couponCode: normalizedCouponCode,
         couponMetadata: couponMetadata || {},
         membershipMetadata: membershipMetadata,
-        metadata: orderMetadata,
+        metadata: {
+          ...orderMetadata,
+          addressResolution: addressMetadata,
+        },
         notes,
       });
 
@@ -982,6 +1083,34 @@ class OrderController {
       } catch (error: any) {
         logger.error(`Failed to send order placed notification: ${error.message}`);
         // Don't fail the order creation if notification fails
+      }
+
+      // Emit order placed event
+      try {
+        const { familyEventEmitter, FAMILY_EVENTS } = await import("@/utils/familyEvents");
+        
+        const orderPlacedEvent = {
+          orderedBy: req.body.orderedBy || userId,
+          orderedFor: req.body.orderedFor || userId,
+          relationshipType: req.body.relationshipType || "SELF",
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          timestamp: new Date(),
+        };
+
+        familyEventEmitter.emit(FAMILY_EVENTS.ORDER_PLACED, orderPlacedEvent);
+        
+        logger.info("Order placed event emitted", {
+          orderId: String(order._id),
+          orderNumber: order.orderNumber,
+          orderedBy: orderPlacedEvent.orderedBy,
+          orderedFor: orderPlacedEvent.orderedFor,
+          relationshipType: orderPlacedEvent.relationshipType,
+        });
+
+      } catch (error: any) {
+        logger.error(`Failed to emit order placed event: ${error.message}`);
+        // Don't fail the order creation if event emission fails
       }
 
       // Check if couponCode is a referral code and create referral record
@@ -1003,7 +1132,7 @@ class OrderController {
               userId.toString(),
               normalizedCouponCode,
               (order._id as mongoose.Types.ObjectId).toString(),
-              roundAmount(discountedPrice)
+              roundAmount(pricing.overall.discountedPrice)
             );
             logger.info(
               `Referral record created for order ${order.orderNumber} with referral code ${normalizedCouponCode}`
@@ -1043,9 +1172,13 @@ class OrderController {
       const { page, limit, skip, sort } = getPaginationOptions(req);
       const { status, paymentStatus, startDate, endDate } = req.query;
 
-      // Build filter for user's orders
+      // Build filter for user's orders (include orders where user is either the owner or the recipient)
       const filter: any = {
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Orders for this user
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Orders placed by this user for others
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Orders placed for this user by others
+        ],
         isDeleted: false,
       };
 
@@ -1082,7 +1215,7 @@ class OrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
+          "orderNumber planType isOneTime variantType status items pricing paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt"
         )
         .populate(
           "items.productId",
@@ -1100,8 +1233,6 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: order.items.map((item: any) => ({
@@ -1122,16 +1253,7 @@ class OrderController {
               )
             : item.features,
         })),
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         couponCode: order.couponCode,
         couponMetadata: order.couponMetadata,
         membershipMetadata: order.membershipMetadata,
@@ -1168,19 +1290,23 @@ class OrderController {
         throw new AppError("Invalid order ID", 400);
       }
 
-      // Get order with populated addresses
+      // Get order with populated addresses (user can access orders where they are owner, placer, or recipient)
       const order = await Orders.findOne({
         _id: new mongoose.Types.ObjectId(orderId),
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Order for this user
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Order placed by this user
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Order placed for this user
+        ],
         isDeleted: false,
       })
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone city country note"
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone city country note"
         )
         .populate(
           "items.productId",
@@ -1194,11 +1320,15 @@ class OrderController {
 
       const userLang = await getUserLanguage(req, req.user!._id.toString());
 
-      // Get payment details for this order
+      // Get payment details for this order (user can access payments for orders they can access)
       let paymentData = null;
       const payment = await Payments.findOne({
         orderId: new mongoose.Types.ObjectId(orderId),
-        userId: new mongoose.Types.ObjectId(req.user._id),
+        $or: [
+          { userId: new mongoose.Types.ObjectId(req.user._id) }, // Payment for this user's order
+          { orderedBy: new mongoose.Types.ObjectId(req.user._id) }, // Payment for order placed by this user
+          { orderedFor: new mongoose.Types.ObjectId(req.user._id) } // Payment for order placed for this user
+        ],
         isDeleted: false,
       })
         .select(
@@ -1249,21 +1379,10 @@ class OrderController {
         id: order._id,
         orderNumber: order.orderNumber,
         planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
         status: order.status,
         paymentStatus: order.paymentStatus,
         items: itemsWithProducts,
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         shippingAddressId: order.shippingAddressId,
         billingAddressId: order.billingAddressId,
         paymentMethod: order.paymentMethod,

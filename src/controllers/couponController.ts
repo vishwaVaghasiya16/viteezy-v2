@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { Coupons, Orders, Carts, Products } from "@/models/commerce";
-import { CouponType, ProductVariant } from "@/models/enums";
+import { CouponType, ProductVariant, PaymentStatus } from "@/models/enums";
 import { cartService } from "@/services/cartService";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
 
@@ -50,18 +50,11 @@ class CouponController {
 
       // If couponCode is null or empty, remove coupon from cart
       if (!couponCode || couponCode.trim() === "") {
-        // Use cartService to remove coupon (it will get the cart by userId and update it)
-        // But first verify the cart belongs to this user
-        const userCart = await Carts.findOne({
-          userId: new mongoose.Types.ObjectId(userId),
-          isDeleted: false,
-        }).lean();
-
-        if (!userCart || userCart._id.toString() !== cartId) {
-          throw new AppError("Cart not found or does not belong to user", 404);
-        }
-
-        const result = await cartService.removeCoupon(userId);
+        // Remove coupon directly from the specified cart
+        const result = await cartService.removeCouponByCartId(
+          userId,
+          cartId
+        );
         res.apiSuccess(
           {
             cart: result.cart,
@@ -161,6 +154,7 @@ class CouponController {
           const userCouponUsageCount = await Orders.countDocuments({
             userId: new mongoose.Types.ObjectId(userId),
             couponCode: coupon.code,
+            paymentStatus: PaymentStatus.COMPLETED,
             isDeleted: false,
           });
 
@@ -184,9 +178,13 @@ class CouponController {
 
         // Calculate order amount (discounted price total before coupon) - same logic as cartService.applyCoupon
         // We need to calculate totals without coupon to get the base amount for validation
+        // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+        const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+          ? cart.items[0].variantType 
+          : ProductVariant.SACHETS;
         const totalsWithoutCoupon = await (cartService as any).calculateCartTotalsWithVariantType(
           cart.items,
-          cart.variantType as ProductVariant,
+          firstItemVariantType,
           0 // No coupon discount
         );
 
@@ -198,7 +196,7 @@ class CouponController {
           totalsWithoutCoupon.tax;
 
         // Validate cart order amount with coupon minimum order amount
-        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount) {
+        if (coupon.minOrderAmount && orderAmount < coupon.minOrderAmount - 0.001) {
           // Remove coupon from cart if minimum order amount not met
           await Carts.findByIdAndUpdate(
             cart._id,
@@ -211,7 +209,7 @@ class CouponController {
           );
           throw new AppError(
             `Minimum order amount of ${coupon.minOrderAmount} ${
-              totalsWithoutCoupon.currency || cart.currency || "EUR"
+              totalsWithoutCoupon.currency || cart.currency || "USD"
             } is required for this coupon`,
             400
           );
@@ -219,9 +217,11 @@ class CouponController {
 
         // Additional validation: recurringMonths for subscription sachet plans
         // This ensures coupon only applies to specific subscription plan durations
+        // Use overrideVariantType or first item's variantType
+        const effectiveVariantType = overrideVariantType || firstItemVariantType;
         if (
           isSubscription &&
-          (overrideVariantType || cart.variantType) === ProductVariant.SACHETS &&
+          effectiveVariantType === ProductVariant.SACHETS &&
           Array.isArray((coupon as any).recurringMonths) &&
           (coupon as any).recurringMonths.length > 0
         ) {
@@ -381,9 +381,10 @@ class CouponController {
           }
         }
 
-        // Apply coupon to cart using cartService
-        const result = await cartService.applyCoupon(
+        // Apply coupon to this specific cart using cartId
+        const result = await cartService.applyCouponByCartId(
           userId,
+          cartId,
           normalizedCouponCode
         );
 

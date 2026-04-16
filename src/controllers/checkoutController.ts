@@ -3,6 +3,7 @@ import { cartService } from "../services/cartService";
 import { checkoutService } from "../services/checkoutService";
 import { AppError } from "../utils/AppError";
 import { Addresses } from "../models/core/addresses.model";
+import { User } from "../models/index.model";
 import mongoose from "mongoose";
 import {
   calculateMemberPrice,
@@ -18,6 +19,7 @@ import {
 import { Products } from "../models/commerce/products.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { transformProductForLanguage } from "../services/productEnrichmentService";
+import { ProductVariant } from "../models/enums";
 
 /**
  * Calculate monthly amount from totalAmount and durationDays
@@ -70,29 +72,27 @@ const calculateMonthlyAmounts = (product: any): any => {
       }
     });
 
-    // Process oneTime if exists
-    if (sachetPrices.oneTime) {
-      sachetPrices.oneTime = {
-        count30: { ...sachetPrices.oneTime.count30 },
-        count60: { ...sachetPrices.oneTime.count60 },
-      };
-    }
+    // Note: One-time plans are NOT supported for SACHETS (only subscription plans)
+    // Removed oneTime processing logic
 
     result.sachetPrices = sachetPrices;
   }
 
-  // Preserve standupPouchPrice
+  // Preserve standupPouchPrice (count_0 / count_1). Backward compat: count30/count60 → count_0/count_1
   if (product.standupPouchPrice) {
-    if (
-      product.standupPouchPrice.count30 ||
-      product.standupPouchPrice.count60
-    ) {
+    const sp = product.standupPouchPrice as any;
+    if (sp.count_0 || sp.count_1) {
       result.standupPouchPrice = {
-        count30: { ...product.standupPouchPrice.count30 },
-        count60: { ...product.standupPouchPrice.count60 },
+        count_0: sp.count_0 ? { ...sp.count_0 } : undefined,
+        count_1: sp.count_1 ? { ...sp.count_1 } : undefined,
+      };
+    } else if (sp.count30 || sp.count60) {
+      result.standupPouchPrice = {
+        count_0: sp.count30 ? { ...sp.count30 } : undefined,
+        count_1: sp.count60 ? { ...sp.count60 } : undefined,
       };
     } else {
-      result.standupPouchPrice = { ...product.standupPouchPrice };
+      result.standupPouchPrice = { ...sp };
     }
   }
 
@@ -508,7 +508,7 @@ class CheckoutController {
       const userLang = getUserLanguage(req);
 
       // Parallel execution: Validate cart and fetch addresses simultaneously
-      const [cartValidation, shippingAddress, billingAddress] =
+      const [cartValidation, shippingAddress, billingAddress, user] =
         await Promise.all([
           cartService.validateCart(userId),
           Addresses.findOne({
@@ -521,7 +521,27 @@ class CheckoutController {
             isDefault: true,
             isDeleted: false,
           }).lean(),
+          User.findById(userId).lean()
         ]);
+
+      // ADDRESS INHERITANCE LOGIC
+      let finalShippingAddress = shippingAddress;
+      if (!shippingAddress && user?.parentId) {
+        // Try to get parent's default address
+        const parentAddress = await Addresses.findOne({
+          userId: user.parentId,
+          isDefault: true,
+          isDeleted: false,
+        }).lean();
+        
+        if (parentAddress) {
+          finalShippingAddress = {
+            ...parentAddress,
+            inherited: true,
+            inheritedFrom: user.parentId
+          } as any;
+        }
+      }
 
       if (!cartValidation.isValid) {
         res.status(400).json({
@@ -695,21 +715,24 @@ class CheckoutController {
           total: cartValidation.pricing.total,
         },
         addresses: {
-          shipping: shippingAddress
+          shipping: finalShippingAddress
             ? {
-                id: shippingAddress._id,
-                firstName: shippingAddress.firstName,
-                lastName: shippingAddress.lastName,
-                streetName: shippingAddress.streetName,
-                houseNumber: shippingAddress.houseNumber,
-                houseNumberAddition: shippingAddress.houseNumberAddition,
-                postalCode: shippingAddress.postalCode,
-                address: shippingAddress.address,
-                phone: shippingAddress.phone,
-                city: shippingAddress.city,
-                country: shippingAddress.country,
-                isDefault: shippingAddress.isDefault,
-                note: shippingAddress.note,
+                id: finalShippingAddress._id,
+                firstName: finalShippingAddress.firstName,
+                lastName: finalShippingAddress.lastName,
+                streetName: finalShippingAddress.streetName,
+                houseNumber: finalShippingAddress.houseNumber,
+                houseNumberAddition: finalShippingAddress.houseNumberAddition,
+                postalCode: finalShippingAddress.postalCode,
+                address: finalShippingAddress.address,
+                email: finalShippingAddress.email,
+                phone: finalShippingAddress.phone,
+                city: finalShippingAddress.city,
+                country: finalShippingAddress.country,
+                isDefault: finalShippingAddress.isDefault,
+                note: finalShippingAddress.note,
+                inherited: finalShippingAddress.inherited,
+                inheritedFrom: finalShippingAddress.inheritedFrom,
               }
             : null,
           billing: billingAddress
@@ -722,6 +745,7 @@ class CheckoutController {
                 houseNumberAddition: billingAddress.houseNumberAddition,
                 postalCode: billingAddress.postalCode,
                 address: billingAddress.address,
+                email: billingAddress.email,
                 phone: billingAddress.phone,
                 city: billingAddress.city,
                 country: billingAddress.country,
@@ -855,7 +879,7 @@ class CheckoutController {
    * Request body:
    *  - planDurationDays: 30 | 60 | 90 | 180
    *  - planType: "SACHET" | "STANDUP_POUCH"
-   *  - capsuleCount: 30 | 60 (optional, for one-time purchases)
+   *  - capsuleCount: 60 | 120 (optional, for one-time purchases)
    *  - couponCode: string (optional)
    *
    * Response: Complete pricing breakdown with all discounts
@@ -886,8 +910,8 @@ class CheckoutController {
         throw new AppError("planType must be SACHET or STANDUP_POUCH", 400);
       }
 
-      if (capsuleCount !== undefined && ![30, 60].includes(capsuleCount)) {
-        throw new AppError("capsuleCount must be 30 or 60", 400);
+      if (capsuleCount !== undefined && ![60, 120].includes(capsuleCount)) {
+        throw new AppError("capsuleCount must be 60 or 120", 400);
       }
 
       const result = await checkoutService.getEnhancedPlanPricing(userId, {
@@ -924,7 +948,7 @@ class CheckoutController {
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-  ): Promise<void> {
+  ): Promise<any> {
     try {
       const userId = req.user?._id || req.userId;
       if (!userId) {
@@ -941,39 +965,74 @@ class CheckoutController {
       }
 
       if (!findCart.items || findCart.items.length === 0) {
-        throw new AppError("Cart is empty", 400);
+        return res.status(200).json({
+          success: true,
+          message: "Cart is empty",
+          data: {
+            cartItems: [],
+            subTotal: 0,
+            discountedPrice: 0,
+            taxAmount: 0,
+            grandTotal: 0,
+            isEmpty: true
+          }
+        });
       }
 
-      // Extract body parameters (with defaults applied by Joi validation)
-      const {
-        planDurationDays = 180,
-        variantType = "SACHETS",
-        capsuleCount,
+      // Extract body parameters
+      let {
+        sachets,
+        standUpPouch,
         couponCode,
-        isOneTime,
         shippingAddressId,
         billingAddressId,
       } = req.body;
 
-      // Validate variant type only if cart has a variantType set
-      // If cart variantType is null/undefined, allow the request to proceed
-      if (
-        findCart.variantType &&
-        variantType &&
-        findCart.variantType !== variantType
-      ) {
-        throw new AppError(
-          "Cart variant type does not match the request variant type",
-          400
-        );
+      // Default detection logic: If body doesn't have values, detect from cart
+      // Separate items by variantType
+      const sachetItems = findCart.items.filter(
+        (item: any) => item.variantType === ProductVariant.SACHETS,
+      );
+      const standupPouchItems = findCart.items.filter(
+        (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH,
+      );
+
+      // If sachets not provided in body but cart has SACHETS items, set default to 180 days
+      if (!sachets && sachetItems.length > 0) {
+        sachets = {
+          planDurationDays: 180,
+        };
       }
 
+      // If standUpPouch not provided in body but cart has STAND_UP_POUCH items,
+      // get quantity and planDays from cart items
+      if (!standUpPouch && standupPouchItems.length > 0) {
+        standUpPouch = {
+          itemQuantities: standupPouchItems.map((item: any) => ({
+            productId: item.productId.toString(),
+            quantity: item.quantity || 1,
+            planDays: item.planDays || 30, // Default to 30 if not set in cart
+          })),
+        };
+      }
+
+      // Service handles both variantTypes together with separate configurations
+      // Note: isOneTime is NOT allowed for SACHETS (only subscription plans)
       const result = await checkoutService.getCheckoutPageSummary(userId, {
-        planDurationDays: planDurationDays as 30 | 60 | 90 | 180,
-        variantType: variantType as "SACHETS" | "STAND_UP_POUCH",
-        capsuleCount: capsuleCount as 30 | 60 | undefined,
+        sachets: sachets
+          ? {
+              planDurationDays: sachets.planDurationDays as 30 | 60 | 90 | 180,
+              // isOneTime is NOT allowed for SACHETS
+            }
+          : undefined,
+        standUpPouch: standUpPouch
+          ? {
+              capsuleCount: standUpPouch.capsuleCount as 60 | 120,
+              planDays: standUpPouch.planDays as 60 | 120 | undefined,
+              itemQuantities: standUpPouch.itemQuantities || undefined,
+            }
+          : undefined,
         couponCode: couponCode || undefined,
-        isOneTime: isOneTime || false,
         shippingAddressId: shippingAddressId || null,
         billingAddressId: billingAddressId || null,
       });

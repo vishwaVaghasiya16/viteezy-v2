@@ -2,16 +2,19 @@ import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
-import { MembershipPlans, Memberships } from "@/models/commerce";
+import { MembershipPlans, Memberships, Payments } from "@/models/commerce";
 import { membershipService } from "@/services/membershipService";
 import { paymentService } from "@/services/payment/PaymentService";
-import { PaymentMethod } from "@/models/enums";
+import { PaymentMethod, PaymentStatus } from "@/models/enums";
 import { MemberReferrals } from "@/models/core/memberReferrals.model";
 import { User } from "@/models/index.model";
 import { 
   MembershipStatus, 
   MembershipInterval 
 } from "@/models/enums";
+import { config } from "@/config";
+
+// Fixed TypeScript compilation errors
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -19,8 +22,65 @@ interface AuthenticatedRequest extends Request {
     email?: string;
     firstName?: string;
     lastName?: string;
-  };
+  }
 }
+
+/**
+ * Get effective membership for a user with family benefits
+ * Merges self benefits with inherited benefits from main member
+ */
+const getEffectiveMembership = async (userId: string) => {
+  try {
+    // Get user's family role
+    const user = await User.findById(userId).select('parentId').lean();
+    if (!user) {
+      return null;
+    }
+
+    // Get user's own membership
+    const userMembership = await Memberships.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+      status: MembershipStatus.ACTIVE,
+      isDeleted: false
+    }).populate('planId').lean();
+
+    // If user is independent or main member, return their own membership
+    if (!user.parentId) {
+      return userMembership;
+    }
+
+    // For sub-members, get main member's membership
+    const mainMembership = await Memberships.findOne({
+      userId: user.parentId,
+      status: MembershipStatus.ACTIVE,
+      isDeleted: false
+    }).populate('planId').lean();
+
+    // Merge benefits: self benefits take priority over inherited
+    if (userMembership && mainMembership && userMembership.planId && mainMembership.planId) {
+      const selfBenefits = (userMembership.planId as any).benefits || [];
+      const inheritedBenefits = ((mainMembership.planId as any).benefits || []).filter(
+        (benefit: any) => benefit.familyShareable !== false
+      );
+      
+      // Remove duplicates, keeping self benefits
+      const allBenefits = [...new Set([...selfBenefits, ...inheritedBenefits])];
+      
+      return {
+        ...userMembership,
+        effectiveBenefits: allBenefits,
+        hasInheritedBenefits: inheritedBenefits.length > 0,
+        inheritedFrom: user.parentId
+      };
+    }
+
+    // Return whichever membership exists
+    return userMembership || mainMembership;
+  } catch (error) {
+    console.error('Error getting effective membership:', error);
+    return null;
+  }
+};
 
 class MembershipController {
   /**
@@ -96,6 +156,13 @@ class MembershipController {
           metadata?: Record<string, any>;
           beneficiaryUserId?: string;
         };
+      console.log("🟢 [MEMBERSHIP BUY] Request received", {
+        userId: req.user._id,
+        planId,
+        paymentMethod,
+        beneficiaryUserId: beneficiaryUserId || null,
+        hasReturnUrl: !!returnUrl,
+      });
 
       const plan = await MembershipPlans.findOne({
         _id: new mongoose.Types.ObjectId(planId),
@@ -104,12 +171,28 @@ class MembershipController {
       }).lean();
 
       if (!plan) {
+        console.log("❌ [MEMBERSHIP BUY] Plan not found", {
+          userId: req.user._id,
+          planId,
+        });
         throw new AppError("Membership plan not found", 404);
       }
+      console.log("✅ [MEMBERSHIP BUY] Plan validated", {
+        planId: plan._id?.toString?.() || planId,
+        planName: plan.name,
+        amount: plan.price?.amount,
+        currency: plan.price?.currency,
+      });
 
       const activeMembership =
         await membershipService.getActiveMembershipForUser(req.user._id);
       if (activeMembership) {
+        console.log("❌ [MEMBERSHIP BUY] Active membership already exists", {
+          userId: req.user._id,
+          activeMembershipId: activeMembership._id?.toString?.(),
+          activeStatus: activeMembership.status,
+          activeExpiresAt: activeMembership.expiresAt,
+        });
         throw new AppError(
           "You already have an active membership. Please cancel or wait until it expires before purchasing a new plan.",
           400
@@ -139,6 +222,10 @@ class MembershipController {
           .lean();
 
         if (!referral || !referral.childUserId) {
+          console.log("❌ [MEMBERSHIP BUY] Beneficiary validation failed", {
+            userId: req.user._id,
+            beneficiaryUserId,
+          });
           throw new AppError(
             "Selected member is not linked to your account",
             403
@@ -147,6 +234,10 @@ class MembershipController {
 
         const child = referral.childUserId as any;
         if (child.isActive === false) {
+          console.log("❌ [MEMBERSHIP BUY] Beneficiary inactive", {
+            userId: req.user._id,
+            beneficiaryUserId,
+          });
           throw new AppError("Selected member account is inactive", 400);
         }
 
@@ -159,6 +250,15 @@ class MembershipController {
         };
       }
 
+      const { getUserFamilyRole } = await import("@/services/familyValidationService");
+      const userRole = await getUserFamilyRole(req.user._id);
+      console.log("ℹ️ [MEMBERSHIP BUY] Purchase context resolved", {
+        purchaserUserId: req.user._id,
+        purchaserRole: userRole,
+        targetUserId,
+        isForBeneficiary: !!beneficiaryInfo,
+      });
+
       const membership = await membershipService.createPendingMembership({
         userId: targetUserId,
         plan,
@@ -170,11 +270,18 @@ class MembershipController {
               ? req.user._id
               : undefined,
           beneficiaryUserId: beneficiaryInfo?.userId,
+          purchasedByRole: userRole,
+          familyBenefitsShareable: userRole === "MAIN_MEMBER",
         },
         purchasedByUserId:
           beneficiaryInfo && beneficiaryInfo.userId !== req.user._id
             ? req.user._id
             : undefined,
+      });
+      console.log("✅ [MEMBERSHIP BUY] Pending membership created", {
+        membershipId: membership._id?.toString?.(),
+        membershipStatus: membership.status,
+        targetUserId,
       });
 
       const membershipId = (
@@ -182,7 +289,7 @@ class MembershipController {
       ).toString();
 
       const amount = plan.price?.amount || 0;
-      const currency = plan.price?.currency || "EUR";
+      const currency = plan.price?.currency || "USD";
 
       const paymentMetadata: Record<string, string> = {
         membershipId,
@@ -196,16 +303,27 @@ class MembershipController {
             : req.user?.firstName || req.user?.lastName || ""),
       };
 
-      // Set redirect URLs to /products for membership payments (clean URLs without query params)
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
-      const membershipReturnUrl = `${frontendUrl}/products`;
+      // Route gateway success callback through backend return handler so
+      // membership verification + activation happen immediately after payment.
+      const frontendUrl = config.frontend.url;
+      const paymentReturnBaseUrl = `${config.app.baseUrl}/api/v1/payments/return`;
+      const membershipReturnUrl =
+        `${paymentReturnBaseUrl}?gateway=${encodeURIComponent(paymentMethod)}` +
+        `&membershipId=${encodeURIComponent(membershipId)}` +
+        `&userId=${encodeURIComponent(req.user._id)}`;
       const membershipCancelUrl = `${frontendUrl}/products`;
+      console.log("ℹ️ [MEMBERSHIP BUY] Return URL prepared", {
+        membershipId,
+        paymentMethod,
+        membershipReturnUrl,
+      });
 
       // Get email from authenticated user token
       const customerEmail = req.user?.email;
 
-      const paymentResponse =
-        await paymentService.createMembershipPaymentIntent({
+      let paymentResponse;
+      try {
+        paymentResponse = await paymentService.createMembershipPaymentIntent({
           membershipId,
           userId: req.user._id,
           paymentMethod,
@@ -219,6 +337,29 @@ class MembershipController {
           cancelUrl: membershipCancelUrl,
           customerEmail,
         });
+        console.log("✅ [MEMBERSHIP BUY] Payment intent created", {
+          membershipId,
+          paymentId: paymentResponse.payment?._id?.toString?.(),
+          paymentStatus: paymentResponse.payment?.status,
+          gatewayTransactionId:
+            paymentResponse.payment?.gatewayTransactionId || null,
+          hasRedirectUrl: !!paymentResponse.result?.redirectUrl,
+          hasClientSecret: !!paymentResponse.result?.clientSecret,
+        });
+      } catch (error: any) {
+        console.error("❌ [MEMBERSHIP BUY] Payment intent creation failed", {
+          membershipId,
+          purchaserUserId: req.user._id,
+          targetUserId,
+          paymentMethod,
+          amount,
+          currency,
+          errorMessage: error?.message,
+          errorName: error?.name,
+          stack: error?.stack,
+        });
+        throw error;
+      }
 
       res.status(201).json({
         success: true,
@@ -737,6 +878,219 @@ class MembershipController {
           },
         },
       });
+    }
+  );
+
+  /**
+   * Get user's effective membership with family benefits
+   * @route GET /api/memberships/effective
+   * @access Private
+   */
+  getEffectiveMembership = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const effectiveMembership = await getEffectiveMembership(req.user._id);
+
+      if (!effectiveMembership) {
+        res.apiSuccess(
+          { hasMembership: false },
+          "No active membership found"
+        );
+        return;
+      }
+
+      res.apiSuccess(
+        { 
+          hasMembership: true,
+          membership: effectiveMembership
+        },
+        "Effective membership retrieved successfully"
+      );
+    }
+  );
+
+  /**
+   * Get membership benefits (available benefits from active plans)
+   * @route GET /api/memberships/benefits
+   * @access Private
+   */
+  getMembershipBenefits = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { lang = "en" } = req.query as { lang?: string };
+
+      // Get all active membership plans and their benefits
+      const membershipPlans = await MembershipPlans.find({
+        isActive: true,
+        isDeleted: false,
+      })
+        .select("name benefits")
+        .lean();
+
+      // Collect all unique benefits from all plans
+      const allBenefits = new Set<string>();
+      membershipPlans.forEach((plan) => {
+        if (plan.benefits && Array.isArray(plan.benefits)) {
+          plan.benefits.forEach((benefit) => {
+            if (typeof benefit === "string" && benefit.trim()) {
+              allBenefits.add(benefit.trim());
+            }
+          });
+        }
+      });
+
+      // Convert to array and sort alphabetically
+      const benefitsList = Array.from(allBenefits).sort();
+
+      res.apiSuccess(
+        { 
+          benefits: benefitsList,
+          totalBenefits: benefitsList.length 
+        },
+        "Membership benefits retrieved successfully"
+      );
+    }
+  );
+
+  /**
+   * Get membership transaction history
+   * @route GET /api/memberships/:membershipId/transactions
+   * @access Private
+   * @query {Number} [page] - Page number (default: 1)
+   * @query {Number} [limit] - Items per page (default: 10)
+   * @query {String} [status] - Filter by payment status
+   * @query {String} [paymentMethod] - Filter by payment method
+   * @query {String} [sortBy] - Sort by field (createdAt, processedAt, amount, status)
+   * @query {String} [sortOrder] - Sort order (asc, desc)
+   * @query {String} [search] - Search by transaction ID
+   */
+  getMembershipTransactions = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      if (!req.user?._id) {
+        throw new AppError("User not authenticated", 401);
+      }
+
+      const { membershipId } = req.params;
+      const { page, limit, skip, sort } = getPaginationOptions(req);
+      const { status, paymentMethod, search } = req.query as {
+        status?: string;
+        paymentMethod?: string;
+        search?: string;
+      };
+
+      // Validate membershipId format
+      if (!mongoose.Types.ObjectId.isValid(membershipId)) {
+        throw new AppError("Invalid membership ID format", 400);
+      }
+
+      const membershipObjectId = new mongoose.Types.ObjectId(membershipId);
+
+      // Check if membership exists and belongs to the user
+      const membership = await Memberships.findOne({
+        _id: membershipObjectId,
+        userId: req.user._id,
+        isDeleted: { $ne: true },
+      })
+        .populate("planId")
+        .lean();
+
+      if (!membership) {
+        throw new AppError("Membership not found or access denied", 404);
+      }
+
+      // Build filters for payments
+      const filters: any = {
+        userId: req.user._id,
+        membershipId: membershipObjectId,
+        isDeleted: { $ne: true },
+      };
+
+      // Filter by payment status
+      if (status) {
+        filters.status = status as PaymentStatus;
+      }
+
+      // Filter by payment method
+      if (paymentMethod) {
+        filters.paymentMethod = paymentMethod as PaymentMethod;
+      }
+
+      // Search functionality
+      if (search && search.trim()) {
+        const regex = new RegExp(search.trim(), "i");
+        filters.$or = [
+          { transactionId: regex },
+          { gatewayTransactionId: regex },
+          { gatewaySessionId: regex },
+        ];
+      }
+
+      // Get transactions and total count
+      const [transactions, total] = await Promise.all([
+        Payments.find(filters)
+          .select(
+            "paymentMethod status amount currency transactionId gatewayTransactionId gatewaySessionId processedAt createdAt orderId metadata failureReason"
+          )
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        Payments.countDocuments(filters),
+      ]);
+
+      // Format transactions for response
+      const formattedTransactions = transactions.map((payment: any) => ({
+        id: payment._id,
+        paymentMethod: payment.paymentMethod,
+        status: payment.status,
+        transactionId:
+          payment.transactionId ||
+          payment.gatewayTransactionId ||
+          payment.gatewaySessionId ||
+          null,
+        amount: payment.amount?.amount ?? null,
+        currency: payment.amount?.currency || payment.currency || "USD",
+        taxRate: payment.amount?.taxRate ?? null,
+        processedAt: payment.processedAt || payment.createdAt,
+        createdAt: payment.createdAt,
+        orderId: payment.orderId,
+        failureReason: payment.failureReason || null,
+        metadata: payment.metadata || {},
+      }));
+
+      // Add membership details to response
+      const membershipDetails = {
+        id: membership._id,
+        planName: (membership as any).planSnapshot?.name || ((membership as any).planId as any)?.name || "Unknown Plan",
+        status: membership.status,
+        startedAt: membership.startedAt,
+        expiresAt: membership.expiresAt,
+        planPrice: (membership as any).planSnapshot?.price?.amount || ((membership as any).planId as any)?.price?.amount || 0,
+        currency: (membership as any).planSnapshot?.price?.currency || ((membership as any).planId as any)?.price?.currency || "USD",
+        interval: (membership as any).planSnapshot?.interval || ((membership as any).planId as any)?.interval || "Monthly",
+      };
+
+      // Response with pagination
+      const pagination = getPaginationMeta(
+        Number(page) || 1, 
+        Number(limit) || 10, 
+        total
+      );
+
+      res.apiPaginated(
+        {
+          membership: membershipDetails,
+          transactions: formattedTransactions,
+        } as any,
+        pagination,
+        "Membership transactions retrieved successfully"
+      );
     }
   );
 }

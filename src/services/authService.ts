@@ -47,6 +47,7 @@ interface LoginData {
   email: string;
   password: string;
   deviceInfo: string;
+  type?: string; // Optional: 'admin' or undefined for normal login
 }
 
 interface AppleLoginData {
@@ -109,39 +110,23 @@ class AuthService {
   private readonly googleOAuthClient: OAuth2Client;
 
   constructor() {
-    this.JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-    this.JWT_REFRESH_SECRET =
-      process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key";
-    this.JWT_EXPIRES_IN = process.env.JWT_EXPIRE || "15m"; // 15 minutes for access token
-    this.JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRE || "7d"; // 7 days for refresh token
-    this.OTP_EXPIRES_IN = parseInt(process.env.OTP_EXPIRES_IN || "5"); // 5 minutes
+    this.JWT_SECRET = config.jwt.secret;
+    this.JWT_REFRESH_SECRET = config.jwt.refreshSecret;
+    this.JWT_EXPIRES_IN = config.jwt.expiresIn;
+    this.JWT_REFRESH_EXPIRES_IN = config.jwt.refreshExpiresIn;
+    this.OTP_EXPIRES_IN = config.auth.otpExpiresInMinutes;
 
-    // Validate JWT_EXPIRES_IN format
     if (!this.isValidExpiresIn(this.JWT_EXPIRES_IN)) {
-      this.JWT_EXPIRES_IN = "15m"; // Default to 15 minutes
+      throw new Error("Invalid JWT_EXPIRE format in configuration");
     }
 
     if (!this.isValidExpiresIn(this.JWT_REFRESH_EXPIRES_IN)) {
-      this.JWT_REFRESH_EXPIRES_IN = "7d"; // Default to 7 days
+      throw new Error("Invalid JWT_REFRESH_EXPIRE format in configuration");
     }
 
-    if (!this.JWT_SECRET || this.JWT_SECRET === "your-secret-key") {
-      console.warn(
-        "Warning: JWT_SECRET is not set. Using default secret key. This is not secure for production!"
-      );
-    }
-
-    if (
-      !this.JWT_REFRESH_SECRET ||
-      this.JWT_REFRESH_SECRET === "your-refresh-secret-key"
-    ) {
-      console.warn(
-        "Warning: JWT_REFRESH_SECRET is not set. Using default secret key. This is not secure for production!"
-      );
-    }
-
-    // Initialize Google OAuth Client
-    this.googleOAuthClient = new OAuth2Client(config.google.clientId);
+    this.googleOAuthClient = new OAuth2Client(
+      config.google.clientId || undefined
+    );
   }
 
   private isValidExpiresIn(value: string): boolean {
@@ -203,7 +188,7 @@ class AuthService {
    */
   private generateTokens(
     userId: string,
-    sessionId: string
+    sessionId: string,
   ): { accessToken: string; refreshToken: string } {
     return {
       accessToken: this.generateAccessToken(userId, sessionId),
@@ -217,7 +202,7 @@ class AuthService {
   private async sendOTP(
     email: string,
     otp: string,
-    type: OTPType
+    type: OTPType,
   ): Promise<void> {
     try {
       // Send OTP via email
@@ -229,14 +214,14 @@ class AuthService {
         logger.error(`Failed to send OTP email to ${email} (Type: ${type})`);
         throw new AppError(
           "Failed to send verification email. Please try again later.",
-          502
+          502,
         );
       }
     } catch (error) {
       logger.error("Error sending OTP email:", error);
       throw new AppError(
         "Failed to send verification email. Please try again later.",
-        502
+        502,
       );
     }
   }
@@ -247,7 +232,7 @@ class AuthService {
   private sendWelcomeEmailAsync(
     email: string,
     firstName: string,
-    lastName: string
+    lastName: string,
   ): void {
     const fullName = `${firstName} ${lastName}`.trim();
     Promise.resolve()
@@ -311,13 +296,13 @@ class AuthService {
           type: OTPType.EMAIL_VERIFICATION,
           status: OTPStatus.PENDING,
         },
-        { status: OTPStatus.EXPIRED }
+        { status: OTPStatus.EXPIRED },
       );
 
       await this.sendOTPForVerification(
         existingUser._id.toString(),
         email,
-        OTPType.EMAIL_VERIFICATION
+        OTPType.EMAIL_VERIFICATION,
       );
 
       // this.sendWelcomeEmailAsync(email, existingUser.name);
@@ -327,7 +312,7 @@ class AuthService {
         existingUser.memberId = await generateMemberId();
         await existingUser.save();
         logger.info(
-          `Member ID generated for existing user: ${existingUser.memberId}`
+          `Member ID generated for existing user: ${existingUser.memberId}`,
         );
       }
 
@@ -373,14 +358,14 @@ class AuthService {
     });
 
     logger.info(
-      `User created successfully: ${user.email}, isEmailVerified: ${user.isEmailVerified}`
+      `User created successfully: ${user.email}, isEmailVerified: ${user.isEmailVerified}`,
     );
 
     // Generate and send OTP for email verification
     await this.sendOTPForVerification(
       user._id.toString(),
       email,
-      OTPType.EMAIL_VERIFICATION
+      OTPType.EMAIL_VERIFICATION,
     );
 
     // Send welcome email asynchronously to avoid delaying the API response
@@ -412,7 +397,7 @@ class AuthService {
   async sendOTPForVerification(
     userId: string,
     email: string,
-    type: OTPType
+    type: OTPType,
   ): Promise<{ message: string }> {
     // Check if user exists
     const user = await User.findById(userId);
@@ -432,7 +417,7 @@ class AuthService {
       if (existingOTP.expiresAt > new Date()) {
         throw new AppError(
           "OTP already sent. Please wait before requesting a new one.",
-          400
+          400,
         );
       }
       // Mark expired OTP as expired
@@ -509,7 +494,7 @@ class AuthService {
       await OTP.findByIdAndUpdate(otpRecord._id, { status: OTPStatus.EXPIRED });
       throw new AppError(
         "Maximum OTP attempts exceeded. Please request a new OTP.",
-        400
+        400,
       );
     }
 
@@ -543,7 +528,7 @@ class AuthService {
     // User will then call reset-password API with password and confirmPassword
     if (type === OTPType.PASSWORD_RESET) {
       logger.info(
-        `Password reset OTP verified successfully for user: ${user.email}. User can now reset password.`
+        `Password reset OTP verified successfully for user: ${user.email}. User can now reset password.`,
       );
       return {
         user: {
@@ -606,7 +591,7 @@ class AuthService {
    * Login user
    */
   async login(data: LoginData): Promise<LoginResult> {
-    const { email, password, deviceInfo } = data;
+    const { email, password, deviceInfo, type } = data;
 
     // Find user with password
     const user = await User.findOne({ email }).select("+password");
@@ -616,14 +601,14 @@ class AuthService {
     }
 
     logger.info(
-      `Login attempt for user: ${user.email}, isEmailVerified: ${user.isEmailVerified}`
+      `Login attempt for user: ${user.email}, isEmailVerified: ${user.isEmailVerified}, type: ${type || 'normal'}`,
     );
 
     // Check if user is active
     if (!user.isActive) {
       throw new AppError(
         "Account is deactivated. Please contact support.",
-        401
+        401,
       );
     }
 
@@ -639,14 +624,20 @@ class AuthService {
     // If credentials are correct but user is not verified, return Unverified errorType
     if (!user.isEmailVerified) {
       logger.warn(
-        `Login attempt with correct credentials but unverified email: ${email}`
+        `Login attempt with correct credentials but unverified email: ${email}`,
       );
       throw new AppError(
         "Please verify your email before logging in. Check your email for verification OTP.",
         401,
         true,
-        "Unverified"
+        "Unverified",
       );
+    }
+
+    // Check role if type is provided
+    if (type && type === 'admin' && user.role !== 'Admin') {
+      logger.error(`Admin login attempted by non-admin user: ${email}, role: ${user.role}`);
+      throw new AppError("Access denied. Admin access required.", 403);
     }
 
     // Generate session and tokens
@@ -709,7 +700,7 @@ class AuthService {
     if (!email) {
       throw new AppError(
         "Email not available from Apple account. Please ensure your Apple account has an email.",
-        400
+        400,
       );
     }
 
@@ -719,7 +710,8 @@ class AuthService {
     if (!user) {
       // Create new user for Apple login (Register)
       const memberId = await generateMemberId();
-      const referralCode = await referralService.generateReferralCode(firstName);
+      const referralCode =
+        await referralService.generateReferralCode(firstName);
       user = await User.create({
         firstName,
         lastName,
@@ -737,7 +729,7 @@ class AuthService {
       if (!user.isActive) {
         throw new AppError(
           "Account is deactivated. Please contact support.",
-          401
+          401,
         );
       }
 
@@ -789,7 +781,7 @@ class AuthService {
           },
         },
       },
-      { new: true }
+      { new: true },
     ).select("-password");
 
     // Return same response format for both login and register
@@ -838,15 +830,22 @@ class AuthService {
   async forgotPassword(
     email: string,
     deviceInfo: string,
-    client?: "user" | "admin"
+    client?: "user" | "admin",
+    type?: string, // Optional: 'admin' or undefined for normal flow
   ): Promise<{ message: string }> {
     const user = await User.findOne({ email, isEmailVerified: true });
     if (!user) {
-      throw new AppError("No account exists with the provided email.", 404)
+      throw new AppError("No account exists with the provided email.", 404);
     }
 
-    if(!user.isActive) {
-      throw new AppError("Account is deactivated. Please contact support.")
+    if (!user.isActive) {
+      throw new AppError("Account is deactivated. Please contact support.");
+    }
+
+    // Check role if type is provided
+    if (type && type === 'admin' && user.role !== UserRole.ADMIN) {
+      logger.error(`Admin forgot password attempted by non-admin user: ${email}, role: ${user.role}`);
+      throw new AppError("Access denied. Admin access required.", 403);
     }
 
     // Determine if request is from Web or App based on deviceInfo
@@ -857,7 +856,7 @@ class AuthService {
     const requestType = isApp ? "App" : "Web";
 
     logger.info(
-      `Password reset request for ${email} from ${requestType} (deviceInfo: ${deviceInfo})`
+      `Password reset request for ${email} from ${requestType} (deviceInfo: ${deviceInfo})`,
     );
 
     if (isApp) {
@@ -870,29 +869,29 @@ class AuthService {
             type: OTPType.PASSWORD_RESET,
             status: OTPStatus.PENDING,
           },
-          { status: OTPStatus.EXPIRED }
+          { status: OTPStatus.EXPIRED },
         );
 
         // Generate and send OTP for password reset
         await this.sendOTPForVerification(
           user._id.toString(),
           email,
-          OTPType.PASSWORD_RESET
+          OTPType.PASSWORD_RESET,
         );
 
         logger.info(
-          `Password reset OTP sent successfully to ${email} (App request)`
+          `Password reset OTP sent successfully to ${email} (App request)`,
         );
 
         return {
           message:
-            "If an account exists with this email, a password reset OTP has been sent. Please verify the OTP to reset your password.",
+            "Password reset OTP has been sent to your email. Please verify the OTP to reset your password.",
         };
       } catch (error) {
         logger.error("Error sending password reset OTP:", error);
         throw new AppError(
           "Failed to send password reset OTP. Please try again later.",
-          502
+          502,
         );
       }
     } else {
@@ -908,23 +907,20 @@ class AuthService {
           passwordResetTokenExpires: resetTokenExpires,
         });
 
-        // Generate reset URL for web/link-based reset
-        // - User-side: FRONTEND_URL (default http://localhost:8080)
-        // - Admin panel: ADMIN_PANEL_URL (default http://localhost:8081)
-        const userFrontendUrl =
-          process.env.FRONTEND_URL || "http://localhost:8080";
+        const userFrontendUrl = config.frontend.url;
         const adminPanelUrl =
-          process.env.ADMIN_PANEL_URL || "http://localhost:8081";
+          config.adminPanel.url || config.frontend.url;
 
         // If the caller explicitly says "admin", always use admin panel URL.
         // Otherwise, fall back to user role (Admin => admin panel) for safety.
         const shouldUseAdminUrl =
-          client === "admin" || (client !== "user" && user.role === UserRole.ADMIN);
+          client === "admin" ||
+          (client !== "user" && user.role === UserRole.ADMIN);
 
         const baseUrl = shouldUseAdminUrl ? adminPanelUrl : userFrontendUrl;
 
         const resetUrl = `${baseUrl}/resetPassword?token=${resetToken}&email=${encodeURIComponent(
-          email
+          email,
         )}`;
 
         // Send reset link via email
@@ -932,30 +928,30 @@ class AuthService {
         const emailSent = await emailService.sendPasswordResetLinkEmail(
           email,
           fullName,
-          resetUrl
+          resetUrl,
         );
 
         if (emailSent) {
           logger.info(
-            `Password reset link sent successfully to ${email} (Web request)`
+            `Password reset link sent successfully to ${email} (Web request)`,
           );
         } else {
           logger.error(`Failed to send password reset link to ${email}`);
           throw new AppError(
             "Failed to send password reset email. Please try again later.",
-            502
+            502,
           );
         }
 
         return {
           message:
-            "If an account exists with this email, a password reset link has been sent. Please check your email to reset your password.",
+            "Password reset instructions have been sent to your email. Please check your inbox to reset your password.",
         };
       } catch (error) {
         logger.error("Error sending password reset link email:", error);
         throw new AppError(
           "Failed to send password reset email. Please try again later.",
-          502
+          502,
         );
       }
     }
@@ -1004,7 +1000,7 @@ class AuthService {
           password: hashedPassword,
           passwordResetToken: undefined,
           passwordResetTokenExpires: undefined,
-        }
+        },
       );
 
       // Expire any pending password reset OTPs
@@ -1014,13 +1010,13 @@ class AuthService {
           type: OTPType.PASSWORD_RESET,
           status: OTPStatus.PENDING,
         },
-        { status: OTPStatus.EXPIRED }
+        { status: OTPStatus.EXPIRED },
       );
 
       // Invalidate all existing sessions
       await AuthSessions.updateMany(
         { userId: userWithToken._id },
-        { isRevoked: true, revokedAt: new Date() }
+        { isRevoked: true, revokedAt: new Date() },
       );
 
       // Mark all user's stored sessionIds as revoked
@@ -1032,7 +1028,7 @@ class AuthService {
       });
 
       logger.info(
-        `Password reset via token successfully for user: ${userWithToken.email} (Web)`
+        `Password reset via token successfully for user: ${userWithToken.email} (Web)`,
       );
 
       return {
@@ -1053,7 +1049,7 @@ class AuthService {
       if (!verifiedOTP) {
         throw new AppError(
           "No verified OTP found. Please verify OTP first.",
-          400
+          400,
         );
       }
 
@@ -1068,7 +1064,7 @@ class AuthService {
           password: hashedPassword,
           passwordResetToken: undefined,
           passwordResetTokenExpires: undefined,
-        }
+        },
       );
 
       // Mark the verified OTP as used
@@ -1084,13 +1080,13 @@ class AuthService {
           status: { $in: [OTPStatus.PENDING, OTPStatus.VERIFIED] },
           _id: { $ne: verifiedOTP._id },
         },
-        { status: OTPStatus.EXPIRED }
+        { status: OTPStatus.EXPIRED },
       );
 
       // Invalidate all existing sessions
       await AuthSessions.updateMany(
         { userId: user._id },
-        { isRevoked: true, revokedAt: new Date() }
+        { isRevoked: true, revokedAt: new Date() },
       );
 
       // Mark all user's stored sessionIds as revoked
@@ -1102,7 +1098,7 @@ class AuthService {
       });
 
       logger.info(
-        `Password reset via verified OTP successfully for user: ${user.email} (App)`
+        `Password reset via verified OTP successfully for user: ${user.email} (App)`,
       );
 
       return {
@@ -1148,7 +1144,7 @@ class AuthService {
   async logout(sessionId: string): Promise<{ message: string }> {
     await AuthSessions.findOneAndUpdate(
       { sessionId: sessionId },
-      { isRevoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() },
     );
 
     // Mark session as revoked in user's sessionIds
@@ -1160,7 +1156,7 @@ class AuthService {
           "sessionIds.$[elem].revoked": true,
         },
       },
-      { arrayFilters: [{ "elem.sessionId": sessionId }] } as any
+      { arrayFilters: [{ "elem.sessionId": sessionId }] } as any,
     );
 
     return {
@@ -1174,7 +1170,7 @@ class AuthService {
   async logoutAllDevices(userId: string): Promise<{ message: string }> {
     await AuthSessions.updateMany(
       { userId },
-      { isRevoked: true, revokedAt: new Date() }
+      { isRevoked: true, revokedAt: new Date() },
     );
 
     // Mark all sessionIds as revoked on user
@@ -1246,7 +1242,7 @@ class AuthService {
    * Refresh Access Token
    */
   async refreshToken(
-    refreshToken: string
+    refreshToken: string,
   ): Promise<{ accessToken: string; refreshToken: string; message: string }> {
     try {
       // Verify refresh token
@@ -1285,7 +1281,7 @@ class AuthService {
           revokedAt: new Date(),
           lastUsedAt: new Date(),
         },
-        { new: true }
+        { new: true },
       );
 
       if (!revokedSession) {
@@ -1300,7 +1296,7 @@ class AuthService {
             "sessionIds.$.status": "Revoked",
             "sessionIds.$.revoked": true,
           },
-        }
+        },
       );
 
       // Create a brand new session (token rotation)
@@ -1373,7 +1369,7 @@ class AuthService {
       let decodedHeader: any;
       try {
         decodedHeader = JSON.parse(
-          Buffer.from(tokenParts[0], "base64").toString("utf-8")
+          Buffer.from(tokenParts[0], "base64").toString("utf-8"),
         );
       } catch (e) {
         throw new AppError("Invalid Google ID token format", 400);
@@ -1383,7 +1379,7 @@ class AuthService {
       let decodedPayload: any;
       try {
         decodedPayload = JSON.parse(
-          Buffer.from(tokenParts[1], "base64").toString("utf-8")
+          Buffer.from(tokenParts[1], "base64").toString("utf-8"),
         );
       } catch (e) {
         throw new AppError("Invalid Google ID token format", 400);
@@ -1401,9 +1397,8 @@ class AuthService {
 
       if (isFirebaseToken) {
         // Verify Firebase ID token
-        const decodedToken = await firebaseService.verifyFirebaseIdToken(
-          idToken
-        );
+        const decodedToken =
+          await firebaseService.verifyFirebaseIdToken(idToken);
 
         // Check if the token is from Google provider
         if (decodedToken.firebase.sign_in_provider !== "google.com") {
@@ -1451,7 +1446,8 @@ class AuthService {
       if (!user) {
         // Create new user for Google login (Register) - same pattern as Apple login
         const memberId = await generateMemberId();
-        const referralCode = await referralService.generateReferralCode(firstName);
+        const referralCode =
+          await referralService.generateReferralCode(firstName);
         user = await User.create({
           firstName,
           lastName,
@@ -1473,7 +1469,7 @@ class AuthService {
         if (!user.isActive) {
           throw new AppError(
             "Account is deactivated. Please contact support.",
-            403
+            403,
           );
         }
 
@@ -1532,7 +1528,7 @@ class AuthService {
             },
           },
         },
-        { new: true }
+        { new: true },
       ).select("-password");
 
       // Return same response format for both login and register - same as Apple login
@@ -1608,7 +1604,7 @@ class AuthService {
    * Email is optional for family members
    */
   async registerFamilyMember(
-    data: RegisterFamilyMemberData
+    data: RegisterFamilyMemberData,
   ): Promise<{ user: any; message: string }> {
     const {
       parentMemberId,
@@ -1662,6 +1658,7 @@ class AuthService {
       referralCode,
       isSubMember: true,
       parentMemberId: parentMember._id,
+      parentId: parentMember._id, // Also set parentId for consistency
       relationshipToParent,
       isEmailVerified: false, // Family members start as unverified
       isActive: true,
@@ -1675,7 +1672,7 @@ class AuthService {
     const familyMember = await User.create(familyMemberData);
 
     logger.info(
-      `Family member created successfully: ${familyMember._id} under parent: ${parentMemberId}`
+      `Family member created successfully: ${familyMember._id} under parent: ${parentMemberId}`,
     );
 
     // If email is provided, send OTP for verification
@@ -1684,7 +1681,7 @@ class AuthService {
         await this.sendOTPForVerification(
           familyMember._id.toString(),
           email,
-          OTPType.EMAIL_VERIFICATION
+          OTPType.EMAIL_VERIFICATION,
         );
       } catch (error) {
         logger.error("Failed to send OTP to family member:", error);
@@ -1739,7 +1736,7 @@ class AuthService {
       isSubMember: true,
     })
       .select(
-        "-password -passwordResetToken -passwordResetTokenExpires -sessionIds"
+        "-password -passwordResetToken -passwordResetTokenExpires -sessionIds",
       )
       .lean();
 

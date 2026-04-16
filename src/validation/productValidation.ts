@@ -277,16 +277,12 @@ const variantSchema = Joi.string()
 
 const hasStandupPouchSchema = Joi.boolean().optional().default(false);
 
-// Sachet one-time capsule options (30 count, 60 count)
-const sachetOneTimeCapsuleOptionsSchema = Joi.object({
-  count30: priceSchema
+// Stand-up pouch plan options: count_0, count_1 (replaces count30/count60)
+const standupPouchPlanOptionsSchema = Joi.object({
+  count_0: priceSchema
     .keys({
-      discountedPrice: Joi.number().min(0).optional().messages({
-        "number.min": "Discounted price must be greater than or equal to 0",
-      }),
-      capsuleCount: Joi.number().min(0).optional().messages({
-        "number.min": "Capsule count must be greater than or equal to 0",
-      }),
+      discountedPrice: Joi.number().min(0).optional(),
+      capsuleCount: Joi.number().min(0).optional(),
       features: Joi.array()
         .items(
           Joi.alternatives().try(
@@ -300,20 +296,13 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
             })
           )
         )
-        .optional()
-        .messages({
-          "array.base": "Features must be an array of strings or I18n objects",
-        }),
+        .optional(),
     })
-    .required(),
-  count60: priceSchema
+    .optional(),
+  count_1: priceSchema
     .keys({
-      discountedPrice: Joi.number().min(0).optional().messages({
-        "number.min": "Discounted price must be greater than or equal to 0",
-      }),
-      capsuleCount: Joi.number().min(0).optional().messages({
-        "number.min": "Capsule count must be greater than or equal to 0",
-      }),
+      discountedPrice: Joi.number().min(0).optional(),
+      capsuleCount: Joi.number().min(0).optional(),
       features: Joi.array()
         .items(
           Joi.alternatives().try(
@@ -327,35 +316,22 @@ const sachetOneTimeCapsuleOptionsSchema = Joi.object({
             })
           )
         )
-        .optional()
-        .messages({
-          "array.base": "Features must be an array of strings or I18n objects",
-        }),
+        .optional(),
     })
-    .required(),
+    .optional(),
 });
 
-// Sachet prices (subscription + one-time with capsule options)
+// Sachet prices (subscription plans only; oneTime removed)
 const sachetPricesSchema = Joi.object({
   thirtyDays: subscriptionPriceSchema.required(),
   sixtyDays: subscriptionPriceSchema.required(),
   ninetyDays: subscriptionPriceSchema.required(),
   oneEightyDays: subscriptionPriceSchema.required(),
-  oneTime: sachetOneTimeCapsuleOptionsSchema.required(),
 }).optional();
 
-// Stand-up pouch: can be simple price, oneTime structure with count30/count60, or wrapped in oneTime
-const standupPouchPriceWithOneTimeSchema = Joi.object({
-  oneTime: sachetOneTimeCapsuleOptionsSchema.required(),
-});
-
-// Stand-up pouch: can be simple price or oneTime structure with count30/count60 (with or without oneTime wrapper)
+// Stand-up pouch: simple price or count_0 / count_1 structure
 const standupPouchPriceSchema = Joi.alternatives()
-  .try(
-    priceSchema,
-    sachetOneTimeCapsuleOptionsSchema,
-    standupPouchPriceWithOneTimeSchema
-  )
+  .try(priceSchema, standupPouchPlanOptionsSchema)
   .when("hasStandupPouch", {
     is: true,
     then: Joi.required().messages({
@@ -566,12 +542,43 @@ const specificationSchemaForUpdate = Joi.object({
 export const createProductSchema = Joi.object({
   title: titleSchema,
   slug: slugSchema.optional(),
-  description: descriptionSchema,
-  productImage: productImageSchema,
-  shortDescription: shortDescriptionSchema,
-  galleryImages: galleryImagesSchema,
-  benefits: benefitsSchema,
-  ingredients: ingredientsSchema,
+  description: descriptionSchema.optional(),
+  productImage: productImageSchema.optional(),
+  shortDescription: shortDescriptionSchema.optional(),
+  galleryImages: galleryImagesSchema.optional(),
+  benefits: benefitsSchema.optional(),
+  ingredients: ingredientsSchema.optional(),
+  ingredientCompositions: Joi.array()
+    .items(
+      Joi.object({
+        ingredient: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/).messages({
+          "string.pattern.base": "Invalid ingredient ID format",
+          "any.required": "Ingredient ID is required",
+        }),
+        quantity: Joi.number().min(0).required().messages({
+          "number.base": "Quantity must be a number",
+          "number.min": "Quantity cannot be negative",
+          "any.required": "Quantity is required",
+        }),
+        driPercentage: Joi.alternatives()
+          .try(
+            Joi.number().min(0).messages({
+              "number.base": "DRI percentage must be a number",
+              "number.min": "DRI percentage cannot be negative",
+            }),
+            Joi.string().valid("*", "**").messages({
+              "any.only": "DRI percentage string must be '*' or '**'",
+            })
+          )
+          .required().messages({
+            "any.required": "DRI percentage is required",
+          }),
+      })
+    )
+    .optional()
+    .messages({
+      "array.base": "Ingredient compositions must be an array of composition objects",
+    }),
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
@@ -640,7 +647,7 @@ export const createProductSchema = Joi.object({
         ? thirtyDays.discountedPrice
         : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: thirtyDays.currency || "EUR",
+      currency: thirtyDays.currency || "USD",
       amount: baseAmount,
       taxRate: thirtyDays.taxRate || 0,
     };
@@ -722,7 +729,7 @@ export const updateProductSchema = Joi.object({
         ? thirtyDays.discountedPrice
         : thirtyDays.amount || thirtyDays.totalAmount || 0;
     value.price = {
-      currency: thirtyDays.currency || "EUR",
+      currency: thirtyDays.currency || "USD",
       amount: baseAmount,
       taxRate: thirtyDays.taxRate || 0,
     };

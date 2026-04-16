@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { HeaderBanner } from "@/models/cms/headerBanner.model";
 import { logger } from "@/utils/logger";
+import { config } from "@/config";
 import { DeviceType } from "@/models/enums";
 
 /**
@@ -189,7 +190,7 @@ const runScheduleCheck = async () => {
 };
 
 // 1) Cron: every 5 minutes
-const cronSchedule = process.env.HEADER_BANNER_CRON_SCHEDULE || "*/5 * * * *";
+const cronSchedule = config.jobs.headerBannerCron;
 const cronTask = cron.schedule(cronSchedule, () => {
   logger.info("🕐 [CRON] Scheduled header banner job triggered");
   runScheduleCheck();

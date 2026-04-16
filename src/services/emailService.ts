@@ -1,8 +1,9 @@
+import axios from "axios";
 import { logger } from "../utils/logger";
 import { AddressSnapshotType } from "@/models/common.model";
 import * as fs from "fs";
 import * as path from "path";
-import axios from "axios";
+import { config } from "@/config";
 
 interface EmailOptions {
   to: string;
@@ -39,10 +40,9 @@ class EmailService {
   private fromName: string;
 
   constructor() {
-    // Check if Brevo API key is available
-    const apiKey = process.env.BREVO_API_KEY;
-    this.fromEmail = process.env.BREVO_FROM_EMAIL || "noreply@viteezy.com";
-    this.fromName = process.env.BREVO_FROM_NAME || "Viteezy";
+    const apiKey = config.brevo.apiKey;
+    this.fromEmail = config.brevo.fromEmail;
+    this.fromName = config.brevo.fromName;
 
     // Warn about Gmail addresses causing DMARC issues
     if (
@@ -486,12 +486,16 @@ class EmailService {
   }
 
   /**
-   * Generic email sending method using Brevo API
+   * Generic email sending method using Brevo
    */
   private async sendEmail(options: EmailOptions): Promise<void> {
     try {
+      const apiKey = config.brevo.apiKey;
+      if (!apiKey) {
+        throw new Error("Brevo API key not configured");
+      }
+
       // Warn if using Gmail address (DMARC issues)
-      // Even verified Gmail addresses can have DMARC alignment issues
       if (this.fromEmail.includes("@gmail.com")) {
         logger.warn(
           "⚠️  Gmail addresses may still go to spam due to DMARC alignment issues, even when verified.",
@@ -504,12 +508,6 @@ class EmailService {
         );
       }
 
-      const apiKey = process.env.BREVO_API_KEY;
-      if (!apiKey) {
-        throw new Error("Brevo API key not configured");
-      }
-
-      // Prepare Brevo email payload
       const emailData = {
         sender: {
           email: this.fromEmail,
@@ -523,32 +521,21 @@ class EmailService {
         subject: options.subject,
         htmlContent: options.html,
         textContent: options.text || options.html.replace(/<[^>]*>/g, ""),
-        replyTo: {
-          email: this.fromEmail,
-        },
         headers: {
           "X-Entity-Ref-ID": `viteezy-${Date.now()}`,
           "X-Mailer": "Viteezy Email Service",
-          "X-Priority": "1",
-          "X-MSMail-Priority": "Normal",
-          Importance: "normal",
-          "List-Unsubscribe": `<mailto:${this.fromEmail}?subject=unsubscribe>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-          Precedence: "bulk",
-          "Auto-Submitted": "auto-generated",
         },
-        tags: ["viteezy", "transactional", "verification"],
+        tags: ["viteezy", "transactional"],
       };
 
-      // Send email via Brevo API
       const response = await axios.post(
         "https://api.brevo.com/v3/smtp/email",
         emailData,
         {
           headers: {
-            "api-key": apiKey,
+            "Accept": "application/json",
             "Content-Type": "application/json",
-            Accept: "application/json",
+            "api-key": apiKey,
           },
           timeout: 10000, // 10 seconds timeout
         }
@@ -574,18 +561,19 @@ class EmailService {
 
       // Provide more helpful error messages based on status code and error details
       let errorMessage = error?.message || "Unknown error";
-      const errorBody = error?.response?.data;
-      const errorText = errorBody?.message || errorMessage;
+      const errorData = error?.response?.data;
 
       if (error?.response?.status === 401) {
+        // Check for specific error messages
         if (
-          errorText?.toLowerCase().includes("credits") ||
-          errorText?.toLowerCase().includes("quota")
+          errorData?.message?.toLowerCase().includes("credits") ||
+          errorData?.message?.toLowerCase().includes("quota") ||
+          errorData?.code === "unauthorized"
         ) {
           errorMessage =
             "Brevo account has exceeded email credits/quota. Please upgrade your plan or wait for quota reset.";
           logger.error("Brevo Credits Exceeded:", {
-            hint: "Check your Brevo account credits at https://app.brevo.com/credits",
+            hint: "Check your Brevo account credits at https://app.brevo.com/settings/billing",
             message:
               "You may need to upgrade your Brevo plan or wait for monthly quota reset",
           });
@@ -594,20 +582,16 @@ class EmailService {
             "Brevo API key is invalid, expired, or revoked. Please check your BREVO_API_KEY in .env file.";
           logger.error("Brevo Authentication Error:", {
             hint: "Verify your API key at https://app.brevo.com/settings/api-keys",
-            apiKeyPrefix:
-              process.env.BREVO_API_KEY?.substring(0, 10) + "..." ||
-              "not set",
+            brevoApiKeyConfigured: !!config.brevo.apiKey,
           });
         }
       } else if (error?.response?.status === 403) {
         errorMessage =
           "Brevo API key does not have permission to send emails. Please check your API key permissions.";
       } else if (error?.response?.status === 400) {
-        errorMessage = `Brevo validation error: ${errorText}`;
+        errorMessage = `Brevo validation error: ${errorData?.message || errorMessage}`;
       } else if (error?.response?.status === 429) {
         errorMessage = "Brevo rate limit exceeded. Please try again later.";
-      } else if (error?.code === "ECONNABORTED") {
-        errorMessage = "Request timeout. Please check your network connection and try again.";
       }
 
       // Re-throw error so calling methods can handle it
@@ -1299,10 +1283,10 @@ The Viteezy Team
     try {
       return new Intl.NumberFormat("en-US", {
         style: "currency",
-        currency: currency || "EUR",
+        currency: currency || "USD",
       }).format(amount);
     } catch (_error) {
-      return `${amount.toFixed(2)} ${currency || "EUR"}`;
+      return `${amount.toFixed(2)} ${currency || "USD"}`;
     }
   }
 
@@ -1504,6 +1488,7 @@ This is an automated message, please do not reply to this email.
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): Promise<boolean> {
     try {
@@ -1694,7 +1679,7 @@ This is an automated message, please do not reply to this email.
           <p>If the payment continues to fail, your subscription may be cancelled.</p>
 
           <p style="margin-top: 30px;">
-            <a href="${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions" 
+            <a href="${config.frontend.url}/subscriptions" 
                style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
               Update Payment Method
             </a>
@@ -1745,7 +1730,7 @@ What happens next?
 
 If the payment continues to fail, your subscription may be cancelled.
 
-Update your payment method: ${process.env.FRONTEND_URL || 'https://viteezy.com'}/subscriptions
+Update your payment method: ${config.frontend.url}/subscriptions
 
 If you have any questions, please contact our support team.
 
@@ -1764,6 +1749,7 @@ Viteezy Team
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): string {
     const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
@@ -1771,6 +1757,21 @@ Viteezy Team
       month: "long",
       day: "numeric",
     });
+
+    const scheduledDate = data.scheduledCancellationDate 
+      ? data.scheduledCancellationDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
+    const isScheduledCancellation = data.scheduledCancellationDate && !data.cancelledImmediately;
+    const cancellationType = isScheduledCancellation 
+      ? "Scheduled Cancellation" 
+      : data.cancelledImmediately 
+        ? "Immediate Cancellation" 
+        : "Cancelled at End Date";
 
     return `
       <!DOCTYPE html>
@@ -1848,21 +1849,22 @@ Viteezy Team
           </div>
           <div class="content">
             <p>Hello ${name},</p>
-            <p>We wanted to inform you that your subscription has been cancelled.</p>
+            <p>We wanted to inform you that your subscription ${isScheduledCancellation ? 'has been scheduled for cancellation' : 'has been cancelled'}.</p>
             
             <div class="info-box">
               <p><span class="info-label">Subscription Number:</span> ${data.subscriptionNumber}</p>
               <p><span class="info-label">Cancellation Date:</span> ${cancelledDate}</p>
-              <p><span class="info-label">Cancellation Type:</span> ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}</p>
+              ${scheduledDate ? `<p><span class="info-label">Scheduled Cancellation Date:</span> ${scheduledDate}</p>` : ''}
+              <p><span class="info-label">Cancellation Type:</span> ${cancellationType}</p>
               <p><span class="info-label">Reason:</span> ${data.cancellationReason}</p>
             </div>
 
-            <p>If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.</p>
+            <p>${isScheduledCancellation ? 'Your subscription will remain active until the scheduled cancellation date. If you have any questions or need to make changes, please contact our support team.' : 'If you have any questions or concerns about this cancellation, please don\'t hesitate to contact our support team.'}</p>
             <p>We're sorry to see you go and hope to serve you again in the future.</p>
             <p>Best regards,<br><strong>The Viteezy Team</strong></p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
+            <p>  ${new Date().getFullYear()} Viteezy. All rights reserved.</p>
             <p>This is an automated message, please do not reply to this email.</p>
           </div>
         </div>
@@ -1881,6 +1883,7 @@ Viteezy Team
       cancellationReason: string;
       cancelledAt: Date;
       cancelledImmediately: boolean;
+      scheduledCancellationDate?: Date;
     }
   ): string {
     const cancelledDate = data.cancelledAt.toLocaleDateString("en-US", {
@@ -1889,19 +1892,35 @@ Viteezy Team
       day: "numeric",
     });
 
+    const scheduledDate = data.scheduledCancellationDate 
+      ? data.scheduledCancellationDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
+    const isScheduledCancellation = data.scheduledCancellationDate && !data.cancelledImmediately;
+    const cancellationType = isScheduledCancellation 
+      ? "Scheduled Cancellation" 
+      : data.cancelledImmediately 
+        ? "Immediate Cancellation" 
+        : "Cancelled at End Date";
+
     return `
 Viteezy - Subscription Cancelled
 
 Hello ${name},
 
-We wanted to inform you that your subscription has been cancelled.
+We wanted to inform you that your subscription ${isScheduledCancellation ? 'has been scheduled for cancellation' : 'has been cancelled'}.
 
 Subscription Number: ${data.subscriptionNumber}
 Cancellation Date: ${cancelledDate}
-Cancellation Type: ${data.cancelledImmediately ? "Immediate Cancellation" : "Cancelled at End Date"}
+${scheduledDate ? `Scheduled Cancellation Date: ${scheduledDate}` : ''}
+Cancellation Type: ${cancellationType}
 Reason: ${data.cancellationReason}
 
-If you have any questions or concerns about this cancellation, please don't hesitate to contact our support team.
+${isScheduledCancellation ? 'Your subscription will remain active until the scheduled cancellation date. If you have any questions or need to make changes, please contact our support team.' : 'If you have any questions or concerns about this cancellation, please don\'t hesitate to contact our support team.'}
 
 We're sorry to see you go and hope to serve you again in the future.
 
@@ -2134,7 +2153,11 @@ This is an automated message, please do not reply to this email.
         };
       });
 
-      // Prepare Brevo email payload with attachments
+      const apiKey = config.brevo.apiKey;
+      if (!apiKey) {
+        throw new Error("Brevo API key not configured");
+      }
+
       const emailData = {
         sender: {
           email: this.fromEmail,
@@ -2148,9 +2171,6 @@ This is an automated message, please do not reply to this email.
         subject: options.subject,
         htmlContent: html,
         textContent: html.replace(/<[^>]*>/g, ""),
-        replyTo: {
-          email: this.fromEmail,
-        },
         attachment: attachments,
         headers: {
           "X-Entity-Ref-ID": `viteezy-pharmacist-${Date.now()}`,
@@ -2159,17 +2179,16 @@ This is an automated message, please do not reply to this email.
         tags: ["viteezy", "pharmacist", "csv"],
       };
 
-      // Send email via Brevo API
       const response = await axios.post(
         "https://api.brevo.com/v3/smtp/email",
         emailData,
         {
           headers: {
-            "api-key": apiKey,
+            "Accept": "application/json",
             "Content-Type": "application/json",
-            Accept: "application/json",
+            "api-key": apiKey,
           },
-          timeout: 10000, // 10 seconds timeout
+          timeout: 10000,
         }
       );
 

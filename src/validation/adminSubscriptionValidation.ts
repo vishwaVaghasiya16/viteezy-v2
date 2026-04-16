@@ -80,23 +80,67 @@ export const cancelSubscriptionSchema = Joi.object(
         }),
         otherwise: Joi.optional(),
       }),
+    scheduledCancellationDate: Joi.date()
+      .iso()
+      .optional()
+      .label("Scheduled cancellation date")
+      .when("cancelImmediately", {
+        is: true,
+        then: Joi.forbidden().messages({
+          "any.unknown": "Cannot schedule cancellation date when cancelling immediately",
+        }),
+        otherwise: Joi.date().iso().optional(),
+      })
+      .when("cancelAtEndDate", {
+        is: true,
+        then: Joi.forbidden().messages({
+          "any.unknown": "Cannot specify custom cancellation date when cancelling at end date",
+        }),
+        otherwise: Joi.date().iso().optional(),
+      }),
   })
 )
   .custom((value, helpers) => {
-    // At least one of cancelAtEndDate or cancelImmediately must be true
-    if (!value.cancelAtEndDate && !value.cancelImmediately) {
+    // At least one of cancelAtEndDate, cancelImmediately, or scheduledCancellationDate must be provided
+    const hasCancelAtEndDate = value.hasOwnProperty('cancelAtEndDate');
+    const hasCancelImmediately = value.hasOwnProperty('cancelImmediately');
+    const hasScheduledCancellationDate = value.hasOwnProperty('scheduledCancellationDate') && value.scheduledCancellationDate;
+    
+    if (!hasCancelAtEndDate && !hasCancelImmediately && !hasScheduledCancellationDate) {
       return helpers.error("any.custom", {
         message:
-          "Either 'cancelAtEndDate' or 'cancelImmediately' must be true",
+          "Either 'cancelAtEndDate', 'cancelImmediately', or 'scheduledCancellationDate' must be provided",
       });
     }
-    // Both cannot be true at the same time
-    if (value.cancelAtEndDate && value.cancelImmediately) {
+    // Only one cancellation method can be specified
+    // Note: cancelImmediately: false is a valid standalone option (defaults to cancel at end date)
+    const activeCancellationMethods = [
+      hasCancelAtEndDate && value.cancelAtEndDate === true,
+      hasCancelImmediately && value.cancelImmediately === true,
+      hasScheduledCancellationDate,
+    ].filter(Boolean);
+    
+    // Special case: cancelImmediately: false is valid even if no other methods are specified
+    const hasExplicitFalseCancel = hasCancelImmediately && value.cancelImmediately === false;
+    
+    if (activeCancellationMethods.length > 1 && !hasExplicitFalseCancel) {
       return helpers.error("any.custom", {
         message:
-          "Cannot set both 'cancelAtEndDate' and 'cancelImmediately' to true",
+          "Only one cancellation method can be specified: 'cancelAtEndDate', 'cancelImmediately', or 'scheduledCancellationDate'",
       });
     }
+    
+    // Validate scheduled cancellation date is in future
+    if (value.scheduledCancellationDate) {
+      const now = new Date();
+      const scheduledDate = new Date(value.scheduledCancellationDate);
+      if (scheduledDate <= now) {
+        return helpers.error("any.custom", {
+          message: "Scheduled cancellation date must be in the future",
+        });
+      }
+    }
+    
     return value;
   })
   .label("CancelSubscriptionPayload");

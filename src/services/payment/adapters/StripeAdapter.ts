@@ -1,4 +1,6 @@
 import Stripe from "stripe";
+import jwt, { SignOptions } from "jsonwebtoken";
+import mongoose from "mongoose";
 import {
   IPaymentGateway,
   PaymentIntentData,
@@ -10,6 +12,8 @@ import {
 import { PaymentMethod, PaymentStatus } from "../../../models/enums";
 import { logger } from "../../../utils/logger";
 import { AppError } from "../../../utils/AppError";
+import { AuthSessions } from "../../../models/index.model";
+import { config } from "@/config";
 
 export class StripeAdapter implements IPaymentGateway {
   private stripe: Stripe;
@@ -18,7 +22,7 @@ export class StripeAdapter implements IPaymentGateway {
   private defaultCancelUrl: string;
 
   constructor() {
-    const apiKey = process.env.STRIPE_SECRET_KEY;
+    const apiKey = config.payments.stripeSecretKey;
     if (!apiKey) {
       throw new AppError("STRIPE_SECRET_KEY is required", 500);
     }
@@ -27,8 +31,8 @@ export class StripeAdapter implements IPaymentGateway {
       apiVersion: "2025-10-29.clover",
     });
 
-    this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    this.webhookSecret = config.payments.stripeWebhookSecret;
+    const frontendUrl = config.frontend.url;
     this.defaultSuccessUrl = `${frontendUrl}/orderConfirmed/success`;
     this.defaultCancelUrl = `${frontendUrl}/orderConfirmed/cancel`;
 
@@ -50,9 +54,10 @@ export class StripeAdapter implements IPaymentGateway {
         billing_address_collection: "required",
         customer_email: data.customerEmail,
         line_items: this.buildLineItems(data),
-        success_url: this.buildSuccessUrl(
+        success_url: await this.buildSuccessUrl(
           data.returnUrl,
           data.orderId,
+          data.userId,
           isMembershipPayment
         ),
         cancel_url: this.buildCancelUrl(
@@ -585,20 +590,45 @@ export class StripeAdapter implements IPaymentGateway {
     }));
   }
 
-  private buildSuccessUrl(
+  private async buildSuccessUrl(
     returnUrl: string | undefined,
     orderId: string,
+    userId: string,
     skipQueryParams: boolean = false
-  ): string {
-    const base = returnUrl || this.defaultSuccessUrl;
-    // For membership payments, return clean URL without query params
+  ): Promise<string> {
     if (skipQueryParams) {
-      return base;
+      return returnUrl || this.defaultSuccessUrl;
     }
-    return this.appendQueryParams(base, {
+
+    // Redirect straight to FE (FRONTEND_URL). Stripe replaces {CHECKOUT_SESSION_ID} on redirect.
+    const frontendBase = config.frontend.url.replace(/\/$/, "");
+    const base = `${frontendBase}/orderConfirmed/success`;
+    logger.info("[STRIPE_CHECKOUT] success_url (frontend)", {
+      successUrlBase: base,
       orderId,
-      session_id: "{CHECKOUT_SESSION_ID}",
     });
+
+    const queryParams: Record<string, string> = {
+      orderId,
+    };
+
+    if (userId) {
+      try {
+        const userToken = await this.generateUserToken(userId);
+        if (userToken) {
+          queryParams.token = userToken;
+        }
+      } catch (error: any) {
+        logger.warn(
+          `Failed to generate token for user ${userId} in success URL: ${error.message}`
+        );
+      }
+    }
+
+    const withParams = this.appendQueryParams(base, queryParams);
+    const sep = withParams.includes("?") ? "&" : "?";
+    // Literal braces — do not URL-encode or Stripe will not substitute the session id.
+    return `${withParams}${sep}session_id={CHECKOUT_SESSION_ID}`;
   }
 
   private buildCancelUrl(
@@ -615,6 +645,47 @@ export class StripeAdapter implements IPaymentGateway {
       orderId,
       reason: "cancelled",
     });
+  }
+
+  /**
+   * Generate JWT access token for user
+   * @private
+   */
+  private async generateUserToken(userId: string): Promise<string | null> {
+    try {
+      // Get user's most recent active session
+      const activeSession = await AuthSessions.findOne({
+        userId: new mongoose.Types.ObjectId(userId),
+        isRevoked: false,
+        expiresAt: { $gt: new Date() },
+      })
+        .sort({ lastUsedAt: -1 }) // Get the most recent active session
+        .lean();
+
+      if (!activeSession) {
+        logger.warn(
+          `No active session found for user ${userId} to generate token for redirect`
+        );
+        return null;
+      }
+
+      const payload = {
+        userId: userId,
+        sessionId: activeSession.sessionId,
+        type: "access",
+      };
+
+      const options: SignOptions = {
+        expiresIn: config.jwt.expiresIn as any,
+      };
+
+      const token = jwt.sign(payload, config.jwt.secret, options);
+      logger.info(`Generated token for user ${userId} for payment redirect`);
+      return token;
+    } catch (error: any) {
+      logger.error(`Failed to generate token for user ${userId}: ${error.message}`);
+      return null;
+    }
   }
 
   private appendQueryParams(

@@ -69,12 +69,12 @@ const getUserLanguage = (req: AuthenticatedRequest): SupportedLanguage => {
 class HeaderBannerController {
   /**
    * Get active header banner by device type (Public endpoint)
-   * @route GET /api/v1/header-banner?deviceType=WEB
+   * @route GET /api/v1/header-banner?deviceType=WEB&lang=en
    * @access Public
    */
   getActiveHeaderBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const { deviceType } = req.query;
+      const { deviceType, lang } = req.query;
 
       if (!deviceType || !DEVICE_TYPE_VALUES.includes(deviceType as DeviceType)) {
         throw new AppError(
@@ -83,8 +83,19 @@ class HeaderBannerController {
         );
       }
 
-      // Get user language from token (if authenticated)
-      const userLang = getUserLanguage(req);
+      // Get language from query parameter first, then from user token, then default
+      let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
+      
+      if (lang && typeof lang === 'string') {
+        // Use lang query parameter if provided and valid
+        const validLangs: SupportedLanguage[] = ['en', 'es', 'fr', 'nl', 'de'];
+        if (validLangs.includes(lang as SupportedLanguage)) {
+          userLang = lang as SupportedLanguage;
+        }
+      } else {
+        // Fall back to user language from token
+        userLang = getUserLanguage(req);
+      }
 
       // Find active banner for the specified device type
       const headerBanner = await HeaderBanner.findOne({

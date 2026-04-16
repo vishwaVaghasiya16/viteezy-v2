@@ -3,17 +3,28 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
-import { Orders, Payments, Products, Subscriptions } from "@/models/commerce";
+import {
+  Orders,
+  Payments,
+  Products,
+  Subscriptions,
+  Carts,
+} from "@/models/commerce";
 import { User, Addresses } from "@/models/core";
 import {
   OrderStatus,
   PaymentStatus,
   OrderPlanType,
+  ProductVariant,
 } from "@/models/enums";
+import { emailService } from "@/services/emailService";
+import { cartService } from "@/services/cartService";
 import { orderService } from "@/services/orderService";
 import { getTranslatedString } from "@/utils/translationUtils";
 import { getUserLanguageCode } from "@/utils/translationUtils";
 import { DEFAULT_LANGUAGE, SupportedLanguage } from "@/models/common.model";
+import { getStandUpPouchPlanKey, getNormalizedStandupPouchPrice } from "../config/planConfig";
+import { config } from "@/config";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -30,6 +41,14 @@ const ensureObjectId = (id: string, label: string): mongoose.Types.ObjectId => {
   return new mongoose.Types.ObjectId(id);
 };
 
+// Helper function to extract English-only values from multi-language objects
+const getEnglishOnlyValue = (value: any): any => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value.en || value.nl || value;
+  }
+  return value;
+};
+
 class AdminOrderController {
   /**
    * Get order statistics with comparison to last month
@@ -39,12 +58,12 @@ class AdminOrderController {
   getOrderStats = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const now = new Date();
-      
+
       // Current month
       const startOfCurrentMonth = new Date(
         now.getFullYear(),
         now.getMonth(),
-        1
+        1,
       );
       const endOfCurrentMonth = new Date(
         now.getFullYear(),
@@ -53,14 +72,14 @@ class AdminOrderController {
         23,
         59,
         59,
-        999
+        999,
       );
 
       // Last month
       const startOfLastMonth = new Date(
         now.getFullYear(),
         now.getMonth() - 1,
-        1
+        1,
       );
       const endOfLastMonth = new Date(
         now.getFullYear(),
@@ -69,7 +88,7 @@ class AdminOrderController {
         23,
         59,
         59,
-        999
+        999,
       );
 
       // Get all stats in parallel
@@ -162,7 +181,7 @@ class AdminOrderController {
       // Calculate percentage changes
       const calculatePercentageChange = (
         current: number,
-        last: number
+        last: number,
       ): number => {
         if (last === 0) return current > 0 ? 100 : 0;
         return Math.round(((current - last) / last) * 100 * 10) / 10;
@@ -182,7 +201,7 @@ class AdminOrderController {
               lastMonth: totalOrdersLast,
               changePercentage: calculatePercentageChange(
                 totalOrdersCurrent,
-                totalOrdersLast
+                totalOrdersLast,
               ),
             },
             delivered: {
@@ -190,7 +209,7 @@ class AdminOrderController {
               lastMonth: deliveredLast,
               changePercentage: calculatePercentageChange(
                 deliveredCurrent,
-                deliveredLast
+                deliveredLast,
               ),
             },
             processing: {
@@ -198,7 +217,7 @@ class AdminOrderController {
               lastMonth: processingLast,
               changePercentage: calculatePercentageChange(
                 processingCurrent,
-                processingLast
+                processingLast,
               ),
             },
             shipped: {
@@ -206,7 +225,7 @@ class AdminOrderController {
               lastMonth: shippedLast,
               changePercentage: calculatePercentageChange(
                 shippedCurrent,
-                shippedLast
+                shippedLast,
               ),
             },
             cancelled: {
@@ -214,7 +233,7 @@ class AdminOrderController {
               lastMonth: cancelledLast,
               changePercentage: calculatePercentageChange(
                 cancelledCurrent,
-                cancelledLast
+                cancelledLast,
               ),
             },
             pending: {
@@ -222,14 +241,14 @@ class AdminOrderController {
               lastMonth: pendingLast,
               changePercentage: calculatePercentageChange(
                 pendingCurrent,
-                pendingLast
+                pendingLast,
               ),
             },
           },
         },
-        "Order statistics retrieved successfully"
+        "Order statistics retrieved successfully",
       );
-    }
+    },
   );
 
   /**
@@ -257,7 +276,7 @@ class AdminOrderController {
         startDate,
         endDate,
         customerId,
-      
+
         // 🔥 NEW
         date,
         minTotal,
@@ -271,7 +290,7 @@ class AdminOrderController {
         startDate?: string;
         endDate?: string;
         customerId?: string;
-      
+
         date?: string;
         minTotal?: string;
         maxTotal?: string;
@@ -290,36 +309,36 @@ class AdminOrderController {
       if (date) {
         const from = new Date(date);
         from.setHours(0, 0, 0, 0);
-      
+
         const to = new Date(date);
         to.setHours(23, 59, 59, 999);
-      
+
         filter.createdAt = { $gte: from, $lte: to };
       }
 
       if (minTotal || maxTotal) {
-        filter.grandTotal = {};
-      
+        filter["pricing.overall.grandTotal"] = {};
+
         if (minTotal) {
-          filter.grandTotal.$gte = Number(minTotal);
+          filter["pricing.overall.grandTotal"].$gte = Number(minTotal);
         }
-      
+
         if (maxTotal) {
-          filter.grandTotal.$lte = Number(maxTotal);
+          filter["pricing.overall.grandTotal"].$lte = Number(maxTotal);
         }
       }
 
       if (productName) {
         const productRegex = { $regex: productName, $options: "i" };
-      
+
         const matchingProducts = await Products.find({
           title: productRegex,
         })
           .select("_id")
           .lean();
-      
+
         const productIds = matchingProducts.map((p) => p._id);
-      
+
         if (productIds.length > 0) {
           filter["items.productId"] = { $in: productIds };
         } else {
@@ -361,7 +380,7 @@ class AdminOrderController {
       // Search filter - search by order number, customer name, or email
       if (search) {
         const searchRegex = { $regex: search, $options: "i" };
-        
+
         // First, find user IDs matching the search
         const matchingUsers = await User.find({
           $or: [
@@ -369,7 +388,9 @@ class AdminOrderController {
             { lastName: searchRegex },
             { email: searchRegex },
           ],
-        }).select("_id").lean();
+        })
+          .select("_id")
+          .lean();
 
         const userIds = matchingUsers.map((u) => u._id);
 
@@ -390,12 +411,21 @@ class AdminOrderController {
       // Get orders with pagination
       const orders = await Orders.find(filter)
         .select(
-          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt userId"
+          "orderNumber planType isOneTime variantType status items subTotal discountedPrice couponDiscountAmount membershipDiscountAmount subscriptionPlanDiscountAmount taxAmount grandTotal currency paymentMethod paymentStatus couponCode metadata couponMetadata membershipMetadata trackingNumber shippedAt deliveredAt createdAt userId",
         )
         .populate("userId", "firstName lastName email")
-        .populate("items.productId", "title slug description media categories tags status galleryImages productImage")
-        .populate("shippingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
-        .populate("billingAddressId", "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city")
+        .populate(
+          "items.productId",
+          "title slug description media categories tags status galleryImages productImage",
+        )
+        .populate(
+          "shippingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
+        )
+        .populate(
+          "billingAddressId",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
+        )
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
@@ -420,16 +450,27 @@ class AdminOrderController {
       const transformedOrders = orders.map((order: any) => {
         // Type guard for populated user
         const user = order.userId as any;
-        const isPopulatedUser = user && typeof user === 'object' && user.firstName !== undefined;
-        
+        const isPopulatedUser =
+          user && typeof user === "object" && user.firstName !== undefined;
+
         // Get user language for feature translation
         const userId = user?._id?.toString() || order.userId?.toString();
-        const userLang = userId ? (userLanguageMap.get(userId) || DEFAULT_LANGUAGE) : DEFAULT_LANGUAGE;
+        const userLang = userId
+          ? userLanguageMap.get(userId) || DEFAULT_LANGUAGE
+          : DEFAULT_LANGUAGE;
+
+        // Calculate items total for this order
+        const itemsTotal = Math.round(
+          order.items.reduce((sum: number, item: any) => {
+            return sum + (item.totalAmount || 0);
+          }, 0) * 100
+        ) / 100;
 
         return {
           id: order._id,
           orderNumber: order.orderNumber,
           orderDate: order.createdAt,
+          itemsTotal: itemsTotal, // Add items total here
           customer: isPopulatedUser
             ? {
                 id: user._id,
@@ -439,64 +480,59 @@ class AdminOrderController {
                 fullName: `${user.firstName} ${user.lastName}`.trim(),
               }
             : null,
-        planType: order.planType,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        items: order.items.map((item: any) => ({
-          productId: item.productId?._id || item.productId,
-          product: item.productId
-            ? {
-                id: item.productId._id,
-                title: item.productId.title,
-                slug: item.productId.slug,
-              }
-            : null,
-          name: item.name,
-          amount: item.amount,
-          discountedPrice: item.discountedPrice,
-          taxRate: item.taxRate,
-          totalAmount: item.totalAmount,
-          durationDays: item.durationDays,
-          capsuleCount: item.capsuleCount,
-          savingsPercentage: item.savingsPercentage,
-          features: Array.isArray(item.features)
-            ? item.features.map((feature: any) =>
-                getTranslatedString(feature, userLang)
-              )
-            : item.features,
-        })),
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
-        paymentMethod: order.paymentMethod,
-        couponCode: order.couponCode,
-        couponMetadata: order.couponMetadata,
-        membershipMetadata: order.membershipMetadata,
-        shippingAddress: order.shippingAddressId,
-        billingAddress: order.billingAddressId,
-        trackingNumber: order.trackingNumber,
-        shippedAt: order.shippedAt,
-        deliveredAt: order.deliveredAt,
-        notes: order.notes,
-        metadata: order.metadata,
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt,
+          planType: order.planType,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          items: order.items.map((item: any) => ({
+            productId: item.productId?._id || item.productId,
+            product: item.productId
+              ? {
+                  id: item.productId._id,
+                  title: getEnglishOnlyValue(item.productId.title),
+                  slug: item.productId.slug,
+                }
+              : null,
+            name: item.name,
+            amount: item.amount,
+            discountedPrice: item.discountedPrice,
+            taxRate: item.taxRate,
+            totalAmount: item.totalAmount,
+            durationDays: item.durationDays,
+            capsuleCount: item.capsuleCount,
+            savingsPercentage: item.savingsPercentage,
+            features: Array.isArray(item.features)
+              ? item.features.map((feature: any) =>
+                  getTranslatedString(feature, userLang),
+                )
+              : item.features,
+          })),
+          pricing: order.pricing,
+          paymentMethod: order.paymentMethod,
+          couponCode: order.couponCode,
+          couponMetadata: order.couponMetadata,
+          membershipMetadata: order.membershipMetadata,
+          shippingAddress: order.shippingAddressId,
+          billingAddress: order.billingAddressId,
+          trackingNumber: order.trackingNumber,
+          shippedAt: order.shippedAt,
+          deliveredAt: order.deliveredAt,
+          notes: order.notes,
+          metadata: order.metadata,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
         };
       });
 
       const pagination = getPaginationMeta(page, limit, total);
 
-      res.apiPaginated(transformedOrders, pagination, "Orders retrieved successfully");
-    }
+      res.apiSuccess(
+        {
+          orders: transformedOrders,
+          pagination: pagination
+        },
+        "Orders retrieved successfully",
+      );
+    },
   );
 
   /**
@@ -507,7 +543,7 @@ class AdminOrderController {
   getOrderById = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const { id } = req.params;
-  
+
       // Fetch the order with populated references
       const order = await Orders.findOne({
         _id: id,
@@ -516,25 +552,25 @@ class AdminOrderController {
         .populate("userId", "firstName lastName email phone")
         .populate(
           "items.productId",
-          "title slug description media categories tags status galleryImages productImage"
+          "title slug description media categories tags status galleryImages productImage",
         )
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .lean();
-  
+
       if (!order) {
         throw new AppError("Order not found", 404);
       }
 
       // Safely get user
-      const user = order.userId ? order.userId as any : null;
-  
+      const user = order.userId ? (order.userId as any) : null;
+
       // Fetch payment info
       const payment = await Payments.findOne({
         orderId: order._id,
@@ -542,12 +578,14 @@ class AdminOrderController {
       })
         .select("paymentMethod status gatewayTransactionId")
         .lean();
-  
+
       // Get user language for feature translation
       let userLang: SupportedLanguage = DEFAULT_LANGUAGE;
       if (user?._id) {
         try {
-          const userData = await User.findById(user._id).select("language").lean();
+          const userData = await User.findById(user._id)
+            .select("language")
+            .lean();
           if (userData?.language) {
             userLang = getUserLanguageCode(userData.language);
           }
@@ -564,7 +602,8 @@ class AdminOrderController {
       const subscription = await Subscriptions.findOne({
         orderId: order._id,
         isDeleted: { $ne: true },
-      }).select("subscriptionNumber createdAt nextBillingDate cycleDays status")
+      })
+        .select("subscriptionNumber createdAt nextBillingDate cycleDays status")
         .lean();
 
       const transformedOrder = {
@@ -572,14 +611,16 @@ class AdminOrderController {
         orderNumber: order.orderNumber,
         orderDate: order.createdAt,
         totalOrders: totalOrders ? totalOrders : 0,
-        subscription: subscription ? {
-          id: subscription._id,
-          subscriptionNumber: subscription.subscriptionNumber,
-          createdAt: subscription.createdAt,
-          nextBillingDate: subscription.nextBillingDate,
-          cycleDays: subscription.cycleDays,
-          status: subscription.status,
-        } : null,
+        subscription: subscription
+          ? {
+              id: subscription._id,
+              subscriptionNumber: subscription.subscriptionNumber,
+              createdAt: subscription.createdAt,
+              nextBillingDate: subscription.nextBillingDate,
+              cycleDays: subscription.cycleDays,
+              status: subscription.status,
+            }
+          : null,
         customer: user
           ? {
               id: user._id || null,
@@ -590,8 +631,6 @@ class AdminOrderController {
             }
           : null,
         planType: order.planType || null,
-        isOneTime: order.isOneTime,
-        variantType: order.variantType || null,
         status: order.status || null,
         paymentStatus: order.paymentStatus || null,
         items: Array.isArray(order.items)
@@ -600,9 +639,9 @@ class AdminOrderController {
               product: item.productId
                 ? {
                     id: item.productId._id,
-                    title: item.productId.title,
+                    title: getEnglishOnlyValue(item.productId.title),
                     slug: item.productId.slug,
-                    description: item.productId.description,
+                    description: getEnglishOnlyValue(item.productId.description),
                     media: item.productId.media,
                     categories: item.productId.categories,
                     tags: item.productId.tags,
@@ -621,21 +660,12 @@ class AdminOrderController {
               savingsPercentage: item.savingsPercentage,
               features: Array.isArray(item.features)
                 ? item.features.map((feature: any) =>
-                    getTranslatedString(feature, userLang)
+                    getTranslatedString(feature, userLang),
                   )
                 : item.features,
             }))
           : [],
-        pricing: {
-          subTotal: order.subTotal,
-          discountedPrice: order.discountedPrice,
-          couponDiscountAmount: order.couponDiscountAmount,
-          membershipDiscountAmount: order.membershipDiscountAmount,
-          subscriptionPlanDiscountAmount: order.subscriptionPlanDiscountAmount,
-          taxAmount: order.taxAmount,
-          grandTotal: order.grandTotal,
-          currency: order.currency,
-        },
+        pricing: order.pricing,
         paymentMethod: order.paymentMethod,
         payment: payment
           ? {
@@ -656,9 +686,12 @@ class AdminOrderController {
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
       };
-  
-      res.apiSuccess({ order: transformedOrder }, "Order retrieved successfully");
-    }
+
+      res.apiSuccess(
+        { order: transformedOrder },
+        "Order retrieved successfully",
+      );
+    },
   );
 
   /**
@@ -708,8 +741,9 @@ class AdminOrderController {
 
       // Send notifications based on status change
       try {
-        const { orderNotifications } = await import("@/utils/notificationHelpers");
-        
+        const { orderNotifications } =
+          await import("@/utils/notificationHelpers");
+
         if (status !== previousStatus) {
           switch (status) {
             case OrderStatus.SHIPPED:
@@ -718,7 +752,7 @@ class AdminOrderController {
                 String(order._id),
                 order.orderNumber,
                 order.trackingNumber,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.DELIVERED:
@@ -726,7 +760,7 @@ class AdminOrderController {
                 order.userId,
                 String(order._id),
                 order.orderNumber,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.CANCELLED:
@@ -735,7 +769,7 @@ class AdminOrderController {
                 String(order._id),
                 order.orderNumber,
                 undefined,
-                requesterId
+                requesterId,
               );
               break;
             case OrderStatus.PROCESSING:
@@ -744,18 +778,20 @@ class AdminOrderController {
                 order.userId,
                 String(order._id),
                 order.orderNumber,
-                requesterId
+                requesterId,
               );
               break;
           }
         }
       } catch (error: any) {
-        logger.error(`Failed to send order status notification: ${error.message}`);
+        logger.error(
+          `Failed to send order status notification: ${error.message}`,
+        );
         // Don't fail status update if notification fails
       }
 
       res.apiSuccess({ order }, "Order status updated successfully");
-    }
+    },
   );
 
   /**
@@ -768,7 +804,10 @@ class AdminOrderController {
       const { id } = req.params;
       const { paymentStatus } = req.body;
 
-      if (!paymentStatus || !Object.values(PaymentStatus).includes(paymentStatus)) {
+      if (
+        !paymentStatus ||
+        !Object.values(PaymentStatus).includes(paymentStatus)
+      ) {
         throw new AppError("Valid payment status is required", 400);
       }
 
@@ -794,7 +833,7 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess({ order }, "Payment status updated successfully");
-    }
+    },
   );
 
   /**
@@ -839,7 +878,7 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess({ order }, "Tracking number updated successfully");
-    }
+    },
   );
 
   /**
@@ -865,14 +904,556 @@ class AdminOrderController {
       await order.save();
 
       res.apiSuccess(null, "Order deleted successfully");
-    }
+    },
   );
 
   /**
+   * Create manual order (Admin Panel)
+   * @route POST /api/v1/admin/orders/manual
+   * @access Admin
+   */
+  createManualOrder = asyncHandler(
+    async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+      const {
+        userId,
+        orderType,
+        items,
+        shippingAddressId,
+        billingAddressId,
+        subTotal,
+        discountedPrice,
+        couponDiscountAmount,
+        membershipDiscountAmount,
+        subscriptionPlanDiscountAmount,
+        taxAmount,
+        grandTotal,
+        currency,
+        couponCode,
+        paymentMethod,
+        notes,
+        planType,
+        isOneTime,
+        variantType,
+        selectedPlanDays,
+      } = req.body;
+
+      // Validate user exists
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Validate addresses exist
+      const shippingAddress = await Addresses.findById(shippingAddressId);
+      if (!shippingAddress) {
+        throw new AppError("Shipping address not found", 404);
+      }
+
+      let billingAddress = null;
+      if (billingAddressId) {
+        billingAddress = await Addresses.findById(billingAddressId);
+        if (!billingAddress) {
+          throw new AppError("Billing address not found", 404);
+        }
+      }
+
+      // Fetch products and build order items
+      const productIds = items.map((item: any) => item.productId);
+      const products = await Products.find({
+        _id: { $in: productIds },
+        isDeleted: false,
+        status: true,
+      }).lean();
+
+      if (products.length !== productIds.length) {
+        throw new AppError("One or more products not found", 404);
+      }
+
+      const productMap = new Map(
+        products.map((p: any) => [p._id.toString(), p]),
+      );
+
+      // Build order items with product details
+      const orderItems = items.map((item: any) => {
+        const product = productMap.get(item.productId);
+        if (!product) {
+          throw new AppError(`Product ${item.productId} not found`, 404);
+        }
+
+        const productTitle =
+          typeof product.title === "string"
+            ? product.title
+            : product.title?.en ||
+              product.title?.nl ||
+              product.slug ||
+              "Product";
+
+        // Calculate pricing based on variant type
+        let amount = 0;
+        let discountedPricePerUnit = 0;
+        let taxRate = 0;
+
+        if (
+          item.variantType === ProductVariant.SACHETS &&
+          product.sachetPrices
+        ) {
+          const planKey = item.planDays
+            ? this.getPlanKeyFromDays(item.planDays)
+            : "thirtyDays";
+          const planData = (product.sachetPrices as any)[planKey];
+          if (planData) {
+            amount = planData.amount || planData.totalAmount || 0;
+            discountedPricePerUnit =
+              planData.discountedPrice ||
+              planData.amount ||
+              planData.totalAmount ||
+              0;
+            taxRate = planData.taxRate || 0;
+          }
+        } else if (
+          item.variantType === ProductVariant.STAND_UP_POUCH &&
+          product.standupPouchPrice
+        ) {
+          const standupPrice = getNormalizedStandupPouchPrice(product.standupPouchPrice);
+          const countKey = getStandUpPouchPlanKey(item.capsuleCount || 60);
+          const countData = countKey ? standupPrice[countKey] : null;
+          if (countData) {
+            amount = countData.amount || 0;
+            discountedPricePerUnit =
+              countData.discountedPrice || countData.amount || 0;
+            taxRate = countData.taxRate || 0;
+          } else if (standupPrice.amount) {
+            amount = standupPrice.amount || 0;
+            discountedPricePerUnit =
+              standupPrice.discountedPrice || standupPrice.amount || 0;
+            taxRate = standupPrice.taxRate || 0;
+          }
+        }
+
+        const quantity = item.quantity || 1;
+        const totalAmount = discountedPricePerUnit * quantity;
+
+        return {
+          productId: new mongoose.Types.ObjectId(item.productId),
+          name: productTitle,
+          variantType: item.variantType,
+          quantity: quantity,
+          planDays: item.planDays || null,
+          capsuleCount: item.capsuleCount || null,
+          amount: amount,
+          discountedPrice: discountedPricePerUnit,
+          taxRate: taxRate,
+          totalAmount: totalAmount,
+        };
+      });
+
+      // Generate order number
+      const generateOrderNumber = (): string => {
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 9000) + 1000;
+        return `ORD-${timestamp}-${random}`;
+      };
+
+      // Determine payment status based on order type
+      const paymentStatus =
+        orderType === "already_paid"
+          ? PaymentStatus.COMPLETED
+          : PaymentStatus.PENDING;
+
+      // Calculate pricing breakdown by variant type
+      const calculatePricingBreakdown = () => {
+        // Helper function to round amounts
+        const roundAmount = (amount: number): number => {
+          return Math.round(amount * 100) / 100;
+        };
+
+        // Calculate SACHETS pricing
+        const sachetOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.SACHETS
+        );
+        const sachetSubTotal = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const sachetDiscountedPrice = sachetOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const sachetTaxAmount = sachetOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for sachets (proportional to sachets subtotal)
+        const sachetMembershipDiscountAmount = sachetSubTotal > 0 && subTotal > 0
+          ? roundAmount((membershipDiscountAmount * sachetSubTotal) / subTotal)
+          : 0;
+        // Subscription plan discount only applies to sachets
+        const sachetSubscriptionPlanDiscountAmount = subscriptionPlanDiscountAmount || 0;
+        const sachetTotal = roundAmount(
+          sachetDiscountedPrice - sachetMembershipDiscountAmount - sachetSubscriptionPlanDiscountAmount + sachetTaxAmount
+        );
+
+        // Calculate STAND_UP_POUCH pricing
+        const standUpPouchOrderItems = orderItems.filter(
+          (item: any) => item.variantType === ProductVariant.STAND_UP_POUCH
+        );
+        const standUpPouchSubTotal = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.amount * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchDiscountedPrice = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => sum + (item.discountedPrice * (item.quantity || 1)),
+          0
+        );
+        const standUpPouchTaxAmount = standUpPouchOrderItems.reduce(
+          (sum: number, item: any) => {
+            const itemTotal = item.discountedPrice * (item.quantity || 1);
+            return sum + (itemTotal * (item.taxRate || 0));
+          },
+          0
+        );
+        // Calculate membership discount for standUpPouch (proportional to standUpPouch subtotal)
+        const standUpPouchMembershipDiscountAmount = standUpPouchSubTotal > 0 && subTotal > 0
+          ? roundAmount((membershipDiscountAmount * standUpPouchSubTotal) / subTotal)
+          : 0;
+        const standUpPouchTotal = roundAmount(
+          standUpPouchDiscountedPrice - standUpPouchMembershipDiscountAmount + standUpPouchTaxAmount
+        );
+
+        // Build pricing breakdown
+        const pricingBreakdown: any = {
+          overall: {
+            subTotal: roundAmount(subTotal),
+            discountedPrice: roundAmount(discountedPrice),
+            couponDiscountAmount: roundAmount(couponDiscountAmount || 0),
+            membershipDiscountAmount: roundAmount(membershipDiscountAmount || 0),
+            subscriptionPlanDiscountAmount: roundAmount(subscriptionPlanDiscountAmount || 0),
+            taxAmount: roundAmount(taxAmount || 0),
+            grandTotal: roundAmount(grandTotal),
+            currency: currency || "USD",
+          },
+        };
+
+        // Add sachets pricing if there are sachet items
+        if (sachetOrderItems.length > 0) {
+          pricingBreakdown.sachets = {
+            subTotal: roundAmount(sachetSubTotal),
+            discountedPrice: roundAmount(sachetDiscountedPrice),
+            membershipDiscountAmount: roundAmount(sachetMembershipDiscountAmount),
+            subscriptionPlanDiscountAmount: roundAmount(sachetSubscriptionPlanDiscountAmount),
+            taxAmount: roundAmount(sachetTaxAmount),
+            total: sachetTotal,
+            currency: currency || "USD",
+          };
+        }
+
+        // Add standUpPouch pricing if there are standUpPouch items
+        if (standUpPouchOrderItems.length > 0) {
+          pricingBreakdown.standUpPouch = {
+            subTotal: roundAmount(standUpPouchSubTotal),
+            discountedPrice: roundAmount(standUpPouchDiscountedPrice),
+            membershipDiscountAmount: roundAmount(standUpPouchMembershipDiscountAmount),
+            taxAmount: roundAmount(standUpPouchTaxAmount),
+            total: standUpPouchTotal,
+            currency: currency || "USD",
+          };
+        }
+
+        return pricingBreakdown;
+      };
+
+      const pricingBreakdown = calculatePricingBreakdown();
+
+      // Create order
+      const order = await Orders.create({
+        orderNumber: generateOrderNumber(),
+        userId: new mongoose.Types.ObjectId(userId),
+        status: OrderStatus.PENDING,
+        planType: planType,
+        items: orderItems,
+        pricing: pricingBreakdown,
+        shippingAddressId: new mongoose.Types.ObjectId(shippingAddressId),
+        billingAddressId: billingAddressId
+          ? new mongoose.Types.ObjectId(billingAddressId)
+          : null,
+        paymentMethod: paymentMethod || null,
+        paymentStatus: paymentStatus,
+        couponCode: couponCode || null,
+        notes: notes || null,
+        metadata: {
+          isManualOrder: true,
+          createdBy: req.user?._id || null,
+          orderType: orderType,
+        },
+      });
+
+      let paymentLink = null;
+      let cartId = null;
+
+      // If pending payment, create cart and generate payment link
+      if (orderType === "pending_payment") {
+        try {
+          // Clear existing cart for user (if any)
+          try {
+            await cartService.clearCart(userId);
+          } catch (error) {
+            // Cart might not exist, continue
+            logger.info(`No existing cart to clear for user ${userId}`);
+          }
+
+          // Add items to cart
+          for (const item of items) {
+            try {
+              await cartService.addItem(userId, {
+                productId: item.productId,
+                variantType: item.variantType,
+                quantity: item.quantity || 1,
+              });
+            } catch (error: any) {
+              logger.error(
+                `Failed to add item ${item.productId} to cart: ${error.message}`,
+              );
+              throw new AppError(
+                `Failed to add item to cart: ${error.message}`,
+                500,
+              );
+            }
+          }
+
+          // Apply coupon if provided
+          if (couponCode) {
+            try {
+              await cartService.applyCoupon(userId, couponCode);
+            } catch (error: any) {
+              logger.warn(
+                `Failed to apply coupon ${couponCode}: ${error.message}`,
+              );
+              // Continue even if coupon fails
+            }
+          }
+
+          // Get updated cart
+          const updatedCart = await Carts.findOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            isDeleted: false,
+          }).lean();
+
+          cartId = updatedCart?._id ? String(updatedCart._id) : null;
+        } catch (error: any) {
+          logger.error(
+            `Failed to create cart for manual order: ${error.message}`,
+          );
+          // Continue even if cart creation fails - we'll still generate a payment link
+        }
+
+        // Always generate payment link (even if cart creation failed)
+        const frontendUrl = config.frontend.url;
+        if (cartId) {
+          paymentLink = `${frontendUrl}/checkout?orderId=${order._id}&cartId=${cartId}`;
+        } else {
+          // Fallback: generate link with just orderId if cart creation failed
+          paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
+        }
+
+        logger.info(
+          `Generated payment link for order ${order.orderNumber}: ${paymentLink}`,
+        );
+
+        // Send payment request email
+        try {
+          await this.sendPaymentRequestEmail(user, order, paymentLink);
+          logger.info(
+            `Payment request email sent to ${user.email} for order ${order.orderNumber}`,
+          );
+        } catch (error: any) {
+          logger.error(
+            `Failed to send payment request email: ${error.message}`,
+          );
+          // Don't fail order creation if email fails
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        data: {
+          order: {
+            _id: order._id,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            grandTotal: order.pricing?.overall?.grandTotal || 0,
+            currency: order.pricing?.overall?.currency || "USD",
+            orderType: orderType,
+            paymentLink: paymentLink,
+            cartId: cartId,
+          },
+        },
+        message:
+          orderType === "already_paid"
+            ? "Order created successfully (Already Paid)"
+            : "Order created successfully. Payment request email sent to customer.",
+      });
+    },
+  );
+
+  /**
+   * Helper method to get plan key from days
+   */
+  private getPlanKeyFromDays(days: number): string {
+    switch (days) {
+      case 30:
+        return "thirtyDays";
+      case 60:
+        return "sixtyDays";
+      case 90:
+        return "ninetyDays";
+      case 180:
+        return "oneEightyDays";
+      default:
+        return "thirtyDays";
+    }
+  }
+
+  /**
+   * Send payment request email to customer
+   */
+  private async sendPaymentRequestEmail(
+    user: any,
+    order: any,
+    paymentLink: string | null,
+  ): Promise<void> {
+    const userName =
+      `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Customer";
+    const orderNumber = order.orderNumber;
+    const orderTotal = `${order.pricing?.overall?.currency || "USD"} ${(
+      order.pricing?.overall?.grandTotal || 0
+    ).toFixed(2)}`;
+
+    // Ensure paymentLink is always provided for pending payment orders
+    if (!paymentLink) {
+      const frontendUrl = config.frontend.url;
+      paymentLink = `${frontendUrl}/checkout?orderId=${order._id}`;
+      logger.warn(
+        `Payment link was null, generated fallback link: ${paymentLink}`,
+      );
+    }
+
+    const emailSubject = `Payment Request for Order ${orderNumber}`;
+
+    // Escape HTML in user input to prevent XSS
+    const escapeHtml = (text: string): string => {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+
+    const safeUserName = escapeHtml(userName);
+    const safeOrderNumber = escapeHtml(orderNumber);
+    const safeOrderTotal = escapeHtml(orderTotal);
+    const safePaymentLink = escapeHtml(paymentLink);
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Request</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h1 style="color: #2c3e50; margin-top: 0;">Payment Request</h1>
+  </div>
+  
+  <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
+    <p>Dear ${safeUserName},</p>
+    
+    <p>We have created an order for you and require payment to proceed with processing and shipping.</p>
+    
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+      <h2 style="color: #2c3e50; margin-top: 0; font-size: 18px;">Order Details</h2>
+      <p style="margin: 5px 0;"><strong>Order Number:</strong> ${safeOrderNumber}</p>
+      <p style="margin: 5px 0;"><strong>Total Amount:</strong> ${safeOrderTotal}</p>
+      <p style="margin: 5px 0;"><strong>Status:</strong> Pending Payment</p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${paymentLink}" 
+         style="background-color: #007bff; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+        Complete Payment
+      </a>
+    </div>
+    
+    <p style="color: #666; font-size: 14px; text-align: center;">
+      Or copy and paste this link into your browser:<br>
+      <a href="${paymentLink}" style="color: #007bff; word-break: break-all; text-decoration: underline;">${safePaymentLink}</a>
+    </p>
+    
+    <p style="margin-top: 30px;">If you have any questions or concerns, please don't hesitate to contact our support team.</p>
+    
+    <p>Thank you for your business!</p>
+    
+    <p style="margin-top: 30px;">
+      Best regards,<br>
+      <strong>The Viteezy Team</strong>
+    </p>
+  </div>
+  
+  <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+    <p>This is an automated email. Please do not reply to this message.</p>
+  </div>
+</body>
+</html>
+    `;
+
+    const emailText = `
+Payment Request
+
+Dear ${userName},
+
+We have created an order for you and require payment to proceed with processing and shipping.
+
+Order Details:
+- Order Number: ${orderNumber}
+- Total Amount: ${orderTotal}
+- Status: Pending Payment
+
+Complete your payment by visiting: ${paymentLink}
+
+If you have any questions or concerns, please don't hesitate to contact our support team.
+
+Thank you for your business!
+
+Best regards,
+The Viteezy Team
+
+---
+This is an automated email. Please do not reply to this message.
+    `;
+
+    logger.info(
+      `Sending payment request email to ${user.email} with payment link: ${paymentLink}`,
+    );
+
+    await emailService.sendCustomEmail(
+      user.email,
+      emailSubject,
+      emailHtml,
+      emailText,
+    );
+  }
+
+  /*
    * Process partial refund for specific products in an order
    * @route POST /api/v1/admin/orders/:id/partial-refund
    * @access Admin
-   * 
+   *
    * This endpoint allows admin to:
    * - Refund specific products from an order
    * - Remove refunded products from the order
@@ -882,9 +1463,19 @@ class AdminOrderController {
   processPartialRefund = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { id } = req.params;
-      const { productIds, refundAmount, refundMethod = "gateway", reason, metadata } = req.body;
+      const {
+        productIds,
+        refundAmount,
+        refundMethod = "gateway",
+        reason,
+        metadata,
+      } = req.body;
 
-      if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      if (
+        !productIds ||
+        !Array.isArray(productIds) ||
+        productIds.length === 0
+      ) {
         throw new AppError("At least one product ID is required", 400);
       }
 
@@ -921,11 +1512,10 @@ class AdminOrderController {
           },
           order: updatedOrder,
         },
-        result.message
+        result.message,
       );
-    }
+    },
   );
 }
 
 export const adminOrderController = new AdminOrderController();
-

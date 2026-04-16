@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { fileStorageService } from "@/services/fileStorageService";
+import { logger } from "@/utils/logger";
 
 export const handleProductImageUpload = async (
   req: Request,
@@ -8,6 +9,10 @@ export const handleProductImageUpload = async (
 ) => {
   try {
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+
+    logger.info("[handleProductImageUpload] Incoming files for product update", {
+      fileFields: files ? Object.keys(files) : [],
+    });
 
     // Handle productImage (single file)
     if (files?.productImage && files.productImage.length > 0) {
@@ -54,6 +59,10 @@ export const handleProductImageUpload = async (
         req.body.specification = {};
       }
       req.body.specification.bg_image = bgImageUrl;
+
+      logger.info("[handleProductImageUpload] Uploaded specificationBgImage", {
+        bg_image: bgImageUrl,
+      });
     }
 
     // Handle specification item images (1-4)
@@ -87,7 +96,18 @@ export const handleProductImageUpload = async (
           req.body.specification.items[i - 1] = {};
         }
         req.body.specification.items[i - 1].imageMobile = mobileImageUrl;
+
+        logger.info("[handleProductImageUpload] Uploaded specificationItemImagemobile", {
+          index: i - 1,
+          imageMobile: mobileImageUrl,
+        });
       }
+    }
+
+    if (req.body.specification) {
+      logger.debug("[handleProductImageUpload] Final specification in req.body after image upload", {
+        specification: req.body.specification,
+      });
     }
 
     next();

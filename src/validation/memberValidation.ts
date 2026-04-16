@@ -5,25 +5,44 @@ import mongoose from "mongoose";
  * Member Registration Schema
  */
 export const registerWithMemberIdSchema = Joi.object({
-  name: Joi.string()
+  firstName: Joi.string()
     .trim()
-    .min(2)
+    .min(1)
     .max(50)
     .required()
     .messages({
-      "string.empty": "Name is required",
-      "string.min": "Name must be at least 2 characters long",
-      "string.max": "Name cannot exceed 50 characters",
+      "string.empty": "First name is required",
+      "string.min": "First name must be at least 1 character long",
+      "string.max": "First name cannot exceed 50 characters",
     })
-    .label("Name"),
-  email: Joi.string()
-    .email()
-    .lowercase()
+    .label("First Name"),
+  lastName: Joi.string()
     .trim()
-    .required()
+    .max(50)
+    .allow("")
+    .optional()
+    .label("Last Name"),
+  parentMemberId: Joi.string()
+    .pattern(/^MEM-[A-Z0-9]{8}$/)
+    .uppercase()
+    .optional()
     .messages({
-      "string.empty": "Email is required",
-      "string.email": "Please enter a valid email address",
+      "string.pattern.base": "Invalid member ID format. Format: MEM-XXXXXXXX",
+    })
+    .label("Parent Member ID"),
+  email: Joi.alternatives()
+    .conditional("parentMemberId", {
+      is: Joi.exist(),
+      then: Joi.string().email().lowercase().trim().optional(),
+      otherwise: Joi.string()
+        .email()
+        .lowercase()
+        .trim()
+        .required()
+        .messages({
+          "string.empty": "Email is required",
+          "string.email": "Please enter a valid email address",
+        }),
     })
     .label("Email"),
   password: Joi.string()
@@ -41,14 +60,6 @@ export const registerWithMemberIdSchema = Joi.object({
       "string.pattern.base": "Please enter a valid phone number",
     })
     .label("Phone"),
-  parentMemberId: Joi.string()
-    .pattern(/^MEM-[A-Z0-9]{8}$/)
-    .uppercase()
-    .optional()
-    .messages({
-      "string.pattern.base": "Invalid member ID format. Format: MEM-XXXXXXXX",
-    })
-    .label("Parent Member ID"),
   registrationSource: Joi.string()
     .valid("registration", "quiz")
     .default("registration")

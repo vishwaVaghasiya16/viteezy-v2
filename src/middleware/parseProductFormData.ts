@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "@/utils/AppError";
+import { logger } from "@/utils/logger";
 
 const ARRAY_FIELDS = [
   "benefits",
@@ -16,6 +17,7 @@ const JSON_FIELDS = [
   "comparisonSection",
   "specification",
   "faqs", // Optional array of { question, answer }, max 15
+  "ingredientCompositions", // Array of { ingredient, quantity, driPercentage }
 ];
 
 const toBoolean = (value: any): boolean | undefined => {
@@ -137,11 +139,22 @@ export const parseProductFormData = (
     }
 
     // Handle specification with individual fields (title1, descr1, etc.)
-    const hasSpecificationFields = req.body.specificationMainTitle || 
-      req.body.specificationTitle1 || req.body.specificationTitle2 || 
-      req.body.specificationTitle3 || req.body.specificationTitle4;
+    const hasSpecificationFields =
+      req.body.specificationMainTitle ||
+      req.body.specificationTitle1 ||
+      req.body.specificationTitle2 ||
+      req.body.specificationTitle3 ||
+      req.body.specificationTitle4;
     
     if (hasSpecificationFields) {
+      logger.info("[parseProductFormData] Detected specification text fields in multipart payload", {
+        specificationMainTitle: req.body.specificationMainTitle,
+        hasTitle1: !!req.body.specificationTitle1,
+        hasTitle2: !!req.body.specificationTitle2,
+        hasTitle3: !!req.body.specificationTitle3,
+        hasTitle4: !!req.body.specificationTitle4,
+      });
+
       if (!req.body.specification) {
         req.body.specification = {};
       }
@@ -179,6 +192,16 @@ export const parseProductFormData = (
       req.body.specification.items = req.body.specification.items.filter(
         (item: any) => item && (item.title || item.descr || item.image || item.imageMobile)
       );
+
+      logger.info("[parseProductFormData] Built specification object from text fields", {
+        specification: req.body.specification,
+      });
+    }
+
+    if (req.body.specification) {
+      logger.debug("[parseProductFormData] Final specification in req.body before image middleware", {
+        specification: req.body.specification,
+      });
     }
 
     next();

@@ -119,10 +119,16 @@ class AdminBlogBannerController {
    * Create blog banner (Admin only)
    * @route POST /api/v1/admin/blog-banners
    * @access Private (Admin)
+   * @note Only ONE blog banner can exist. If a banner already exists, it will be updated instead of creating a new one.
    */
   createBlogBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
       const { heading, description, banner_image } = req.body;
+
+      // Check if a blog banner already exists (only one banner allowed)
+      let blogBanner = await BlogBanner.findOne({
+        isDeleted: { $ne: true },
+      });
 
       // Handle banner image upload
       let bannerImageData = null;
@@ -132,28 +138,62 @@ class AdminBlogBannerController {
         bannerImageData = this.normalizeMediaInput(banner_image);
       }
 
-      // Create blog banner
-      const blogBanner = await BlogBanner.create({
-        banner_image: bannerImageData,
-        heading: heading || {},
-        description: description || {},
-        createdBy: req.user?._id
-          ? new mongoose.Types.ObjectId(req.user._id)
-          : undefined,
-        updatedBy: req.user?._id
-          ? new mongoose.Types.ObjectId(req.user._id)
-          : undefined,
-      });
+      if (blogBanner) {
+        // Update existing banner instead of creating new one
+        // Delete old image if new image is provided
+        if (bannerImageData && blogBanner.banner_image) {
+          await this.deleteBannerImage(blogBanner.banner_image);
+        }
 
-      logger.info(
-        `Blog banner created: ${blogBanner._id} by admin ${req.user?._id}`
-      );
+        // Update banner fields
+        if (bannerImageData !== null) {
+          blogBanner.banner_image = bannerImageData as any;
+        }
+        if (heading !== undefined) {
+          blogBanner.heading = heading || {};
+        }
+        if (description !== undefined) {
+          blogBanner.description = description || {};
+        }
+        blogBanner.updatedBy = req.user?._id
+          ? new mongoose.Types.ObjectId(req.user._id)
+          : undefined;
 
-      res.status(201).json({
-        success: true,
-        message: "Blog banner created successfully",
-        data: { blogBanner },
-      });
+        await blogBanner.save();
+
+        logger.info(
+          `Blog banner updated: ${blogBanner._id} by admin ${req.user?._id}`
+        );
+
+        res.status(200).json({
+          success: true,
+          message: "Blog banner updated successfully",
+          data: { blogBanner },
+        });
+      } else {
+        // Create new banner (first time)
+        blogBanner = await BlogBanner.create({
+          banner_image: bannerImageData,
+          heading: heading || {},
+          description: description || {},
+          createdBy: req.user?._id
+            ? new mongoose.Types.ObjectId(req.user._id)
+            : undefined,
+          updatedBy: req.user?._id
+            ? new mongoose.Types.ObjectId(req.user._id)
+            : undefined,
+        });
+
+        logger.info(
+          `Blog banner created: ${blogBanner._id} by admin ${req.user?._id}`
+        );
+
+        res.status(201).json({
+          success: true,
+          message: "Blog banner created successfully",
+          data: { blogBanner },
+        });
+      }
     }
   );
 
@@ -328,43 +368,17 @@ class AdminBlogBannerController {
   );
 
   /**
-   * Delete blog banner (Admin only) - Soft delete
+   * Delete blog banner (Admin only) - DISABLED
    * @route DELETE /api/v1/admin/blog-banners/:id
    * @access Private (Admin)
+   * @note Blog banner deletion is not allowed. Only one banner can exist and it cannot be deleted.
    */
   deleteBlogBanner = asyncHandler(
     async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-      const { id } = req.params;
-
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        throw new AppError("Invalid blog banner ID", 400);
-      }
-
-      const blogBanner = await BlogBanner.findOne({
-        _id: id,
-        isDeleted: { $ne: true },
-      });
-
-      if (!blogBanner) {
-        throw new AppError("Blog banner not found", 404);
-      }
-
-      // Delete banner image from storage
-      if (blogBanner.banner_image) {
-        await this.deleteBannerImage(blogBanner.banner_image);
-      }
-
-      // Perform soft delete
-      blogBanner.isDeleted = true;
-      blogBanner.deletedAt = new Date();
-      await blogBanner.save();
-
-      logger.info(`Blog banner soft deleted: ${id} by admin ${req.user?._id}`);
-
-      res.status(200).json({
-        success: true,
-        message: "Blog banner deleted successfully",
-      });
+      throw new AppError(
+        "Blog banner deletion is not allowed. You can only update the existing banner.",
+        403
+      );
     }
   );
 }

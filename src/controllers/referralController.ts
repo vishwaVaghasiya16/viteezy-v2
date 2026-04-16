@@ -85,11 +85,15 @@ class ReferralController {
 
       try {
         // Calculate order amount for referral validation
+        // Use first item's variantType for backward compatibility (method uses item-level variantType anyway)
+        const firstItemVariantType = cart.items && cart.items.length > 0 && cart.items[0].variantType 
+          ? cart.items[0].variantType 
+          : ProductVariant.SACHETS;
         const totalsWithoutCoupon = await (
           cartService as any
         ).calculateCartTotalsWithVariantType(
           cart.items,
-          cart.variantType as ProductVariant,
+          firstItemVariantType,
           0 // No discount
         );
 
@@ -148,7 +152,7 @@ class ReferralController {
           cartService as any
         ).calculateCartTotalsWithVariantType(
           cart.items,
-          cart.variantType as ProductVariant,
+          firstItemVariantType,
           referralDiscountAmount
         );
 
@@ -168,7 +172,7 @@ class ReferralController {
             referralCode: normalizedReferralCode,
             referralDiscount: {
               amount: referralDiscountAmount,
-              currency: totalsWithReferral.currency || "EUR",
+              currency: totalsWithReferral.currency || "USD",
             },
           },
           "Referral code applied successfully"
