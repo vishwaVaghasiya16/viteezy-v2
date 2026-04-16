@@ -5,7 +5,9 @@ export interface IReminder extends Document {
   reminderSetBy: Types.ObjectId;
   time: string;
   note: string;
+  frequency: string;
   isActive: boolean;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +35,15 @@ const ReminderSchema = new Schema<IReminder>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    frequency: {
+      type: String,
+      enum: ["Daily", "Weekly", "Monthly"],
+      default: "Daily",
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
     },
   },
   {

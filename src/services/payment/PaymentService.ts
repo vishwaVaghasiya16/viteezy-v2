@@ -1872,6 +1872,7 @@ export class PaymentService {
       name:
         `${address.firstName || ""} ${address.lastName || ""}`.trim() ||
         undefined,
+      email: address.email || undefined,
       phone: address.phone || undefined,
       line1: line1Parts.join(" ") || address.address || undefined,
       line2: undefined, // No longer used

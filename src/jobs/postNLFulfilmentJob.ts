@@ -194,7 +194,7 @@ export class PostNLFulfilmentJob {
         shipToCity: address.city || "",
         shipToCountryCode: address.country || "NL",
         shipToPhone: address.phone || "",
-        shipToEmail: user.email || "",
+        shipToEmail: address.email || user.email || "",
         language: this.LANGUAGE,
         shippingAgentCode: shippingAgentCode,
         shipmentType: this.SHIPMENT_TYPE,

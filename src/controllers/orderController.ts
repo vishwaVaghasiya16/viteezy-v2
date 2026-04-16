@@ -1302,11 +1302,11 @@ class OrderController {
       })
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone city country note"
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone city country note"
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone city country note"
         )
         .populate(
           "items.productId",

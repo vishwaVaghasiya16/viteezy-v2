@@ -420,11 +420,11 @@ class AdminOrderController {
         )
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .sort(sortOptions)
         .skip(skip)
@@ -556,11 +556,11 @@ class AdminOrderController {
         )
         .populate(
           "shippingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .populate(
           "billingAddressId",
-          "firstName lastName streetName houseNumber houseNumberAddition postalCode address phone country city",
+          "firstName lastName streetName houseNumber houseNumberAddition postalCode address email phone country city",
         )
         .lean();
 

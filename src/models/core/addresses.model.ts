@@ -10,6 +10,7 @@ export interface IAddress extends Document {
   houseNumberAddition?: string;
   postalCode: string;
   address: string; // Full address line
+  email?: string;
   phone?: string;
   country: string;
   city?: string; // Optional, but may be needed for BE validation
@@ -62,6 +63,11 @@ const AddressSchema = new Schema<IAddress>(
       type: String,
       required: true,
       trim: true,
+    },
+    email: {
+      type: String,
+      trim: true,
+      default: null,
     },
     phone: {
       type: String,

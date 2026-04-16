@@ -95,6 +95,7 @@ class AddressController {
       const {
         firstName,
         lastName,
+        email,
         streetName,
         houseNumber,
         houseNumberAddition,
@@ -160,6 +161,7 @@ class AddressController {
         postalCode,
         address: address || fullAddress, // Use address from body if provided, otherwise build from parts
         ...(phone && { phone }),
+        ...(email?.trim() && { email: email.trim() }),
         country,
         ...(city && { city }),
         isDefault: isDefault || false,
@@ -346,6 +348,7 @@ class AddressController {
         houseNumberAddition,
         postalCode,
         address,
+        email,
         phone,
         country,
         city,
@@ -419,6 +422,7 @@ class AddressController {
         }),
         ...(finalPostalCode && { postalCode: finalPostalCode }),
         ...(fullAddress && { address: fullAddress }),
+        ...(email !== undefined && { email: email?.trim() || null }),
         ...(phone !== undefined && { phone: phone || null }),
         ...(finalCountry && { country: finalCountry }),
         ...(finalCity !== undefined && { city: finalCity || null }),

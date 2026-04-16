@@ -9,3 +9,5 @@ export { Countries, ICountry } from "./countries.model";
 export { States, IState } from "./states.model";
 export { Notification, INotification } from "./notifications.model";
 export { FamilyMapping } from "./familyMapping.model";
+export { Reminders, IReminder } from "./reminder.model";
+export { ReminderHistory, IReminderHistory } from "./reminderHistory.model";

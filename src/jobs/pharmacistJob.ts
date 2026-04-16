@@ -211,7 +211,7 @@ export class PharmacistJob {
     const orderLine: PharmacistOrderLine = {
       orderId: order._id.toString(),
       orderNumber: order.orderNumber,
-      email: user.email || "",
+      email: address.email || user.email || "",
       firstName: user.firstName || "",
       lastName: user.lastName || "",
       postcode: address.postalCode || "",

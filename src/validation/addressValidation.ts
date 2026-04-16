@@ -95,6 +95,15 @@ export const addAddressSchema = Joi.object(
       "string.max": "Street name must not exceed 200 characters",
       "any.required": "Street name is required",
     }),
+    email: Joi.string()
+    .email()
+    .trim()
+    .required()
+    .messages({
+      "string.email": "Please provide a valid email address",
+      "string.empty": "Email cannot be empty",
+      "any.required": "Email is required",
+    }),
     houseNumber: Joi.alternatives()
       .try(
         Joi.string()
@@ -202,6 +211,14 @@ export const updateAddressSchema = Joi.object(
     address: Joi.string().trim().optional().min(5).max(300).messages({
       "string.min": "Address must be at least 5 characters",
       "string.max": "Address must not exceed 300 characters",
+    }),
+   email: Joi.string()
+    .email()
+    .trim()
+    .optional()
+    .allow(null)
+    .messages({
+      "string.email": "Please provide a valid email address",
     }),
     phone: Joi.string()
       .trim()

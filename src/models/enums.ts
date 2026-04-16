@@ -369,6 +369,24 @@ export enum NotificationType {
   REDIRECTION = "Redirection",
 }
 
+// Reminder History Event Types
+export enum ReminderHistoryEventType {
+  CREATED = "CREATED",
+  TIME_UPDATED = "TIME_UPDATED",
+  DATE_FREQUENCY_CHANGED = "DATE_FREQUENCY_CHANGED",
+  MESSAGE_UPDATED = "MESSAGE_UPDATED",
+  ENABLED = "ENABLED",
+  DISABLED = "DISABLED",
+  DELETED = "DELETED",
+  MULTIPLE_ADDED = "MULTIPLE_ADDED",
+}
+
+// Reminder Triggered By
+export enum ReminderTriggeredBy {
+  USER = "USER",
+  SYSTEM = "SYSTEM",
+}
+
 // Export all enum values as arrays for Mongoose schemas
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
@@ -421,3 +439,5 @@ export const REFERRAL_STATUS_VALUES = Object.values(ReferralStatus);
 export const DEVICE_TYPE_VALUES = Object.values(DeviceType);
 export const NOTIFICATION_CATEGORY_VALUES = Object.values(NotificationCategory);
 export const NOTIFICATION_TYPE_VALUES = Object.values(NotificationType);
+export const REMINDER_HISTORY_EVENT_TYPE_VALUES = Object.values(ReminderHistoryEventType);
+export const REMINDER_TRIGGERED_BY_VALUES = Object.values(ReminderTriggeredBy);
