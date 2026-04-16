@@ -3,6 +3,7 @@ import * as reminderService from "../services/reminder.service";
 import { ReminderHistory } from "@/models/core/reminderHistory.model";
 import { AppError } from "../utils/AppError";
 import { asyncHandler } from "@/utils";
+import { getPaginationOptions, getPaginationMeta } from "@/utils/pagination";
 
 export const createReminder = asyncHandler(
   async (req: any, res: Response) => {
@@ -82,23 +83,29 @@ export const getReminderHistory = asyncHandler(
   async (req: any, res: Response) => {
     const { id } = req.params;
     const userId = req.userId;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const skip = parseInt(req.query.skip as string) || 0;
+
+    const { page, limit, skip } = getPaginationOptions(req);
 
     const history = await ReminderHistory.find({
       reminderId: id,
       userId
     })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
-    const total = await ReminderHistory.countDocuments({ reminderId: id, userId });
-
-    res.apiSuccess({
+    const total = await ReminderHistory.countDocuments({
       reminderId: id,
-      history: history.map(h => ({
+      userId
+    });
+
+    const pagination = getPaginationMeta(page, limit, total);
+
+    res.status(200).json({
+      success: true,
+      message: "Reminder history retrieved successfully",
+      data: history.map(h => ({
         eventType: h.eventType,
         message: h.message,
         createdAt: h.createdAt,
@@ -106,13 +113,8 @@ export const getReminderHistory = asyncHandler(
         oldValue: h.oldValue,
         newValue: h.newValue
       })),
-      pagination: {
-        total,
-        limit,
-        skip,
-        hasMore: total > skip + limit
-      }
-    }, "Reminder history retrieved successfully");
+      pagination
+    });
   }
 );
 
