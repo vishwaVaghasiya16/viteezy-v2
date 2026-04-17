@@ -116,6 +116,50 @@ export const getReminderHistory = asyncHandler(
   }
 );
 
+/*
+  * GET /api/reminders/:id/history
+*/
+
+export const getReminderHistoryById = asyncHandler(
+  async (req: any, res: Response) => {
+    const userId = req.userId;
+    const reminderId = req.params.id;
+
+    const { page, limit, skip } = getPaginationOptions(req);
+
+    const history = await ReminderHistory.find({
+      userId,
+      reminderId,
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await ReminderHistory.countDocuments({
+      userId,
+      reminderId,
+    });
+
+    const pagination = getPaginationMeta(page, limit, total);
+
+    res.status(200).json({
+      success: true,
+      message: "Reminder history retrieved successfully",
+      data: history.map((h) => ({
+        reminderId: h.reminderId,
+        eventType: h.eventType,
+        message: h.message,
+        createdAt: h.createdAt,
+        triggeredBy: h.triggeredBy,
+        oldValue: h.oldValue,
+        newValue: h.newValue,
+      })),
+      pagination,
+    });
+  }
+);
+
 /**
  * POST /api/reminders/bulk
  */
