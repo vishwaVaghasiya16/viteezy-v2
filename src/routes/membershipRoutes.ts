@@ -47,6 +47,10 @@ router.get(
   membershipController.getUserMemberships
 );
 
+router.get("/benefits", membershipController.getMembershipBenefits);
+router.get("/effective", membershipController.getEffectiveMembership);
+
+
 /**
  * @route   GET /api/memberships/widget/overview
  * @desc    Widget data for user dashboard membership section
@@ -104,7 +108,5 @@ router.get(
   membershipController.getMembershipTransactions
 );
 
-router.get("/benefits", membershipController.getMembershipBenefits);
-router.get("/effective", membershipController.getEffectiveMembership);
 
 export default router;
