@@ -55,4 +55,10 @@ router.get(
   reminderController.getReminderHistory
 );
 
+router.get(
+  "/:id/history",
+  authenticate,
+  reminderController.getReminderHistoryById
+);
+
 export default router;
