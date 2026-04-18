@@ -13,11 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Build Node here (fast machine)
+      # ✅ Install Node dependencies
       - name: Install Node dependencies
         run: |
           npm install
 
+      # ✅ Build Node app
       - name: Build Node app
         run: |
           npm run build
@@ -32,6 +33,15 @@ jobs:
           port: 2222
           timeout: 30m
           script: |
+            # Navigate to your app's directory
             cd /home/deploy/apps/viteezy-v2
+
+            # Ensure no local changes conflict with remote pull
+            git reset --hard
+            git clean -fd
+
+            # Pull the latest changes from the remote
             git pull origin main
+
+            # Restart the Docker containers (no heavy rebuild)
             docker compose up -d --remove-orphans
