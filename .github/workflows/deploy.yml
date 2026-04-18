@@ -13,17 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ✅ Install Node dependencies
-      - name: Install Node dependencies
-        run: |
-          npm install
-
-      # ✅ Build Node app
-      - name: Build Node app
-        run: |
-          npm run build
-
-      # ✅ SSH deploy (no heavy build now)
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -33,15 +22,16 @@ jobs:
           port: 2222
           timeout: 30m
           script: |
-            # Navigate to your app's directory
+            set -e
+
             cd /home/deploy/apps/viteezy-v2
 
-            # Ensure no local changes conflict with remote pull
             git reset --hard
             git clean -fd
-
-            # Pull the latest changes from the remote
             git pull origin main
 
-            # Restart the Docker containers (no heavy rebuild)
+            docker compose down --remove-orphans
+            docker compose build --no-cache
             docker compose up -d --remove-orphans
+
+            docker ps

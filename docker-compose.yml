@@ -1,26 +1,24 @@
-version: '3'
 services:
-  frontend:
-    image: viteezy-frontend
-    build:
-      context: .
-    ports:
-      - "8080:8080"
-    environment:
-      - NODE_ENV=production
-
   backend:
-    image: viteezy-node
     build:
       context: .
+      dockerfile: Dockerfile.node
+    image: viteezy-node
+    container_name: viteezy_node
     ports:
-      - "3000:3000"
+      - "8050:8050"
     environment:
       - NODE_ENV=production
+    restart: unless-stopped
 
   python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
     image: viteezy-python
+    container_name: viteezy_python
     ports:
       - "8000:8000"
     environment:
       - PYTHON_ENV=production
+    restart: unless-stopped
