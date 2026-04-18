@@ -7,6 +7,8 @@ services:
     container_name: viteezy_node
     ports:
       - "8050:8050"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
     restart: unless-stopped
@@ -19,6 +21,8 @@ services:
     container_name: viteezy_python
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - PYTHON_ENV=production
     restart: unless-stopped
