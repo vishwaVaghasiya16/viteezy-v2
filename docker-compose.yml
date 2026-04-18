@@ -1,0 +1,26 @@
+version: '3'
+services:
+  frontend:
+    image: viteezy-frontend
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+
+  backend:
+    image: viteezy-node
+    build:
+      context: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+
+  python:
+    image: viteezy-python
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHON_ENV=production
