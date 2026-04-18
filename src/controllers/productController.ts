@@ -134,7 +134,7 @@ const transformProductForLanguage = (
   // Map ingredient composition values by ingredientId so they can be merged into ingredients.
   const compositionByIngredientId = new Map<
     string,
-    { quantity?: number; driPercentage?: number | string }
+    { quantity?: number | string; driPercentage?: number | string }
   >();
   if (
     Array.isArray(product.ingredientCompositions) &&

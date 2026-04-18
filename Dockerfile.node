@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package.json and package-lock.json to install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy only the built files (you should be building your app beforehand)
+COPY dist ./dist
+
+# Expose port 8050
+EXPOSE 8050
+
+# Start the application
+CMD ["node", "-r", "module-alias/register", "dist/index.js"]

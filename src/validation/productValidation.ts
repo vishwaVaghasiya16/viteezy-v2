@@ -538,37 +538,15 @@ const specificationSchemaForUpdate = Joi.object({
     "object.base": "Specification must be an object",
   });
 
-/**
- * Amount for an ingredient composition: plain number or string with leading numeric part
- * (e.g. 100, "100", "100mg", "12.5 ml") — normalized to a number for the DB.
- */
+/** Stored as a string in DB (e.g. "100mg"); plain numbers from JSON become strings */
 const ingredientCompositionQuantitySchema = Joi.alternatives()
   .try(
-    Joi.number().min(0),
-    Joi.string()
-      .trim()
-      .custom((value, helpers) => {
-        const match = String(value).match(/^(\d+(?:\.\d+)?)/);
-        if (!match) {
-          return helpers.error("any.custom", {
-            message:
-              "Quantity must be a non-negative number or a string that starts with one (e.g. 100 or 100mg)",
-          });
-        }
-        const n = parseFloat(match[1]);
-        if (Number.isNaN(n) || n < 0) {
-          return helpers.error("any.custom", {
-            message: "Quantity must be a non-negative number",
-          });
-        }
-        return n;
-      })
+    Joi.string().trim().min(1),
+    Joi.number().custom((n) => String(n))
   )
   .required()
   .messages({
-    "alternatives.types": "Quantity must be a number or a parseable string (e.g. 100mg)",
-    "number.base": "Quantity must be a number",
-    "number.min": "Quantity cannot be negative",
+    "string.empty": "Quantity cannot be empty",
     "any.required": "Quantity is required",
   });
 

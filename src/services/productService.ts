@@ -41,7 +41,7 @@ interface CreateProductData {
   ingredients: string[];
   ingredientCompositions?: Array<{
     ingredient: string;
-    quantity: number;
+    quantity: string;
     driPercentage: number | string;
   }>;
   categories?: string[];
@@ -146,7 +146,7 @@ interface UpdateProductData {
   ingredients?: string[];
   ingredientCompositions?: Array<{
     ingredient: string;
-    quantity: number;
+    quantity: string;
     driPercentage: number | string;
   }>;
   categories?: string[];

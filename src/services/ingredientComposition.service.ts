@@ -43,8 +43,14 @@ export class IngredientCompositionService {
     // Validate DRI percentage
     this.validateDriPercentage(driPercentage);
 
+    const quantityStored = String(quantity ?? "").trim();
+    if (!quantityStored) {
+      throw new AppError("Quantity is required", 400);
+    }
+
     const composition = new IngredientComposition({
       ...compositionData,
+      quantity: quantityStored,
       createdBy: new mongoose.Types.ObjectId(userId),
     });
 
@@ -173,12 +179,21 @@ export class IngredientCompositionService {
       }
     }
 
+    const updatePayload: Record<string, any> = {
+      ...(updateData as Record<string, any>),
+      updatedBy: new mongoose.Types.ObjectId(userId),
+    };
+    if (updatePayload.quantity !== undefined) {
+      const q = String(updatePayload.quantity).trim();
+      if (!q) {
+        throw new AppError("Quantity cannot be empty", 400);
+      }
+      updatePayload.quantity = q;
+    }
+
     const composition = await IngredientComposition.findByIdAndUpdate(
       id,
-      {
-        ...updateData,
-        updatedBy: new mongoose.Types.ObjectId(userId),
-      },
+      updatePayload,
       { new: true, runValidators: true }
     )
       .populate("product", "title description productImage")
@@ -223,7 +238,7 @@ export class IngredientCompositionService {
     productId: string,
     compositions: Array<{
       ingredient: string;
-      quantity: number;
+      quantity: number | string;
       driPercentage: number | string;
     }>,
     userId?: string
@@ -243,6 +258,10 @@ export class IngredientCompositionService {
 
     for (const comp of compositions) {
       const { ingredient, quantity, driPercentage } = comp;
+      const quantityStored = String(quantity ?? "").trim();
+      if (!quantityStored) {
+        throw new AppError("Quantity is required", 400);
+      }
 
       // Validate ingredient exists
       const ingredientExists = await ProductIngredients.findById(ingredient);
@@ -261,7 +280,7 @@ export class IngredientCompositionService {
 
       if (existingComposition) {
         const updatePayload: Record<string, any> = {
-          quantity,
+          quantity: quantityStored,
           driPercentage,
           // Revive soft-deleted composition instead of creating duplicate
           isDeleted: false,
@@ -286,7 +305,7 @@ export class IngredientCompositionService {
         const createPayload: Record<string, any> = {
           product: new mongoose.Types.ObjectId(productId),
           ingredient: new mongoose.Types.ObjectId(ingredient),
-          quantity,
+          quantity: quantityStored,
           driPercentage,
         };
         if (userObjectId) {
