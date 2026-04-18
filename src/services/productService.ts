@@ -451,8 +451,12 @@ class ProductService {
     // Log product data summary before creation
     logger.info(`[Create Product] Creating product with - Slug: "${finalSlug}", Variant: ${variant}, HasStandupPouch: ${hasStandupPouch}, Categories: ${data.categories?.length || 0}, Ingredients: ${data.ingredients?.length || 0}, FAQs: ${data.faqs?.length || 0}`);
 
-    // Strip faqs from product data (FAQs are stored in product_faqs collection)
-    const { faqs: faqsInput, ...productData } = data;
+    // Strip faqs and ingredient compositions (stored in ingredient_compositions collection)
+    const {
+      faqs: faqsInput,
+      ingredientCompositions: compositionsInput,
+      ...productData
+    } = data;
 
     // Create product with generated slug and derived price
     const product = await Products.create({
@@ -502,7 +506,7 @@ class ProductService {
     }
 
     // Handle ingredient compositions if provided
-    const ingredientCompositions = data.ingredientCompositions || [];
+    const ingredientCompositions = compositionsInput || [];
     if (ingredientCompositions.length > 0 && product._id) {
       logger.info(`[Create Product] Creating ${ingredientCompositions.length} ingredient compositions for product ${product._id}`);
       try {
@@ -539,6 +543,10 @@ class ProductService {
       logger.debug(`[Create Product] Populated ${populatedProduct.categories.length} categories`);
     }
 
+    const newProductId = String(product._id);
+    const ingredientCompositionsForResponse =
+      await this.getIngredientCompositionsByProductId(newProductId);
+
     // Get ingredient details and replace ingredients array with populated data
     // Reuse ingredientIds from above (already declared at line 477)
     if (ingredientIds.length > 0) {
@@ -555,6 +563,7 @@ class ProductService {
       const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
         ...populatedProduct,
         ingredients: ingredientDetails, // Replace IDs with populated data
+        ingredientCompositions: ingredientCompositionsForResponse,
       });
 
       logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
@@ -570,6 +579,7 @@ class ProductService {
       const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
         ...populatedProduct,
         ingredients: [], // No ingredients
+        ingredientCompositions: ingredientCompositionsForResponse,
       });
 
       logger.info(`[Create Product] Product creation completed successfully - ID: ${product._id}, Slug: "${product.slug}"`);
@@ -1666,6 +1676,7 @@ class ProductService {
       if (
         key !== "faqs" &&
         key !== "specification" &&
+        key !== "ingredientCompositions" &&
         data[key as keyof UpdateProductData] !== undefined
       ) {
         updateData[key] = data[key as keyof UpdateProductData];
@@ -1911,10 +1922,15 @@ class ProductService {
 
     logger.info(`Product updated successfully: ${updatedProduct.slug}`);
 
+    const ingredientCompositions = await this.getIngredientCompositionsByProductId(
+      productId
+    );
+
     // Calculate monthly amounts for subscription prices in response
     const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
       ...updatedProduct,
       ingredients: ingredientDetails, // Replace IDs with populated data
+      ingredientCompositions,
     });
 
     return {
@@ -2334,9 +2350,10 @@ class ProductService {
   private async getIngredientCompositionsByProductId(
     productId: string
   ): Promise<any[]> {
+    const productObjectId = new mongoose.Types.ObjectId(productId);
     const compositions = await IngredientComposition.find({
-      product: new mongoose.Types.ObjectId(productId),
-      isDeleted: false,
+      $or: [{ product: productObjectId }, { product: productId }],
+      isDeleted: { $ne: true },
     })
       .populate("ingredient", "_id name description image slug")
       .select("_id product ingredient quantity driPercentage")
@@ -2361,6 +2378,8 @@ class ProductService {
       .filter((id) => mongoose.Types.ObjectId.isValid(id))
       .map((id) => new mongoose.Types.ObjectId(id));
 
+    const productIdStrings = productIds.map((id) => id.toString());
+
     if (productIds.length === 0) {
       return products.map((product) => ({
         ...product,
@@ -2369,8 +2388,8 @@ class ProductService {
     }
 
     const compositions = await IngredientComposition.find({
-      product: { $in: productIds },
-      isDeleted: false,
+      $or: [{ product: { $in: productIds } }, { product: { $in: productIdStrings } }],
+      isDeleted: { $ne: true },
     })
       .populate("ingredient", "_id name description image slug")
       .select("_id product ingredient quantity driPercentage")

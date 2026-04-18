@@ -538,6 +538,70 @@ const specificationSchemaForUpdate = Joi.object({
     "object.base": "Specification must be an object",
   });
 
+/**
+ * Amount for an ingredient composition: plain number or string with leading numeric part
+ * (e.g. 100, "100", "100mg", "12.5 ml") — normalized to a number for the DB.
+ */
+const ingredientCompositionQuantitySchema = Joi.alternatives()
+  .try(
+    Joi.number().min(0),
+    Joi.string()
+      .trim()
+      .custom((value, helpers) => {
+        const match = String(value).match(/^(\d+(?:\.\d+)?)/);
+        if (!match) {
+          return helpers.error("any.custom", {
+            message:
+              "Quantity must be a non-negative number or a string that starts with one (e.g. 100 or 100mg)",
+          });
+        }
+        const n = parseFloat(match[1]);
+        if (Number.isNaN(n) || n < 0) {
+          return helpers.error("any.custom", {
+            message: "Quantity must be a non-negative number",
+          });
+        }
+        return n;
+      })
+  )
+  .required()
+  .messages({
+    "alternatives.types": "Quantity must be a number or a parseable string (e.g. 100mg)",
+    "number.base": "Quantity must be a number",
+    "number.min": "Quantity cannot be negative",
+    "any.required": "Quantity is required",
+  });
+
+/** Stored in `ingredient_compositions` collection — not on the product document */
+const ingredientCompositionsFieldSchema = Joi.array()
+  .items(
+    Joi.object({
+      ingredient: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/).messages({
+        "string.pattern.base": "Invalid ingredient ID format",
+        "any.required": "Ingredient ID is required",
+      }),
+      quantity: ingredientCompositionQuantitySchema,
+      driPercentage: Joi.alternatives()
+        .try(
+          Joi.number().min(0).messages({
+            "number.base": "DRI percentage must be a number",
+            "number.min": "DRI percentage cannot be negative",
+          }),
+          Joi.string().valid("*", "**").messages({
+            "any.only": "DRI percentage string must be '*' or '**'",
+          })
+        )
+        .required()
+        .messages({
+          "any.required": "DRI percentage is required",
+        }),
+    })
+  )
+  .optional()
+  .messages({
+    "array.base": "Ingredient compositions must be an array of composition objects",
+  });
+
 // Create product schema
 export const createProductSchema = Joi.object({
   title: titleSchema,
@@ -548,37 +612,7 @@ export const createProductSchema = Joi.object({
   galleryImages: galleryImagesSchema.optional(),
   benefits: benefitsSchema.optional(),
   ingredients: ingredientsSchema.optional(),
-  ingredientCompositions: Joi.array()
-    .items(
-      Joi.object({
-        ingredient: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/).messages({
-          "string.pattern.base": "Invalid ingredient ID format",
-          "any.required": "Ingredient ID is required",
-        }),
-        quantity: Joi.number().min(0).required().messages({
-          "number.base": "Quantity must be a number",
-          "number.min": "Quantity cannot be negative",
-          "any.required": "Quantity is required",
-        }),
-        driPercentage: Joi.alternatives()
-          .try(
-            Joi.number().min(0).messages({
-              "number.base": "DRI percentage must be a number",
-              "number.min": "DRI percentage cannot be negative",
-            }),
-            Joi.string().valid("*", "**").messages({
-              "any.only": "DRI percentage string must be '*' or '**'",
-            })
-          )
-          .required().messages({
-            "any.required": "DRI percentage is required",
-          }),
-      })
-    )
-    .optional()
-    .messages({
-      "array.base": "Ingredient compositions must be an array of composition objects",
-    }),
+  ingredientCompositions: ingredientCompositionsFieldSchema,
   categories: categoriesSchema,
   healthGoals: healthGoalsSchema,
   nutritionInfo: nutritionInfoSchema,
@@ -665,6 +699,7 @@ export const updateProductSchema = Joi.object({
   galleryImages: galleryImagesSchema.optional(),
   benefits: benefitsSchema.optional(),
   ingredients: ingredientsSchema.optional(),
+  ingredientCompositions: ingredientCompositionsFieldSchema,
   categories: categoriesSchema.optional(),
   healthGoals: healthGoalsSchema.optional(),
   nutritionInfo: nutritionInfoSchema.optional(),

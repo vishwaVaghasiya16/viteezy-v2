@@ -56,7 +56,7 @@ export class IngredientCompositionService {
    */
   static async getCompositionById(id: string): Promise<IIngredientComposition> {
     const composition = await IngredientComposition.findById(id)
-      .populate("product", "title slug")
+      .populate("product", "title description productImage")
       .populate("ingredient", "name scientificName")
       .where({ isDeleted: false });
 
@@ -93,7 +93,7 @@ export class IngredientCompositionService {
     }
 
     const compositions = await IngredientComposition.find(filter)
-      .populate("product", "title slug")
+      .populate("product", "title description productImage")
       .populate("ingredient", "name scientificName")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -181,7 +181,7 @@ export class IngredientCompositionService {
       },
       { new: true, runValidators: true }
     )
-      .populate("product", "title slug")
+      .populate("product", "title description productImage")
       .populate("ingredient", "name scientificName")
       .where({ isDeleted: false });
 
@@ -278,7 +278,7 @@ export class IngredientCompositionService {
           updatePayload,
           { new: true, runValidators: true }
         )
-          .populate("product", "title slug")
+          .populate("product", "title description productImage")
           .populate("ingredient", "name scientificName");
 
         results.push(updated!);
@@ -297,7 +297,7 @@ export class IngredientCompositionService {
         const created = await IngredientComposition.create(createPayload);
 
         const populated = await IngredientComposition.findById(created._id)
-          .populate("product", "title slug")
+          .populate("product", "title description productImage")
           .populate("ingredient", "name scientificName");
 
         results.push(populated!);
