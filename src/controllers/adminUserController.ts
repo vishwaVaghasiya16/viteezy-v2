@@ -137,28 +137,26 @@ class AdminUserController {
               registeredAt: 1,
               createdAt: 1,
               isActive: 1,
-              lastLogin: 1
-            }
+              lastLogin: 1,
+              parentId: 1,
+              mainMemberId: 1,   
+            },
           },
-          { $sort: { createdAt: -1 } }
+          { $sort: { createdAt: -1 as const } },
+          { $skip: skip },
+          { $limit: limitNum },
         ];
-
-        // Add pagination stages if needed
-        if (skip > 0) {
-          searchPipeline.push({ $skip: skip });
-        }
-        if (limitNum > 0) {
-          searchPipeline.push({ $limit: limitNum });
-        }
 
         allUsers = await User.aggregate(searchPipeline);
       } else {
         // Normal query without search
         allUsers = await User.find(baseQuery)
           .select(
-            "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin"
+            "_id firstName lastName email phone countryCode memberId registeredAt createdAt isActive lastLogin parentId mainMemberId"
           )
           .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
           .lean();
       }
 
@@ -180,47 +178,76 @@ class AdminUserController {
         },
       ]);
 
-      const orderCountMap = new Map(
-        orderCounts.map((item) => [item._id.toString(), item.orderCount])
+      const orderMap = new Map(
+        orderCounts.map((i) => [i._id.toString(), i.orderCount])
       );
 
-      // Enrich users with userType and apply userType filter
-      const enrichedUsers = allUsers
-        .map((user) => {
-          const orderCount = orderCountMap.get(user._id.toString()) || 0;
-          const isRecurring =
-            orderCount > 0 || (user.lastLogin && user.lastLogin !== null);
-          const finalUserType = isRecurring ? "Recurring User" : "New User";
+      // FAMILY LOGIC (ADDED ONLY)
 
-          // Use registeredAt if set, otherwise fallback to createdAt
-          const registrationDate = user.registeredAt || user.createdAt;
+      const mainMemberMap = new Map<string, number>();
+      const childToParentMap = new Map<string, string>();
 
-          return {
-            _id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phone: user.phone || null,
-            memberId: user.memberId || null,
-            countryCode: user.countryCode || null,
-            registeredAt: registrationDate,
-            status: {
-              userType: finalUserType, // "New User" or "Recurring User"
-              isActive: user.isActive, // true or false
-            },
-          };
-        })
-        .filter((user) => {
-          // Apply userType filter if specified
-          if (userType) {
-            return user.status.userType === userType;
-          }
-          return true;
-        });
+      // Build relationship map from users themselves
+      allUsers.forEach((u: any) => {
+        if (u.parentId) {
+          const parent = u.parentId.toString();
+          const child = u._id.toString();
 
-      // Apply pagination after filtering
-      const total = enrichedUsers.length;
-      const paginatedUsers = enrichedUsers.slice(skip, skip + limitNum);
+          mainMemberMap.set(parent, (mainMemberMap.get(parent) || 0) + 1);
+          childToParentMap.set(child, parent);
+        }
+      });
+
+      const enrichedUsers = allUsers.map((user: any) => {
+        const userId = user._id.toString();
+
+        let familyStatus: "independent" | "main" | "sub" = "independent";
+        let subMemberCount = 0;
+        let parentMemberId: string | null = null;
+
+        // SUB MEMBER
+        if (childToParentMap.has(userId)) {
+          familyStatus = "sub";
+          parentMemberId = childToParentMap.get(userId)!;
+        }
+
+        // MAIN MEMBER
+        else if (mainMemberMap.has(userId)) {
+          familyStatus = "main";
+          subMemberCount = mainMemberMap.get(userId)!;
+        }
+
+        const orderCount = orderMap.get(userId) || 0;
+        const isRecurring = orderCount > 0 || !!user.lastLogin;
+
+        return {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone || null,
+          memberId: user.memberId || null,
+          countryCode: user.countryCode || null,
+          registeredAt: user.registeredAt || user.createdAt,
+          family: {
+            familyStatus,
+            subMemberCount,
+            parentMemberId,
+          },
+
+          status: {
+            userType: isRecurring ? "Recurring User" : "New User",
+            isActive: user.isActive,
+          },
+        };
+      });
+
+      const filtered = userType
+        ? enrichedUsers.filter((u) => u.status.userType === userType)
+        : enrichedUsers;
+
+      const total = filtered.length;
+      const paginatedUsers = filtered.slice(skip, skip + limitNum);
 
       res.apiPaginated(
         paginatedUsers,
