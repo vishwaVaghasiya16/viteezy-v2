@@ -1006,7 +1006,7 @@ class CartService {
             (!coupon.validUntil || now <= coupon.validUntil);
 
           if (isValidDate) {
-            const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+            const orderAmount = totalsWithoutCoupon.subtotal; // Use subtotal as base for coupon validation
 
             if (
               !coupon.minOrderAmount ||
@@ -1284,7 +1284,7 @@ class CartService {
             (!coupon.validUntil || now <= coupon.validUntil);
 
           if (isValidDate) {
-            const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+            const orderAmount = totalsWithoutCoupon.subtotal; // Use subtotal as base for coupon validation
 
             if (
               !coupon.minOrderAmount ||
@@ -1429,7 +1429,7 @@ class CartService {
               (!coupon.validUntil || now <= coupon.validUntil);
 
             if (isValidDate) {
-              const orderAmount = totalsWithoutCoupon.discount; // Use discounted price as base
+              const orderAmount = totalsWithoutCoupon.subtotal; // Use subtotal as base for coupon validation
 
               if (
                 !coupon.minOrderAmount ||
