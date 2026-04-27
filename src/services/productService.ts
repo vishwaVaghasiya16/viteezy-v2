@@ -1824,7 +1824,7 @@ class ProductService {
       }
     }
 
-    // Handle ingredient compositions if provided
+    // Handle ingredient compositions - always update to keep only what's provided
     if (data.ingredientCompositions !== undefined) {
       logger.info(`[Update Product] Updating ingredient compositions for product ${productId}`);
       try {
@@ -1844,6 +1844,20 @@ class ProductService {
         logger.info(`[Update Product] Successfully updated ingredient compositions for product ${productId}`);
       } catch (error: any) {
         logger.error(`[Update Product] Failed to update ingredient compositions: ${error.message}`, error);
+        // Don't throw error, just log it - product update will continue
+      }
+    } else {
+      // If ingredientCompositions is not provided, clear all existing compositions
+      logger.info(`[Update Product] Clearing all ingredient compositions for product ${productId}`);
+      try {
+        await IngredientCompositionService.bulkUpdateCompositions(
+          productId,
+          [], // Empty array to clear all compositions
+          data.updatedBy?.toString()
+        );
+        logger.info(`[Update Product] Successfully cleared ingredient compositions for product ${productId}`);
+      } catch (error: any) {
+        logger.error(`[Update Product] Failed to clear ingredient compositions: ${error.message}`, error);
         // Don't throw error, just log it - product update will continue
       }
     }
