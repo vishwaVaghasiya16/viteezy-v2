@@ -1061,6 +1061,7 @@ class CartService {
       } : {
         items: updatedItems,
         linkedSubscriptionId: cart.linkedSubscriptionId,
+        couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date()
       },
       { new: true }
@@ -1338,6 +1339,7 @@ class CartService {
       } : {
         items: updatedItems,
         linkedSubscriptionId: cart.linkedSubscriptionId,
+        couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date(),
       },
       { new: true }
@@ -1484,6 +1486,7 @@ class CartService {
       } : {
         items: updatedItems,
         linkedSubscriptionId: cart.linkedSubscriptionId,
+        couponDiscountAmount: couponDiscountAmount,
         updatedAt: new Date(),
       },
       { new: true }
