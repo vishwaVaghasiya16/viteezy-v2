@@ -965,6 +965,7 @@ class CheckoutService {
 
     // Additional validation: recurringMonths for subscription sachet plans
     // If coupon has recurringMonths configured, it should only apply to matching subscription plan durations
+    // However, if cart has mixed items (SACHETS + STAND_UP_POUCH), allow coupon to apply to entire cart
     if (
       isSubscription &&
       variantType === ProductVariant.SACHETS &&
@@ -997,10 +998,32 @@ class CheckoutService {
         }
       }
 
+      // Check if the plan duration is allowed
+      // Note: For mixed carts (SACHETS + STAND_UP_POUCH), we should be more lenient
+      // since the coupon can apply to the entire cart, not just SACHETS
       if (!allowedDurations.has(planDurationDays)) {
-        throw new AppError(
-          "This coupon is not applicable to the selected subscription plan",
-          400,
+        // Only throw error if cart ONLY contains SACHETS
+        // If cart has mixed items, allow the coupon to apply
+        const cart = await Carts.findOne({
+          userId: new mongoose.Types.ObjectId(userId),
+          isDeleted: false,
+          cartType: "NORMAL",
+        }).lean();
+
+        const hasOnlySachets = cart?.items?.every(
+          (item: any) => item.variantType === ProductVariant.SACHETS
+        );
+
+        if (hasOnlySachets) {
+          throw new AppError(
+            "This coupon is not applicable to the selected subscription plan",
+            400,
+          );
+        }
+        
+        // For mixed carts, log a warning but allow the coupon
+        logger.warn(
+          `Coupon ${couponCode} recurringMonths validation skipped for mixed cart (SACHETS + STAND_UP_POUCH)`
         );
       }
     }
