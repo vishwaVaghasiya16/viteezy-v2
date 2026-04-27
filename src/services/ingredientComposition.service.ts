@@ -256,6 +256,17 @@ export class IngredientCompositionService {
         ? new mongoose.Types.ObjectId(userId)
         : null;
 
+    // First, soft-delete all existing compositions for this product
+    await IngredientComposition.updateMany(
+      { product: new mongoose.Types.ObjectId(productId) },
+      { 
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: userObjectId
+      }
+    );
+
+    // Then, create/update only the compositions provided in the request
     for (const comp of compositions) {
       const { ingredient, quantity, driPercentage } = comp;
       const quantityStored = String(quantity ?? "").trim();
@@ -272,17 +283,18 @@ export class IngredientCompositionService {
       // Validate DRI percentage
       this.validateDriPercentage(driPercentage);
 
-      // Check if composition exists
+      // Check if composition exists (including soft-deleted ones)
       const existingComposition = await IngredientComposition.findOne({
         product: new mongoose.Types.ObjectId(productId),
         ingredient: new mongoose.Types.ObjectId(ingredient),
       });
 
       if (existingComposition) {
+        // Update existing composition (revive if it was soft-deleted)
         const updatePayload: Record<string, any> = {
           quantity: quantityStored,
           driPercentage,
-          // Revive soft-deleted composition instead of creating duplicate
+          // Revive soft-deleted composition
           isDeleted: false,
           deletedAt: null,
           deletedBy: null,
@@ -291,7 +303,6 @@ export class IngredientCompositionService {
           updatePayload.updatedBy = userObjectId;
         }
 
-        // Update existing
         const updated = await IngredientComposition.findByIdAndUpdate(
           existingComposition._id,
           updatePayload,
@@ -302,6 +313,7 @@ export class IngredientCompositionService {
 
         results.push(updated!);
       } else {
+        // Create new composition
         const createPayload: Record<string, any> = {
           product: new mongoose.Types.ObjectId(productId),
           ingredient: new mongoose.Types.ObjectId(ingredient),
@@ -312,7 +324,6 @@ export class IngredientCompositionService {
           createPayload.createdBy = userObjectId;
         }
 
-        // Create new
         const created = await IngredientComposition.create(createPayload);
 
         const populated = await IngredientComposition.findById(created._id)

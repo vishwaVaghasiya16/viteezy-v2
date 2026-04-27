@@ -1688,6 +1688,11 @@ class ProductService {
       updateData.standupPouchImages = [];
     }
 
+    // Handle galleryImages: if not provided in update, clear it
+    if (!("galleryImages" in data)) {
+      updateData.galleryImages = [];
+    }
+
     // Merge specification with existing so partial update does not wipe other fields
     if ((data as any).specification !== undefined) {
       // Ensure we always work with plain JS objects (no Mongoose subdocument metadata)
