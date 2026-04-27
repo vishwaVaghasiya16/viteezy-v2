@@ -5,7 +5,6 @@
  * @author Viteezy Development Team
  * @version 2.0.0
  */
-// Module aliases: loaded by the run script, not here, so dev uses src and prod uses dist.
 // - npm run dev:node uses ts-node -r tsconfig-paths/register → @/* resolves to src/*
 // - npm start uses node -r module-alias/register → @/* resolves to dist/*
 // Do NOT import "module-alias/register" here or dev will resolve to dist and ignore source changes.

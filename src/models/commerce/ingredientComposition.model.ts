@@ -4,7 +4,7 @@ import { AuditSchema, SoftDelete } from "../common.model";
 export interface IIngredientComposition extends Document {
   product: mongoose.Types.ObjectId;
   ingredient: mongoose.Types.ObjectId;
-  quantity: number;
+  quantity: string;
   driPercentage: number | string; // Can be numeric, "*", or "**"
   isDeleted?: boolean;
   deletedAt?: Date;
@@ -28,9 +28,9 @@ const IngredientCompositionSchema = new Schema<IIngredientComposition>(
       required: true,
     },
     quantity: {
-      type: Number,
+      type: String,
       required: true,
-      min: 0,
+      trim: true,
     },
     driPercentage: {
       type: Schema.Types.Mixed, // Can be number or string ("*" or "**")

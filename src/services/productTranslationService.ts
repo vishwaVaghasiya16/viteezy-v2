@@ -467,6 +467,7 @@ export async function translateProduct(
       categories: translatedCategories,
       faqs: translatedFaqs,
       productIngredientDetails: translatedProductIngredientDetails,
+      ingredientCompositions: product.ingredientCompositions,
       comparisonSection: translatedComparisonSection,
       specification: translatedSpecification,
       sachetPrices: translatedSachetPrices,

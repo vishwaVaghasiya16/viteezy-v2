@@ -9,13 +9,14 @@ class Settings(BaseSettings):
     port: int = 8000
 
     mongo_uri: str = Field(..., alias="MONGODB_URI")
-    mongo_db: str = Field("viteezy-phase-2-staging", alias="MONGODB_DB")
+    mongo_db: str = Field("new_viteezy_staging", alias="MONGODB_DB")
     mongo_sessions_collection: str = "ai_conversations"
     mongo_quiz_sessions_collection: str = "quiz_sessions"
     mongo_products_collection: str = Field("products", alias="MONGO_PRODUCTS_COLLECTION")
 
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
     openai_model: str = "gpt-4o-mini"
+    openai_fallback_model: str | None = Field(default="gpt-4.1", alias="OPENAI_FALLBACK_MODEL")
     openai_temperature: float = 0.7
     openai_max_tokens: int = 600
     max_history_turns: int = 8

@@ -33,7 +33,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.934.0",
     "@mollie/api-client": "^4.3.3",
-    "@sendgrid/mail": "^8.1.6",
     "@types/markdown-it": "^14.1.2",
     "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",

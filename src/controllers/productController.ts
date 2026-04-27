@@ -134,7 +134,7 @@ const transformProductForLanguage = (
   // Map ingredient composition values by ingredientId so they can be merged into ingredients.
   const compositionByIngredientId = new Map<
     string,
-    { quantity?: number; driPercentage?: number | string }
+    { quantity?: number | string; driPercentage?: number | string }
   >();
   if (
     Array.isArray(product.ingredientCompositions) &&
@@ -152,6 +152,29 @@ const transformProductForLanguage = (
       });
     });
   }
+
+  const transformedIngredientCompositions = Array.isArray(
+    product.ingredientCompositions
+  )
+    ? product.ingredientCompositions.map((composition: any) => {
+        const ingredient = composition?.ingredient;
+        const ingredientPayload =
+          ingredient && typeof ingredient === "object" && ingredient._id
+            ? {
+                _id: ingredient._id,
+                slug: ingredient.slug,
+                name: getTranslatedString(ingredient.name, lang),
+                description: getTranslatedText(ingredient.description, lang),
+                image: ingredient.image || null,
+              }
+            : ingredient;
+
+        return {
+          ...composition,
+          ingredient: ingredientPayload,
+        };
+      })
+    : [];
 
   return {
     ...productWithoutVariants,
@@ -223,6 +246,7 @@ const transformProductForLanguage = (
         answer: getTranslatedText(faq.answer, lang),
         sortOrder: faq.sortOrder || 0,
       })) || [],
+    ingredientCompositions: transformedIngredientCompositions,
   };
 };
 
