@@ -1683,6 +1683,11 @@ class ProductService {
       }
     });
 
+    // Handle standupPouchImages: if not provided in update, clear it
+    if (!("standupPouchImages" in data)) {
+      updateData.standupPouchImages = [];
+    }
+
     // Merge specification with existing so partial update does not wipe other fields
     if ((data as any).specification !== undefined) {
       // Ensure we always work with plain JS objects (no Mongoose subdocument metadata)
