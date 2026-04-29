@@ -316,16 +316,22 @@ class AdminOrderController {
         filter.createdAt = { $gte: from, $lte: to };
       }
 
-      if (minTotal || maxTotal) {
-        filter["pricing.overall.grandTotal"] = {};
+      if (minTotal !== undefined && minTotal !== "" || maxTotal !== undefined && maxTotal !== "") {
+        const conditions: any[] = [];
 
-        if (minTotal) {
-          filter["pricing.overall.grandTotal"].$gte = Number(minTotal);
+        if (minTotal !== undefined && minTotal !== "") {
+          conditions.push({
+            $gte: [{ $sum: "$items.totalAmount" }, Number(minTotal)]
+          });
         }
 
-        if (maxTotal) {
-          filter["pricing.overall.grandTotal"].$lte = Number(maxTotal);
+        if (maxTotal !== undefined && maxTotal !== "") {
+          conditions.push({
+            $lte: [{ $sum: "$items.totalAmount" }, Number(maxTotal)]
+          });
         }
+
+        filter.$expr = { $and: conditions };
       }
 
       if (productName) {
@@ -364,7 +370,7 @@ class AdminOrderController {
 
       // Filter by date range
       if (startDate || endDate) {
-        filter.createdAt = {};
+        if (!filter.createdAt) filter.createdAt = {};
         if (startDate) {
           const fromDate = new Date(startDate);
           fromDate.setHours(0, 0, 0, 0);

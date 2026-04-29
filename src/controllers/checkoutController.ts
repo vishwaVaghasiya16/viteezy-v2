@@ -1011,7 +1011,7 @@ class CheckoutController {
           itemQuantities: standupPouchItems.map((item: any) => ({
             productId: item.productId.toString(),
             quantity: item.quantity || 1,
-            planDays: item.planDays || 30, // Default to 30 if not set in cart
+            planDays: item.planDays || 60 , // Default to 30 if not set in cart
           })),
         };
       }
