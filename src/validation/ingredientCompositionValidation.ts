@@ -1,17 +1,5 @@
 import Joi from "joi";
 
-const compositionQuantityJoi = Joi.alternatives()
-  .try(Joi.string().trim().min(1), Joi.number().custom((n) => String(n)))
-  .required()
-  .messages({
-    "string.empty": "Quantity cannot be empty",
-    "any.required": "Quantity is required",
-  });
-
-const compositionQuantityJoiOptional = Joi.alternatives()
-  .try(Joi.string().trim().min(1), Joi.number().custom((n) => String(n)))
-  .optional();
-
 // Base validation schema for ingredient composition
 const baseCompositionSchema = {
   product: Joi.string().required().pattern(/^[0-9a-fA-F]{24}$/).messages({
@@ -22,7 +10,11 @@ const baseCompositionSchema = {
     "string.pattern.base": "Invalid ingredient ID format",
     "any.required": "Ingredient ID is required",
   }),
-  quantity: compositionQuantityJoi,
+  quantity: Joi.number().required().min(0).messages({
+    "number.base": "Quantity must be a number",
+    "number.min": "Quantity cannot be negative",
+    "any.required": "Quantity is required",
+  }),
   driPercentage: Joi.alternatives().try(
     Joi.number().min(0).messages({
       "number.base": "DRI percentage must be a number",
@@ -49,7 +41,10 @@ export const updateCompositionSchema = Joi.object({
   ingredient: Joi.string().optional().pattern(/^[0-9a-fA-F]{24}$/).messages({
     "string.pattern.base": "Invalid ingredient ID format",
   }),
-  quantity: compositionQuantityJoiOptional,
+  quantity: Joi.number().optional().min(0).messages({
+    "number.base": "Quantity must be a number",
+    "number.min": "Quantity cannot be negative",
+  }),
   driPercentage: Joi.alternatives().try(
     Joi.number().min(0).messages({
       "number.base": "DRI percentage must be a number",
@@ -69,7 +64,11 @@ export const bulkUpdateCompositionsSchema = Joi.object({
         "string.pattern.base": "Invalid ingredient ID format",
         "any.required": "Ingredient ID is required",
       }),
-      quantity: compositionQuantityJoi,
+      quantity: Joi.number().required().min(0).messages({
+        "number.base": "Quantity must be a number",
+        "number.min": "Quantity cannot be negative",
+        "any.required": "Quantity is required",
+      }),
       driPercentage: Joi.alternatives().try(
         Joi.number().min(0).messages({
           "number.base": "DRI percentage must be a number",

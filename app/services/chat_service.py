@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from typing import Any
@@ -73,8 +73,8 @@ class ChatService:
         "new_product_request": "Are there any new products you would like us to add? (yes/no)",
         "new_product_request_details": "What products would you like us to add?",
         "previous_concern_followup": "Sorry to hear you are facing the same concern again..Are you feeling better after intaking the product recommended?",
-        "medical_treatment": "I'm on your side, tell me a bit more so I can help you better: Are you currently undergoing any medical treatment? (yes/no)",
-        "medical_treatment_details": "What medical treatment are you currently undergoing? Please brief it.",
+        "medical_treatment": "Are you currently undergoing any medical treatment? (yes/no)",
+        "medical_treatment_details": "Please explain in detail about the ongoing medical treatment.",
         "pre_recommendation_notes": "Is there anything you would like to share before product recommendation to us apart from the details asked in the quiz?",
     }
     CONCERN_SYNONYMS = {
@@ -1396,7 +1396,7 @@ class ChatService:
 
         # For returning users who select "me", skip name, email, gender, knowledge, vitamin_count
         # and go directly to protein (after age)
-        if has_previous_sessions and (responses.get("for_whom") or "") in {"me", "self"}:
+        if has_previous_sessions and (responses.get("for_whom") or "") == "me":
             # Skip directly to protein question (age already added above)
             steps.append("protein")
         else:
@@ -2713,225 +2713,124 @@ class ChatService:
         previous_concern_resolved: bool | None = None, previous_concerns: list[str] | None = None,
         previous_products: list[str] | None = None
     ) -> str:
-        """Format product recommendations in a concise doctor-style structure."""
+        """
+        Format product recommendations with clear explanations of why each product is suggested.
+        Includes product name, detailed explanation based on user concerns and context, and context-aware safety warnings.
+        
+        Args:
+            products: List of recommended products
+            context: User context and responses
+            product_documents: Raw product documents from MongoDB
+            previous_concern_resolved: Whether previous concerns were resolved (None if not asked)
+            previous_concerns: List of previous concerns that were repeated
+        """
         if not products:
             return "No products found matching your profile."
-
-        # Primary path: OpenAI-generated doctor-style recommendation narrative.
-        # Fallback: local backend formatter below if OpenAI is unavailable/fails.
-        try:
-            return await self._format_product_recommendations_with_openai(
-                products=products,
-                context=context,
-                product_documents=product_documents,
-            )
-        except Exception as e:
-            logger.warning("OpenAI recommendation formatting failed, using local fallback: %s", e)
-
+        
+        # Get user context for explanations
         concerns = self._normalize_concerns(context.get("concern", []))
         concern_details = context.get("concern_details", {})
         medical_treatment = (context.get("medical_treatment") or "").lower() == "yes"
         medical_conditions = (context.get("medical_conditions") or "").lower() == "yes"
-
-        intro_parts: list[str] = []
+        
+        # Build recommendation text
+        recommendations = []
+        
+        # Add medical treatment disclaimer at the start if applicable
+        intro_text = ""
         if medical_treatment:
-            intro_parts.append(
-                "Medical advisory: You are currently undergoing medical treatment. "
-                "Please consult your healthcare provider before starting supplements."
+            intro_text = (
+                "IMPORTANT: Since you mentioned you're currently undergoing medical treatment, "
+                "please consult with your healthcare provider before starting any new supplements. "
+                "The following recommendations are based on your profile, but medical guidance is essential.\n\n"
             )
+        
         if medical_conditions:
-            intro_parts.append(
-                "Medical advisory: You reported existing medical conditions. "
-                "Please use these recommendations only with clinician guidance."
+            medical_conditions_note = (
+                "IMPORTANT: Since you mentioned having medical conditions, "
+                "please consult with your healthcare provider before starting any new supplements. "
+                "I'll take this into account while recommending products.\n\n"
             )
-
+            intro_text = medical_conditions_note + intro_text if intro_text else medical_conditions_note
+        
+        # Add caution if previous_concern_followup was answered (user facing same concern again)
         previous_concern_followup_response = context.get("previous_concern_followup")
-        if previous_concern_followup_response and concerns:
-            major_concern_key = concerns[0]
-            concern_info = self.CONCERN_QUESTIONS.get(major_concern_key, {})
-            major_concern_label = concern_info.get("label", major_concern_key.replace("_", " ").title()).lower()
-            intro_parts.append(
-                f"Clinical note: Your {major_concern_label} concern appears persistent. "
-                "A clinician review is recommended for a proper treatment plan."
+        if previous_concern_followup_response:
+            # Get major concern label for the warning
+            major_concern_label = ""
+            if concerns:
+                major_concern_key = concerns[0]
+                concern_info = self.CONCERN_QUESTIONS.get(major_concern_key, {})
+                major_concern_label = concern_info.get("label", major_concern_key.replace("_", " ").title())
+            
+            caution_message = (
+                f"\n\n⚠️ IMPORTANT: Since you are facing the same concern ({major_concern_label.lower()}) again, "
+                f"please consult with a healthcare provider or doctor before starting any new supplements. "
+                f"While I'm recommending products below, persistent or recurring health concerns may require professional medical evaluation. "
+                f"Your health and wellbeing are important - please seek medical advice to ensure the best care.\n\n"
             )
-
+            intro_text = caution_message + intro_text if intro_text else caution_message
+        
+        # Add strong doctor recommendation if previous concerns were not resolved
         if previous_concern_resolved is False and previous_concerns:
             concerns_text = ", ".join([c.replace("_", " ").title() for c in previous_concerns])
-            intro_parts.append(
-                f"Strong advisory: Earlier recommendations did not resolve {concerns_text}. "
-                "Please schedule a medical consultation."
+            doctor_warning = (
+                f"\n\n⚠️ STRONG MEDICAL ADVISORY: Since you mentioned that having taken the previous recommended products, "
+                f"your concerns about {concerns_text} have not been resolved, I STRONGLY recommend that you visit a healthcare provider "
+                f"or doctor for a proper medical evaluation. Persistent health issues may require professional medical attention "
+                f"beyond what supplements can address. Please consult with a healthcare professional before continuing with any new supplements.\n\n"
             )
-
-        summary_text = self._build_problem_summary(concerns, concern_details, context, len(products))
-        if summary_text:
-            intro_parts.append(summary_text)
-
-        intro_text = "\n\n".join([part for part in intro_parts if part]).strip()
-        if intro_text:
-            intro_text += "\n\n"
-
+            intro_text = doctor_warning + intro_text if intro_text else doctor_warning
+        
+        # Add brief problem summary (2-3 lines) based on user's concerns and answers
+        # Pass actual product count to make summary dynamic
+        actual_product_count = len(products)
+        problem_summary = self._build_problem_summary(concerns, concern_details, context, actual_product_count)
+        if problem_summary:
+            intro_text += problem_summary + "\n\n"
+        
         previous_products_set = set((previous_products or []))
-        recommendations = []
-        for idx, product in enumerate(products[:3], start=1):
+        
+        # Use all products (up to 3 max) - don't force exactly 3
+        for product in products[:3]:  # Max 3, but can be fewer
             product_name = product.title
             is_previous_product = product_name in previous_products_set
-
-            explanation = self._build_clinical_product_explanation(product, concerns)
-            product_text = f"{idx}. {product_name}\nWhy it was recommended: {explanation}"
-            if product.how_to_use:
-                product_text += f"\nHow to take: {product.how_to_use}"
-
+            
+            # Build detailed explanation based on user context
+            # Pass None for product_json since MongoDB products don't have the same structure
+            explanation = self._build_product_explanation(product, None, concerns, concern_details, context)
+            
+            # Get the full MongoDB product document for safety analysis
             product_doc = {}
             if product_documents and product_name in product_documents:
                 product_doc = product_documents[product_name]
             else:
+                # Fallback: try to fetch if not provided
                 product_doc = await self._get_product_document_by_title(product_name)
-
+            
+            # Get context-aware safety warnings with auto-detection
             warnings = self.product_service.get_safety_warnings(product_doc, context)
+            
+            # Format product recommendation
+            product_text = f"{product_name}\n{explanation}"
+            
+            # Add warnings if any
             if warnings:
-                generic_medical_note = (
-                    "Please consult with your healthcare provider before starting any new supplements, "
-                    "especially if you're currently undergoing medical treatment."
-                )
-                filtered_warnings = [w for w in warnings if w != generic_medical_note]
-                if filtered_warnings:
-                    product_text += "\n" + "\n".join([f"Safety note: {w}" for w in filtered_warnings])
-
+                product_text += "\n" + "\n".join([f"Note: {w}" for w in warnings])
+            
+            # Add caution note if this is a previously recommended product that didn't resolve the issue
             if is_previous_product and previous_concern_resolved is False:
-                product_text += (
-                    "\nCaution: This was previously recommended but your concern is still ongoing. "
-                    "Please consult a healthcare provider before continuing."
-                )
-
+                product_text += "\n⚠️ CAUTION: This product was previously recommended but the issue persists. Please consult with a healthcare provider before continuing."
+            
+            # Add extra medical disclaimer for each product if user is under medical treatment
+            if medical_treatment:
+                product_text += "\n⚠️ Medical Advisory: Please consult with your healthcare provider before starting this supplement."
+            
             recommendations.append(product_text)
-
+        
+        # Join all recommendations with intro text
         return intro_text + "\n\n".join(recommendations)
-
-    async def _format_product_recommendations_with_openai(
-        self,
-        products: list,
-        context: dict,
-        product_documents: dict[str, dict] | None = None,
-    ) -> str:
-        """Use OpenAI to generate a doctor-style recommendation message from structured product/context data."""
-        concerns = self._normalize_concerns(context.get("concern", []))
-        concern_labels = [
-            self.CONCERN_QUESTIONS.get(c, {}).get("label", c.replace("_", " ").title())
-            for c in concerns
-        ]
-
-        product_payload = []
-        for product in products[:3]:
-            product_doc = {}
-            if product_documents and product.title in product_documents:
-                product_doc = product_documents[product.title]
-            else:
-                product_doc = await self._get_product_document_by_title(product.title)
-
-            warnings = self.product_service.get_safety_warnings(product_doc, context)
-            product_payload.append(
-                {
-                    "title": product.title,
-                    "short_description": product.short_description or "",
-                    "benefits": [str(b) for b in (product.benefits or [])],
-                    "health_goals": [str(g) for g in (product.health_goals or [])],
-                    "how_to_use": product.how_to_use or "",
-                    "safety_warnings": warnings,
-                }
-            )
-
-        system_prompt = (
-            "You are a clinical wellness advisor writing concise, doctor-style supplement recommendations. "
-            "Use only the provided concerns, context, and products. Do not invent products, ingredients, dosages, "
-            "or medical claims. Keep tone professional, clear, and non-repetitive. "
-            "Add a clear note that this is supportive wellness guidance, not a diagnosis. "
-            "Return plain text only. Do not use markdown, headers, bold markers, bullets, or code fences."
-        )
-
-        user_prompt = (
-            "Generate a recommendation message in plain text using this structure:\n"
-            "1) A short concern summary paragraph.\n"
-            "2) A short paragraph explaining these are supportive wellness recommendations, not a diagnosis.\n"
-            "3) For each product (use the exact given order and exact names):\n"
-            "   <index>. <Product Name>\n"
-            "   Why recommended: <concern-linked reason based ONLY on provided data>\n"
-            "   How to take: <use provided how_to_use; if missing, say follow label instructions>\n"
-            "4) Additional Advice with 3-5 concise lifestyle points tailored to concerns.\n"
-            "5) Final safety line advising to consult doctor if symptoms persist/worsen.\n\n"
-            f"User concerns: {concern_labels}\n"
-            f"User context: {context}\n"
-            f"Products: {product_payload}\n"
-        )
-
-        reply_text, _usage_info = await self.ai_service.generate_reply(
-            system_prompt=system_prompt,
-            history=[],
-            user_message=user_prompt,
-            context=None,
-            products=None,
-        )
-
-        if not reply_text or not reply_text.strip():
-            raise ValueError("Empty recommendation response from OpenAI")
-        return self._sanitize_recommendation_text(reply_text)
-
-    def _sanitize_recommendation_text(self, text: str) -> str:
-        """Normalize model output to plain text by removing markdown wrappers/syntax."""
-        cleaned = (text or "").strip()
-        if not cleaned:
-            return ""
-
-        # Remove fenced code wrappers like ```markdown ... ```
-        cleaned = re.sub(r"^\s*```[a-zA-Z0-9_-]*\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```\s*$", "", cleaned)
-
-        # Light markdown cleanup in case model ignores plain-text instruction.
-        cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
-        cleaned = cleaned.replace("**", "")
-        cleaned = cleaned.replace("__", "")
-        cleaned = re.sub(r"^\s*[-*]\s+", "", cleaned, flags=re.MULTILINE)
-
-        return cleaned.strip()
-
-    def _build_clinical_product_explanation(self, product, concerns: list[str]) -> str:
-        """Build a clean and non-repetitive clinical reason for recommendation."""
-        concern_labels = []
-        for concern in concerns:
-            label = self.CONCERN_QUESTIONS.get(concern, {}).get("label", concern.replace("_", " ").title())
-            concern_labels.append(label.lower())
-
-        concern_text = ""
-        if len(concern_labels) == 1:
-            concern_text = concern_labels[0]
-        elif len(concern_labels) > 1:
-            concern_text = ", ".join(concern_labels[:-1]) + f" and {concern_labels[-1]}"
-
-        benefits = [str(b).strip() for b in (product.benefits or []) if str(b).strip()]
-        primary_benefit = benefits[0].rstrip(".") if benefits else ""
-        short_desc = (product.short_description or "").strip().rstrip(".")
-        health_goals = [str(g).strip() for g in (product.health_goals or []) if str(g).strip()]
-
-        if concern_text and primary_benefit:
-            return (
-                f"You reported {concern_text} concerns. "
-                f"The key expected benefit is: {primary_benefit}."
-            )
-        if concern_text and short_desc:
-            return (
-                f"You reported {concern_text} concerns. "
-                f"This product was selected based on its profile: {short_desc}."
-            )
-        if concern_text and health_goals:
-            goals_text = ", ".join(health_goals[:2])
-            return (
-                f"You reported {concern_text} concerns. "
-                f"This product aligns with these support goals: {goals_text}."
-            )
-        if primary_benefit:
-            return f"This product was selected for its primary benefit: {primary_benefit}."
-        if short_desc:
-            return f"This product was selected based on its profile: {short_desc}."
-        return "This product was selected because it best matched your concern profile."
+    
     def _build_product_explanation(
         self, product, product_json: dict | None, concerns: list[str], 
         concern_details: dict, context: dict

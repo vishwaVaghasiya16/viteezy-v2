@@ -133,7 +133,6 @@ class ProductService:
             filtered_products = []
             exclude_titles = set((exclude_product_titles or []))
             include_titles = set((include_product_titles or [])) if include_product_titles else None
-            selected_titles: set[str] = set()
             
             for score, product in scored_products:
                 # Only include products with minimum confidence score
@@ -152,32 +151,12 @@ class ProductService:
                         continue
                 
                 # Exclude previous products if specified
-                if product_title in exclude_titles or product_title in selected_titles:
+                if product_title in exclude_titles:
                     continue
                 
                 if self._is_safe_and_suitable(product, context):
                     filtered_products.append(product_obj)
-                    selected_titles.add(product_title)
                     # Stop at 3 products max, but don't force exactly 3
-                    if len(filtered_products) >= 3:
-                        break
-
-            # Ensure we return at least 3 products when possible by relaxing confidence threshold.
-            # Products are still constrained to search results + safety/suitability checks.
-            if len(filtered_products) < 3:
-                for _score, product in scored_products:
-                    product_obj = self._mongo_to_product(product)
-                    product_title = product_obj.title
-
-                    if include_titles is not None and product_title not in include_titles:
-                        continue
-                    if product_title in exclude_titles or product_title in selected_titles:
-                        continue
-                    if not self._is_safe_and_suitable(product, context):
-                        continue
-
-                    filtered_products.append(product_obj)
-                    selected_titles.add(product_title)
                     if len(filtered_products) >= 3:
                         break
 
@@ -241,54 +220,6 @@ class ProductService:
     def _extract_terms(message: str) -> list[str]:
         """Extract alphanumeric words with length >=3 from message."""
         return [term.lower() for term in re.findall(r"[a-zA-Z]{3,}", message.lower())]
-
-    @staticmethod
-    def _extract_localized_text(value: Any, fallback: str = "") -> str:
-        """
-        Extract displayable text from either:
-        - plain string
-        - localized object: {"en": "...", "nl": "..."}
-        Falls back to the first non-empty localized value when "en" is missing.
-        """
-        if isinstance(value, str):
-            return value
-
-        if isinstance(value, dict):
-            en_val = value.get("en")
-            if isinstance(en_val, str) and en_val.strip():
-                return en_val
-
-            for v in value.values():
-                if isinstance(v, str) and v.strip():
-                    return v
-
-        return fallback
-
-    @classmethod
-    def _extract_localized_list(cls, values: Any) -> list[str]:
-        """
-        Normalize arrays that may contain strings and/or localized objects.
-        """
-        if not isinstance(values, list):
-            return []
-
-        normalized: list[str] = []
-        for item in values:
-            if isinstance(item, str):
-                if item.strip():
-                    normalized.append(item)
-                continue
-
-            if isinstance(item, dict):
-                text = cls._extract_localized_text(item, "")
-                if text:
-                    normalized.append(text)
-                continue
-
-            if item is not None:
-                normalized.append(str(item))
-
-        return normalized
 
     def _concerns_to_health_goals(self, concerns: list[str]) -> list[str]:
         """Map user concerns to health goals for MongoDB search."""
@@ -376,28 +307,34 @@ class ProductService:
         text_parts = []
         
         # Handle multilingual title (prefer English, fallback to first available)
-        title_val = self._extract_localized_text(product.get("title", {}), "")
-        if title_val:
-            text_parts.append(title_val)
+        title = product.get("title", {})
+        if isinstance(title, dict):
+            title_val = title.get("en", title.get(list(title.keys())[0] if title else "", ""))
+            if title_val:
+                text_parts.append(str(title_val))
+        elif isinstance(title, str):
+            text_parts.append(title)
         
         # Handle multilingual description (prefer English, fallback to first available)
-        desc_val = self._extract_localized_text(product.get("description", {}), "")
-        if desc_val:
-            text_parts.append(desc_val)
+        description = product.get("description", {})
+        if isinstance(description, dict):
+            desc_val = description.get("en", description.get(list(description.keys())[0] if description else "", ""))
+            if desc_val:
+                text_parts.append(str(desc_val))
+        elif isinstance(description, str):
+            text_parts.append(description)
         
         # Add short description
         if product.get("shortDescription"):
-            short_desc = self._extract_localized_text(product["shortDescription"], str(product["shortDescription"]))
-            if short_desc:
-                text_parts.append(short_desc)
+            text_parts.append(str(product["shortDescription"]))
         
-        # Add benefits
+        # Add benefits (convert all items to strings to handle ObjectIds and other types)
         if product.get("benefits"):
-            text_parts.extend(self._extract_localized_list(product["benefits"]))
+            text_parts.extend([str(b) for b in product["benefits"]])
         
-        # Add health goals
+        # Add health goals (convert all items to strings to handle ObjectIds and other types)
         if product.get("healthGoals"):
-            text_parts.extend(self._extract_localized_list(product["healthGoals"]))
+            text_parts.extend([str(g) for g in product["healthGoals"]])
         
         # Add ingredients (convert all items to strings to handle ObjectIds and other types)
         if product.get("ingredients"):
@@ -632,27 +569,50 @@ class ProductService:
 
     def _mongo_to_product(self, product: dict[str, Any]) -> Product:
         """Convert MongoDB product document to Product schema."""
-        # Handle multilingual/object/string fields consistently
-        title = self._extract_localized_text(product.get("title", {}), "Unknown Product")
+        # Handle multilingual title (prefer English, fallback to first available)
+        title_obj = product.get("title", {})
+        if isinstance(title_obj, dict):
+            title = title_obj.get("en", title_obj.get(list(title_obj.keys())[0] if title_obj else "", "Unknown Product"))
+        elif isinstance(title_obj, str):
+            title = title_obj
+        else:
+            title = "Unknown Product"
         
-        description = self._extract_localized_text(product.get("description", {}), "")
+        # Handle multilingual description
+        description_obj = product.get("description", {})
+        if isinstance(description_obj, dict):
+            description = description_obj.get("en", description_obj.get(list(description_obj.keys())[0] if description_obj else "", ""))
+        elif isinstance(description_obj, str):
+            description = description_obj
+        else:
+            description = ""
         
         # Get short description
-        short_description = self._extract_localized_text(product.get("shortDescription", ""), "")
+        short_description = product.get("shortDescription", "")
         if not short_description and description:
             short_description = description[:150] + "..." if len(description) > 150 else description
         
         # Get benefits
-        benefits = self._extract_localized_list(product.get("benefits", []))
+        benefits = product.get("benefits", [])
         
         # Get health goals (already in MongoDB)
-        health_goals = self._extract_localized_list(product.get("healthGoals", []))
+        health_goals = product.get("healthGoals", [])
         
         # Handle multilingual nutrition info
-        nutrition_info = self._extract_localized_text(product.get("nutritionInfo", {}), "")
+        nutrition_info_obj = product.get("nutritionInfo", {})
+        nutrition_info = ""
+        if isinstance(nutrition_info_obj, dict):
+            nutrition_info = nutrition_info_obj.get("en", nutrition_info_obj.get(list(nutrition_info_obj.keys())[0] if nutrition_info_obj else "", ""))
+        elif isinstance(nutrition_info_obj, str):
+            nutrition_info = nutrition_info_obj
         
         # Handle multilingual howToUse
-        how_to_use = self._extract_localized_text(product.get("howToUse", {}), "")
+        how_to_use_obj = product.get("howToUse", {})
+        how_to_use = ""
+        if isinstance(how_to_use_obj, dict):
+            how_to_use = how_to_use_obj.get("en", how_to_use_obj.get(list(how_to_use_obj.keys())[0] if how_to_use_obj else "", ""))
+        elif isinstance(how_to_use_obj, str):
+            how_to_use = how_to_use_obj
         
         # Get slug
         slug = product.get("slug", "")
@@ -766,27 +726,39 @@ class ProductService:
         text_parts = []
         
         # Handle multilingual title
-        title_val = ProductService._extract_localized_text(product_doc.get("title", {}), "")
-        if title_val:
-            text_parts.append(title_val)
+        title_obj = product_doc.get("title", {})
+        if isinstance(title_obj, dict):
+            title_val = title_obj.get("en", title_obj.get(list(title_obj.keys())[0] if title_obj else "", ""))
+            if title_val:
+                text_parts.append(str(title_val))
+        elif isinstance(title_obj, str):
+            text_parts.append(title_obj)
         
         # Handle multilingual description
-        desc_val = ProductService._extract_localized_text(product_doc.get("description", {}), "")
-        if desc_val:
-            text_parts.append(desc_val)
+        desc_obj = product_doc.get("description", {})
+        if isinstance(desc_obj, dict):
+            desc_val = desc_obj.get("en", desc_obj.get(list(desc_obj.keys())[0] if desc_obj else "", ""))
+            if desc_val:
+                text_parts.append(str(desc_val))
+        elif isinstance(desc_obj, str):
+            text_parts.append(desc_obj)
         
         # Add benefits
         if product_doc.get("benefits"):
-            text_parts.extend(ProductService._extract_localized_list(product_doc["benefits"]))
+            text_parts.extend([str(b) for b in product_doc["benefits"]])
         
         # Add health goals
         if product_doc.get("healthGoals"):
-            text_parts.extend(ProductService._extract_localized_list(product_doc["healthGoals"]))
+            text_parts.extend([str(g) for g in product_doc["healthGoals"]])
         
         # Add nutrition info
-        nutrition_val = ProductService._extract_localized_text(product_doc.get("nutritionInfo", {}), "")
-        if nutrition_val:
-            text_parts.append(nutrition_val)
+        nutrition_obj = product_doc.get("nutritionInfo", {})
+        if isinstance(nutrition_obj, dict):
+            nutrition_val = nutrition_obj.get("en", nutrition_obj.get(list(nutrition_obj.keys())[0] if nutrition_obj else "", ""))
+            if nutrition_val:
+                text_parts.append(str(nutrition_val))
+        elif isinstance(nutrition_obj, str):
+            text_parts.append(nutrition_obj)
         
         # Filter out None values and empty strings, then join
         text_parts = [part for part in text_parts if part]
@@ -832,8 +804,8 @@ class ProductService:
                     "This product contains high doses of minerals. Please consult your healthcare provider "
                     "to ensure the dosage is appropriate during pregnancy or breastfeeding."
                 )
-
-        return warnings
+        
+            return warnings
     
     @staticmethod
     def _detect_allergens(product_text: str, ingredients_text: str) -> list[str]:

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { asyncHandler, getPaginationOptions, getPaginationMeta } from "@/utils";
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
+import { cartService } from "@/services/cartService";
 import { Orders, Payments, Products, Coupons, Carts } from "@/models/commerce";
 import { Addresses, User } from "@/models/core";
 import {
@@ -1070,6 +1071,13 @@ class OrderController {
         },
         notes,
       });
+
+      try {
+        await cartService.clearCart(req.user._id.toString());
+        logger.info(`Cart cleared for user ${req.user._id} after order ${order.orderNumber}`);
+      } catch (error: any) {
+        logger.error(`Failed to clear cart after order creation: ${error.message}`);
+      }
 
       // Send order placed notification
       try {

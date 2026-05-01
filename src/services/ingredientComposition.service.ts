@@ -43,14 +43,8 @@ export class IngredientCompositionService {
     // Validate DRI percentage
     this.validateDriPercentage(driPercentage);
 
-    const quantityStored = String(quantity ?? "").trim();
-    if (!quantityStored) {
-      throw new AppError("Quantity is required", 400);
-    }
-
     const composition = new IngredientComposition({
       ...compositionData,
-      quantity: quantityStored,
       createdBy: new mongoose.Types.ObjectId(userId),
     });
 
@@ -62,7 +56,7 @@ export class IngredientCompositionService {
    */
   static async getCompositionById(id: string): Promise<IIngredientComposition> {
     const composition = await IngredientComposition.findById(id)
-      .populate("product", "title description productImage")
+      .populate("product", "title slug")
       .populate("ingredient", "name scientificName")
       .where({ isDeleted: false });
 
@@ -99,7 +93,7 @@ export class IngredientCompositionService {
     }
 
     const compositions = await IngredientComposition.find(filter)
-      .populate("product", "title description productImage")
+      .populate("product", "title slug")
       .populate("ingredient", "name scientificName")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -179,24 +173,15 @@ export class IngredientCompositionService {
       }
     }
 
-    const updatePayload: Record<string, any> = {
-      ...(updateData as Record<string, any>),
-      updatedBy: new mongoose.Types.ObjectId(userId),
-    };
-    if (updatePayload.quantity !== undefined) {
-      const q = String(updatePayload.quantity).trim();
-      if (!q) {
-        throw new AppError("Quantity cannot be empty", 400);
-      }
-      updatePayload.quantity = q;
-    }
-
     const composition = await IngredientComposition.findByIdAndUpdate(
       id,
-      updatePayload,
+      {
+        ...updateData,
+        updatedBy: new mongoose.Types.ObjectId(userId),
+      },
       { new: true, runValidators: true }
     )
-      .populate("product", "title description productImage")
+      .populate("product", "title slug")
       .populate("ingredient", "name scientificName")
       .where({ isDeleted: false });
 
@@ -238,7 +223,7 @@ export class IngredientCompositionService {
     productId: string,
     compositions: Array<{
       ingredient: string;
-      quantity: number | string;
+      quantity: number;
       driPercentage: number | string;
     }>,
     userId?: string
@@ -269,10 +254,6 @@ export class IngredientCompositionService {
     // Then, create/update only the compositions provided in the request
     for (const comp of compositions) {
       const { ingredient, quantity, driPercentage } = comp;
-      const quantityStored = String(quantity ?? "").trim();
-      if (!quantityStored) {
-        throw new AppError("Quantity is required", 400);
-      }
 
       // Validate ingredient exists
       const ingredientExists = await ProductIngredients.findById(ingredient);
@@ -292,7 +273,7 @@ export class IngredientCompositionService {
       if (existingComposition) {
         // Update existing composition (revive if it was soft-deleted)
         const updatePayload: Record<string, any> = {
-          quantity: quantityStored,
+          quantity,
           driPercentage,
           // Revive soft-deleted composition
           isDeleted: false,
@@ -308,7 +289,7 @@ export class IngredientCompositionService {
           updatePayload,
           { new: true, runValidators: true }
         )
-          .populate("product", "title description productImage")
+          .populate("product", "title slug")
           .populate("ingredient", "name scientificName");
 
         results.push(updated!);
@@ -317,7 +298,7 @@ export class IngredientCompositionService {
         const createPayload: Record<string, any> = {
           product: new mongoose.Types.ObjectId(productId),
           ingredient: new mongoose.Types.ObjectId(ingredient),
-          quantity: quantityStored,
+          quantity,
           driPercentage,
         };
         if (userObjectId) {
@@ -327,7 +308,7 @@ export class IngredientCompositionService {
         const created = await IngredientComposition.create(createPayload);
 
         const populated = await IngredientComposition.findById(created._id)
-          .populate("product", "title description productImage")
+          .populate("product", "title slug")
           .populate("ingredient", "name scientificName");
 
         results.push(populated!);

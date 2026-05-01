@@ -2148,7 +2148,7 @@ This is an automated message, please do not reply to this email.
         };
       });
 
-      const apiKey = config.brevo.apiKey || process.env.BREVO_API_KEY;
+      const apiKey = config.brevo.apiKey;
       if (!apiKey) {
         throw new Error("Brevo API key not configured");
       }

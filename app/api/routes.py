@@ -8,8 +8,7 @@ from app.dependencies.db import get_database
 from app.dependencies.openai_client import get_openai_client
 from app.exceptions.errors import ValidationError
 from app.repositories.session_repository import SessionRepository
-from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse, QuestionStateResponse
-from app.utils.content_safety import check_message_safety
+from app.schemas.chat import ChatRequest, ChatResponse, QuestionStateResponse
 from app.utils.validation import sanitize_message, validate_search_word, validate_session_id, validate_user_id
 from app.utils.error_handler import log_error_with_context
 
@@ -577,61 +576,6 @@ async def chat(
         # Validate and sanitize input
         payload.message = sanitize_message(payload.message)
         payload.session_id = validate_session_id(payload.session_id)
-
-        # Lightweight safety pre-check: block direct illegal drug requests.
-        safety_result = check_message_safety(payload.message)
-        if safety_result.blocked:
-            flagged_at = datetime.now(timezone.utc).isoformat()
-            is_registered = False
-
-            try:
-                session = await chat_service.session_repo.get(payload.session_id)
-                if session:
-                    metadata = dict(session.metadata or {})
-                    is_registered = bool(metadata.get("is_registered", False))
-                    safety_flags = list(metadata.get("safety_flags", []))
-                    safety_flags.append(
-                        {
-                            "type": safety_result.category,
-                            "matched_terms": safety_result.matched_terms or [],
-                            "message_preview": payload.message[:120],
-                            "timestamp": flagged_at,
-                        }
-                    )
-                    metadata["safety_flags"] = safety_flags
-                    metadata["last_safety_flag_at"] = flagged_at
-                    await chat_service.session_repo.update_metadata(payload.session_id, metadata)
-            except Exception:
-                logger.warning(
-                    "Failed to persist safety flag for session %s",
-                    payload.session_id,
-                    exc_info=True,
-                )
-
-            safe_reply = ChatResponse(
-                session_id=payload.session_id,
-                reply=ChatMessage(
-                    role="assistant",
-                    content=(
-                        "I can't help with illegal drugs like cocaine. "
-                        "If you want, I can help with safer wellness support for stress, sleep, energy, "
-                        "or cravings. If this is urgent, please contact a licensed healthcare professional "
-                        "or local emergency services."
-                    ),
-                ),
-                options=None,
-                question_type="text",
-                redirect_url=None,
-                isRegistered=is_registered,
-            )
-
-            chat_data = safe_reply.model_dump(mode="json")
-            chat_data["timestamp"] = flagged_at
-            return ChatResponseCustom(
-                success=True,
-                message="Message processed with safety guardrail",
-                data=chat_data,
-            )
         
         logger.info(f"[Chat Endpoint] Calling chat_service.handle_message for session: {payload.session_id}")
         chat_response = await chat_service.handle_message(payload)
@@ -1022,65 +966,6 @@ async def check_user_login(
                                     })
                                     
                                 logging.info(f"Formatted {len(products_data)} products for response")
-
-                                # Keep message strictly aligned with products array:
-                                # rebuild recommendation message from the same fetched documents.
-                                if product_docs:
-                                    normalized_products = []
-                                    product_documents_by_title = {}
-                                    for product_doc in product_docs:
-                                        product_obj = chat_service.product_service._mongo_to_product(product_doc)
-                                        normalized_products.append(product_obj)
-                                        product_documents_by_title[product_obj.title] = product_doc
-
-                                    recommendation_message = await chat_service._format_product_recommendations(
-                                        normalized_products,
-                                        responses,
-                                        product_documents_by_title,
-                                    )
-                                    logging.info(
-                                        "Rebuilt recommendation message from %d fetched products for consistency",
-                                        len(normalized_products),
-                                    )
-                                else:
-                                    recommendation_message = "No products found matching your profile."
-
-                                # If title-based fetch returned fewer than 3 products, refresh directly
-                                # from concern-based recommendation flow to get up to 3 real products.
-                                if len(products_data) < 3 and chat_service.product_service:
-                                    refreshed_products, refreshed_docs = await chat_service.product_service.find_relevant_products(
-                                        message=None,
-                                        context=responses,
-                                        limit=3,
-                                    )
-                                    if refreshed_products:
-                                        products_data = []
-                                        for product in refreshed_products[:3]:
-                                            product_doc = refreshed_docs.get(product.title, {})
-                                            product_id = str(product_doc.get("_id", product.id))
-                                            title_str = _i18n_to_string(product_doc.get("title"), user_lang) if product_doc else product.title
-                                            short_desc_str = (
-                                                _i18n_to_string(product_doc.get("shortDescription"), user_lang)
-                                                if product_doc else (product.short_description or "")
-                                            )
-                                            product_image = (product_doc.get("productImage", "") if product_doc else "") or ""
-
-                                            products_data.append({
-                                                "id": product_id,
-                                                "title": title_str,
-                                                "shortDescription": short_desc_str,
-                                                "productImage": product_image
-                                            })
-
-                                        recommendation_message = await chat_service._format_product_recommendations(
-                                            refreshed_products[:3],
-                                            responses,
-                                            refreshed_docs,
-                                        )
-                                        logging.info(
-                                            "Refreshed useridLogin recommendations to %d products from concern-based search",
-                                            len(products_data),
-                                        )
                             except Exception as e:
                                 import logging
                                 import traceback

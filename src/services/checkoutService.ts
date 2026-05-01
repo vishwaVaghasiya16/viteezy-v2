@@ -2993,36 +2993,39 @@ class CheckoutService {
           );
         }
       } catch (error: any) {
-        // Coupon invalid for current cart/order — never apply a stale stored discount
-        couponDiscountAmount = 0;
+        // Coupon validation failed
+        // If we're using the existing cart coupon, use its stored discount amount as fallback
+        const isUsingExistingCartCoupon = cart.couponCode === couponCodeToProcess;
+        
         couponInfo = {
           code: couponCodeToProcess,
           isValid: false,
-          discountAmount: 0,
+          discountAmount: isUsingExistingCartCoupon ? (cart.couponDiscountAmount || 0) : 0,
           message: error.message || "Invalid coupon code",
         };
         logger.warn(
           `Coupon validation failed for ${couponCodeToProcess}: ${error.message}`,
         );
 
-        if (cart.couponCode || cart.couponDiscountAmount > 0) {
-          await Carts.findByIdAndUpdate(
-            cart._id,
-            cart.cartType === "NORMAL"
-              ? {
-                  couponCode: null,
-                  couponDiscountAmount: 0,
-                  updatedAt: new Date(),
-                }
-              : {
-                  couponCode: null,
-                  couponDiscountAmount: 0,
-                  linkedSubscriptionId: cart.linkedSubscriptionId,
-                  updatedAt: new Date(),
-                },
-            { new: true },
-          );
+        // If using existing cart coupon, keep it (don't remove)
+        // If new coupon failed, remove it
+        if (!isUsingExistingCartCoupon) {
+          // Update cart to remove invalid coupon only if coupon exists in cart
+          if (cart.couponCode || cart.couponDiscountAmount > 0) {
+            await Carts.findByIdAndUpdate(
+              cart._id,
+              {
+                couponCode: null,
+                couponDiscountAmount: 0,
+                updatedAt: new Date(),
+              },
+              { new: true },
+            );
+          }
         }
+        
+        // Use existing cart discount amount if available
+        couponDiscountAmount = isUsingExistingCartCoupon ? (cart.couponDiscountAmount || 0) : 0;
       }
     } else {
       // No coupon code provided (null or empty string)
