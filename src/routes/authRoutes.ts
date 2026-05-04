@@ -21,6 +21,8 @@ import {
   appleLoginSchema,
   googleLoginSchema,
   registerFamilyMemberSchema,
+  registerSubMemberSchema,
+  subMemberLoginSchema,
 } from "@/validation/authValidation";
 import { authMiddleware } from "@/middleware/auth";
 
@@ -34,8 +36,26 @@ const router = Router();
 // User registration endpoint
 router.post("/register", validateJoi(registerSchema), authController.register);
 
+
+// Sub-member self-registration (public — no auth required)
+// Either email or mainMemberMemberId must be provided (or both)
+router.post(
+  "/members/register",
+  validateJoi(registerSubMemberSchema),
+  authController.registerSubMember
+);
+
 // User login endpoint
 router.post("/login", validateJoi(loginSchema), authController.login);
+
+
+// Sub-member login — for sub-members without their own email
+// Uses mainMemberId + sub-member's own password
+router.post(
+  "/members/login",
+  validateJoi(subMemberLoginSchema),
+  authController.loginSubMember
+);
 
 // Apple login endpoint
 router.post(

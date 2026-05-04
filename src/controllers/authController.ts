@@ -12,6 +12,69 @@ interface AuthenticatedRequest extends Request {
 
 class AuthController {
   /**
+   * Sub-Member Self-Registration
+   * Public endpoint — no auth required.
+   * Either email or mainMemberId (or both) must be provided.
+   */
+  registerSubMember = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const {
+        firstName,
+        lastName,
+        email,
+        mainMemberId,
+        password,
+        phone,
+        countryCode,
+        gender,
+        age,
+        relationshipToParent,
+      } = req.body;
+
+      const result = await authService.registerSubMember({
+        firstName,
+        lastName,
+        email,
+        mainMemberId,
+        password,
+        phone,
+        countryCode,
+        gender,
+        age,
+        relationshipToParent,
+      });
+
+      res.apiCreated({ user: result.user }, result.message);
+    }
+  );
+
+  /**
+   * Sub-Member Login (no-email flow)
+   * Sub-members without their own email log in using mainMemberId + subMemberId + password.
+   */
+  loginSubMember = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const { mainMemberId, subMemberId, password, deviceInfo } = req.body;
+
+      const result = await authService.loginSubMember({
+        mainMemberId,
+        subMemberId,
+        password,
+        deviceInfo,
+      });
+
+      res.apiSuccess(
+        {
+          user: result.user,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
+        result.message
+      );
+    }
+  );
+
+  /**
    * Register new user
    */
   register = asyncHandler(

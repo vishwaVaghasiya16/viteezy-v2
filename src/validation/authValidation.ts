@@ -403,6 +403,96 @@ export const googleLoginSchema = Joi.object(
     }),
   })
 ).label("GoogleLoginPayload");
+/**
+ * Sub-Member Self-Registration Schema
+ * A sub-member registers themselves by providing the main member's memberId.
+ * Email is optional — but at least one of email or mainMemberId must be present.
+ */
+export const registerSubMemberSchema = Joi.object(
+  withFieldLabels({
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
+    email: Joi.string()
+      .email()
+      .optional()
+      .allow(null, "")
+      .label("Email")
+      .messages({
+        "string.email": "Please provide a valid email address",
+      }),
+    mainMemberId: Joi.string()
+      .pattern(/^MEM-[A-Z0-9]{8}$/)
+      .optional()
+      .allow(null, "")
+      .label("Main Member ID")
+      .messages({
+        "string.pattern.base": "Invalid member ID format. Expected: MEM-XXXXXXXX",
+      }),
+    password: passwordSchema,
+    phone: phoneSchema,
+    countryCode: countryCodeSchema,
+    gender: Joi.string()
+      .valid(...GENDER_VALUES)
+      .optional()
+      .allow(null)
+      .messages({
+        "any.only": `Gender must be one of: ${GENDER_VALUES.join(", ")}`,
+      }),
+    age: Joi.number()
+      .integer()
+      .min(1)
+      .max(150)
+      .optional()
+      .allow(null)
+      .messages({
+        "number.min": "Age must be at least 1",
+        "number.max": "Age cannot exceed 150",
+        "number.integer": "Age must be an integer",
+      }),
+    relationshipToParent: Joi.string()
+      .valid("Child", "Spouse", "Parent", "Sibling", "Other")
+      .optional()
+      .allow(null, "")
+      .label("Relationship"),
+  })
+)
+  .or("email", "mainMemberId") // at least one must be present
+  .messages({
+    "object.missing": "Either email or main member ID is required",
+  })
+  .label("RegisterSubMemberPayload");
+
+/**
+ * Sub-Member Login Schema
+ * Sub-members with an email use standard login.
+ * Sub-members without an email identify themselves with mainMemberId + subMemberId + password.
+ * subMemberId uniquely identifies the sub-member, preventing ambiguity when multiple
+ * sub-members share the same main member or the same password.
+ */
+export const subMemberLoginSchema = Joi.object(
+  withFieldLabels({
+    mainMemberId: Joi.string()
+      .pattern(/^MEM-[A-Z0-9]{8}$/)
+      .required()
+      .label("Main Member ID")
+      .messages({
+        "string.empty": "Main Member ID is required",
+        "string.pattern.base": "Invalid member ID format. Expected: MEM-XXXXXXXX",
+        "any.required": "Main Member ID is required",
+      }),
+    subMemberId: Joi.string()
+      .pattern(/^MEM-[A-Z0-9]{8}$/)
+      .required()
+      .label("Sub-member ID")
+      .messages({
+        "string.empty": "Sub-member ID is required",
+        "string.pattern.base": "Invalid member ID format. Expected: MEM-XXXXXXXX",
+        "any.required": "Sub-member ID is required",
+      }),
+    password: passwordSchema,
+    deviceInfo: deviceInfoSchema,
+  })
+).label("SubMemberLoginPayload");
 
 /**
  * Relationship Type validation schema

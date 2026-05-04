@@ -600,6 +600,16 @@ class AuthService {
       throw new AppError("Invalid email or password", 401);
     }
 
+    // Sub-members without their own email cannot use this endpoint.
+    // They must use the OTP-based sub-member login flow.
+    // Also block anyone from logging in as a sub-member using the main member's email.
+    if (user.isSubMember && !user.email) {
+      throw new AppError(
+        "Sub-members without an email must use the sub-member OTP login.",
+        403,
+      );
+    }
+
     logger.info(
       `Login attempt for user: ${user.email}, isEmailVerified: ${user.isEmailVerified}, type: ${type || 'normal'}`,
     );
@@ -675,6 +685,244 @@ class AuthService {
         phone: user.phone,
         isEmailVerified: user.isEmailVerified,
         lastLogin: user.lastLogin,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      message: "Login successful",
+    };
+  }
+
+  /**
+   * Sub-Member Self-Registration
+   *
+   * A sub-member registers themselves from the public registration page.
+   * - If they provide an email → standard account, OTP sent for verification
+   * - If they provide a mainMemberId → linked as sub-member under that main member
+   * - Both can be provided together
+   * - At least one of email or mainMemberId is required (enforced by Joi)
+   */
+  async registerSubMember(data: {
+    firstName: string;
+    lastName: string;
+    email?: string;
+    mainMemberId?: string;
+    password: string;
+    phone?: string;
+    countryCode?: string;
+    gender?: string;
+    age?: number;
+    relationshipToParent?: string;
+  }): Promise<{ user: any; message: string }> {
+    const {
+      firstName,
+      lastName,
+      email,
+      mainMemberId,
+      password,
+      phone,
+      countryCode,
+      gender,
+      age,
+      relationshipToParent,
+    } = data;
+
+    // Resolve main member if memberId provided
+    let parentMember: any = null;
+    if (mainMemberId && mainMemberId.trim()) {
+      parentMember = await User.findOne({ memberId: mainMemberId.trim() });
+      if (!parentMember) {
+        throw new AppError("Main member not found. Please check the Member ID.", 404);
+      }
+      if (!parentMember.isActive) {
+        throw new AppError("Main member account is not active.", 400);
+      }
+      if (parentMember.isSubMember || parentMember.parentId) {
+        throw new AppError("The provided Member ID does not belong to a main member.", 400);
+      }
+      // Check sub-member limit
+      const subMemberCount = await User.countDocuments({ parentId: parentMember._id });
+      if (subMemberCount >= 10) {
+        throw new AppError("This family has reached the maximum sub-member limit (10).", 400);
+      }
+    }
+
+    // Check email uniqueness if provided
+    const cleanEmail = email && email.trim() ? email.toLowerCase().trim() : null;
+    if (cleanEmail) {
+      const existing = await User.findOne({ email: cleanEmail });
+      if (existing) {
+        throw new AppError("An account with this email already exists.", 400);
+      }
+    }
+
+    const memberId = await generateMemberId();
+    const referralCode = await referralService.generateReferralCode(firstName);
+
+    const userData: any = {
+      firstName,
+      lastName,
+      password,
+      phone,
+      countryCode,
+      gender,
+      age,
+      memberId,
+      referralCode,
+      isActive: true,
+      isEmailVerified: false,
+    };
+
+    if (cleanEmail) {
+      userData.email = cleanEmail;
+    }
+
+    if (parentMember) {
+      userData.isSubMember = true;
+      userData.parentMemberId = parentMember._id;
+      userData.parentId = parentMember._id;
+      if (relationshipToParent) {
+        userData.relationshipToParent = relationshipToParent;
+      }
+    }
+
+    const newUser = await User.create(userData);
+
+    logger.info(`Sub-member self-registered: ${newUser._id}, parent: ${parentMember?._id || "none"}`);
+
+    // Send OTP if email provided
+    if (cleanEmail) {
+      try {
+        await this.sendOTPForVerification(
+          newUser._id.toString(),
+          cleanEmail,
+          OTPType.EMAIL_VERIFICATION,
+        );
+      } catch (err) {
+        logger.error("Failed to send OTP after sub-member registration:", err);
+      }
+    }
+
+    const registrationDate = newUser.registeredAt || newUser.createdAt;
+
+    return {
+      user: {
+        _id: newUser._id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email || null,
+        phone: newUser.phone,
+        memberId: newUser.memberId,
+        isSubMember: newUser.isSubMember || false,
+        parentMemberId: newUser.parentMemberId || null,
+        relationshipToParent: newUser.relationshipToParent || null,
+        isEmailVerified: newUser.isEmailVerified,
+        registeredAt: registrationDate,
+      },
+      message: cleanEmail
+        ? "Account created successfully. Please verify your email with the OTP sent."
+        : "Account created successfully.",
+    };
+  }
+
+  /**
+   * Sub-Member Login (no-email flow)
+   *
+   * Sub-members without their own email log in using:
+   *   mainMemberId (MEM-XXXXXXXX) — identifies the family
+   *   subMemberId  (MEM-XXXXXXXX) — uniquely identifies the sub-member
+   *   password                    — verifies the sub-member's own credentials
+   *
+   * Using subMemberId as the primary identifier means:
+   *   - Multiple sub-members under the same main member are unambiguous
+   *   - Shared passwords between sub-members never cause a collision
+   *
+   * Sub-members with their own email should use the standard /login endpoint.
+   */
+  async loginSubMember(data: {
+    mainMemberId: string;
+    subMemberId: string;
+    password: string;
+    deviceInfo: string;
+  }): Promise<LoginResult> {
+    const { mainMemberId, subMemberId, password, deviceInfo } = data;
+
+    // Resolve and validate main member
+    const mainMember = await User.findOne({ memberId: mainMemberId.toUpperCase() });
+    if (!mainMember || mainMember.isSubMember || mainMember.parentId) {
+      throw new AppError("Invalid credentials", 401);
+    }
+    if (!mainMember.isActive) {
+      throw new AppError("Invalid credentials", 401);
+    }
+
+    // Resolve sub-member directly by their own memberId — O(1), no scan
+    const subMember = await User.findOne({
+      memberId: subMemberId.toUpperCase(),
+      isSubMember: true,
+      parentId: mainMember._id,
+    }).select("+password");
+
+    if (!subMember) {
+      throw new AppError("Invalid credentials", 401);
+    }
+
+    if (!subMember.isActive) {
+      throw new AppError("Account is deactivated. Please contact support.", 401);
+    }
+
+    // Sub-members with their own email must use the standard login endpoint
+    if (subMember.email) {
+      throw new AppError(
+        "This account has an email address. Please log in with your email and password.",
+        400,
+      );
+    }
+
+    // Verify password
+    const isValid = await subMember.comparePassword(password);
+    if (!isValid) {
+      throw new AppError("Invalid credentials", 401);
+    }
+
+    logger.info(`Sub-member login: subMember=${subMember._id}, mainMember=${mainMember._id}`);
+
+    const sessionId = crypto.randomUUID();
+    await AuthSessions.create({
+      userId: subMember._id,
+      sessionId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      deviceInfo,
+      lastUsedAt: new Date(),
+      isRevoked: false,
+    });
+
+    const tokens = this.generateTokens(subMember._id.toString(), sessionId);
+
+    await User.findByIdAndUpdate(subMember._id, {
+      lastLogin: new Date(),
+      $push: {
+        sessionIds: {
+          sessionId,
+          status: SessionStatus.ACTIVE,
+          revoked: false,
+          deviceInfo,
+        },
+      },
+    });
+
+    return {
+      user: {
+        _id: subMember._id,
+        firstName: subMember.firstName,
+        lastName: subMember.lastName,
+        email: subMember.email || null,
+        phone: subMember.phone,
+        memberId: subMember.memberId,
+        isSubMember: subMember.isSubMember,
+        parentMemberId: mainMember.memberId,
+        relationshipToParent: subMember.relationshipToParent,
+        isEmailVerified: subMember.isEmailVerified,
+        lastLogin: new Date(),
       },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
