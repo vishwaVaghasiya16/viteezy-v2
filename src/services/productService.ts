@@ -415,10 +415,10 @@ class ProductService {
       logger.info(`[Create Product] No sachetPrices provided`);
     }
 
-    // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
+    // If price is explicitly undefined/null (not 0) and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
     if (
-      !finalPrice &&
+      finalPrice === undefined &&
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
@@ -1326,6 +1326,10 @@ class ProductService {
    * Includes variants, detailed ingredients, meta, and structured data
    */
   async getProductById(productId: string): Promise<{ product: any }> {
+    logger.info("[Get Product By ID] Starting product fetch", {
+      productId
+    });
+
     const product = await Products.findOne({
       _id: productId,
       isDeleted: false,
@@ -1337,8 +1341,19 @@ class ProductService {
       .lean();
 
     if (!product) {
+      logger.warn("[Get Product By ID] Product not found", {
+        productId
+      });
       throw new AppError("Product not found", 404);
     }
+
+    logger.info("[Get Product By ID] Product found, logging raw data", {
+      productId,
+      productPrice: product.price,
+      productSachetPrices: product.sachetPrices,
+      productStandupPouchPrice: product.standupPouchPrice,
+      productMetadata: (product as any).metadata
+    });
 
     // Fetch product variants
     const variants = await ProductVariants.find({
@@ -1427,6 +1442,14 @@ class ProductService {
     // Add variants array to product
     const productWithVariants =
       this.addVariantsToSingleProduct(enrichedProduct);
+
+    logger.info("[Get Product By ID] Final product before return", {
+      productId,
+      finalProductPrice: productWithVariants.price,
+      finalProductSachetPrices: productWithVariants.sachetPrices,
+      finalProductStandupPouchPrice: productWithVariants.standupPouchPrice,
+      finalProductMetadata: productWithVariants.metadata
+    });
 
     return { product: productWithVariants };
   }
@@ -1528,6 +1551,14 @@ class ProductService {
     const { slug, hasStandupPouch, standupPouchPrice, price, sachetPrices } =
       data;
 
+    logger.info("[Update Product] Starting product update", {
+      productId,
+      incomingPrice: price,
+      incomingSachetPrices: sachetPrices,
+      hasStandupPouch,
+      incomingStandupPouchPrice: standupPouchPrice
+    });
+
     // Check if product exists
     const existingProduct = await Products.findOne({
       _id: productId,
@@ -1537,6 +1568,13 @@ class ProductService {
     if (!existingProduct) {
       throw new AppError("Product not found", 404);
     }
+
+    logger.info("[Update Product] Existing product data", {
+      productId,
+      existingPrice: existingProduct.price,
+      existingSachetPrices: existingProduct.sachetPrices,
+      existingStandupPouchPrice: existingProduct.standupPouchPrice
+    });
 
     logger.info("[Update Product] Incoming update payload (high level)", {
       productId,
@@ -1575,24 +1613,60 @@ class ProductService {
     }
 
     // Process sachetPrices: calculate savingsPercentage and totalAmount (if being updated)
+    logger.info("[Update Product] Processing sachetPrices", {
+      productId,
+      sachetPricesProvided: sachetPrices !== undefined,
+      sachetPrices
+    });
+    
     const processedSachetPrices =
       sachetPrices !== undefined
         ? this.processSachetPrices(sachetPrices)
         : sachetPrices;
 
+    logger.info("[Update Product] SachetPrices processed", {
+      productId,
+      processedSachetPrices
+    });
+
     // Process standupPouchPrice: count_0 / count_1 (if being updated)
+    logger.info("[Update Product] Processing standupPouchPrice", {
+      productId,
+      standupPouchPriceProvided: standupPouchPrice !== undefined,
+      standupPouchPrice
+    });
+    
     const processedStandupPouchPrice =
       standupPouchPrice !== undefined
         ? this.processStandupPouchPrice(standupPouchPrice)
         : standupPouchPrice;
 
-    // If price is not provided and sachetPrices exists, derive price from sachetPrices.thirtyDays
+    logger.info("[Update Product] StandupPouchPrice processed", {
+      productId,
+      processedStandupPouchPrice
+    });
+
+    // If price is explicitly undefined/null (not 0) and sachetPrices exists, derive price from sachetPrices.thirtyDays
     let finalPrice = price;
+    logger.info("[Update Product] Price derivation logic", {
+      productId,
+      incomingPrice: price,
+      priceType: typeof price,
+      finalPriceBeforeDerivation: finalPrice,
+      hasProcessedSachetPrices: !!processedSachetPrices,
+      hasThirtyDaysPrice: !!(processedSachetPrices && processedSachetPrices.thirtyDays)
+    });
+    
     if (
-      !finalPrice &&
+      finalPrice === undefined &&
       processedSachetPrices &&
       processedSachetPrices.thirtyDays
     ) {
+      logger.info("[Update Product] Deriving price from sachetPrices.thirtyDays", {
+        productId,
+        thirtyDaysPrice: processedSachetPrices.thirtyDays
+      });
+      
       const thirtyDaysPrice = processedSachetPrices.thirtyDays as any; // Type assertion for discountedPrice property
       const baseAmount =
         thirtyDaysPrice.discountedPrice !== undefined
@@ -1603,6 +1677,18 @@ class ProductService {
         amount: baseAmount,
         taxRate: thirtyDaysPrice.taxRate || 0,
       };
+      
+      logger.info("[Update Product] Price derived from sachetPrices", {
+        productId,
+        derivedPrice: finalPrice,
+        baseAmount
+      });
+    } else {
+      logger.info("[Update Product] Using provided price (not deriving)", {
+        productId,
+        finalPrice,
+        reason: finalPrice !== undefined ? "Price explicitly provided" : "No sachetPrices.thirtyDays available"
+      });
     }
 
     // Handle old image deletion
@@ -1758,16 +1844,34 @@ class ProductService {
     // Handle processed sachetPrices if provided
     if (sachetPrices !== undefined) {
       updateData.sachetPrices = processedSachetPrices;
+      logger.info("[Update Product] Adding processed sachetPrices to update", {
+        productId,
+        sachetPrices: processedSachetPrices
+      });
     }
 
     // Handle processed standupPouchPrice if provided
     if (standupPouchPrice !== undefined) {
       updateData.standupPouchPrice = processedStandupPouchPrice;
+      logger.info("[Update Product] Adding processed standupPouchPrice to update", {
+        productId,
+        standupPouchPrice: processedStandupPouchPrice
+      });
     }
 
     // Handle derived price if sachetPrices is being updated
     if (finalPrice !== undefined) {
       updateData.price = finalPrice;
+      logger.info("[Update Product] Adding final price to update", {
+        productId,
+        finalPrice,
+        finalPriceAmount: finalPrice.amount,
+        finalPriceCurrency: finalPrice.currency
+      });
+    } else {
+      logger.info("[Update Product] No price update (finalPrice is undefined)", {
+        productId
+      });
     }
 
     // Handle ingredient updates: update ingredient documents if ingredients are being changed
@@ -1864,9 +1968,23 @@ class ProductService {
     }
 
     // Update product with only provided fields
-    await Products.findByIdAndUpdate(productId, updateData, {
+    logger.info("[Update Product] Final update data before database operation", {
+      productId,
+      updateDataKeys: Object.keys(updateData),
+      updateData,
+      finalPriceInUpdateData: updateData.price
+    });
+
+    const updatedProduct = await Products.findByIdAndUpdate(productId, updateData, {
       new: true,
       runValidators: true,
+    });
+
+    logger.info("[Update Product] Product updated successfully", {
+      productId,
+      updatedProductId: updatedProduct?._id,
+      finalPriceInDatabase: updatedProduct?.price,
+      finalSachetPricesInDatabase: updatedProduct?.sachetPrices
     });
 
     // Handle FAQ updates: if faqs are provided, replace all existing FAQs
@@ -1910,34 +2028,34 @@ class ProductService {
     }
 
     // Fetch updated product with populated categories
-    const updatedProduct = await Products.findById(productId)
+    const populatedProduct = await Products.findById(productId)
       .populate(
         "categories",
         "sId slug name description sortOrder icon image productCount"
       )
       .lean();
 
-    if (!updatedProduct) {
+    if (!populatedProduct) {
       throw new AppError("Product not found", 404);
     }
 
     logger.info("[Update Product] Updated product specification from DB", {
       productId,
-      updatedSpecification: (updatedProduct as any).specification,
+      updatedSpecification: (populatedProduct as any).specification,
     });
 
     // Get ingredient details and replace ingredients array with populated data
     const ingredientDetails = await ProductIngredients.find({
-      _id: { $in: updatedProduct.ingredients || [] },
+      _id: { $in: populatedProduct.ingredients || [] },
     })
       .select("sId slug name description sortOrder icon image")
       .lean();
 
-    logger.info(`Product updated successfully: ${updatedProduct.slug}`);
+    logger.info(`Product updated successfully: ${populatedProduct.slug}`);
 
     // Calculate monthly amounts for subscription prices in response
     const productWithMonthlyAmounts = this.calculateMonthlyAmounts({
-      ...updatedProduct,
+      ...populatedProduct,
       ingredients: ingredientDetails, // Replace IDs with populated data
     });
 
@@ -2311,9 +2429,9 @@ class ProductService {
       periods.forEach((period) => {
         if (sachetPrices[period]) {
           const periodData = { ...sachetPrices[period] }; // Preserve discountedPrice
-          // Only calculate if amount is not already set and totalAmount exists
+          // Only calculate if amount is explicitly undefined/null (not 0) and totalAmount exists
           if (
-            !periodData.amount &&
+            periodData.amount === undefined &&
             periodData.totalAmount &&
             periodData.durationDays
           ) {

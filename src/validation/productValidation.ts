@@ -214,7 +214,7 @@ const priceSchema = Joi.object({
     "number.min": "Amount must be greater than or equal to 0",
     "any.required": "Amount is required",
   }),
-  taxRate: Joi.number().min(0).optional().default(0).messages({
+  taxRate: Joi.number().min(0).optional().messages({
     "number.min": "Tax rate must be greater than or equal to 0",
   }),
 })

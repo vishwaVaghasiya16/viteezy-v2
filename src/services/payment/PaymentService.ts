@@ -205,10 +205,17 @@ export class PaymentService {
         );
       }
       
-      if (finalAmount <= 0) {
+      if (finalAmount < 0) {
         throw new AppError(
           `Invalid payment amount: ${finalAmount}. Order total is ${overallPricing.grandTotal}`,
           400
+        );
+      }
+      
+      // Allow 0 amount for free orders, but log it for monitoring
+      if (finalAmount === 0) {
+        logger.info(
+          `Processing free order (amount 0) for order ${order.orderNumber}. This is valid for products with 0 pricing.`
         );
       }
       

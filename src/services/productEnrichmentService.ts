@@ -3,6 +3,7 @@ import { Products } from "../models/commerce/products.model";
 import { ProductVariants } from "../models/commerce/productVariants.model";
 import { ProductIngredients } from "../models/commerce/productIngredients.model";
 import { Reviews } from "../models/cms/reviews.model";
+import { logger } from "../utils/logger";
 import {
   calculateMemberPrice,
   ProductPriceSource,
@@ -366,6 +367,14 @@ export async function enrichProduct(
   const productWithMonthlyAmounts = calculateMonthlyAmounts(transformedProduct);
 
   // Calculate member pricing
+  logger.info("[Product Enrichment] Starting member pricing calculation", {
+    productId: productWithMonthlyAmounts._id,
+    userId,
+    originalPrice: productWithMonthlyAmounts.price,
+    memberPriceFromMetadata: productWithMonthlyAmounts.metadata?.memberPrice,
+    memberDiscountOverride: productWithMonthlyAmounts.metadata?.memberDiscountOverride
+  });
+
   const productPriceSource: ProductPriceSource = {
     price: productWithMonthlyAmounts.price,
     memberPrice: productWithMonthlyAmounts.metadata?.memberPrice,
@@ -377,6 +386,16 @@ export async function enrichProduct(
     productPriceSource,
     userId || ""
   );
+
+  logger.info("[Product Enrichment] Member pricing calculation completed", {
+    productId: productWithMonthlyAmounts._id,
+    userId,
+    isMember: memberPriceResult.isMember,
+    originalPrice: memberPriceResult.originalPrice,
+    memberPrice: memberPriceResult.memberPrice,
+    discountAmount: memberPriceResult.discountAmount,
+    discountPercentage: memberPriceResult.discountPercentage
+  });
 
   // Build full product object (same format as getAllProducts)
   let enrichedProduct: any = {

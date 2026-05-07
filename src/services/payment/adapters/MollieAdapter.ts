@@ -45,11 +45,29 @@ export class MollieAdapter implements IPaymentGateway {
   async createPaymentIntent(data: PaymentIntentData): Promise<PaymentResult> {
     try {
       // Validate amount
-      if (!data.amount || data.amount <= 0) {
+      if (!data.amount || data.amount < 0) {
         throw new AppError(
-          `Invalid payment amount: ${data.amount}. Amount must be greater than 0`,
+          `Invalid payment amount: ${data.amount}. Amount must be 0 or greater`,
           400
         );
+      }
+      
+      // Handle free orders (amount 0) - skip payment processing
+      if (data.amount === 0) {
+        logger.info(
+          `Mollie: Processing free order (amount 0) for order ${data.orderId}. Skipping payment gateway.`
+        );
+        return {
+          success: true,
+          paymentId: `free-order-${data.orderId}`,
+          clientSecret: `free-order-${data.orderId}`,
+          status: PaymentStatus.COMPLETED,
+          gatewayResponse: {
+            amount: 0,
+            currency: data.currency,
+            message: "Free order processed successfully",
+          },
+        };
       }
       
       // Convert from minor units (cents) to major units (euros)
