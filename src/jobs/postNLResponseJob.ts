@@ -8,6 +8,7 @@ import * as path from "path";
 import { downloadFromSFTP, listSFTPFiles } from "@/utils/sftpUploader";
 import { parseXML } from "@/utils/xmlParser";
 import { Addresses } from "@/models/core/addresses.model";
+import { inventoryIntegrationService } from "@/services/inventoryIntegrationService";
 import { config } from "@/config";
 
 interface DeliveryOrderResponse {
@@ -233,6 +234,17 @@ export class PostNLResponseJob {
       );
 
       logger.info(`Updated order ${order.orderNumber} status to SHIPPED`);
+
+      // ── INVENTORY SALE (Step 5) ──────────────────────────────────────────
+      try {
+        await inventoryIntegrationService.recordSaleForOrder(
+          order,
+          "SYSTEM_POSTNL_JOB" // System user context
+        );
+      } catch (invError: any) {
+        logger.error(`Inventory sale recording failed for order ${order.orderNumber}: ${invError.message}`);
+      }
+      // ────────────────────────────────────────────────────────────────────
     } catch (error: any) {
       logger.error(`Failed to process response: ${error.message}`, {
         orderNo: responseData.orderNo,

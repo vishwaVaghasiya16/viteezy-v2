@@ -313,6 +313,58 @@ class OrderService {
         : "Refund calculation completed but gateway refund failed. Please process manually.",
     };
   }
+  /**
+   * Cancel an entire order
+   * Releases any inventory reservations associated with the order.
+   */
+  async cancelOrder(orderId: string, adminId?: string, reason?: string): Promise<any> {
+    const order = await Orders.findOne({
+      _id: orderId,
+      isDeleted: { $ne: true },
+    });
+
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new AppError("Order is already cancelled", 400);
+    }
+
+    if (order.status === OrderStatus.SHIPPED || order.status === OrderStatus.DELIVERED) {
+      throw new AppError("Cannot cancel a shipped or delivered order", 400);
+    }
+
+    // Update order status
+    order.status = OrderStatus.CANCELLED;
+    if (!order.metadata) order.metadata = {};
+    order.metadata.cancellation = {
+      cancelledAt: new Date(),
+      cancelledBy: adminId,
+      reason: reason || "Admin cancellation",
+    };
+
+    await order.save();
+
+    // ── INVENTORY RELEASE (Step 11) ─────────────────────────────────────
+    try {
+      const { inventoryIntegrationService } = await import("./inventoryIntegrationService");
+      await inventoryIntegrationService.releaseReservationForOrder(
+        order,
+        adminId || "SYSTEM_CANCEL"
+      );
+    } catch (invError: any) {
+      logger.error(`Inventory release failed for cancelled order ${order.orderNumber}: ${invError.message}`);
+    }
+    // ────────────────────────────────────────────────────────────────────
+
+    logger.info(`Order ${order.orderNumber} cancelled by ${adminId || "system"}`);
+    
+    return {
+      success: true,
+      message: `Order ${order.orderNumber} cancelled successfully`,
+    };
+  }
 }
 
 export const orderService = new OrderService();

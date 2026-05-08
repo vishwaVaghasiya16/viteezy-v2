@@ -63,8 +63,11 @@ import contactRoutes from "./contactRoutes";
 import adminContactRoutes from "./adminContactRoutes";
 import adminDeliveryPostponementRoutes from "./adminDeliveryPostponementRoutes";
 import adminFamilyRoutes from "./adminFamilyRoutes";
+import adminLocationRoutes from "./locationRoutes";
 import reminderRoutes from "./reminder.route";
 import ingredientCompositionRoutes from "./ingredientCompositionRoutes";
+import inventoryRoutes from "./inventoryRoutes";
+import movementRoutes from "./movementRoutes";
 
 const router = Router();
 
@@ -136,6 +139,9 @@ router.use("/contact", contactRoutes);
 router.use("/admin/contacts", adminContactRoutes);
 router.use("/admin/postponements", adminDeliveryPostponementRoutes);
 router.use("/admin/families", adminFamilyRoutes);
+router.use("/admin/locations", adminLocationRoutes);
+router.use("/admin/inventory", inventoryRoutes);
+router.use("/admin/movements", movementRoutes);
 router.use("/reminders", reminderRoutes);
 router.use("/ingredient-compositions", ingredientCompositionRoutes);
 

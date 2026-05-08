@@ -33,6 +33,7 @@ import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
 import { SubscriptionGatewayService } from "../subscriptionGatewayService";
+import { inventoryIntegrationService } from "../inventoryIntegrationService";
 import { config } from "@/config";
 
 /**
@@ -752,6 +753,17 @@ export class PaymentService {
           order.status = OrderStatus.CONFIRMED;
           order.paymentId = (payment._id as mongoose.Types.ObjectId).toString();
           await order.save();
+
+          // ── INVENTORY RESERVATION (Step 4) ──────────────────────────────────
+          try {
+            await inventoryIntegrationService.reserveStockForOrder(
+              order,
+              (order.userId as mongoose.Types.ObjectId).toString()
+            );
+          } catch (invError: any) {
+            logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
+          }
+          // ────────────────────────────────────────────────────────────────────
 
           console.log(
             "✅ [PAYMENT SERVICE] - Order status updated to CONFIRMED"
@@ -1506,6 +1518,18 @@ export class PaymentService {
             logger.info(
               `Order ${order.orderNumber} confirmed after payment completion`
             );
+
+            // ── INVENTORY RESERVATION (Step 4) ──────────────────────────────────
+            try {
+              await inventoryIntegrationService.reserveStockForOrder(
+                order,
+                (order.userId as mongoose.Types.ObjectId).toString()
+              );
+            } catch (invError: any) {
+              logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
+            }
+            // ────────────────────────────────────────────────────────────────────
+
             await this.handleOrderConfirmation(order, payment);
 
             // Send payment successful and order confirmed notifications

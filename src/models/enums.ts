@@ -361,6 +361,7 @@ export enum NotificationCategory {
   SUPPORT = "Support",
   GENERAL = "General",
   REMINDER = "Reminder",
+  INVENTORY_LOW_STOCK = "Inventory Low Stock",
 }
 
 // Notification Types
@@ -385,6 +386,47 @@ export enum ReminderHistoryEventType {
 export enum ReminderTriggeredBy {
   USER = "USER",
   SYSTEM = "SYSTEM",
+}
+
+// Inventory Movement Types
+export enum MovementType {
+  PURCHASE = "Purchase",
+  TRANSFER = "Transfer",
+  SALE = "Sale",
+  RETURN = "Return",
+  ADJUSTMENT = "Adjustment",
+  RESERVATION = "Reservation",
+  RELEASE_RESERVATION = "Release Reservation",
+}
+
+// Inventory Movement Status
+
+export enum MovementStatus {
+  PENDING = "Pending",
+  COMPLETED = "Completed",
+  FAILED = "Failed",
+  CANCELLED = "Cancelled",
+}
+
+// Location Types
+
+export enum LocationType {
+  MANUFACTURER = "Manufacturer",
+  WAREHOUSE = "Warehouse",
+  FULFILLMENT_CENTER = "Fulfillment Center", // Third-party logistics provider that stores inventory and fulfills orders on behalf of the business(e.g. , PostNL)
+  PACKAGING_PARTNER = "Packaging Partner", // Partner that handles packaging of products, can be same as fulfillment center or separate entity(e.g. , Apotheek)
+  CUSTOMER = "Customer",
+}
+
+// Inventory Adjustment Reasons
+
+export enum InventoryAdjustmentReason {
+  DAMAGE = "Damage",
+  LOSS = "Loss",
+  EXPIRY = "Expiry",
+  AUDIT_CORRECTION = "Audit Correction",
+  SYSTEM_FIX = "System Fix",
+  OTHER = "Other",
 }
 
 // Export all enum values as arrays for Mongoose schemas
@@ -441,3 +483,8 @@ export const NOTIFICATION_CATEGORY_VALUES = Object.values(NotificationCategory);
 export const NOTIFICATION_TYPE_VALUES = Object.values(NotificationType);
 export const REMINDER_HISTORY_EVENT_TYPE_VALUES = Object.values(ReminderHistoryEventType);
 export const REMINDER_TRIGGERED_BY_VALUES = Object.values(ReminderTriggeredBy);
+export const MOVEMENT_TYPE_VALUES = Object.values(MovementType);
+export const MOVEMENT_STATUS_VALUES = Object.values(MovementStatus);
+export const LOCATION_TYPE_VALUES = Object.values(LocationType);
+export const INVENTORY_ADJUSTMENT_REASON_VALUES = Object.values(InventoryAdjustmentReason);
+
