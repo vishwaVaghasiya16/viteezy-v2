@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Locations } from "@/models/inventory/location.model";
+import { Inventory } from "@/models/inventory/inventory.model";
 import {
   CreateLocationDto,
   UpdateLocationDto,
@@ -206,6 +207,25 @@ class LocationController {
     next: NextFunction
   ): Promise<void> {
     try {
+      const { locationId } = req.params;
+
+      // Check if location has any active stock
+      const stockExists = await Inventory.findOne({
+        locationId,
+        isDeleted: false,
+        $or: [
+          { stockQuantity: { $gt: 0 } },
+          { reservedQuantity: { $gt: 0 } },
+        ],
+      }).lean();
+
+      if (stockExists) {
+        throw new AppError(
+          "Cannot delete location because it still contains active stock. Please transfer or adjust stock to zero first.",
+          400
+        );
+      }
+
       const location =
         await Locations.findOneAndUpdate(
           {

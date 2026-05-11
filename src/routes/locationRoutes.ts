@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { authMiddleware, authorize } from "@/middleware/auth";
+import { UserRole } from "@/models/enums";
 import { validateJoi, validateParams, validateQuery } from "@/middleware/joiValidation";
 import {locationController} from "@/controllers/locationController";
+import {movementController} from "@/controllers/movementController";
 import {
   createLocationSchema,
   updateLocationSchema,
@@ -11,9 +13,9 @@ import {
 
 const router = Router();
 
-// All routes require authentication and Admin role
+// All routes require authentication and Admin or Inventory Manager role
 router.use(authMiddleware);
-router.use(authorize("Admin"));
+router.use(authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER));
 
 /**
  * @route POST /api/v1/admin/locations
@@ -59,5 +61,16 @@ router.put(
  * @access Admin
  */
 router.delete("/:locationId", validateParams(locationIdParamSchema), locationController.remove);
+
+/**
+ * @route GET /api/v1/admin/locations/:locationId/movements
+ * @desc Get all movements for a specific location
+ * @access Admin
+ */
+router.get(
+  "/:locationId/movements",
+  validateParams(locationIdParamSchema),
+  movementController.getByLocation.bind(movementController)
+);
 
 export default router;

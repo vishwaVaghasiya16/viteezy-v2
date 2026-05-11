@@ -134,19 +134,57 @@ class MovementService {
       };
     }
 
+    // ── Linkage (Order/Subscription) ───────────────────────────────────
+    let orderId: mongoose.Types.ObjectId | undefined;
+    let finalQuantity = dto.quantity;
+
+    if (dto.orderId) {
+      orderId = new mongoose.Types.ObjectId(dto.orderId);
+
+      // AUTO-SYNC: Fetch the order to verify/get the correct quantity
+      const { Orders } = await import("@/models/commerce/orders.model");
+      const order = await Orders.findById(orderId).lean();
+
+      if (order) {
+        // Find the item in the order that matches this SKU's product and variant
+        const orderItem = order.items.find(
+          (item: any) =>
+            item.productId.toString() === sku.productId.toString() &&
+            item.variantType === sku.variantType
+        );
+
+        if (!orderItem) {
+          throw new AppError(
+            `SKU ${sku.skuCode} is not part of Order ${dto.orderId}`,
+            400
+          );
+        }
+
+        // If quantity was missing or wrong, use the order's quantity
+        if (!dto.quantity) {
+          finalQuantity = orderItem.quantity || 1;
+        } else if (dto.quantity !== orderItem.quantity) {
+          throw new AppError(
+            `Quantity mismatch. Order requires ${orderItem.quantity} units, but you requested ${dto.quantity}.`,
+            400
+          );
+        }
+      }
+    }
+
     return {
       movementType: dto.movementType,
       sku: {
         _id: sku._id as mongoose.Types.ObjectId,
         skuCode: sku.skuCode,
         displayName: sku.displayName,
+        productId: sku.productId,
+        variantType: sku.variantType as any,
       },
       fromLocation,
       toLocation,
-      quantity: dto.quantity,
-      orderId: dto.orderId
-        ? new mongoose.Types.ObjectId(dto.orderId)
-        : undefined,
+      quantity: finalQuantity,
+      orderId,
       subscriptionId: dto.subscriptionId
         ? new mongoose.Types.ObjectId(dto.subscriptionId)
         : undefined,
@@ -164,64 +202,67 @@ class MovementService {
   private async validateBusinessRules(
     ctx: ProcessedMovementContext
   ): Promise<void> {
-    const { movementType, sku, fromLocation, quantity } = ctx;
+    const { movementType, sku, fromLocation, toLocation, quantity } = ctx;
+
+    // Global Check: Locations cannot be the same
+    if (
+      fromLocation &&
+      toLocation &&
+      fromLocation._id.equals(toLocation._id)
+    ) {
+      throw new AppError(
+        "Source and destination locations cannot be the same.",
+        400
+      );
+    }
 
     switch (movementType) {
-      //  TRANSFER: source must have sufficient available stock 
-      case MovementType.TRANSFER: {
-        if (!fromLocation) break;
-        const inv = await this.getInventoryOrThrow(
-          sku._id,
-          fromLocation._id,
-          "Transfer source"
-        );
-        const available = computeAvailableQuantity(
-          inv.stockQuantity,
-          inv.reservedQuantity
-        );
-        if (available < quantity) {
+      //  PURCHASE: must come from a Manufacturer
+      case MovementType.PURCHASE: {
+        if (fromLocation && fromLocation.type !== LocationType.MANUFACTURER) {
           throw new AppError(
-            `Insufficient available stock at ${fromLocation.name}. ` +
-            `Available: ${available}, Requested: ${quantity}`,
-            400
-          );
-        }
-        if (
-          ![LocationType.WAREHOUSE, LocationType.FULFILLMENT_CENTER].includes(
-            fromLocation.type
-          )
-        ) {
-          throw new AppError(
-            `Transfer source must be a Warehouse or Fulfillment Center, got: ${fromLocation.type}`,
+            `Purchase movements must originate from a Manufacturer, got: ${fromLocation.type}`,
             400
           );
         }
         break;
       }
 
-      //  SALE: fulfillment center must have sufficient available stock 
-      case MovementType.SALE: {
+      //  TRANSFER: source must have sufficient available (unreserved) stock
+      case MovementType.TRANSFER: {
         if (!fromLocation) break;
-        const inv = await this.getInventoryOrThrow(
-          sku._id,
-          fromLocation._id,
-          "Sale source"
-        );
-        const available = computeAvailableQuantity(
-          inv.stockQuantity,
-          inv.reservedQuantity
-        );
-        if (available < quantity) {
+        
+        // Transfers cannot come from Manufacturers (use Purchase instead)
+        if (fromLocation.type === LocationType.MANUFACTURER) {
           throw new AppError(
-            `Insufficient available stock for sale at ${fromLocation.name}. ` +
-            `Available: ${available}, Requested: ${quantity}`,
+            "Cannot use TRANSFER for Manufacturer stock. Please use PURCHASE instead.",
             400
           );
         }
-        // Sales must come from FULFILLMENT_CENTER
-        if (fromLocation.type !== LocationType.FULFILLMENT_CENTER) {
+
+        const inv = await this.getInventoryOrThrow(sku._id, fromLocation._id, "Transfer source");
+        const available = computeAvailableQuantity(inv.stockQuantity, inv.reservedQuantity);
+        
+        if (available < quantity) {
           throw new AppError(
-            `Sale movements must originate from a Fulfillment Center, got: ${fromLocation.type}`,
+            `Insufficient available stock at ${fromLocation.name}. ` +
+            `Available: ${available} (Total: ${inv.stockQuantity}, Reserved: ${inv.reservedQuantity}), Requested: ${quantity}`,
+            400
+          );
+        }
+        break;
+      }
+
+      //  SALE: fulfillment center must have sufficient reserved stock
+      case MovementType.SALE: {
+        if (!fromLocation) break;
+        const inv = await this.getInventoryOrThrow(sku._id, fromLocation._id, "Sale source");
+        
+        // Sales deduct from RESERVED quantity
+        if (inv.reservedQuantity < quantity) {
+          throw new AppError(
+            `Cannot complete sale at ${fromLocation.name}. ` +
+            `Insufficient reserved stock. Reserved: ${inv.reservedQuantity}, Requested: ${quantity}`,
             400
           );
         }
@@ -231,25 +272,32 @@ class MovementService {
       //  RESERVATION: must have sufficient available (unreserved) stock 
       case MovementType.RESERVATION: {
         if (!fromLocation) break;
-        const inv = await this.getInventoryOrThrow(
-          sku._id,
-          fromLocation._id,
-          "Reservation source"
-        );
-        const available = computeAvailableQuantity(
-          inv.stockQuantity,
-          inv.reservedQuantity
-        );
+
+        // Check for duplicate reservation for the same order/subscription
+        if (ctx.orderId || ctx.subscriptionId) {
+          const existingMatch: any = {
+            skuId: sku._id,
+            movementType: MovementType.RESERVATION,
+          };
+          if (ctx.orderId) existingMatch.orderId = ctx.orderId;
+          if (ctx.subscriptionId) existingMatch.subscriptionId = ctx.subscriptionId;
+
+          const alreadyReserved = await InventoryMovements.findOne(existingMatch);
+          if (alreadyReserved) {
+            throw new AppError(
+              `Stock has already been reserved for this SKU in ${ctx.orderId ? "order" : "subscription"} ${ctx.orderId || ctx.subscriptionId}`,
+              409
+            );
+          }
+        }
+
+        const inv = await this.getInventoryOrThrow(sku._id, fromLocation._id, "Reservation source");
+        const available = computeAvailableQuantity(inv.stockQuantity, inv.reservedQuantity);
+        
         if (available < quantity) {
           throw new AppError(
             `Insufficient available stock to reserve at ${fromLocation.name}. ` +
             `Available: ${available}, Requested: ${quantity}`,
-            400
-          );
-        }
-        if (fromLocation.type !== LocationType.FULFILLMENT_CENTER) {
-          throw new AppError(
-            `Reservations must be at a Fulfillment Center, got: ${fromLocation.type}`,
             400
           );
         }
@@ -427,8 +475,8 @@ class MovementService {
           orderId: ctx.orderId ?? null,
           subscriptionId: ctx.subscriptionId ?? null,
           referenceCode: ctx.referenceCode ?? null,
-          adjustmentReason: ctx.adjustmentReason ?? null,
-          adjustmentNote: ctx.adjustmentNote ?? null,
+          reason: ctx.adjustmentReason ?? null,
+          note: ctx.adjustmentNote ?? null,
           snapshot: {
             skuCode: ctx.sku.skuCode,
             skuDisplayName: ctx.sku.displayName,

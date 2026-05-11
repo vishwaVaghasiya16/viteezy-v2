@@ -160,10 +160,14 @@ export class PaymentService {
         order.status !== OrderStatus.PENDING &&
         order.status !== OrderStatus.CONFIRMED
       ) {
-        throw new AppError(
-          `Order cannot be paid. Current status: ${order.status}`,
-          400
-        );
+        let errorMessage = `Order cannot be paid. Current status: ${order.status}`;
+        if (order.status === OrderStatus.CANCELLED) {
+          errorMessage = "This order has been cancelled and cannot be paid for. Please place a new order.";
+        } else if (order.status === OrderStatus.REFUNDED) {
+          errorMessage = "This order has already been refunded.";
+        }
+        
+        throw new AppError(errorMessage, 400);
       }
 
       // Check if order already has a completed payment
@@ -341,6 +345,18 @@ export class PaymentService {
       // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
       const isEligibleForSubscription = 
         (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
+
+      if (isPaymentCompleted) {
+        console.log("🟢 [INVENTORY] Payment completed. Triggering stock reservation...");
+        try {
+          await inventoryIntegrationService.reserveStockForOrder(
+            order,
+            data.userId
+          );
+        } catch (invError: any) {
+          logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
+        }
+      }
 
       if (isPaymentCompleted && isEligibleForSubscription) {
         console.log(

@@ -65,8 +65,8 @@ class InventoryController {
   async getInventoryList(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const filters: InventoryFilterDto = req.query as any;
-      const result = await inventoryService.getInventoryList(filters);
-      res.apiSuccess(result, "Inventory list retrieved successfully");
+      const { data, pagination } = await inventoryService.getInventoryList(filters);
+      res.apiPaginated(data, pagination, "Inventory list retrieved successfully");
     }
     catch (error) {
       next(error)
@@ -134,19 +134,12 @@ class InventoryController {
       const dto: CreateSkuDto = req.body;
 
       const existing = await Skus.findOne({
-        $or: [
-          { skuCode: dto.skuCode.toUpperCase() },
-          { productVariantId: dto.productVariantId },
-        ],
+        skuCode: dto.skuCode.toUpperCase(),
         isDeleted: false,
       });
 
       if (existing) {
-        const reason =
-          existing.skuCode === dto.skuCode.toUpperCase()
-            ? `SKU code "${dto.skuCode}" already exists`
-            : "A SKU for this product variant already exists";
-        throw new AppError(reason, 409);
+        throw new AppError(`SKU code "${dto.skuCode}" already exists`, 409);
       }
 
       const sku = await Skus.create({
@@ -184,24 +177,20 @@ class InventoryController {
           .sort({ skuCode: 1 })
           .skip(skip)
           .limit(Number(limit))
-          .populate("productVariantId", "sku name attributes")
+          .populate("productId", "title slug productImage variant status")
           .lean(),
         Skus.countDocuments(filter),
       ]);
 
       const totalPages = Math.ceil(total / Number(limit));
 
-      res.apiSuccess(
+      res.apiPaginated(
+        data,
         {
-          data,
-          pagination: {
-            total,
-            page: Number(page),
-            limit: Number(limit),
-            totalPages,
-            hasNextPage: Number(page) < totalPages,
-            hasPrevPage: Number(page) > 1,
-          },
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          pages: totalPages,
         },
         "SKUs retrieved successfully"
       );
@@ -218,7 +207,7 @@ class InventoryController {
         _id: req.params.skuId,
         isDeleted: false,
       })
-        .populate("productVariantId", "sku name attributes price")
+        .populate("productId", "title slug productImage variant status")
         .lean();
 
       if (!sku) throw new AppError("SKU not found", 404);

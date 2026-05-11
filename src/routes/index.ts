@@ -68,6 +68,7 @@ import reminderRoutes from "./reminder.route";
 import ingredientCompositionRoutes from "./ingredientCompositionRoutes";
 import inventoryRoutes from "./inventoryRoutes";
 import movementRoutes from "./movementRoutes";
+import staffRoutes from "./staffRoutes";
 
 const router = Router();
 
@@ -142,6 +143,7 @@ router.use("/admin/families", adminFamilyRoutes);
 router.use("/admin/locations", adminLocationRoutes);
 router.use("/admin/inventory", inventoryRoutes);
 router.use("/admin/movements", movementRoutes);
+router.use("/admin/staff", staffRoutes);
 router.use("/reminders", reminderRoutes);
 router.use("/ingredient-compositions", ingredientCompositionRoutes);
 

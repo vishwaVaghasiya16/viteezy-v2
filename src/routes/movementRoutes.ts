@@ -16,29 +16,29 @@ router.use(authenticate);
 
 // ─── ROUTES ───────────────────────────────────────────────────────────────────
 
-// POST /api/inventory/movements
+// POST /api/movements
 // Staff records a new stock movement (purchase, transfer, sale, return, adjustment)
 router.post(
   "/",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateJoi(createMovementSchema),
-  movementController.create.bind(movementController)
+  movementController.create.bind(movementController) 
 );
 
-// GET /api/inventory/movements
+// GET /api/movements
 // List movements with filters (skuId, locationId, movementType, dateRange etc.)
 router.get(
   "/",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateQuery(movementFilterSchema),
   movementController.list.bind(movementController)
 );
 
-// GET /api/inventory/movements/:movementId
+// GET /api/movements/:movementId
 // Get a single movement record with all references populated
 router.get(
   "/:movementId",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(movementIdParamSchema),
   movementController.getOne.bind(movementController)
 );

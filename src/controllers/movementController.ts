@@ -54,13 +54,9 @@ class MovementController {
       const filters =
         req.query as unknown as MovementFilterDto;
 
-      const result =
+      const { data, pagination } =
         await inventoryService.getMovementHistory(filters);
-
-      res.apiSuccess(
-        result,
-        "Movement history retrieved successfully"
-      );
+      res.apiPaginated(data, pagination, "Movements retrieved successfully");
     } catch (error) {
       next(error);
     }
@@ -81,6 +77,32 @@ class MovementController {
       res.apiSuccess(
         movement,
         "Movement details retrieved successfully"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // GET /api/inventory/locations/:locationId/movements
+  async getByLocation(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { locationId } = req.params;
+      const filters = req.query as unknown as MovementFilterDto;
+
+      // Force location filter
+      const { data, pagination } = await inventoryService.getMovementHistory({
+        ...filters,
+        locationId,
+      });
+
+      res.apiPaginated(
+        data,
+        pagination,
+        `Movements for location ${locationId} retrieved successfully`
       );
     } catch (error) {
       next(error);

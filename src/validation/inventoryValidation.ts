@@ -65,6 +65,7 @@ export const skuIdParamSchema = Joi.object({
 });
 
 export const updateThresholdRequestSchema = Joi.object({
-  params : skuLocationParamSchema,
-  query : updateThresholdSchema,
-})
+  params: skuLocationParamSchema,
+  body: updateThresholdSchema,
+  query: Joi.object().optional(),
+});

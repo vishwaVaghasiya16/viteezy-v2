@@ -9,7 +9,6 @@ import {
  */
 export interface ISku extends Document {
     skuCode: string;                               // Unique identifier, e.g. "MV-SACHET-30"
-    productVariantId: mongoose.Types.ObjectId;     // → product_variants
     productId: mongoose.Types.ObjectId;            // → products (denormalised for query performance)
     variantType: ProductVariant;                   // SACHETS | STAND_UP_POUCH (from your existing enum)
     displayName: string;                           // Human-readable, e.g. "Viteezy Sachet 30-day"
@@ -32,11 +31,7 @@ const SkuSchema = new Schema<ISku>(
             trim: true,
             uppercase: true,
         },
-        productVariantId: {
-            type: Schema.Types.ObjectId,
-            ref: "product_variants",
-            required: [true, "Product variant reference is required"],
-        },
+
         productId: {
             type: Schema.Types.ObjectId,
             ref: "products",
@@ -95,7 +90,7 @@ const SkuSchema = new Schema<ISku>(
 
 // ─── Indexes ────────────────────────────────────────────────────────────────
 SkuSchema.index({ skuCode: 1 }, { unique: true });
-SkuSchema.index({ productVariantId: 1 }, { unique: true }); // one SKU per variant
+
 SkuSchema.index({ productId: 1, variantType: 1 });
 SkuSchema.index({ variantType: 1, isActive: 1 });
 SkuSchema.index({ isDeleted: 1 });
@@ -103,12 +98,12 @@ SkuSchema.index({ isDeleted: 1 });
 // ─── Virtuals ───────────────────────────────────────────────────────────────
 
 /**
- * Populated product variant — available after .populate('productVariantId')
- * Usage: const sku = await Skus.findOne(...).populate('productVariantId')
+ * Populated product — available after .populate('productId')
+ * Usage: const sku = await Skus.findOne(...).populate('productId')
  */
-SkuSchema.virtual("productVariant", {
-    ref: "product_variants",
-    localField: "productVariantId",
+SkuSchema.virtual("product", {
+    ref: "products",
+    localField: "productId",
     foreignField: "_id",
     justOne: true,
 });

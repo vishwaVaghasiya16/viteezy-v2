@@ -27,7 +27,7 @@ router.use(authenticate);
 // GET /api/inventory/dashboard
 router.get(
   "/dashboard",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   inventoryController.getDashboard.bind(inventoryController)
 );
 
@@ -36,14 +36,14 @@ router.get(
 // GET /api/inventory/low-stock
 router.get(
   "/low-stock",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   inventoryController.getLowStock.bind(inventoryController)
 );
 
 // POST /api/inventory/low-stock/check  (manual admin trigger)
 router.post(
   "/low-stock/check",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   inventoryController.runLowStockCheck.bind(inventoryController)
 );
 
@@ -51,7 +51,7 @@ router.post(
 // GET /api/inventory/list
 router.get(
   "/list",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateQuery(inventoryFilterSchema),
   inventoryController.getInventoryList.bind(inventoryController)
 );
@@ -61,7 +61,7 @@ router.get(
 // GET /api/inventory/sku/:skuId
 router.get(
   "/sku/:skuId",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(skuIdParamSchema),
   inventoryController.getStockBySku.bind(inventoryController)
 );
@@ -69,7 +69,7 @@ router.get(
 // GET /api/inventory/location/:locationId
 router.get(
   "/location/:locationId",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(locationIdParamSchema),
   inventoryController.getStockByLocation.bind(inventoryController)
 );
@@ -79,7 +79,7 @@ router.get(
 // PATCH /api/inventory/:skuId/:locationId/threshold
 router.patch(
   "/:skuId/:locationId/threshold",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validate(updateThresholdRequestSchema),
   inventoryController.updateThreshold.bind(inventoryController)
 );
@@ -89,7 +89,7 @@ router.patch(
 // POST /api/inventory/skus
 router.post(
   "/skus",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateJoi(createSkuSchema),
   inventoryController.createSku.bind(inventoryController)
 );
@@ -97,7 +97,7 @@ router.post(
 // GET /api/inventory/skus
 router.get(
   "/skus",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateQuery(skuFilterSchema),
   inventoryController.listSkus.bind(inventoryController)
 );
@@ -105,7 +105,7 @@ router.get(
 // GET /api/inventory/skus/:skuId
 router.get(
   "/skus/:skuId",
-  authorize(UserRole.ADMIN, UserRole.MODERATOR),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(skuParamSchema),
   inventoryController.getOneSku.bind(inventoryController)
 );
@@ -113,7 +113,7 @@ router.get(
 // PATCH /api/inventory/skus/:skuId
 router.patch(
   "/skus/:skuId",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validate(updateSkuRequestSchema),
   inventoryController.updateSku.bind(inventoryController)
 );
@@ -121,7 +121,7 @@ router.patch(
 // DELETE /api/inventory/skus/:skuId
 router.delete(
   "/skus/:skuId",
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(skuParamSchema),
   inventoryController.removeSku.bind(inventoryController)
 );

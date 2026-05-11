@@ -63,7 +63,7 @@ export interface LocationFilterDto {
 
 export interface CreateSkuDto {
   skuCode: string;
-  productVariantId: string;
+
   productId: string;
   variantType: ProductVariant;
   displayName: string;
@@ -163,6 +163,8 @@ export interface ProcessedMovementContext {
     _id: mongoose.Types.ObjectId;
     skuCode: string;
     displayName: string;
+    productId: mongoose.Types.ObjectId;
+    variantType: ProductVariant;
   };
   fromLocation?: {
     _id: mongoose.Types.ObjectId;
@@ -308,9 +310,9 @@ export interface PaginatedResponse<T> {
     total: number;
     page: number;
     limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
+    pages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
   };
 }
 
@@ -323,10 +325,13 @@ export interface PaginatedResponse<T> {
 
 export function requiresFromLocation(type: MovementType): boolean {
   return [
+    MovementType.PURCHASE,
     MovementType.TRANSFER,
     MovementType.SALE,
+    MovementType.RETURN,
     MovementType.RESERVATION,
     MovementType.RELEASE_RESERVATION,
+    MovementType.ADJUSTMENT,
   ].includes(type);
 }
 

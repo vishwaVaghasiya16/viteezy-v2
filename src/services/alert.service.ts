@@ -166,47 +166,57 @@ class AlertService {
   /**
    * dispatch()
    *
-   * The single place to swap notification targets.
-   * Currently logs to console.
-   *
-   * Future enhancements — replace or extend this method only:
-   *   - Email: call your existing email service
-   *   - Slack: POST to a webhook URL
-   *   - Dashboard: write to a notifications collection
-   *   - Multiple channels: call all three
+   * Sends notifications to all Admin users via the NotificationService.
    */
   private async dispatch(alert: LowStockAlert): Promise<void> {
     const isOutOfStock = alert.availableQuantity <= 0;
     const level = isOutOfStock ? "OUT OF STOCK" : "LOW STOCK";
 
-    console.warn(
-      `[INVENTORY ALERT] ${level} — ` +
-      `SKU: ${alert.skuCode} (${alert.displayName}) | ` +
-      `Location: ${alert.locationName} (${alert.locationType}) | ` +
-      `Available: ${alert.availableQuantity} | ` +
-      `Threshold: ${alert.lowStockThreshold} | ` +
-      `Deficit: ${alert.deficit}`
-    );
+    // Build the message
+    const title = `⚠️ ${level}: ${alert.skuCode}`;
+    const message = `${alert.displayName} is running low at ${alert.locationName}. ` +
+                    `Only ${alert.availableQuantity} units left (Threshold: ${alert.lowStockThreshold}).`;
 
-    // ── TODO: replace with your notification transport ────────────────────
-    // Example — email:
-    // await emailService.sendLowStockAlert(alert);
-    //
-    // Example — Slack:
-    // await slackService.postMessage({
-    //   channel: "#inventory-alerts",
-    //   text: `⚠️ ${level}: ${alert.skuCode} at ${alert.locationName} — ${alert.availableQuantity} remaining`,
-    // });
-    //
-    // Example — notifications collection:
-    // await Notifications.create({
-    //   category: NotificationCategory.SYSTEM,
-    //   title: `${level}: ${alert.skuCode}`,
-    //   message: `Only ${alert.availableQuantity} units left at ${alert.locationName}`,
-    //   metadata: alert,
-    // });
+    try {
+      // 1. Fetch all active Admin users
+      const { User } = await import("@/models/core/users.model");
+      const { UserRole, NotificationCategory } = await import("@/models/enums");
+      const { notificationService } = await import("./notificationService");
+
+      const admins = await User.find({ 
+        role: UserRole.ADMIN, 
+        isActive: true, 
+        isDeleted: false 
+      }).select("_id").lean();
+
+      if (admins.length === 0) {
+        console.warn(`[INVENTORY ALERT] No admins found to notify for ${alert.skuCode}`);
+        return;
+      }
+
+      // 2. Send notification to each admin
+      await Promise.all(
+        admins.map((admin) =>
+          notificationService.createNotification({
+            userId: admin._id,
+            category: NotificationCategory.INVENTORY_LOW_STOCK,
+            title,
+            message,
+            data: {
+              skuId: alert.skuId,
+              skuCode: alert.skuCode,
+              locationId: alert.locationId,
+              availableQuantity: alert.availableQuantity,
+            },
+          })
+        )
+      );
+
+      console.log(`[INVENTORY ALERT] Notification dispatched to ${admins.length} admin(s) for ${alert.skuCode}`);
+    } catch (error: any) {
+      console.error(`[INVENTORY ALERT] Failed to dispatch notifications: ${error.message}`);
+    }
   }
 }
-
 
 export const alertService = new AlertService();

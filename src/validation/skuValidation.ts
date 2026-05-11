@@ -26,9 +26,7 @@ export const createSkuSchema = Joi.object({
       "string.pattern.base": "SKU code can only contain uppercase letters, numbers, hyphens, and underscores",
       "any.required": "SKU code is required",
     }),
-  productVariantId: mongoId.required().messages({
-    "any.required": "productVariantId is required",
-  }),
+
   productId: mongoId.required().messages({
     "any.required": "productId is required",
   }),
@@ -100,4 +98,5 @@ export const skuIdParamSchema = Joi.object({
 export const updateSkuRequestSchema = Joi.object({
   params: skuIdParamSchema,
   body: updateSkuSchema,
+  query : Joi.object({}).optional(),
 });

@@ -19,6 +19,7 @@ export interface IInventoryMovement extends Document {
   referenceCode?: string;                      // Free-text PO number, shipment ref, etc.
   // Adjustment metadata
   reason?: string;                             // Required when movementType === ADJUSTMENT
+  note?: string;                               // Optional extra detail for adjustments
   // Snapshot — denormalised at write time so history is readable even if
   // the SKU or Location document is later renamed or soft-deleted
   snapshot: {
@@ -90,6 +91,11 @@ const InventoryMovementSchema = new Schema<IInventoryMovement>(
       trim: true,
       default: null,
     },
+    note: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     // ── Snapshot (denormalised) ──────────────────────────────────────────
     snapshot: {
       skuCode: {
@@ -112,7 +118,7 @@ const InventoryMovementSchema = new Schema<IInventoryMovement>(
     },
     performedBy: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "User",
       required: [true, "Performed by is required"],
     },
     // ── Stock state after movement ───────────────────────────────────────
@@ -162,7 +168,7 @@ InventoryMovementSchema.index({ createdAt: -1 });
  * Business rule validations applied before every insert.
  * These are the last line of defence — the service layer validates first.
  */
-InventoryMovementSchema.pre("save", function (next) {
+InventoryMovementSchema.pre("save", function (this: IInventoryMovement, next) {
   // ADJUSTMENT movements must always include a reason
   if (this.movementType === MovementType.ADJUSTMENT && !this.reason?.trim()) {
     return next(new Error("Reason is required for ADJUSTMENT movements"));

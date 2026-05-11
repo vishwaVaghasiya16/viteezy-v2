@@ -561,9 +561,9 @@ class InventoryService {
         total,
         page,
         limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
+        pages: totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
       },
     };
   }
@@ -592,12 +592,15 @@ class InventoryService {
       performedBy,
       dateFrom,
       dateTo,
-      page = 1,
-      limit = 20,
     } = filters;
+
+    // Ensure page and limit are numbers
+    const page = Number(filters.page) || 1;
+    const limit = Number(filters.limit) || 20;
 
     const match: Record<string, any> = {};
 
+    // Cast IDs only if they exist
     if (skuId) match.skuId = new mongoose.Types.ObjectId(skuId);
     if (movementType) match.movementType = movementType;
     if (status) match.status = status;
@@ -614,11 +617,19 @@ class InventoryService {
       if (toLocationId) match.toLocationId = new mongoose.Types.ObjectId(toLocationId);
     }
 
-    // Date range
+    // Date range with safety check
     if (dateFrom || dateTo) {
       match.createdAt = {};
-      if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
-      if (dateTo) match.createdAt.$lte = new Date(dateTo);
+      if (dateFrom) {
+        const d = new Date(dateFrom);
+        if (!isNaN(d.getTime())) match.createdAt.$gte = d;
+      }
+      if (dateTo) {
+        const d = new Date(dateTo);
+        if (!isNaN(d.getTime())) match.createdAt.$lte = d;
+      }
+      // Cleanup if dates were invalid
+      if (Object.keys(match.createdAt).length === 0) delete match.createdAt;
     }
 
     const total = await InventoryMovements.countDocuments(match);
@@ -640,9 +651,9 @@ class InventoryService {
         total,
         page,
         limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
+        pages: totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
       },
     };
   }
