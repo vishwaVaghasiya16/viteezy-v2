@@ -89,17 +89,29 @@ export const createMovementSchema = Joi.object({
     const { movementType, fromLocationId, toLocationId, orderId, subscriptionId, adjustmentReason } = value;
 
     // ── fromLocationId required check ────────────────────────────────────
+    const mongoIdLooksValid = (id: unknown) =>
+      typeof id === "string" && /^[a-fA-F0-9]{24}$/.test(id);
+
+    const returnCanDeriveShipping = movementType === MovementType.RETURN && mongoIdLooksValid(orderId);
+    const saleCanDeriveShipping =
+      movementType === MovementType.SALE &&
+      (mongoIdLooksValid(orderId) || mongoIdLooksValid(subscriptionId));
+
     if (requiresFromLocation(movementType) && !fromLocationId) {
-      return helpers.error("any.invalid", {
-        message: `fromLocationId is required for ${movementType} movements`,
-      });
+      if (!returnCanDeriveShipping) {
+        return helpers.error("any.invalid", {
+          message: `fromLocationId is required for ${movementType} movements (or supply orderId for Return to derive shipping address)`,
+        });
+      }
     }
 
     // ── toLocationId required check ──────────────────────────────────────
     if (requiresToLocation(movementType) && !toLocationId) {
-      return helpers.error("any.invalid", {
-        message: `toLocationId is required for ${movementType} movements`,
-      });
+      if (!saleCanDeriveShipping) {
+        return helpers.error("any.invalid", {
+          message: `toLocationId is required for ${movementType} movements (or supply orderId/subscriptionId for Sale to derive destination when applicable)`,
+        });
+      }
     }
 
     // ── Transfer: both locations must differ ─────────────────────────────

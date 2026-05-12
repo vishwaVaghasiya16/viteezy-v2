@@ -96,8 +96,8 @@ export interface SkuFilterDto {
  *
  * Purchase            → skuId, toLocationId, quantity
  * Transfer            → skuId, fromLocationId, toLocationId, quantity
- * Sale                → skuId, fromLocationId, quantity, orderId
- * Return              → skuId, toLocationId, quantity
+ * Sale                → skuId, fromLocationId, quantity, orderId [, toLocationId or resolved from order.shippingAddressId]
+ * Return              → skuId, toLocationId, quantity [, fromLocationId or orderId → order shipping]
  * Reservation         → skuId, fromLocationId, quantity, orderId
  * Release Reservation → skuId, fromLocationId, quantity, orderId
  * Adjustment          → skuId, fromLocationId OR toLocationId, quantity, adjustmentReason
@@ -189,6 +189,15 @@ export interface ProcessedMovementContext {
   adjustmentReason?: InventoryAdjustmentReason;
   adjustmentNote?: string;
   performedBy: mongoose.Types.ObjectId;
+  /**
+   * Fulfillment / packaging site where reserved stock physically lives when
+   * `fromLocation` is the customer shipping pseudo-location (order cancel/releases).
+   */
+  reservationLedgerLocation?: {
+    _id: mongoose.Types.ObjectId;
+    name: string;
+    type: LocationType;
+  };
 }
 
 /**
@@ -213,6 +222,16 @@ export interface MovementResult {
   status: MovementStatus;
   skuId: mongoose.Types.ObjectId;
   quantity: number;
+  route: {
+    fromLocation?: {
+      locationId: mongoose.Types.ObjectId;
+      locationName: string;
+    };
+    toLocation?: {
+      locationId: mongoose.Types.ObjectId;
+      locationName: string;
+    };
+  };
   stockBefore: {
     fromLocation?: StockSnapshot;
     toLocation?: StockSnapshot;
@@ -354,6 +373,7 @@ export function requiresFromLocation(type: MovementType): boolean {
     MovementType.SALE,
     MovementType.RESERVATION,
     MovementType.RELEASE_RESERVATION,
+    MovementType.RETURN,
     MovementType.ADJUSTMENT,
   ].includes(type);
 }
@@ -362,6 +382,7 @@ export function requiresToLocation(type: MovementType): boolean {
   return [
     MovementType.PURCHASE,
     MovementType.TRANSFER,
+    MovementType.SALE,
     MovementType.RETURN,
   ].includes(type);
 }

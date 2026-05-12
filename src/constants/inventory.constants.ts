@@ -12,10 +12,10 @@ export const MovementLocationRules: Partial<Record<MovementType, AllowedRoute>> 
   },
   [MovementType.SALE]: {
     allowedSources: [LocationType.FULFILLMENT_CENTER, LocationType.PACKAGING_PARTNER],
-    allowedDestinations: [], // Customer ID handled separately
+    allowedDestinations: [LocationType.CUSTOMER],
   },
   [MovementType.RETURN]: {
-    allowedSources: [], // Customer ID handled separately
+    allowedSources: [LocationType.CUSTOMER],
     allowedDestinations: [LocationType.WAREHOUSE],
   },
   [MovementType.RESERVATION]: {

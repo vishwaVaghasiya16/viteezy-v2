@@ -22,6 +22,8 @@ const ContactSchema = new Schema({
 export interface ILocation extends Document {
   name: string;
   type: LocationType;
+  /** When type is CUSTOMER — links to commerce `addresses._id` (order shipping) for stable routing in movements */
+  linkedAddressId?: mongoose.Types.ObjectId | null;
   address: {
     street?: string;
     street2?: string;
@@ -48,7 +50,7 @@ export interface ILocation extends Document {
 
 const LocationSchema = new Schema<ILocation>(
   {
-    name: {
+    name: {        
       type: String,
       required: [true, "Location name is required"],
       trim: true,
@@ -58,6 +60,11 @@ const LocationSchema = new Schema<ILocation>(
       type: String,
       enum: LOCATION_TYPE_VALUES,
       required: [true, "Location type is required"],
+    },
+    linkedAddressId: {
+      type: Schema.Types.ObjectId,
+      ref: "addresses",
+      default: null,
     },
     address: {
       type: AddressSchema,
@@ -100,6 +107,13 @@ const LocationSchema = new Schema<ILocation>(
 // ─── Indexes ────────────────────────────────────────────────────────────────
 LocationSchema.index({ type: 1, isActive: 1 });
 LocationSchema.index({ isDeleted: 1 });
+LocationSchema.index(
+  { linkedAddressId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false, linkedAddressId: { $exists: true } },
+  }
+);
 LocationSchema.index(
   { name: 1, type: 1 },
   { unique: true, partialFilterExpression: { isDeleted: false } }

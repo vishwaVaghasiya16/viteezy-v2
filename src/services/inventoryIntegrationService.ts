@@ -79,7 +79,8 @@ class InventoryIntegrationService {
    * releaseReservationForOrder
    *
    * Called when an order is CANCELLED.
-   * Releases previously reserved stock.
+   * Releases previously reserved stock at the fulfilment/source site; the movement rows
+   * record shipping address as `fromLocationId` when the order includes shippingAddressId.
    */
   async releaseReservationForOrder(order: any, performedBy: string): Promise<void> {
     logger.info(`Releasing inventory reservations for order ${order.orderNumber}`);
@@ -128,6 +129,7 @@ class InventoryIntegrationService {
    *
    * Called when an order is SHIPPED.
    * Decrements both stock and reserved quantities at the Fulfillment Center.
+   * Customer destination on the movement (`toLocationId`) is derived from order.shippingAddressId.
    */
   async recordSaleForOrder(order: any, performedBy: string): Promise<void> {
     logger.info(`Recording inventory sale for order ${order.orderNumber}`);

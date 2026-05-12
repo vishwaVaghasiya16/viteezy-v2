@@ -25,6 +25,7 @@ import {
 } from "../types/inventory.types";
 import { MovementLocationRules } from "@/constants/inventory.constants";
 import { alertService } from "@/services/alert.service";
+import { ensureCustomerLocationForShippingAddressId } from "@/services/inventoryShippingLocation.service";
 import { AppError } from "@/utils/AppError";
 
 // TYPES
@@ -88,7 +89,6 @@ class MovementService {
     dto: CreateMovementDto,
     performedBy: string
   ): Promise<ProcessedMovementContext> {
-    // Fetch SKU
     const sku = await Skus.findOne({
       _id: dto.skuId,
       isActive: true,
@@ -99,48 +99,8 @@ class MovementService {
       throw new AppError(`SKU not found or inactive: ${dto.skuId}`, 404);
     }
 
-    // Fetch fromLocation if needed
-    let fromLocation: ProcessedMovementContext["fromLocation"] | undefined;
-    if (requiresFromLocation(dto.movementType) && dto.fromLocationId) {
-      const loc = await Locations.findOne({
-        _id: dto.fromLocationId,
-        isActive: true,
-        isDeleted: false,
-      }).lean();
-
-      if (!loc) {
-        throw new AppError(`Source location not found or inactive: ${dto.fromLocationId}`, 404);
-      }
-
-      fromLocation = {
-        _id: loc._id as mongoose.Types.ObjectId,
-        name: loc.name,
-        type: loc.type,
-      };
-    }
-
-    // Fetch toLocation if needed
-    let toLocation: ProcessedMovementContext["toLocation"] | undefined;
-    if (requiresToLocation(dto.movementType) && dto.toLocationId) {
-      const loc = await Locations.findOne({
-        _id: dto.toLocationId,
-        isActive: true,
-        isDeleted: false,
-      }).lean();
-
-      if (!loc) {
-        throw new AppError(`Target location not found or inactive: ${dto.toLocationId}`, 404);
-      }
-
-      toLocation = {
-        _id: loc._id as mongoose.Types.ObjectId,
-        name: loc.name,
-        type: loc.type,
-      };
-    }
-
-    // ── Linkage (Order/Subscription) ───────────────────────────────────
     let orderId: mongoose.Types.ObjectId | undefined;
+    let orderLean: { shippingAddressId?: mongoose.Types.ObjectId } | undefined;
     let finalQuantity = dto.quantity;
 
     if (dto.orderId) {
@@ -150,7 +110,8 @@ class MovementService {
       const order = await Orders.findById(orderId).lean();
 
       if (order) {
-        // Find the item in the order that matches this SKU's product and variant
+        orderLean = order;
+
         const orderItem = order.items.find(
           (item: any) =>
             item.productId.toString() === sku.productId.toString() &&
@@ -175,6 +136,9 @@ class MovementService {
         }
       }
     }
+
+    let subscriptionShippingAddressId: mongoose.Types.ObjectId | undefined;
+
     if (dto.subscriptionId) {
       const subscriptionObjectId = new mongoose.Types.ObjectId(dto.subscriptionId);
       const subscription = await Subscriptions.findById(subscriptionObjectId).lean();
@@ -217,6 +181,82 @@ class MovementService {
       if (!dto.quantity) {
         finalQuantity = subscriptionItem.capsuleCount || 1;
       }
+
+      const rawMetaShipping = (subscription as { metadata?: { shippingAddressId?: unknown } }).metadata
+        ?.shippingAddressId;
+      if (rawMetaShipping && mongoose.Types.ObjectId.isValid(String(rawMetaShipping))) {
+        subscriptionShippingAddressId = new mongoose.Types.ObjectId(String(rawMetaShipping));
+      }
+    }
+
+    const loadMiniLocation = async (
+      id: string | undefined,
+      role: "source" | "target"
+    ): Promise<ProcessedMovementContext["fromLocation"] | undefined> => {
+      if (!id) return undefined;
+      const loc = await Locations.findOne({
+        _id: id,
+        isActive: true,
+        isDeleted: false,
+      }).lean();
+
+      if (!loc) {
+        throw new AppError(
+          `${role === "source" ? "Source" : "Target"} location not found or inactive: ${id}`,
+          404
+        );
+      }
+
+      return {
+        _id: loc._id as mongoose.Types.ObjectId,
+        name: loc.name,
+        type: loc.type as LocationType,
+      };
+    };
+
+    let fromLocation: ProcessedMovementContext["fromLocation"] | undefined;
+    let toLocation: ProcessedMovementContext["toLocation"] | undefined;
+    let reservationLedgerLocation: ProcessedMovementContext["reservationLedgerLocation"];
+
+    if (requiresFromLocation(dto.movementType) && dto.fromLocationId) {
+      fromLocation = await loadMiniLocation(dto.fromLocationId, "source");
+    }
+    if (requiresToLocation(dto.movementType) && dto.toLocationId) {
+      toLocation = await loadMiniLocation(dto.toLocationId, "target");
+    }
+
+    // Route customer shipping (order.shippingAddressId) into movement endpoints
+    if (dto.movementType === MovementType.SALE && !toLocation && orderLean?.shippingAddressId) {
+      toLocation = await ensureCustomerLocationForShippingAddressId(orderLean.shippingAddressId);
+    } else if (
+      dto.movementType === MovementType.SALE &&
+      !toLocation &&
+      dto.subscriptionId &&
+      subscriptionShippingAddressId
+    ) {
+      toLocation =
+        await ensureCustomerLocationForShippingAddressId(subscriptionShippingAddressId);
+    }
+
+    if (
+      dto.movementType === MovementType.RETURN &&
+      !fromLocation &&
+      dto.orderId &&
+      orderLean?.shippingAddressId
+    ) {
+      fromLocation =
+        await ensureCustomerLocationForShippingAddressId(orderLean.shippingAddressId);
+    }
+
+    if (
+      dto.movementType === MovementType.RELEASE_RESERVATION &&
+      dto.orderId &&
+      fromLocation &&
+      orderLean?.shippingAddressId
+    ) {
+      reservationLedgerLocation = fromLocation as ProcessedMovementContext["reservationLedgerLocation"];
+      fromLocation =
+        await ensureCustomerLocationForShippingAddressId(orderLean.shippingAddressId);
     }
 
     return {
@@ -243,6 +283,7 @@ class MovementService {
       adjustmentReason: dto.adjustmentReason,
       adjustmentNote: dto.adjustmentNote,
       performedBy: new mongoose.Types.ObjectId(performedBy),
+      reservationLedgerLocation,
     };
   }
 
@@ -318,6 +359,23 @@ class MovementService {
             400
           );
         }
+
+        if (ctx.orderId && !toLocation) {
+          throw new AppError(
+            "Sale movements for an order require a customer shipping destination — ensure order has shippingAddressId or pass explicit toLocationId.",
+            400
+          );
+        }
+
+        if (toLocation) {
+          if (!MovementLocationRules[MovementType.SALE]?.allowedDestinations.includes(toLocation.type)) {
+            throw new AppError(
+              `Sale destination location type ${toLocation.type} is invalid. Expected: ${MovementLocationRules[MovementType.SALE]?.allowedDestinations.join(", ") || "Customer"}`,
+              400
+            );
+          }
+        }
+
         if (!fromLocation) break;
         const inv = await this.getInventoryOrThrow(sku._id, fromLocation._id, "Sale source");
         
@@ -369,15 +427,17 @@ class MovementService {
 
       //  RELEASE_RESERVATION: must have sufficient reserved stock to release
       case MovementType.RELEASE_RESERVATION: {
-        if (!fromLocation) break;
+        const ledger =
+          ctx.reservationLedgerLocation ?? fromLocation ?? undefined;
+        if (!ledger) break;
         const inv = await this.getInventoryOrThrow(
           sku._id,
-          fromLocation._id,
+          ledger._id,
           "Release reservation source"
         );
         if (inv.reservedQuantity < quantity) {
           throw new AppError(
-            `Cannot release ${quantity} units — only ${inv.reservedQuantity} reserved at ${fromLocation.name}`,
+            `Cannot release ${quantity} units — only ${inv.reservedQuantity} reserved at ${ledger.name}`,
             400
           );
         }
@@ -409,8 +469,18 @@ class MovementService {
         break;
       }
 
-      //  PURCHASE, RETURN: no stock checks needed (adding stock) ─
-      case MovementType.RETURN:
+      //  RETURN: semantic source is Customer (shipping location)
+      case MovementType.RETURN: {
+        if (!fromLocation) {
+          throw new AppError(
+            "Return movements require fromLocationId (shipping) or orderId linked to shippingAddressId.",
+            400
+          );
+        }
+        break;
+      }
+
+      case MovementType.PURCHASE:
         break;
     }
   }
@@ -520,13 +590,14 @@ class MovementService {
 
       //  RELEASE_RESERVATION: decrement reservedQuantity only ─
       case MovementType.RELEASE_RESERVATION: {
+        const ledgerLoc = ctx.reservationLedgerLocation ?? ctx.fromLocation!;
         const updated = await this.decrementReserved(
           ctx.sku._id,
-          ctx.fromLocation!._id,
+          ledgerLoc._id,
           ctx.quantity,
           session
         );
-        fromSnapshots = this.buildSnapshots(ctx.fromLocation!, updated, 0, -ctx.quantity);
+        fromSnapshots = this.buildSnapshots(ledgerLoc, updated, 0, -ctx.quantity);
         break;
       }
 
@@ -596,6 +667,14 @@ class MovementService {
         status: MovementStatus.COMPLETED,
         skuId: ctx.sku._id,
         quantity: ctx.quantity,
+        route: {
+          fromLocation: ctx.fromLocation
+            ? { locationId: ctx.fromLocation._id, locationName: ctx.fromLocation.name }
+            : undefined,
+          toLocation: ctx.toLocation
+            ? { locationId: ctx.toLocation._id, locationName: ctx.toLocation.name }
+            : undefined,
+        },
         stockBefore: {
           fromLocation: fromSnapshots?.before,
           toLocation: toSnapshots?.before,
@@ -630,6 +709,20 @@ class MovementService {
             status: MovementStatus.COMPLETED,
             skuId: existing.skuId as mongoose.Types.ObjectId,
             quantity: existing.quantity,
+            route: {
+              fromLocation: existing.fromLocationId
+                ? {
+                    locationId: existing.fromLocationId as mongoose.Types.ObjectId,
+                    locationName: existing.snapshot?.fromLocationName || "",
+                  }
+                : undefined,
+              toLocation: existing.toLocationId
+                ? {
+                    locationId: existing.toLocationId as mongoose.Types.ObjectId,
+                    locationName: existing.snapshot?.toLocationName || "",
+                  }
+                : undefined,
+            },
             stockBefore: {
               fromLocation: buildSnapshotFromDb(existing.stockBefore?.fromLocation, existing.fromLocationId, existing.snapshot?.fromLocationName),
               toLocation: buildSnapshotFromDb(existing.stockBefore?.toLocation, existing.toLocationId, existing.snapshot?.toLocationName),
@@ -926,7 +1019,18 @@ class MovementService {
   }
 
   private generateIdempotencyKey(ctx: ProcessedMovementContext): string | undefined {
-    const { movementType, sku, fromLocation, toLocation, orderId, subscriptionId, customerId, referenceCode, quantity } = ctx;
+    const {
+      movementType,
+      sku,
+      fromLocation,
+      toLocation,
+      orderId,
+      subscriptionId,
+      customerId,
+      referenceCode,
+      quantity,
+      reservationLedgerLocation,
+    } = ctx;
     const link = orderId?.toString() || subscriptionId?.toString() || customerId?.toString() || "NOLINK";
 
     switch (movementType) {
@@ -937,8 +1041,10 @@ class MovementService {
             return `RES:SUB:${subscriptionId}:${sku._id}:${fromLocation?._id}:${period}`;
           }
         return `RES:${link}:${sku._id}:${fromLocation?._id}`;
-      case MovementType.RELEASE_RESERVATION:
-        return `REL:${link}:${sku._id}:${fromLocation?._id}`;
+      case MovementType.RELEASE_RESERVATION: {
+        const ledgerId = reservationLedgerLocation?._id ?? fromLocation?._id;
+        return `REL:${link}:${sku._id}:${ledgerId}`;
+      }
       case MovementType.SALE:
         return `SALE:${link}:${sku._id}:${fromLocation?._id}:QTY${quantity}`;
       case MovementType.TRANSFER:
