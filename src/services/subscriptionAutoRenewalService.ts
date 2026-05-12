@@ -8,7 +8,6 @@ import { SubscriptionStatus, PaymentStatus, PaymentMethod, OrderStatus, ProductV
 import { AppError } from "@/utils/AppError";
 import { logger } from "@/utils/logger";
 import { PaymentService } from "./payment/PaymentService";
-import { inventoryIntegrationService } from "./inventoryIntegrationService";
 
 interface RenewalResult {
   success: boolean;
@@ -483,18 +482,6 @@ export class SubscriptionAutoRenewalService {
         }
       }
 
-      // ── INVENTORY RESERVATION (Step 9) ──────────────────────────────────
-      if (renewalOrder) {
-        try {
-          await inventoryIntegrationService.reserveStockForOrder(
-            renewalOrder,
-            (subscription.userId as mongoose.Types.ObjectId).toString()
-          );
-        } catch (invError: any) {
-          logger.error(`Inventory reservation failed for renewal order ${renewalOrder.orderNumber}: ${invError.message}`);
-        }
-      }
-      // ────────────────────────────────────────────────────────────────────
 
       // Update subscription
       subscription.lastBilledDate = subscription.nextBillingDate;

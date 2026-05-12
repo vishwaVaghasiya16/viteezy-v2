@@ -430,7 +430,14 @@ export enum InventoryAdjustmentReason {
   OTHER = "Other",
 }
 
+// Adjustment Direction
+export enum AdjustmentDirection {
+  INCREASE = "INCREASE",
+  DECREASE = "DECREASE",
+}
+
 // Export all enum values as arrays for Mongoose schemas
+export const ADJUSTMENT_DIRECTION_VALUES = Object.values(AdjustmentDirection);
 export const PRODUCT_STATUS_VALUES = Object.values(ProductStatus);
 export const PRODUCT_VARIANT_VALUES = Object.values(ProductVariant);
 export const USER_ROLE_VALUES = Object.values(UserRole);

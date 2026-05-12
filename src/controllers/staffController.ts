@@ -42,7 +42,7 @@ class StaffController {
   listStaff = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const staff = await User.find({
       role: { 
-        $in: [UserRole.ADMIN, UserRole.MODERATOR, UserRole.INVENTORY_MANAGER] 
+        $in: [UserRole.INVENTORY_MANAGER] 
       },
       isDeleted: { $ne: true }
     }).sort({ createdAt: -1 });
@@ -64,7 +64,7 @@ class StaffController {
     const staff = await User.findOneAndUpdate(
       { 
         _id: id, 
-        role: { $in: [UserRole.ADMIN, UserRole.MODERATOR, UserRole.INVENTORY_MANAGER] },
+        role: { $in: [UserRole.INVENTORY_MANAGER] },
         isDeleted: { $ne: true }
       },
       { $set: req.body },
@@ -97,7 +97,7 @@ class StaffController {
     const staff = await User.findOneAndUpdate(
       { 
         _id: id, 
-        role: { $in: [UserRole.ADMIN, UserRole.MODERATOR, UserRole.INVENTORY_MANAGER] },
+        role: { $in: [UserRole.INVENTORY_MANAGER] },
         isDeleted: { $ne: true }
       },
       { 

@@ -33,7 +33,6 @@ import { couponUsageHistoryService } from "../couponUsageHistoryService";
 import { cartService } from "../cartService";
 import { AddressSnapshotType } from "../../models/common.model";
 import { SubscriptionGatewayService } from "../subscriptionGatewayService";
-import { inventoryIntegrationService } from "../inventoryIntegrationService";
 import { config } from "@/config";
 
 /**
@@ -345,18 +344,6 @@ export class PaymentService {
       // Eligible if: planType is SUBSCRIPTION or MIXED (with SACHETS items), and isOneTime is false
       const isEligibleForSubscription = 
         (order.planType === OrderPlanType.SUBSCRIPTION || order.planType === OrderPlanType.MIXED);
-
-      if (isPaymentCompleted) {
-        console.log("🟢 [INVENTORY] Payment completed. Triggering stock reservation...");
-        try {
-          await inventoryIntegrationService.reserveStockForOrder(
-            order,
-            data.userId
-          );
-        } catch (invError: any) {
-          logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
-        }
-      }
 
       if (isPaymentCompleted && isEligibleForSubscription) {
         console.log(
@@ -771,15 +758,6 @@ export class PaymentService {
           await order.save();
 
           // ── INVENTORY RESERVATION (Step 4) ──────────────────────────────────
-          try {
-            await inventoryIntegrationService.reserveStockForOrder(
-              order,
-              (order.userId as mongoose.Types.ObjectId).toString()
-            );
-          } catch (invError: any) {
-            logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
-          }
-          // ────────────────────────────────────────────────────────────────────
 
           console.log(
             "✅ [PAYMENT SERVICE] - Order status updated to CONFIRMED"
@@ -1534,17 +1512,6 @@ export class PaymentService {
             logger.info(
               `Order ${order.orderNumber} confirmed after payment completion`
             );
-
-            // ── INVENTORY RESERVATION (Step 4) ──────────────────────────────────
-            try {
-              await inventoryIntegrationService.reserveStockForOrder(
-                order,
-                (order.userId as mongoose.Types.ObjectId).toString()
-              );
-            } catch (invError: any) {
-              logger.error(`Inventory reservation failed for order ${order.orderNumber}: ${invError.message}`);
-            }
-            // ────────────────────────────────────────────────────────────────────
 
             await this.handleOrderConfirmation(order, payment);
 

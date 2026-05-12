@@ -5,6 +5,7 @@ import {
   LocationType,
   InventoryAdjustmentReason,
   ProductVariant,
+  AdjustmentDirection,
 } from "@/models/enums";
 
 // SECTION 1 — LOCATION DTOs
@@ -110,8 +111,10 @@ export interface CreateMovementDto {
   // Linkage
   orderId?: string;
   subscriptionId?: string;
+  customerId?: string;                  // user ID or shipping address ID
   referenceCode?: string;
   // Adjustment specific
+  adjustmentDirection?: AdjustmentDirection;
   adjustmentReason?: InventoryAdjustmentReason;
   adjustmentNote?: string;              // free-text additional context
   // Injected by auth middleware — never accepted from request body
@@ -127,6 +130,7 @@ export interface MovementFilterDto {
   status?: MovementStatus;
   orderId?: string;
   subscriptionId?: string;
+  customerId?: string;
   performedBy?: string;
   dateFrom?: Date | string;
   dateTo?: Date | string;
@@ -179,7 +183,9 @@ export interface ProcessedMovementContext {
   quantity: number;
   orderId?: mongoose.Types.ObjectId;
   subscriptionId?: mongoose.Types.ObjectId;
+  customerId?: mongoose.Types.ObjectId;
   referenceCode?: string;
+  adjustmentDirection?: AdjustmentDirection;
   adjustmentReason?: InventoryAdjustmentReason;
   adjustmentNote?: string;
   performedBy: mongoose.Types.ObjectId;
@@ -207,6 +213,14 @@ export interface MovementResult {
   status: MovementStatus;
   skuId: mongoose.Types.ObjectId;
   quantity: number;
+  stockBefore: {
+    fromLocation?: StockSnapshot;
+    toLocation?: StockSnapshot;
+  };
+  stockDelta: {
+    fromLocation?: StockSnapshot;
+    toLocation?: StockSnapshot;
+  };
   stockAfter: {
     fromLocation?: StockSnapshot;
     toLocation?: StockSnapshot;
@@ -316,7 +330,17 @@ export interface PaginatedResponse<T> {
   };
 }
 
-// SECTION 8 — TYPE GUARD HELPERS
+// SECTION 8 — BUSINESS RULES MATRIX
+
+export interface AllowedRoute {
+  allowedSources: LocationType[];
+  allowedDestinations: LocationType[];
+  requiresSameLocation?: boolean;
+}
+
+
+
+// SECTION 9 — TYPE GUARD HELPERS
 
 /**
  * Called in validators and movement.service.ts to avoid duplicating
@@ -328,7 +352,6 @@ export function requiresFromLocation(type: MovementType): boolean {
     MovementType.PURCHASE,
     MovementType.TRANSFER,
     MovementType.SALE,
-    MovementType.RETURN,
     MovementType.RESERVATION,
     MovementType.RELEASE_RESERVATION,
     MovementType.ADJUSTMENT,
@@ -367,7 +390,7 @@ export function isStockReducingMovement(type: MovementType): boolean {
   ].includes(type);
 }
 
-// SECTION 9 — STOCK COMPUTATION HELPERS
+// SECTION 10 — STOCK COMPUTATION HELPERS
 
 /**
  * Single source of truth for all stock status computations.

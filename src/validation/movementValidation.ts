@@ -3,6 +3,7 @@ import {
   MovementType,
   MovementStatus,
   InventoryAdjustmentReason,
+  AdjustmentDirection,
 } from "@/models/enums";
 import {
   requiresFromLocation,
@@ -68,6 +69,13 @@ export const createMovementSchema = Joi.object({
   referenceCode: Joi.string().trim().max(100).optional().allow(null, ""),
 
   // Adjustment specific
+  adjustmentDirection: Joi.string()
+    .valid(...Object.values(AdjustmentDirection))
+    .optional()
+    .allow(null)
+    .messages({
+      "any.only": `adjustmentDirection must be one of: ${Object.values(AdjustmentDirection).join(", ")}`,
+    }),
   adjustmentReason: Joi.string()
     .valid(...Object.values(InventoryAdjustmentReason))
     .optional()
@@ -78,7 +86,7 @@ export const createMovementSchema = Joi.object({
   adjustmentNote: Joi.string().trim().max(500).optional().allow(null, ""),
 })
   .custom((value, helpers) => {
-    const { movementType, fromLocationId, toLocationId, orderId, adjustmentReason } = value;
+    const { movementType, fromLocationId, toLocationId, orderId, subscriptionId, adjustmentReason } = value;
 
     // ── fromLocationId required check ────────────────────────────────────
     if (requiresFromLocation(movementType) && !fromLocationId) {
@@ -106,11 +114,13 @@ export const createMovementSchema = Joi.object({
       });
     }
 
-    // ── orderId required check ───────────────────────────────────────────
-    if (requiresOrderId(movementType) && !orderId) {
-      return helpers.error("any.invalid", {
-        message: `orderId is required for ${movementType} movements`,
-      });
+    // ── orderId/subscriptionId linkage check ────────────────────────────
+    if (requiresOrderId(movementType)) {
+      if (!orderId && !subscriptionId) {
+        return helpers.error("any.invalid", {
+          message: `Either orderId or subscriptionId is required for ${movementType} movements`,
+        });
+      }
     }
 
     // ── adjustmentReason required check ─────────────────────────────────
@@ -120,18 +130,20 @@ export const createMovementSchema = Joi.object({
       });
     }
 
-    // ── Adjustment: must have exactly one of fromLocationId / toLocationId
+    // ── adjustmentDirection required check ─────────────────────────────
+    if (movementType === MovementType.ADJUSTMENT && !value.adjustmentDirection) {
+      return helpers.error("any.invalid", {
+        message: "adjustmentDirection is required for Adjustment movements",
+      });
+    }
+
+    // ── Adjustment: must specify a location ────────────────────────────
     if (movementType === MovementType.ADJUSTMENT) {
       const hasFrom = Boolean(fromLocationId);
       const hasTo = Boolean(toLocationId);
       if (!hasFrom && !hasTo) {
         return helpers.error("any.invalid", {
-          message: "Adjustment movements must specify either fromLocationId (deduct) or toLocationId (add)",
-        });
-      }
-      if (hasFrom && hasTo) {
-        return helpers.error("any.invalid", {
-          message: "Adjustment movements must specify only one of fromLocationId or toLocationId, not both",
+          message: "Adjustment movements must specify either fromLocationId or toLocationId",
         });
       }
     }

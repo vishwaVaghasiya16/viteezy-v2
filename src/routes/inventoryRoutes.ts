@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { inventoryController } from "../controllers/inventoryController";
+import { skuController } from "../controllers/skuController";
 import { validate, validateJoi, validateParams, validateQuery } from "@/middleware/joiValidation";
 import {
   inventoryFilterSchema,
@@ -91,7 +92,7 @@ router.post(
   "/skus",
   authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateJoi(createSkuSchema),
-  inventoryController.createSku.bind(inventoryController)
+  skuController.createSku.bind(skuController)
 );
 
 // GET /api/inventory/skus
@@ -99,7 +100,7 @@ router.get(
   "/skus",
   authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateQuery(skuFilterSchema),
-  inventoryController.listSkus.bind(inventoryController)
+  skuController.listSkus.bind(skuController)
 );
 
 // GET /api/inventory/skus/:skuId
@@ -107,7 +108,7 @@ router.get(
   "/skus/:skuId",
   authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(skuParamSchema),
-  inventoryController.getOneSku.bind(inventoryController)
+  skuController.getOneSku.bind(skuController)
 );
 
 // PATCH /api/inventory/skus/:skuId
@@ -115,7 +116,7 @@ router.patch(
   "/skus/:skuId",
   authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validate(updateSkuRequestSchema),
-  inventoryController.updateSku.bind(inventoryController)
+  skuController.updateSku.bind(skuController)
 );
 
 // DELETE /api/inventory/skus/:skuId
@@ -123,7 +124,7 @@ router.delete(
   "/skus/:skuId",
   authorize(UserRole.ADMIN, UserRole.INVENTORY_MANAGER),
   validateParams(skuParamSchema),
-  inventoryController.removeSku.bind(inventoryController)
+  skuController.removeSku.bind(skuController)
 );
 
 export default router;
