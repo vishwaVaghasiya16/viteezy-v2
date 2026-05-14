@@ -108,11 +108,15 @@ class AddressController {
         note,
       } = req.body;
 
+      // Extract house number and addition if mixed (e.g., "12A")
+      const extractedHouseNumber = extractHouseNumberFromLine(houseNumber) || houseNumber;
+      const extractedAddition = extractAdditionFromLine(houseNumber) || houseNumberAddition;
+
       // Country-specific validation
       await this.validateAddressByCountry({
         country,
         postalCode,
-        houseNumber,
+        houseNumber: extractedHouseNumber,
         streetName,
         city,
       });
@@ -121,8 +125,10 @@ class AddressController {
       await this.validateDutchAddressOrRespond({
         country,
         postcode: postalCode,
-        houseNumber,
-        houseNumberAddition,
+        houseNumber: extractedHouseNumber,
+        houseNumberAddition: extractedAddition,
+        streetName,
+        cityName: city,
       });
 
       // Store exactly what's in the request body, not normalized data
@@ -365,11 +371,20 @@ class AddressController {
       const finalStreetName = streetName || existingAddress.streetName;
       const finalCity = city || existingAddress.city;
 
+      const finalHouseNumberToValidate =
+        houseNumber !== undefined && houseNumber !== null
+          ? String(houseNumber)
+          : existingAddress.houseNumber;
+      
+      // Extract house number and addition if mixed
+      const extractedHouseNumber = extractHouseNumberFromLine(finalHouseNumberToValidate) || finalHouseNumberToValidate;
+      const extractedAddition = extractAdditionFromLine(finalHouseNumberToValidate) || (houseNumberAddition ?? existingAddress.houseNumberAddition);
+
       // Country-specific validation
       await this.validateAddressByCountry({
         country: finalCountry,
         postalCode: finalPostalCode,
-        houseNumber: finalHouseNumber,
+        houseNumber: extractedHouseNumber,
         streetName: finalStreetName,
         city: finalCity,
       });
@@ -378,9 +393,10 @@ class AddressController {
       const validationOutcome = await this.validateDutchAddressOrRespond({
         country: finalCountry,
         postcode: finalPostalCode,
-        houseNumber: finalHouseNumber,
-        houseNumberAddition:
-          houseNumberAddition ?? existingAddress.houseNumberAddition,
+        houseNumber: extractedHouseNumber,
+        houseNumberAddition: extractedAddition,
+        streetName: finalStreetName,
+        cityName: finalCity,
       });
 
       // Store exactly what's in the request body, not normalized data
@@ -554,7 +570,13 @@ class AddressController {
     const countryCode = options.country?.toUpperCase();
 
     // Netherlands (NL): postalCode + houseNumber are primary
-    if (countryCode === "NL" || countryCode === "NETHERLANDS") {
+    const isNetherlands = 
+      countryCode === "NL" || 
+      countryCode === "NETHERLANDS" || 
+      countryCode === "THE NETHERLANDS" || 
+      countryCode === "NEDERLAND";
+
+    if (isNetherlands) {
       if (!options.postalCode || !options.houseNumber) {
         throw new AppError(
           "For Netherlands addresses, postalCode and houseNumber are required",
@@ -594,6 +616,8 @@ class AddressController {
     postcode?: string;
     houseNumber?: string | number | null;
     houseNumberAddition?: string | null;
+    streetName?: string;
+    cityName?: string | null;
   }): Promise<{ success: true; normalized?: PostNLNormalizedAddress }> {
     // Skip validation for non-Benelux countries
     if (!shouldValidateWithPostNL(options.country)) {
@@ -619,13 +643,16 @@ class AddressController {
         postcode: String(options.postcode),
         houseNumber: String(options.houseNumber),
         houseNumberAddition: options.houseNumberAddition || undefined,
+        streetName: options.streetName,
+        cityName: options.cityName || undefined,
         countryCode: postNLCountryCode,
       });
 
       // PostNL validation is mandatory - reject if invalid
       if (!validation.isValid) {
+        const specificReason = validation.reason ? `: ${validation.reason}` : "";
         throw new AppError(
-          "Address validation failed. Please check the address details.",
+          `Address validation failed${specificReason}. Please check if postcode '${options.postcode}' and house number '${options.houseNumber}' are correct.`,
           400
         );
       }
@@ -633,9 +660,14 @@ class AddressController {
       // Validation successful - return normalized address
       return { success: true, normalized: validation.normalizedAddress };
     } catch (error: any) {
+      // If it's already an AppError, just re-throw it to preserve the specific message
+      if (error instanceof AppError) {
+        throw error;
+      }
+
       // Extract status code from error
       const statusCode =
-        error?.status || error?.details?.status || error?.response?.status;
+        error?.statusCode || error?.status || error?.details?.status || error?.response?.status;
 
       // Check if it's an authentication/configuration error (401, 403)
       const isAuthError =
@@ -683,8 +715,12 @@ class AddressController {
 
       // For invalid address (400) or other validation errors
       if (statusCode === 400 || error?.message?.includes("Address incorrect")) {
+        // Try to extract a specific error message from the response body if available
+        const bodyError = error?.details?.body?.message || error?.details?.body?.ErrorMessage || error?.details?.body?.error;
+        const errorMessage = bodyError ? `: ${bodyError}` : ". Please verify the address details and try again.";
+        
         throw new AppError(
-          "Invalid address. Please verify the address details and try again.",
+          `Invalid address${errorMessage}`,
           400
         );
       }

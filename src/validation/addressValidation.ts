@@ -33,7 +33,13 @@ const validateAddressByCountry = (
   const countryCode = country?.toUpperCase();
 
   // Netherlands (NL): postalCode + houseNumber are primary
-  if (countryCode === "NL" || countryCode === "NETHERLANDS") {
+  const isNetherlands = 
+    countryCode === "NL" || 
+    countryCode === "NETHERLANDS" || 
+    countryCode === "THE NETHERLANDS" || 
+    countryCode === "NEDERLAND";
+
+  if (isNetherlands) {
     if (!value.postalCode || !value.houseNumber) {
       return helpers.error("any.custom", {
         message:
@@ -108,7 +114,7 @@ export const addAddressSchema = Joi.object(
       .try(
         Joi.string()
           .trim()
-          .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
+          .pattern(/^[0-9]{1,10}(?:\s*[-\/\s\.]\s*[a-zA-Z0-9\s]{1,15})?$/),
         Joi.number().min(1).max(99999)
       )
       .optional()
@@ -189,7 +195,7 @@ export const updateAddressSchema = Joi.object(
       .try(
         Joi.string()
           .trim()
-          .pattern(/^[0-9]{1,5}[a-zA-Z]{0,2}$/),
+          .pattern(/^[0-9]{1,10}(?:\s*[-\/\s\.]\s*[a-zA-Z0-9\s]{1,15})?$/),
         Joi.number().min(1).max(99999)
       )
       .optional()

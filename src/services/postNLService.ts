@@ -6,6 +6,8 @@ export interface PostNLAddressRequest {
   postcode: string;
   houseNumber: string;
   houseNumberAddition?: string;
+  streetName?: string;
+  cityName?: string;
   countryCode?: string;
 }
 
@@ -180,6 +182,14 @@ export class PostNLService {
       }
     }
 
+    if (request.streetName) {
+      queryParams.streetName = request.streetName.trim();
+    }
+
+    if (request.cityName) {
+      queryParams.cityName = request.cityName.trim();
+    }
+
     return { sanitized: sanitizedPayload, queryParams };
   }
 
@@ -197,6 +207,11 @@ export class PostNLService {
     }
 
     if (!response.ok) {
+      logger.error("PostNL API Error Response", {
+        status: response.status,
+        body: parsed || text,
+        url: response.url,
+      });
       const error = new PostNLServiceError(
         `PostNL responded with status ${response.status}`,
         { status: response.status, body: parsed || text }
@@ -205,6 +220,11 @@ export class PostNLService {
       (error as any).status = response.status;
       throw error;
     }
+
+    logger.debug("PostNL API Success Response", {
+      status: response.status,
+      body: parsed,
+    });
 
     return parsed;
   }
