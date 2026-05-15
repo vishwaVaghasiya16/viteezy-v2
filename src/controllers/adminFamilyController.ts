@@ -29,16 +29,25 @@ class AdminFamilyController {
       const skip = (page - 1) * limit;
 
       try {
-        // Find all main members (users without parentId)
-        const mainMembers = await User.find({ 
-          parentId: { $exists: false },
+        // Build filter for main members (users without parentId)
+        const filter = {
+          isSubMember: false,
           isActive: true,
           isDeleted: { $ne: true }
-        })
-        .select('_id firstName lastName email memberId')
-        .lean();
+        };
 
-        // Get sub-members for each main member
+        // Get total count for pagination metadata
+        const total = await User.countDocuments(filter);
+
+        // Find main members with database-level pagination
+        const mainMembers = await User.find(filter)
+          .select('_id firstName lastName email memberId isActive createdAt')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+
+        // Get sub-members for only the paginated main members
         const families = await Promise.all(
           mainMembers.map(async (mainMember) => {
             const subMembers = await User.find({ 
@@ -46,7 +55,7 @@ class AdminFamilyController {
               isActive: true,
               isDeleted: { $ne: true }
             })
-            .select('_id firstName lastName email relationshipToParent')
+            .select('_id firstName lastName email relationshipToParent isActive')
             .lean();
 
             return {
@@ -57,12 +66,8 @@ class AdminFamilyController {
           })
         );
 
-        // Apply pagination
-        const total = families.length;
-        const paginatedFamilies = families.slice(skip, skip + limit);
-
         res.apiSuccess({
-          families: paginatedFamilies,
+          families,
           pagination: {
             page,
             limit,
@@ -97,19 +102,32 @@ class AdminFamilyController {
 
       try {
         // Check if main member exists
-        const mainMember = await User.findById(mainMemberId);
-        if (!mainMember || mainMember.parentId) {
-          throw new AppError("Main member not found", 404);
+        const mainMember = await User.findOne({ 
+          _id: mainMemberId,
+          isDeleted: { $ne: true }
+        });
+        
+        if (!mainMember) {
+          throw new AppError("Main member not found or was deleted", 404);
+        }
+        
+        if (mainMember.parentId) {
+          throw new AppError("The provided mainMemberId actually belongs to a sub-member", 400);
         }
 
-        // Check if sub-member exists and belongs to this main member
+        // Check if sub-member exists
         const subMember = await User.findOne({ 
           _id: subMemberId,
-          parentId: mainMemberId 
+          isDeleted: { $ne: true }
         });
         
         if (!subMember) {
-          throw new AppError("Sub-member not found or not linked to this main member", 404);
+          throw new AppError("Sub-member not found or was deleted", 404);
+        }
+
+        // Verify relationship
+        if (!subMember.parentId || subMember.parentId.toString() !== mainMemberId) {
+          throw new AppError(`User ${subMemberId} is not a sub-member of ${mainMemberId}. Current parent: ${subMember.parentId || 'None'}`, 400);
         }
 
         // Remove sub-member from family
@@ -155,16 +173,15 @@ class AdminFamilyController {
         throw new AppError("Invalid action", 400);
       }
 
-      const MAX_SUB_MEMBERS = 10;
+      const MAX_SUB_MEMBERS = 1;
       let familiesChecked = 0;
       let violationsFound = 0;
       let actionsTaken = 0;
 
       try {
-        // Find all main members
+        // Find all main members (even inactive ones)
         const mainMembers = await User.find({ 
-          parentId: { $exists: false },
-          isActive: true,
+          isSubMember: false,
           isDeleted: { $ne: true }
         }).select('_id').lean();
 
@@ -174,7 +191,6 @@ class AdminFamilyController {
         for (const mainMember of mainMembers) {
           const subMemberCount = await User.countDocuments({ 
             parentId: mainMember._id,
-            isActive: true,
             isDeleted: { $ne: true }
           });
 
@@ -184,7 +200,6 @@ class AdminFamilyController {
             // Remove excess sub-members (remove the most recent ones)
             const excessSubMembers = await User.find({ 
               parentId: mainMember._id,
-              isActive: true,
               isDeleted: { $ne: true }
             })
             .sort({ createdAt: -1 })

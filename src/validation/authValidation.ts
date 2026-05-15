@@ -177,10 +177,44 @@ export const registerSchema = Joi.object(
   withFieldLabels({
     firstName: firstNameSchema,
     lastName: lastNameSchema,
-    email: emailSchema,
+    email: Joi.string()
+      .email()
+      .when("mainMemberId", {
+        is: Joi.exist(),
+        then: Joi.optional().allow(null, ""),
+        otherwise: Joi.required(),
+      })
+      .label("Email")
+      .messages({
+        "string.email": "Please provide a valid email address",
+        "any.required": "Email is required",
+      }),
     password: passwordSchema,
     phone: phoneSchema,
     countryCode: countryCodeSchema,
+    mainMemberId: Joi.string()
+      .pattern(/^MEM-[A-Z0-9]{8}$/)
+      .optional()
+      .label("Main Member ID")
+      .messages({
+        "string.pattern.base": "Invalid member ID format. Expected: MEM-XXXXXXXX",
+      }),
+    relationshipToParent: Joi.string()
+      .valid("Child", "Spouse", "Parent", "Sibling", "Other")
+      .when("mainMemberId", {
+        is: Joi.exist(),
+        then: Joi.required(),
+        otherwise: Joi.forbidden(),
+      })
+      .label("Relationship"),
+    registrationSource: Joi.string()
+      .valid("registration", "quiz")
+      .when("mainMemberId", {
+        is: Joi.exist(),
+        then: Joi.required(),
+        otherwise: Joi.optional(),
+      })
+      .label("Registration Source"),
   })
 ).label("RegisterPayload");
 
@@ -191,14 +225,34 @@ export const registerSchema = Joi.object(
  */
 export const loginSchema = Joi.object(
   withFieldLabels({
-    email: emailSchema,
+    email: Joi.string()
+      .email()
+      .when("mainMemberId", {
+        is: Joi.exist(),
+        then: Joi.optional().allow(null, ""),
+        otherwise: Joi.required(),
+      })
+      .label("Email"),
+    mainMemberId: Joi.string()
+      .pattern(/^MEM-[A-Z0-9]{8}$/)
+      .optional()
+      .label("Main Member ID"),
+    firstName: Joi.string()
+      .when("mainMemberId", {
+        is: Joi.exist(),
+        then: Joi.required(),
+        otherwise: Joi.optional().allow(null, ""),
+      })
+      .label("First Name"),
     password: passwordSchema,
     deviceInfo: deviceInfoSchema,
     type: Joi.string().valid("admin").optional().label("Type").messages({
       "any.only": "Type must be 'admin' if provided",
     }),
   })
-).label("LoginPayload");
+)
+  .or("email", "mainMemberId")
+  .label("LoginPayload");
 
 /**
  * Send OTP Validation Schema

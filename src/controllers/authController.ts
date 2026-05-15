@@ -12,75 +12,21 @@ interface AuthenticatedRequest extends Request {
 
 class AuthController {
   /**
-   * Sub-Member Self-Registration
-   * Public endpoint — no auth required.
-   * Either email or mainMemberId (or both) must be provided.
+   * Register new user
    */
-  registerSubMember = asyncHandler(
+  register = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const {
         firstName,
         lastName,
         email,
-        mainMemberId,
         password,
         phone,
         countryCode,
-        gender,
-        age,
+        mainMemberId,
+        registrationSource,
         relationshipToParent,
       } = req.body;
-
-      const result = await authService.registerSubMember({
-        firstName,
-        lastName,
-        email,
-        mainMemberId,
-        password,
-        phone,
-        countryCode,
-        gender,
-        age,
-        relationshipToParent,
-      });
-
-      res.apiCreated({ user: result.user }, result.message);
-    }
-  );
-
-  /**
-   * Sub-Member Login (no-email flow)
-   * Sub-members without their own email log in using mainMemberId + subMemberId + password.
-   */
-  loginSubMember = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
-      const { mainMemberId, subMemberId, password, deviceInfo } = req.body;
-
-      const result = await authService.loginSubMember({
-        mainMemberId,
-        subMemberId,
-        password,
-        deviceInfo,
-      });
-
-      res.apiSuccess(
-        {
-          user: result.user,
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        },
-        result.message
-      );
-    }
-  );
-
-  /**
-   * Register new user
-   */
-  register = asyncHandler(
-    async (req: Request, res: Response): Promise<void> => {
-      const { firstName, lastName, email, password, phone, countryCode } =
-        req.body;
 
       const result = await authService.register({
         firstName,
@@ -89,6 +35,9 @@ class AuthController {
         password,
         phone,
         countryCode,
+        mainMemberId,
+        registrationSource,
+        relationshipToParent,
       });
 
       res.apiCreated(
@@ -133,7 +82,8 @@ class AuthController {
    * Login user
    */
   login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { email, password, deviceInfo, type } = req.body;
+    const { email, mainMemberId, firstName, password, deviceInfo, type } =
+      req.body;
 
     if (!deviceInfo) {
       throw new AppError("deviceInfo is required for login", 400);
@@ -141,9 +91,11 @@ class AuthController {
 
     const result = await authService.login({
       email,
+      mainMemberId,
+      firstName,
       password,
       deviceInfo,
-      type, // Pass type parameter
+      type,
     });
 
     res.apiSuccess(

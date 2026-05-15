@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
-import { User, OTP, AuthSessions } from "../models/index.model";
+import { User, OTP, AuthSessions, MemberReferrals } from "../models/index.model";
 import { OTPType, OTPStatus, SessionStatus, UserRole } from "../models/enums";
 import { AppError } from "../utils/AppError";
 import { logger } from "../utils/logger";
@@ -37,14 +37,19 @@ function splitFullName(fullName: string): {
 interface RegisterData {
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string;
   password: string;
   phone?: string;
   countryCode?: string;
+  mainMemberId?: string;
+  registrationSource?: string;
+  relationshipToParent?: string;
 }
 
 interface LoginData {
-  email: string;
+  email?: string;
+  mainMemberId?: string;
+  firstName?: string;
   password: string;
   deviceInfo: string;
   type?: string; // Optional: 'admin' or undefined for normal login
@@ -246,148 +251,208 @@ class AuthService {
    * Register new user
    */
   async register(data: RegisterData): Promise<{ user: any; message: string }> {
-    const { firstName, lastName, email, password, phone, countryCode } = data;
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      if (existingUser.isEmailVerified) {
-        throw new AppError("User already exists with this email", 400);
-      }
-
-      let userUpdated = false;
-
-      if (existingUser.firstName !== firstName) {
-        existingUser.firstName = firstName;
-        userUpdated = true;
-      }
-
-      if (existingUser.lastName !== lastName) {
-        existingUser.lastName = lastName;
-        userUpdated = true;
-      }
-
-      if (typeof phone !== "undefined" && existingUser.phone !== phone) {
-        existingUser.phone = phone;
-        userUpdated = true;
-      }
-
-      if (
-        typeof countryCode !== "undefined" &&
-        existingUser.countryCode !== countryCode
-      ) {
-        existingUser.countryCode = countryCode;
-        userUpdated = true;
-      }
-
-      if (password) {
-        existingUser.password = password;
-        userUpdated = true;
-      }
-
-      if (userUpdated) {
-        await existingUser.save();
-      }
-
-      // Expire any pending verification OTPs before issuing a new one
-      await OTP.updateMany(
-        {
-          userId: existingUser._id,
-          type: OTPType.EMAIL_VERIFICATION,
-          status: OTPStatus.PENDING,
-        },
-        { status: OTPStatus.EXPIRED },
-      );
-
-      await this.sendOTPForVerification(
-        existingUser._id.toString(),
-        email,
-        OTPType.EMAIL_VERIFICATION,
-      );
-
-      // this.sendWelcomeEmailAsync(email, existingUser.name);
-
-      // Generate member ID if user doesn't have one
-      if (!existingUser.memberId) {
-        existingUser.memberId = await generateMemberId();
-        await existingUser.save();
-        logger.info(
-          `Member ID generated for existing user: ${existingUser.memberId}`,
-        );
-      }
-
-      // Use registeredAt if set, otherwise fallback to createdAt
-      const registrationDate =
-        existingUser.registeredAt || existingUser.createdAt;
-
-      return {
-        user: {
-          _id: existingUser._id,
-          firstName: existingUser.firstName,
-          lastName: existingUser.lastName,
-          email: existingUser.email,
-          phone: existingUser.phone,
-          countryCode: existingUser.countryCode,
-          memberId: existingUser.memberId,
-          isEmailVerified: existingUser.isEmailVerified,
-          registeredAt: registrationDate,
-        },
-        message:
-          "Registration successful. Please verify your email with the OTP sent.",
-      };
-    }
-
-    // Generate unique member ID for new user
-    const memberId = await generateMemberId();
-
-    // Generate unique referral code for new user
-    const referralCode = await referralService.generateReferralCode(firstName);
-
-    // Create user (password will be hashed by pre-save hook)
-    // registeredAt will be automatically set by pre-save hook
-    const user = await User.create({
+    const {
       firstName,
       lastName,
       email,
-      password, // Let the pre-save hook handle hashing
+      password,
       phone,
       countryCode,
-      memberId, // Assign generated member ID
-      referralCode, // Assign generated referral code
+      mainMemberId,
+      registrationSource,
+      relationshipToParent,
+    } = data;
+
+    // --- SUB-MEMBER LOGIC START ---
+    let parentMember: any = null;
+    if (mainMemberId && mainMemberId.trim()) {
+      parentMember = await User.findOne({ memberId: mainMemberId.trim() });
+      if (!parentMember) {
+        throw new AppError(
+          "Main member not found. Please check the Member ID.",
+          404,
+        );
+      }
+      if (!parentMember.isActive) {
+        throw new AppError("Main member account is not active.", 400);
+      }
+      if (parentMember.isSubMember || parentMember.parentId) {
+        throw new AppError(
+          "The provided Member ID belongs to a sub-member. Only main members can add sub-members in a one-level hierarchy.",
+          400,
+        );
+      }
+      // Check sub-member limit (standard limit 10)
+      const subMemberCount = await User.countDocuments({
+        parentId: parentMember._id,
+      });
+      if (subMemberCount >= 10) {
+        throw new AppError(
+          "This family has reached the maximum sub-member limit (10).",
+          400,
+        );
+      }
+
+      // --- PREVENT DUPLICATES ---
+      const duplicateSubMember = await User.findOne({
+        parentId: parentMember._id,
+        firstName: { $regex: new RegExp(`^${firstName.trim()}$`, "i") },
+      });
+      if (duplicateSubMember) {
+        throw new AppError(
+          `A sub-member named '${firstName}' is already registered in this family.`,
+          400,
+        );
+      }
+    }
+    // --- SUB-MEMBER LOGIC END ---
+
+    // Check if user already exists by email (if email provided)
+    if (email && email.trim()) {
+      const cleanEmail = email.toLowerCase().trim();
+      const existingUser = await User.findOne({ email: cleanEmail });
+      if (existingUser) {
+        if (existingUser.isEmailVerified) {
+          throw new AppError("User already exists with this email", 400);
+        }
+
+        // Update existing unverified user
+        existingUser.firstName = firstName;
+        existingUser.lastName = lastName || "";
+        if (phone) existingUser.phone = phone;
+        if (countryCode) existingUser.countryCode = countryCode;
+        existingUser.password = password;
+
+        // If registering as a sub-member now, link them
+        if (parentMember) {
+          existingUser.isSubMember = true;
+          existingUser.parentMemberId = parentMember._id;
+          existingUser.parentId = parentMember._id;
+          if (relationshipToParent)
+            existingUser.relationshipToParent = relationshipToParent;
+        }
+
+        await existingUser.save();
+
+        // Expire any pending verification OTPs before issuing a new one
+        await OTP.updateMany(
+          {
+            userId: existingUser._id,
+            type: OTPType.EMAIL_VERIFICATION,
+            status: OTPStatus.PENDING,
+          },
+          { status: OTPStatus.EXPIRED },
+        );
+
+        await this.sendOTPForVerification(
+          existingUser._id.toString(),
+          cleanEmail,
+          OTPType.EMAIL_VERIFICATION,
+        );
+
+        return {
+          user: {
+            _id: existingUser._id,
+            firstName: existingUser.firstName,
+            lastName: existingUser.lastName,
+            email: existingUser.email,
+            memberId: existingUser.memberId,
+            isEmailVerified: existingUser.isEmailVerified,
+          },
+          message: parentMember
+            ? "Family member registration updated. Please verify the email with the OTP sent."
+            : "Registration successful. Please verify your email with the OTP sent.",
+        };
+      }
+    }
+
+    // Generate unique identifiers
+    const memberId = await generateMemberId();
+    const referralCode = await referralService.generateReferralCode(firstName);
+
+    // Prepare User Data
+    const userData: any = {
+      firstName,
+      lastName: lastName || "",
+      password,
+      phone,
+      countryCode,
+      memberId,
+      referralCode,
       isEmailVerified: false,
-    });
+    };
+
+    if (email && email.trim()) {
+      userData.email = email.toLowerCase().trim();
+    }
+
+    // If registering as sub-member
+    if (parentMember) {
+      userData.isSubMember = true;
+      userData.parentMemberId = parentMember._id;
+      userData.parentId = parentMember._id;
+      if (relationshipToParent) {
+        userData.relationshipToParent = relationshipToParent;
+      }
+    }
+
+    // Create user
+    const user = await User.create(userData);
+
+    // If sub-member, create a referral/connection record
+    if (parentMember) {
+      await MemberReferrals.create({
+        childUserId: user._id,
+        parentUserId: parentMember._id,
+        parentMemberId: parentMember.memberId,
+        registrationSource: registrationSource || "registration",
+        registeredAt: new Date(),
+        isActive: true,
+      });
+    }
 
     logger.info(
-      `User created successfully: ${user.email}, isEmailVerified: ${user.isEmailVerified}`,
+      `User registered: ${user.email || user.firstName} (isSub: ${!!parentMember})`,
     );
 
-    // Generate and send OTP for email verification
-    await this.sendOTPForVerification(
-      user._id.toString(),
-      email,
-      OTPType.EMAIL_VERIFICATION,
-    );
+    // If user has an email, they MUST verify it via OTP
+    if (user.email) {
+      await this.sendOTPForVerification(
+        user._id.toString(),
+        user.email,
+        OTPType.EMAIL_VERIFICATION,
+      );
 
-    // Send welcome email asynchronously to avoid delaying the API response
-    // this.sendWelcomeEmailAsync(email, firstName, lastName);
+      return {
+        user: {
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          memberId: user.memberId,
+          isEmailVerified: false,
+        },
+        message: parentMember
+          ? "Family member registered successfully. Please verify the email with the OTP sent."
+          : "Registration successful. Please verify your email with the OTP sent.",
+      };
+    }
 
-    // Use registeredAt if set, otherwise fallback to createdAt
-    const registrationDate = user.registeredAt || user.createdAt;
+    // If no email (sub-member only), they are verified by the parent registration
+    // They can log in immediately with Member ID + firstName + password
+    user.isEmailVerified = true;
+    await user.save();
 
     return {
       user: {
         _id: user._id,
         firstName: user.firstName,
         lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        countryCode: user.countryCode,
-        memberId: user.memberId, // Include member ID in response
-        isEmailVerified: user.isEmailVerified,
-        registeredAt: registrationDate,
+        memberId: user.memberId,
+        isEmailVerified: true,
       },
       message:
-        "Registration successful. Please verify your email with the OTP sent.",
+        "Registered successfully. You can now log in using the either Main Member ID or email and your First Name.",
     };
   }
 
@@ -591,23 +656,39 @@ class AuthService {
    * Login user
    */
   async login(data: LoginData): Promise<LoginResult> {
-    const { email, password, deviceInfo, type } = data;
+    const { email, mainMemberId, firstName, password, deviceInfo, type } = data;
 
-    // Find user with password
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      logger.error(`Login failed: User not found for email: ${email}`);
-      throw new AppError("Invalid email or password", 401);
-    }
+    let user: any = null;
 
-    // Sub-members without their own email cannot use this endpoint.
-    // They must use the OTP-based sub-member login flow.
-    // Also block anyone from logging in as a sub-member using the main member's email.
-    if (user.isSubMember && !user.email) {
-      throw new AppError(
-        "Sub-members without an email must use the sub-member OTP login.",
-        403,
+    if (email && email.trim()) {
+      // mode 1: Email login
+      user = await User.findOne({ email: email.toLowerCase().trim() }).select(
+        "+password",
       );
+      if (!user) {
+        throw new AppError("Invalid email or password", 401);
+      }
+    } else if (mainMemberId && firstName) {
+      // mode 2: Family login (Parent ID + First Name)
+      const parent = await User.findOne({ memberId: mainMemberId.trim() });
+      if (!parent) {
+        throw new AppError("Main member not found", 404);
+      }
+
+      // Find the specific sub-member under this parent with this firstName
+      user = await User.findOne({
+        parentId: parent._id,
+        firstName: { $regex: new RegExp(`^${firstName.trim()}$`, "i") },
+      }).select("+password");
+
+      if (!user) {
+        throw new AppError(
+          `No sub-member named '${firstName}' found for this Main Member ID.`,
+          404,
+        );
+      }
+    } else {
+      throw new AppError("Either email or Main Member ID is required", 400);
     }
 
     logger.info(

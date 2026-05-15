@@ -99,6 +99,7 @@ BlogSchema.index({ authorId: 1, isActive: 1 });
 BlogSchema.index({ categoryId: 1, isActive: 1 });
 BlogSchema.index({ viewCount: -1 });
 BlogSchema.index({ isActive: 1, isDeleted: 1 });
+BlogSchema.index({ isDeleted: 1, createdAt: -1 });
 BlogSchema.index({ isActive: 1, isDeleted: 1, createdAt: -1 });
 
 export const Blogs = mongoose.model<IBlog>("blogs", BlogSchema);

@@ -228,12 +228,23 @@ class AdminBlogController {
 
       const [blogs, total, blogBanners] = await Promise.all([
         Blogs.find(filter)
-          .populate("categoryId", "title slug")
-          .populate("authorId", "name email")
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(limit)
-          .lean(),
+        .select(`
+          title
+          excerpt
+          coverImage
+          isActive
+          seo.metaSlug
+          categoryId
+          authorId
+          updatedAt
+          createdAt
+        `)
+        .populate("categoryId", "title slug")
+        .populate("authorId", "name email")
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
         Blogs.countDocuments(filter),
         BlogBanner.find({ isDeleted: { $ne: true } })
           .sort({ createdAt: -1 })
